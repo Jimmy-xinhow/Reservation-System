@@ -1,12 +1,28 @@
-讀 CLAUDE.md。釐清一個被誤導的問題:後台「診所設定/門診表」讀不到 clinic_settings。已確認三件事:
-(a) 資料庫 RLS 正確 —— 用登入身分(auth.uid()=7c9f75dd-761d-41a9-8d13-fa83f908f3e1)直接查 clinic_members 撈得到對應那筆,auth_clinic_ids() 在登入身分下會回傳 087f6757...。
-(b) clinic_settings 的 authenticated policy 已存在(for all to authenticated, using clinic_id in (select auth_clinic_ids()))。
-(c) Railway 線上跑的就是最新 commit。
+Users can no longer add LIFF apps to Messaging API channels
+2019/11/11
+LIFF v2 is scheduled to be updated with LINE Login as the core channel. Additionally, an upcoming change will prevent users from adding LIFF apps to Messaging API channels entirely. We strongly recommend users to add LIFF apps to the LINE Login channel.
 
-你上一次的「修正」只是讓今日約診頁用 settings?.booking_mode ?? 'time' 蓋掉讀不到的情況,並沒有真正修好讀取 —— 兩頁其實都讀不到設定。
+Scheduled change date
+Early February 2020
 
-請從這個方向查根因:後台頁面查 clinic_settings 時,用的 Supabase client 是否真的帶著登入使用者的 session(authenticated 身分)？很可能用到了未綁定使用者 session 的 client(導致 auth.uid() 為 null、RLS 擋下、回 0 rows)。
-1. 找出 settings 頁、schedules 頁實際查 clinic_settings 用的是哪個 client、有沒有正確從 cookie 帶入登入 session。
-2. 對照能在登入身分下正確讀取的頁面，看差異。
-3. 真正修正成「以登入使用者的 authenticated session 查詢」，不要再用預設值掩蓋、也不要改用 service-role 繞過 RLS 來假裝修好。
-修正後說明根因與改動，push 並回報 commit hash。
+Impact
+Channel type	Impact
+LINE Login channel	Not affected.
+Messaging API channel	After the specification change, LIFF apps cannot be added to the Messaging API channel. LIFF apps added to Messaging API channels at the time of specification change are still usable.
+Do not add LIFF apps to the Messaging API channel
+At this time, users can add LIFF apps to the Messaging API channel. However, we strongly advise against it due to the following restrictions:
+
+The bot link feature can't be used.
+LIFF feature expansion may not be supported.
+The LIFF app may not be usable in the future.
+LIFF apps added to the LINE Login channel have no restrictions and can use all LIFF v2 functions.
+
+Transition to the LINE Login channel
+To continue using the LIFF app added to the Messaging API channel, re-add the LIFF app to the LINE Login channel. Once re-added, LINE Developers Console will issue a new LIFF app ID. As a result, please take note of the following:
+
+If you're using LIFF v2, change the LIFF app ID specified in liff.init().
+The LIFF URL used to launch LIFF (e.g.: line://app/1234567890-AbcdEfgh) will change.
+Remove LIFF apps added to Messaging API channel
+To avoid confusion, delete the LIFF app added to the Messaging API channel after adding to the LINE Login channel.
+
+LIFF

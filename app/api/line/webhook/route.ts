@@ -50,10 +50,11 @@ export async function POST(req: NextRequest) {
         await replyMessages(ev.replyToken, [welcomeMessage(baseUrl)]);
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim();
-        if (/預約|掛號/.test(text)) {
-          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
-        } else if (/查詢|我的預約|取消/.test(text)) {
+        // 查詢關鍵字優先(否則「預約查詢」會被「預約」先攔截)
+        if (/查詢|查預約|我的預約|取消/.test(text)) {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
+        } else if (/預約|掛號/.test(text)) {
+          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
         } else {
           await replyMessages(ev.replyToken, [menuMessage(baseUrl)]);
         }
