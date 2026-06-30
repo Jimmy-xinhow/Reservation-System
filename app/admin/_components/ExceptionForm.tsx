@@ -57,6 +57,23 @@ export default function ExceptionForm({
       setCap(String(t.capacity));
     }
   }
+  function applyClose(id: string) {
+    setTplId(id);
+    const t = docTemplates.find((x) => x.id === id);
+    if (t) {
+      setStart(hhmm(t.start_time));
+      setEnd(hhmm(t.end_time));
+    } else {
+      setStart(""); // 整天休診
+      setEnd("");
+    }
+  }
+  function changeKind(k: "closed" | "extra") {
+    setKind(k);
+    setTplId("");
+    setStart("");
+    setEnd("");
+  }
 
   return (
     <form action={createAction} className="card flex flex-wrap items-end gap-3 p-4">
@@ -91,13 +108,37 @@ export default function ExceptionForm({
         <select
           name="kind"
           value={kind}
-          onChange={(e) => setKind(e.target.value as "closed" | "extra")}
+          onChange={(e) => changeKind(e.target.value as "closed" | "extra")}
           className="input mt-1"
         >
-          <option value="closed">休診(整天)</option>
+          <option value="closed">休診</option>
           <option value="extra">加診</option>
         </select>
       </label>
+
+      {kind === "closed" && (
+        <>
+          <label className="block text-sm font-medium text-slate-600">
+            休診範圍
+            <select
+              value={tplId}
+              onChange={(e) => applyClose(e.target.value)}
+              className="input mt-1"
+              disabled={!doctorId}
+            >
+              <option value="">整天休診</option>
+              {docTemplates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  只休 週{WD[t.weekday]} {hhmm(t.start_time)}–{hhmm(t.end_time)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* 只休某診時帶出時段;整天休診則留空 */}
+          <input type="hidden" name="start_time" value={start} />
+          <input type="hidden" name="end_time" value={end} />
+        </>
+      )}
 
       {kind === "extra" && (
         <>

@@ -166,12 +166,12 @@ begin
        and t.weekday=v_weekday and t.active
        and not exists (select 1 from public.schedule_exceptions e
               where e.clinic_id=p_clinic_id and e.doctor_id=p_doctor_id
-                and e.date=p_date and e.is_closed)
+                and e.date=p_date and e.is_closed and e.start_time is null)  -- 整天休診
     union all
     select e.start_time, e.end_time, coalesce(e.slot_minutes,15), coalesce(e.capacity,1)
       from public.schedule_exceptions e
      where e.clinic_id=p_clinic_id and e.doctor_id=p_doctor_id
-       and e.date=p_date and not e.is_closed
+       and e.date=p_date and not e.is_closed                                  -- 加診
   loop
     return query
     with candidate as (
@@ -188,6 +188,13 @@ begin
      and a.status in ('booked','confirmed','done')
      and a.start_at < c.e and a.end_at > c.s              -- 區間重疊
     where c.s > now() + (v_lead||' minutes')::interval
+      and not exists (                                    -- 排除「只休某診」的時段
+        select 1 from public.schedule_exceptions ec
+        where ec.clinic_id=p_clinic_id and ec.doctor_id=p_doctor_id and ec.date=p_date
+          and ec.is_closed and ec.start_time is not null
+          and (c.s at time zone 'Asia/Taipei')::time >= ec.start_time
+          and (c.s at time zone 'Asia/Taipei')::time <  ec.end_time
+      )
     group by c.s, c.e, rec.capacity
     having rec.capacity - count(a.id) > 0
     order by c.s;
@@ -212,13 +219,20 @@ begin
     select start_time,end_time,slot_minutes,capacity from public.schedule_templates
       where clinic_id=p_clinic_id and doctor_id=p_doctor_id and weekday=v_weekday and active
         and not exists (select 1 from public.schedule_exceptions e where e.clinic_id=p_clinic_id
-              and e.doctor_id=p_doctor_id and e.date=v_date and e.is_closed)
+              and e.doctor_id=p_doctor_id and e.date=v_date and e.is_closed and e.start_time is null)
     union all
     select start_time,end_time,coalesce(slot_minutes,15),coalesce(capacity,1)
       from public.schedule_exceptions
       where clinic_id=p_clinic_id and doctor_id=p_doctor_id and date=v_date and not is_closed
   ) q where v_tod >= start_time and v_tod < end_time limit 1;
   if not found then raise exception '此時段非門診時間'; end if;
+
+  -- 只休某診:落在被休時段內則擋下
+  if exists (select 1 from public.schedule_exceptions ec
+             where ec.clinic_id=p_clinic_id and ec.doctor_id=p_doctor_id and ec.date=v_date
+               and ec.is_closed and ec.start_time is not null
+               and v_tod >= ec.start_time and v_tod < ec.end_time)
+    then raise exception '此時段已休診'; end if;
 
   if p_visit_type='first' and coalesce(st.first_visit_extends,false)
     then v_len := coalesce(st.first_visit_minutes, s.slot_minutes);
@@ -263,7 +277,8 @@ begin
     select t.id, t.start_time, t.end_time, t.capacity from public.schedule_templates t
       where t.clinic_id=p_clinic_id and t.doctor_id=p_doctor_id and t.weekday=v_weekday and t.active
         and not exists (select 1 from public.schedule_exceptions e where e.clinic_id=p_clinic_id
-              and e.doctor_id=p_doctor_id and e.date=p_date and e.is_closed)
+              and e.doctor_id=p_doctor_id and e.date=p_date and e.is_closed
+              and (e.start_time is null or e.start_time = t.start_time))  -- 整天休診或只休此診
     union all
     select e.id, e.start_time, e.end_time, coalesce(e.capacity,40) from public.schedule_exceptions e
       where e.clinic_id=p_clinic_id and e.doctor_id=p_doctor_id and e.date=p_date and not e.is_closed
@@ -303,6 +318,12 @@ begin
   v_end_at   := (p_date + v_end) at time zone 'Asia/Taipei';
   if v_start_at < now() + (coalesce(st.min_lead_minutes,30)||' minutes')::interval
     then raise exception '已超過可預約時間'; end if;
+
+  -- 整天休診或只休此診則擋下
+  if exists (select 1 from public.schedule_exceptions ec
+             where ec.clinic_id=p_clinic_id and ec.doctor_id=p_doctor_id and ec.date=p_date
+               and ec.is_closed and (ec.start_time is null or ec.start_time = v_start))
+    then raise exception '本診已休診'; end if;
 
   perform pg_advisory_xact_lock(hashtext(p_template_id::text || p_date::text));
   select count(*) filter (where status in ('booked','confirmed','done')),

@@ -271,15 +271,23 @@ export async function deleteTemplateAction(fd: FormData) {
 export async function createExceptionAction(fd: FormData) {
   const { supabase } = await requireMember();
   const isClosed = str(fd, "kind") !== "extra"; // kind=closed(休診) / extra(加診)
+  const start = str(fd, "start_time");
+  const end = str(fd, "end_time");
   const row: Record<string, unknown> = {
     clinic_id: CLINIC_ID,
     doctor_id: str(fd, "doctor_id"),
     date: str(fd, "date"),
     is_closed: isClosed,
   };
-  if (!isClosed) {
-    row.start_time = str(fd, "start_time");
-    row.end_time = str(fd, "end_time");
+  if (isClosed) {
+    // 有指定時段 = 只休某診;留空 = 整天休診
+    if (start) {
+      row.start_time = start;
+      row.end_time = end || start;
+    }
+  } else {
+    row.start_time = start;
+    row.end_time = end;
     row.slot_minutes = intOr(fd, "slot_minutes", 15);
     row.capacity = intOr(fd, "capacity", 1);
   }

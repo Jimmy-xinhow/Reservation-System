@@ -90,7 +90,9 @@ export default async function ExceptionsPage() {
                 </td>
                 <td>
                   {e.is_closed
-                    ? "整天"
+                    ? e.start_time
+                      ? `只休 ${e.start_time.slice(0, 5)}–${e.end_time?.slice(0, 5) ?? ""}`
+                      : "整天"
                     : `${e.start_time?.slice(0, 5) ?? ""}–${e.end_time?.slice(0, 5) ?? ""}`}
                 </td>
                 <td>{e.is_closed ? "—" : e.capacity}</td>
