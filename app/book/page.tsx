@@ -14,7 +14,14 @@ interface Config {
   booking_mode: "time" | "number";
   deposit_enabled: boolean;
   max_advance_days: number;
+  allow_multi_patient_per_phone: boolean;
+  max_patients_per_phone: number;
   doctors: Doctor[];
+}
+interface BoundPatient {
+  id: string;
+  name: string;
+  phone: string;
 }
 interface Slot {
   slot_start: string;
@@ -75,6 +82,10 @@ export default function BookPage() {
   const [visitType, setVisitType] = useState<"first" | "return">("return");
   const [isSelfPay, setIsSelfPay] = useState(false);
 
+  // 綁定:此 LINE 身分已綁定的病患(null = 載入中)
+  const [bound, setBound] = useState<BoundPatient[] | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState(""); // 病患 id 或 "__new__"
+
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [result, setResult] = useState<ReserveResult | null>(null);
@@ -86,6 +97,26 @@ export default function BookPage() {
       .then(setConfig)
       .catch((e) => setLoadErr(e instanceof Error ? e.message : "載入失敗"));
   }, []);
+
+  // 取得此 LINE 身分已綁定的病患
+  const loadBound = useCallback(async () => {
+    if (!idToken) return;
+    try {
+      const data = await api<{ patients: BoundPatient[] }>("/api/booking/patients-of-line", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      setBound(data.patients);
+      setSelectedPatientId(data.patients[0]?.id ?? "__new__");
+    } catch (e) {
+      setLoadErr(e instanceof Error ? e.message : "讀取綁定失敗");
+    }
+  }, [idToken]);
+
+  useEffect(() => {
+    if (ready && idToken) loadBound();
+  }, [ready, idToken, loadBound]);
 
   const maxDate = useMemo(
     () => (config ? todayStr(config.max_advance_days) : todayStr(30)),
@@ -126,18 +157,25 @@ export default function BookPage() {
   }, [doctorId, date, loadAvailability]);
 
   const slotPicked = config?.booking_mode === "time" ? !!pickedStart : !!pickedTemplate;
-  const canSubmit = ready && !!name.trim() && !!phone.trim() && slotPicked && !submitting;
+  const addingNew = selectedPatientId === "__new__";
+  const patientReady = addingNew ? !!name.trim() && !!phone.trim() : !!selectedPatientId;
+  const canSubmit = ready && patientReady && slotPicked && !submitting;
 
   async function handleSubmit() {
     if (!config || !idToken) return;
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      const { patient_id } = await api<{ patient_id: string }>("/api/booking/patient", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, name: name.trim(), phone: phone.trim() }),
-      });
+      // 已綁定病患直接用其 id;選「新增就診者」才建立新病患
+      let patient_id = selectedPatientId;
+      if (addingNew) {
+        const created = await api<{ patient_id: string }>("/api/booking/patient", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, name: name.trim(), phone: phone.trim() }),
+        });
+        patient_id = created.patient_id;
+      }
 
       const payload: Record<string, unknown> = {
         idToken,
@@ -158,6 +196,7 @@ export default function BookPage() {
         body: JSON.stringify(payload),
       });
       setResult(res);
+      loadBound(); // 若剛新增就診者,刷新綁定清單
     } catch (e) {
       setSubmitErr(e instanceof Error ? e.message : "預約失敗");
     } finally {
@@ -237,6 +276,10 @@ export default function BookPage() {
 
       {tab === "my" ? (
         <MyAppointments idToken={idToken} mode={config.booking_mode} />
+      ) : bound === null ? (
+        <div className="card p-6 text-center text-sm text-slate-400">確認身分中…</div>
+      ) : bound.length === 0 ? (
+        <BindGate idToken={idToken} onBound={loadBound} />
       ) : (
       <>
       <div className="space-y-4">
@@ -326,27 +369,49 @@ export default function BookPage() {
 
         {/* 步驟 3:就診資料 */}
         <section className="card p-5">
-          <SectionTitle n={3} title="就診資料" done={!!name.trim() && !!phone.trim()} />
+          <SectionTitle n={3} title="就診資料" done={patientReady} />
           <div className="space-y-4">
             <div>
-              <label className="label">姓名</label>
-              <input
+              <label className="label">為誰預約</label>
+              <select
                 className="input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="就診者姓名"
-              />
+                value={selectedPatientId}
+                onChange={(e) => setSelectedPatientId(e.target.value)}
+              >
+                {(bound ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}({p.phone})
+                  </option>
+                ))}
+                {config.allow_multi_patient_per_phone &&
+                  (bound?.length ?? 0) < config.max_patients_per_phone && (
+                    <option value="__new__">+ 新增就診者</option>
+                  )}
+              </select>
             </div>
-            <div>
-              <label className="label">電話</label>
-              <input
-                className="input"
-                value={phone}
-                inputMode="tel"
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="聯絡電話"
-              />
-            </div>
+            {addingNew && (
+              <>
+                <div>
+                  <label className="label">姓名</label>
+                  <input
+                    className="input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="就診者姓名"
+                  />
+                </div>
+                <div>
+                  <label className="label">電話</label>
+                  <input
+                    className="input"
+                    value={phone}
+                    inputMode="tel"
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="聯絡電話"
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="label">看診類型</label>
               <div className="grid grid-cols-2 gap-2">
@@ -539,6 +604,65 @@ function TypeToggle({
     <button type="button" onClick={onClick} className={`pill text-center ${active ? "pill-active" : ""}`}>
       {children}
     </button>
+  );
+}
+
+function BindGate({ idToken, onBound }: { idToken: string | null; onBound: () => void }) {
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    if (!idToken) return;
+    setSubmitting(true);
+    setErr(null);
+    try {
+      await api("/api/booking/patient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, name: name.trim(), phone: phone.trim() }),
+      });
+      onBound();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "綁定失敗");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const ok = !!name.trim() && !!phone.trim() && !submitting;
+
+  return (
+    <section className="card p-5">
+      <h2 className="mb-1 font-semibold text-slate-900">首次使用,請先綁定</h2>
+      <p className="mb-4 text-sm text-slate-500">填寫一次姓名與電話完成綁定,之後預約免再填寫。</p>
+      <div className="space-y-4">
+        <div>
+          <label className="label">姓名</label>
+          <input
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="就診者姓名"
+          />
+        </div>
+        <div>
+          <label className="label">電話</label>
+          <input
+            className="input"
+            value={phone}
+            inputMode="tel"
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="聯絡電話"
+          />
+        </div>
+        {err && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
+        <button type="button" disabled={!ok} onClick={submit} className="btn btn-primary w-full">
+          {submitting ? "綁定中…" : "完成綁定"}
+        </button>
+      </div>
+    </section>
   );
 }
 

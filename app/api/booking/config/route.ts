@@ -32,6 +32,8 @@ export async function GET() {
       deposit_scope: settings.deposit_scope,
       min_lead_minutes: settings.min_lead_minutes,
       max_advance_days: settings.max_advance_days,
+      allow_multi_patient_per_phone: settings.allow_multi_patient_per_phone,
+      max_patients_per_phone: settings.max_patients_per_phone,
       doctors: doctors ?? [],
     });
   } catch (e) {
