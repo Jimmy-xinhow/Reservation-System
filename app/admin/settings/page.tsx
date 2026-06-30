@@ -27,7 +27,16 @@ export default async function SettingsPage() {
   const s = data as Settings | null;
 
   if (!s) {
-    return <p className="text-red-600">查無診所設定,請先於 Supabase insert 一筆 clinic_settings。</p>;
+    return (
+      <div className="space-y-2 text-sm text-red-600">
+        <p>讀不到此診所設定。常見原因(資料其實存在時多半是後兩者):</p>
+        <ol className="ml-5 list-decimal space-y-1">
+          <li>尚未建立此診所的 clinic_settings(請見 README 第一節)。</li>
+          <li>此登入帳號尚未對應到本診所(clinic_members 缺一筆 → RLS 讀不到)。</li>
+          <li>clinic_settings 的 authenticated SELECT policy 未套用到資料庫。</li>
+        </ol>
+      </div>
+    );
   }
 
   return (
