@@ -311,18 +311,13 @@ create table if not exists clinic_members (
   created_at timestamptz default now(),
   primary key (clinic_id, user_id)
 );
--- 以 user_id 起頭的索引:auth_clinic_ids() 以 user_id 查詢用(PK 為 (clinic_id,user_id))
+-- 以 user_id 起頭的索引:policy 子查詢以 user_id 查 clinic_members 用(PK 為 (clinic_id,user_id))
 create index if not exists clinic_members_user_clinic_idx on clinic_members (user_id, clinic_id);
 
--- 目前登入者所屬的 clinic_id 集合。
--- security definer 避開 clinic_members 自身 RLS 遞迴;policy 以
---   using (clinic_id in (select public.auth_clinic_ids()))
--- 呼叫,planner 可當 InitPlan 只算一次(避免逐列呼叫的子查詢/函式成本)。
-create or replace function auth_clinic_ids()
-returns setof uuid language sql security definer stable
-set search_path = '' as $$
-  select clinic_id from public.clinic_members where user_id = auth.uid();
-$$;
+-- 注意:不要用 security definer 的 helper 函式(例如 auth_clinic_ids())包住 auth.uid() 再給 policy 呼叫。
+-- 實測該函式單獨當 RPC 會回正確值,但放進 RLS policy 的子查詢內,其中的 auth.uid() 取不到值 → policy 永遠比對不到 → 0 rows。
+-- 因此 policy 一律直接內聯 auth.uid() 子查詢(下方),這也是 clinic_members 自身 policy 已驗證可用的寫法。
+drop function if exists auth_clinic_ids();
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- §6 RLS 與權限
@@ -341,45 +336,55 @@ alter table reminder_logs enable row level security;
 alter table clinic_members enable row level security;
 
 -- authenticated:只能讀寫自己所屬診所的資料。
--- 一律用 clinic_id in (select public.auth_clinic_ids()),不在 policy 內聯 select clinic_members。
+-- 一律內聯 auth.uid() 子查詢比對 clinic_members(不要包成 security definer 函式,理由見上方)。
+-- 此子查詢讀 clinic_members 受其自身 policy(user_id = auth.uid())允許,且不會遞迴。
 drop policy if exists clinics_member on clinics;
 create policy clinics_member on clinics for all to authenticated
-  using (id in (select public.auth_clinic_ids())) with check (id in (select public.auth_clinic_ids()));
+  using (id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists clinic_settings_member on clinic_settings;
 create policy clinic_settings_member on clinic_settings for all to authenticated
-  using (clinic_id in (select public.auth_clinic_ids())) with check (clinic_id in (select public.auth_clinic_ids()));
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists doctors_member on doctors;
 create policy doctors_member on doctors for all to authenticated
-  using (clinic_id in (select public.auth_clinic_ids())) with check (clinic_id in (select public.auth_clinic_ids()));
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists schedule_templates_member on schedule_templates;
 create policy schedule_templates_member on schedule_templates for all to authenticated
-  using (clinic_id in (select public.auth_clinic_ids())) with check (clinic_id in (select public.auth_clinic_ids()));
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists schedule_exceptions_member on schedule_exceptions;
 create policy schedule_exceptions_member on schedule_exceptions for all to authenticated
-  using (clinic_id in (select public.auth_clinic_ids())) with check (clinic_id in (select public.auth_clinic_ids()));
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists patients_member on patients;
 create policy patients_member on patients for all to authenticated
-  using (clinic_id in (select public.auth_clinic_ids())) with check (clinic_id in (select public.auth_clinic_ids()));
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists appointments_member on appointments;
 create policy appointments_member on appointments for all to authenticated
-  using (clinic_id in (select public.auth_clinic_ids())) with check (clinic_id in (select public.auth_clinic_ids()));
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists reminder_logs_member on reminder_logs;
 create policy reminder_logs_member on reminder_logs for all to authenticated
-  using ((select clinic_id from public.appointments a where a.id = appointment_id) in (select public.auth_clinic_ids()))
-  with check ((select clinic_id from public.appointments a where a.id = appointment_id) in (select public.auth_clinic_ids()));
+  using ((select clinic_id from public.appointments a where a.id = appointment_id)
+         in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check ((select clinic_id from public.appointments a where a.id = appointment_id)
+         in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 
 drop policy if exists clinic_members_self on clinic_members;
 create policy clinic_members_self on clinic_members for select to authenticated
   using (user_id = auth.uid());
 
--- 舊版 per-row 布林 helper 已改用 auth_clinic_ids();在新 policy 建好(不再依賴它)後清掉。
+-- 舊版 helper 一律清掉,避免有人再用到「policy 內失效」的函式。
 drop function if exists is_clinic_member(uuid);
 
 -- RPC:全 security definer。撤掉 anon/authenticated,只給 service_role(病患端走 service_role)。

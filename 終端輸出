@@ -1,52 +1,9 @@
-$ cd "C:/Users/User/Reservation System" && npx tsc --noEmit && npm run build
+$ cd "C:/Users/User/Reservation System" && npx tsc --noEmit && echo "TSC_EXIT: $?" && npm run build >/dev/null 2>&1 && echo "BUILD_EXIT: $?" && git add -A && (git diff --cached --name-only | grep -iE "\.env" | grep -v "^\.env\.example$" && echo "STOP" || echo "OK: 無 .env 類") && git -c user.name="Jimmy" -c user.email="jimmy@xinhow.com.tw" commit -q -m "chore(diag): 加上 auth_clinic_ids() RPC 探針,定位 policy vs 函式" && git rev-parse HEAD && git push origin main 2>&1 | tail -2
 
---- tsc --noEmit ---
 TSC_EXIT: 0
-
---- next build ---
-
-> reservation-system@0.1.0 build
-> next build
-
-   ▲ Next.js 15.5.19
-
-   Creating an optimized production build ...
- ✓ Compiled successfully in 2.5s
-   Linting and checking validity of types ...
-   Collecting page data ...
-   Generating static pages (0/6) ...
-   Generating static pages (1/6)
-   Generating static pages (2/6)
-   Generating static pages (4/6)
- ✓ Generating static pages (6/6)
-   Finalizing page optimization ...
-   Collecting build traces ...
-
-Route (app)                                 Size  First Load JS
-┌ ○ /                                      150 B         103 kB
-├ ○ /_not-found                            994 B         103 kB
-├ ƒ /admin                               1.65 kB         104 kB
-├ ƒ /admin/exceptions                      150 B         103 kB
-├ ƒ /admin/login                         65.2 kB         168 kB
-├ ƒ /admin/patients                        150 B         103 kB
-├ ƒ /admin/schedules                       150 B         103 kB
-├ ƒ /admin/settings                        150 B         103 kB
-├ ƒ /api/booking/availability              150 B         103 kB
-├ ƒ /api/booking/config                    150 B         103 kB
-├ ƒ /api/booking/patient                   150 B         103 kB
-├ ƒ /api/booking/reserve                   150 B         103 kB
-├ ƒ /api/cron/reminders                    150 B         103 kB
-├ ƒ /api/line/webhook                      150 B         103 kB
-└ ○ /book                                3.38 kB         106 kB
-+ First Load JS shared by all             102 kB
-  ├ chunks/255-98a0bdaa30757bda.js       46.2 kB
-  ├ chunks/4bd1b696-c023c6e3521b1417.js  54.2 kB
-  └ other shared chunks (total)          1.99 kB
-
-
-ƒ Middleware                             89.8 kB
-
-○  (Static)   prerendered as static content
-ƒ  (Dynamic)  server-rendered on demand
-
 BUILD_EXIT: 0
+warning: in the working copy of 'app/admin/diag/page.tsx', LF will be replaced by CRLF the next time Git touches it
+OK: 無 .env 類
+09afced8f4dd8baf5a61348e4c2f76f90d6460e0
+To https://github.com/Jimmy-xinhow/Reservation-System.git
+   6a323ba..09afced  main -> main
