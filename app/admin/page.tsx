@@ -44,25 +44,35 @@ function taipeiToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 }
 
-export default async function TodayPage() {
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ doctor?: string; status?: string }>;
+}) {
+  const sp = await searchParams;
+  const fDoctor = sp.doctor ?? "";
+  const fStatus = sp.status ?? "";
+
   const supabase = await createSupabaseServer();
   const today = taipeiToday();
   const dayStart = new Date(`${today}T00:00:00+08:00`).toISOString();
   const dayEnd = new Date(`${today}T23:59:59.999+08:00`).toISOString();
 
+  let apptQuery = supabase
+    .from("appointments")
+    .select(
+      "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, doctors(name), patients(name, phone)",
+    )
+    .eq("clinic_id", CLINIC_ID)
+    .gte("start_at", dayStart)
+    .lte("start_at", dayEnd);
+  if (fDoctor) apptQuery = apptQuery.eq("doctor_id", fDoctor);
+  if (fStatus) apptQuery = apptQuery.eq("status", fStatus);
+
   const [{ data: settings }, { data: doctors }, { data: appts }] = await Promise.all([
     supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", CLINIC_ID).maybeSingle(),
     supabase.from("doctors").select("id, name").eq("clinic_id", CLINIC_ID).eq("active", true).order("name"),
-    supabase
-      .from("appointments")
-      .select(
-        "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctors(name), patients(name, phone)",
-      )
-      .eq("clinic_id", CLINIC_ID)
-      .gte("start_at", dayStart)
-      .lte("start_at", dayEnd)
-      .order("start_at")
-      .order("queue_number", { nullsFirst: true }),
+    apptQuery.order("start_at").order("queue_number", { nullsFirst: true }),
   ]);
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
@@ -96,13 +106,55 @@ export default async function TodayPage() {
         </p>
       )}
 
-      <BookingForm
-        mode={mode}
-        doctors={doctors ?? []}
-        appointments={rescheduleOptions}
-        createAction={createAppointmentAction}
-        rescheduleAction={rescheduleAppointmentAction}
-      />
+      {(doctors ?? []).length === 0 ? (
+        <div className="card flex flex-col items-start gap-2 p-5">
+          <p className="text-sm text-slate-600">尚未建立任何醫師,病患無法預約。</p>
+          <a href="/admin/schedules" className="btn btn-primary">
+            前往門診表新增醫師
+          </a>
+        </div>
+      ) : (
+        <BookingForm
+          mode={mode}
+          doctors={doctors ?? []}
+          appointments={rescheduleOptions}
+          createAction={createAppointmentAction}
+          rescheduleAction={rescheduleAppointmentAction}
+        />
+      )}
+
+      {/* 篩選列 + 今日筆數 */}
+      <form className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="label">醫師</label>
+          <select name="doctor" defaultValue={fDoctor} className="input">
+            <option value="">全部醫師</option>
+            {(doctors ?? []).map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">狀態</label>
+          <select name="status" defaultValue={fStatus} className="input">
+            <option value="">全部狀態</option>
+            {Object.entries(STATUS_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button className="btn btn-secondary">套用</button>
+        {(fDoctor || fStatus) && (
+          <a href="/admin" className="btn btn-ghost">
+            清除
+          </a>
+        )}
+        <span className="ml-auto self-center text-sm text-slate-400">今日 {rows.length} 筆</span>
+      </form>
 
       <div className="card overflow-x-auto">
         <table className="tbl">

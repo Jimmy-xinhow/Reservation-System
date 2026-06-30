@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireMember } from "@/lib/admin";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import { pushMessages } from "@/lib/line";
 
 function str(fd: FormData, k: string): string {
   return (fd.get(k) ?? "").toString().trim();
@@ -15,6 +16,22 @@ function bool(fd: FormData, k: string): boolean {
 function intOr(fd: FormData, k: string, dflt: number): number {
   const n = Number(str(fd, k));
   return Number.isFinite(n) ? n : dflt;
+}
+
+// ── LINE 測試推播 ─────────────────────────────────────────
+export async function sendTestPushAction(fd: FormData) {
+  await requireMember();
+  const to = str(fd, "line_user_id");
+  if (!to) redirect("/admin/line?test=err&reason=" + encodeURIComponent("請填 line_user_id"));
+
+  let reason: string | null = null;
+  try {
+    await pushMessages(to, [{ type: "text", text: "【慈愛中醫診所】測試推播 ✅ 連線正常。" }]);
+  } catch (e) {
+    reason = e instanceof Error ? e.message : "推播失敗";
+  }
+  // redirect() 放在 try/catch 外,避免吞掉其控制流
+  redirect(reason ? "/admin/line?test=err&reason=" + encodeURIComponent(reason) : "/admin/line?test=ok");
 }
 
 // ── 登出 ──────────────────────────────────────────────────

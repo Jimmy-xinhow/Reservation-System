@@ -9,6 +9,7 @@ const NAV = [
   { href: "/admin/exceptions", label: "休診/加診" },
   { href: "/admin/patients", label: "病患查詢" },
   { href: "/admin/settings", label: "診所設定" },
+  { href: "/admin/line", label: "LINE 連線" },
 ];
 
 export function AdminNav() {

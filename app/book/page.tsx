@@ -79,6 +79,8 @@ export default function BookPage() {
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [result, setResult] = useState<ReserveResult | null>(null);
 
+  const [tab, setTab] = useState<"book" | "my">("book");
+
   useEffect(() => {
     api<Config>("/api/booking/config")
       .then(setConfig)
@@ -223,6 +225,20 @@ export default function BookPage() {
 
   return (
     <Shell>
+      {/* 分頁:預約 / 我的預約 */}
+      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+        <TabButton active={tab === "book"} onClick={() => setTab("book")}>
+          預約看診
+        </TabButton>
+        <TabButton active={tab === "my"} onClick={() => setTab("my")}>
+          我的預約
+        </TabButton>
+      </div>
+
+      {tab === "my" ? (
+        <MyAppointments idToken={idToken} mode={config.booking_mode} />
+      ) : (
+      <>
       <div className="space-y-4">
         {/* 步驟 1:選醫師與日期 */}
         <section className="card p-5">
@@ -368,7 +384,119 @@ export default function BookPage() {
           <p className="mt-2 text-center text-xs text-slate-400">正在確認 LINE 身分…</p>
         )}
       </div>
+      </>
+      )}
     </Shell>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-lg py-2 text-sm font-medium transition-colors ${
+        active ? "bg-white text-brand-700 shadow-sm" : "text-slate-500"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+interface MyAppt {
+  id: string;
+  start_at: string;
+  queue_number: number | null;
+  status: string;
+  doctors: { name: string } | null;
+  patients: { name: string } | null;
+}
+
+function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time" | "number" }) {
+  const [list, setList] = useState<MyAppt[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    if (!idToken) return;
+    setErr(null);
+    try {
+      const data = await api<{ appointments: MyAppt[] }>("/api/booking/my", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      setList(data.appointments);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "查詢失敗");
+    }
+  }, [idToken]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function cancel(id: string) {
+    if (!idToken) return;
+    setCancelling(id);
+    setErr(null);
+    try {
+      await api("/api/booking/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, appointment_id: id }),
+      });
+      await load();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "取消失敗");
+    } finally {
+      setCancelling(null);
+    }
+  }
+
+  if (err) return <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>;
+  if (list === null) return <p className="px-1 text-sm text-slate-400">載入中…</p>;
+  if (list.length === 0)
+    return (
+      <div className="card p-6 text-center text-sm text-slate-400">目前沒有未來的預約。</div>
+    );
+
+  return (
+    <div className="space-y-3">
+      {list.map((a) => (
+        <div key={a.id} className="card flex items-center justify-between p-4">
+          <div>
+            <div className="font-medium text-slate-900">
+              {mode === "time"
+                ? `${formatDateSession(a.start_at)} ${formatTime(a.start_at)}`
+                : `${formatDateSession(a.start_at)} 第 ${a.queue_number} 號`}
+            </div>
+            <div className="mt-0.5 text-xs text-slate-500">
+              {a.doctors?.name}
+              {a.patients?.name ? ` · ${a.patients.name}` : ""} ·{" "}
+              {a.status === "confirmed" ? "已確認" : "已預約"}
+            </div>
+          </div>
+          <button
+            type="button"
+            disabled={cancelling === a.id}
+            onClick={() => cancel(a.id)}
+            className="btn btn-danger px-3 py-1.5 text-xs"
+          >
+            {cancelling === a.id ? "取消中…" : "取消"}
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }
 
