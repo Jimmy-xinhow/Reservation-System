@@ -22,6 +22,7 @@ interface Row {
   deposit_amount: number;
   doctors: { name: string } | null;
   patients: { name: string; phone: string } | null;
+  services: { name: string } | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -61,7 +62,7 @@ export default async function TodayPage({
   let apptQuery = supabase
     .from("appointments")
     .select(
-      "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, doctors(name), patients(name, phone)",
+      "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, doctors(name), patients(name, phone), services(name)",
     )
     .eq("clinic_id", CLINIC_ID)
     .gte("start_at", dayStart)
@@ -163,6 +164,7 @@ export default async function TodayPage({
               <th>{mode === "time" ? "時間" : "號次"}</th>
               <th>醫師</th>
               <th>病患</th>
+              <th>服務</th>
               <th>初/複</th>
               <th>狀態</th>
               <th>訂金</th>
@@ -172,7 +174,7 @@ export default async function TodayPage({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-10 text-center text-slate-400">
+                <td colSpan={8} className="py-10 text-center text-slate-400">
                   今日尚無約診
                 </td>
               </tr>
@@ -186,6 +188,13 @@ export default async function TodayPage({
                 <td>
                   <div className="font-medium text-slate-800">{r.patients?.name}</div>
                   <div className="text-xs text-slate-400">{r.patients?.phone}</div>
+                </td>
+                <td>
+                  {r.services?.name ? (
+                    <span className="badge bg-slate-100 text-slate-600">{r.services.name}</span>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
                 </td>
                 <td>
                   {r.visit_type === "first" ? (

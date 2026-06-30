@@ -8,6 +8,7 @@ const NAV = [
   { href: "/admin", label: "今日約診" },
   { href: "/admin/schedules", label: "門診表" },
   { href: "/admin/exceptions", label: "休診/加診" },
+  { href: "/admin/services", label: "看診服務" },
   { href: "/admin/patients", label: "病患查詢" },
   { href: "/admin/settings", label: "診所設定" },
   { href: "/admin/line", label: "LINE 連線" },

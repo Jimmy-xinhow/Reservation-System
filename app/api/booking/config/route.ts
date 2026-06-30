@@ -24,6 +24,13 @@ export async function GET() {
       .order("name");
     if (error) return fail(error.message, 500);
 
+    const { data: services } = await svc
+      .from("services")
+      .select("id, name, description")
+      .eq("clinic_id", CLINIC_ID)
+      .eq("active", true)
+      .order("created_at");
+
     return ok({
       booking_mode: settings.booking_mode,
       first_visit_extends: settings.first_visit_extends,
@@ -35,6 +42,7 @@ export async function GET() {
       allow_multi_patient_per_phone: settings.allow_multi_patient_per_phone,
       max_patients_per_phone: settings.max_patients_per_phone,
       doctors: doctors ?? [],
+      services: services ?? [],
     });
   } catch (e) {
     return fail(e instanceof Error ? e.message : "讀取設定失敗", 500);

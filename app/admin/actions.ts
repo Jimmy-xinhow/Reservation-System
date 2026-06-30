@@ -313,6 +313,20 @@ export async function createDoctorAction(fd: FormData) {
   revalidatePath("/admin/schedules");
 }
 
+export async function updateDoctorAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const name = str(fd, "name");
+  if (!id || !name) throw new Error("缺少醫師或姓名");
+  const { error } = await supabase
+    .from("doctors")
+    .update({ name, specialty: str(fd, "specialty") || null })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/schedules");
+}
+
 export async function toggleDoctorAction(fd: FormData) {
   const { supabase } = await requireMember();
   const id = str(fd, "id");
@@ -324,6 +338,60 @@ export async function toggleDoctorAction(fd: FormData) {
     .eq("clinic_id", CLINIC_ID);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/schedules");
+}
+
+// ── 看診服務 services ─────────────────────────────────────
+export async function createServiceAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const name = str(fd, "name");
+  if (!name) throw new Error("請填服務名稱");
+  const { error } = await supabase.from("services").insert({
+    clinic_id: CLINIC_ID,
+    name,
+    description: str(fd, "description") || null,
+    active: true,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/services");
+}
+
+export async function updateServiceAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const name = str(fd, "name");
+  if (!id || !name) throw new Error("缺少服務或名稱");
+  const { error } = await supabase
+    .from("services")
+    .update({ name, description: str(fd, "description") || null })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/services");
+}
+
+export async function toggleServiceAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const active = bool(fd, "active");
+  const { error } = await supabase
+    .from("services")
+    .update({ active: !active })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/services");
+}
+
+export async function deleteServiceAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const { error } = await supabase
+    .from("services")
+    .delete()
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error("此服務已被約診使用,無法刪除,請改為停用。");
+  revalidatePath("/admin/services");
 }
 
 // ── 診所公開資訊 clinics(名稱、LINE ID、電話、地址、簡介)──────

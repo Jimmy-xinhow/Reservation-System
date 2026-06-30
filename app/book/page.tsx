@@ -10,6 +10,11 @@ interface Doctor {
   name: string;
   specialty: string | null;
 }
+interface Service {
+  id: string;
+  name: string;
+  description: string | null;
+}
 interface Config {
   booking_mode: "time" | "number";
   deposit_enabled: boolean;
@@ -17,6 +22,7 @@ interface Config {
   allow_multi_patient_per_phone: boolean;
   max_patients_per_phone: number;
   doctors: Doctor[];
+  services: Service[];
 }
 interface BoundPatient {
   id: string;
@@ -68,6 +74,7 @@ export default function BookPage() {
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const [doctorId, setDoctorId] = useState("");
+  const [serviceId, setServiceId] = useState("");
   const [date, setDate] = useState("");
   const [slots, setSlots] = useState<Slot[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -181,6 +188,7 @@ export default function BookPage() {
         idToken,
         patient_id,
         doctor_id: doctorId,
+        service_id: serviceId || undefined,
         visit_type: visitType,
         is_self_pay: isSelfPay,
       };
@@ -303,6 +311,23 @@ export default function BookPage() {
                 ))}
               </select>
             </div>
+            {config.services.length > 0 && (
+              <div>
+                <label className="label">看診服務</label>
+                <select
+                  className="input"
+                  value={serviceId}
+                  onChange={(e) => setServiceId(e.target.value)}
+                >
+                  <option value="">不指定</option>
+                  {config.services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="label">日期</label>
               <input

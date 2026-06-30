@@ -10,6 +10,7 @@ interface ReserveBody {
   idToken?: string;
   patient_id?: string;
   doctor_id?: string;
+  service_id?: string;
   visit_type?: "first" | "return";
   is_self_pay?: boolean;
   // time 模式
@@ -92,6 +93,19 @@ export async function POST(req: NextRequest) {
       if (!row) return fail("掛號失敗", 500);
       appointmentId = row.appointment_id as string;
       queueNumber = row.queue_number as number;
+    }
+
+    // 記錄所選服務(RPC 不含此欄,訂位成功後補寫;驗證服務屬於本診所)
+    if (body.service_id) {
+      const { data: svcRow } = await svc
+        .from("services")
+        .select("id")
+        .eq("id", body.service_id)
+        .eq("clinic_id", CLINIC_ID)
+        .maybeSingle();
+      if (svcRow) {
+        await svc.from("appointments").update({ service_id: body.service_id }).eq("id", appointmentId);
+      }
     }
 
     // 回傳訂金狀態供成功頁顯示

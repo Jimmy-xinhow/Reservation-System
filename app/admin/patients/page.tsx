@@ -24,6 +24,7 @@ interface Appt {
   status: string;
   queue_number: number | null;
   doctors: { name: string } | null;
+  services: { name: string } | null;
 }
 
 export default async function PatientsPage({
@@ -50,7 +51,7 @@ export default async function PatientsPage({
     if (patients.length > 0) {
       const { data: aData } = await supabase
         .from("appointments")
-        .select("id, patient_id, start_at, status, queue_number, doctors(name)")
+        .select("id, patient_id, start_at, status, queue_number, doctors(name), services(name)")
         .eq("clinic_id", CLINIC_ID)
         .in(
           "patient_id",
@@ -96,6 +97,9 @@ export default async function PatientsPage({
                     <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-slate-700">
                       <span className="font-medium">{formatDateTime(a.start_at)}</span>
                       <span className="text-slate-500">{a.doctors?.name}</span>
+                      {a.services?.name && (
+                        <span className="badge bg-slate-100 text-slate-600">{a.services.name}</span>
+                      )}
                       {a.queue_number != null && (
                         <span className="text-slate-500">第 {a.queue_number} 號</span>
                       )}

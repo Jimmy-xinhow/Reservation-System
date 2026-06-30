@@ -87,12 +87,23 @@ create table if not exists patients (
 );
 create index if not exists patients_clinic_phone_idx on patients (clinic_id, phone);
 
+-- 看診服務項目(例:針灸、推拿、把脈調理)。病患預約時可選,記錄於約診。
+create table if not exists services (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  name text not null,
+  description text,
+  active boolean default true,
+  created_at timestamptz default now()
+);
+
 create table if not exists appointments (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references clinics(id) on delete cascade,
   doctor_id uuid not null references doctors(id),
   patient_id uuid not null references patients(id),
   template_id uuid references schedule_templates(id), -- 所屬門診段(號次制必填)
+  service_id uuid references services(id),            -- 看診服務(選填)
   start_at timestamptz not null,
   end_at timestamptz not null,
   visit_type text not null default 'return' check (visit_type in ('first','return')),
@@ -110,6 +121,8 @@ create table if not exists appointments (
 create index if not exists appt_clinic_doctor_start_idx on appointments (clinic_id, doctor_id, start_at);
 create index if not exists appt_start_idx on appointments (start_at);
 create index if not exists appt_template_start_idx on appointments (template_id, start_at);
+-- 既有資料庫補欄位(idempotent)
+alter table appointments add column if not exists service_id uuid references services(id);
 
 create table if not exists reminder_logs (
   id uuid primary key default gen_random_uuid(),
@@ -344,6 +357,7 @@ alter table patients enable row level security;
 alter table appointments enable row level security;
 alter table reminder_logs enable row level security;
 alter table clinic_members enable row level security;
+alter table services enable row level security;
 
 -- authenticated:只能讀寫自己所屬診所的資料。
 -- 一律內聯 auth.uid() 子查詢比對 clinic_members(不要包成 security definer 函式,理由見上方)。
@@ -380,6 +394,11 @@ create policy patients_member on patients for all to authenticated
 
 drop policy if exists appointments_member on appointments;
 create policy appointments_member on appointments for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+
+drop policy if exists services_member on services;
+create policy services_member on services for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
   with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 

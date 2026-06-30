@@ -6,9 +6,11 @@ import {
   toggleTemplateAction,
   deleteTemplateAction,
   createDoctorAction,
+  updateDoctorAction,
   toggleDoctorAction,
 } from "../actions";
 import ScheduleEditor from "../_components/ScheduleEditor";
+import EntityManager from "../_components/EntityManager";
 
 export const dynamic = "force-dynamic";
 
@@ -49,35 +51,16 @@ export default async function SchedulesPage() {
       <h1 className="text-xl font-bold text-slate-900">門診表</h1>
 
       {/* 醫師 */}
-      <section className="space-y-3">
-        <h2 className="font-semibold text-slate-900">醫師</h2>
-        <form action={createDoctorAction} className="card flex flex-wrap items-end gap-3 p-4">
-          <label className="block text-sm font-medium text-slate-600">
-            姓名
-            <input name="name" required className="input mt-1" />
-          </label>
-          <label className="block text-sm font-medium text-slate-600">
-            專長
-            <input name="specialty" className="input mt-1" />
-          </label>
-          <button className="btn btn-primary">新增醫師</button>
-        </form>
-        <div className="flex flex-wrap gap-2">
-          {docs.map((d) => (
-            <form key={d.id} action={toggleDoctorAction} className="card flex items-center gap-2 px-3 py-2 text-sm">
-              <input type="hidden" name="id" value={d.id} />
-              <input type="hidden" name="active" value={String(d.active)} />
-              <span className={d.active ? "font-medium text-slate-700" : "text-slate-400 line-through"}>
-                {d.name}
-                {d.specialty ? `(${d.specialty})` : ""}
-              </span>
-              <button className="text-xs font-medium text-brand-600 hover:underline">
-                {d.active ? "停用" : "啟用"}
-              </button>
-            </form>
-          ))}
-        </div>
-      </section>
+      <EntityManager
+        title="醫師"
+        nameLabel="姓名"
+        secondaryLabel="專長"
+        secondaryField="specialty"
+        items={docs.map((d) => ({ id: d.id, name: d.name, secondary: d.specialty, active: d.active }))}
+        createAction={createDoctorAction}
+        updateAction={updateDoctorAction}
+        toggleAction={toggleDoctorAction}
+      />
 
       {/* 門診段 */}
       <ScheduleEditor
