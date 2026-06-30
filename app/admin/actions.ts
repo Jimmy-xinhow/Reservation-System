@@ -365,6 +365,27 @@ export async function toggleDoctorAction(fd: FormData) {
   revalidatePath("/admin/schedules");
 }
 
+// ── 病患建檔/記錄 patients ───────────────────────────────
+export async function updatePatientAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  if (!id) throw new Error("缺少病患");
+  const { error } = await supabase
+    .from("patients")
+    .update({
+      note: str(fd, "note") || null,
+      tags: str(fd, "tags") || null,
+      birthday: str(fd, "birthday") || null,
+      gender: str(fd, "gender") || null,
+      email: str(fd, "email") || null,
+      marketing_opt_in: bool(fd, "marketing_opt_in"),
+    })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/patients");
+}
+
 // ── 看診服務 services ─────────────────────────────────────
 export async function createServiceAction(fd: FormData) {
   const { supabase } = await requireMember();

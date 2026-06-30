@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { taipeiDateString } from "@/lib/slots";
@@ -38,11 +37,9 @@ function shiftDate(base: string, days: number): string {
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { page: pageStr } = await searchParams;
-  const page = Math.max(1, Number(pageStr) || 1);
-  const pageSize = 20;
+  await searchParams;
 
   const supabase = await createSupabaseServer();
   const today = taipeiToday();
@@ -51,25 +48,18 @@ export default async function DashboardPage({
   const winStartIso = new Date(`${winStart}T00:00:00+08:00`).toISOString();
   const winEndIso = new Date(`${winEnd}T23:59:59.999+08:00`).toISOString();
 
-  const [{ data: apptData }, { count: patientCount }, { data: patientList, count: plCount }] =
-    await Promise.all([
-      supabase
-        .from("appointments")
-        .select("start_at, status, doctors(name)")
-        .eq("clinic_id", CLINIC_ID)
-        .gte("start_at", winStartIso)
-        .lte("start_at", winEndIso),
-      supabase
-        .from("patients")
-        .select("id", { count: "exact", head: true })
-        .eq("clinic_id", CLINIC_ID),
-      supabase
-        .from("patients")
-        .select("id, name, phone, created_at", { count: "exact" })
-        .eq("clinic_id", CLINIC_ID)
-        .order("created_at", { ascending: false })
-        .range((page - 1) * pageSize, page * pageSize - 1),
-    ]);
+  const [{ data: apptData }, { count: patientCount }] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select("start_at, status, doctors(name)")
+      .eq("clinic_id", CLINIC_ID)
+      .gte("start_at", winStartIso)
+      .lte("start_at", winEndIso),
+    supabase
+      .from("patients")
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", CLINIC_ID),
+  ]);
 
   const appts = (apptData ?? []) as unknown as Appt[];
   const active = appts.filter((a) => a.status !== "cancelled");
@@ -95,8 +85,6 @@ export default async function DashboardPage({
   const todayConfirmed = active.filter(
     (a) => taipeiDateString(a.start_at) === today && a.status === "confirmed",
   ).length;
-
-  const totalPages = Math.max(1, Math.ceil((plCount ?? 0) / pageSize));
 
   return (
     <div className="space-y-6">
@@ -170,66 +158,6 @@ export default async function DashboardPage({
           )}
         </section>
       </div>
-
-      {/* 病患列表 */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">病患列表</h2>
-          <Link href="/admin/patients" className="text-sm text-brand-600 hover:underline">
-            前往搜尋 →
-          </Link>
-        </div>
-        <div className="card overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>姓名</th>
-                <th>電話</th>
-                <th>建立日期</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(patientList ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-8 text-center text-slate-400">
-                    尚無病患
-                  </td>
-                </tr>
-              )}
-              {(patientList ?? []).map((p) => (
-                <tr key={p.id as string}>
-                  <td className="font-medium text-slate-800">{p.name as string}</td>
-                  <td className="text-slate-500">{p.phone as string}</td>
-                  <td className="text-slate-400">
-                    {p.created_at ? taipeiDateString(p.created_at as string) : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {totalPages > 1 && (
-          <div className="flex items-center justify-center gap-3 text-sm">
-            {page > 1 ? (
-              <Link href={`/admin/dashboard?page=${page - 1}`} className="btn btn-secondary px-3 py-1.5">
-                上一頁
-              </Link>
-            ) : (
-              <span className="text-slate-300">上一頁</span>
-            )}
-            <span className="text-slate-500">
-              {page} / {totalPages}
-            </span>
-            {page < totalPages ? (
-              <Link href={`/admin/dashboard?page=${page + 1}`} className="btn btn-secondary px-3 py-1.5">
-                下一頁
-              </Link>
-            ) : (
-              <span className="text-slate-300">下一頁</span>
-            )}
-          </div>
-        )}
-      </section>
     </div>
   );
 }
