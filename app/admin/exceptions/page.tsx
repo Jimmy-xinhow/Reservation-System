@@ -62,11 +62,23 @@ export default async function ExceptionsPage() {
         </label>
         <label className="block text-sm font-medium text-slate-600">
           開始
-          <input type="time" name="start_time" className="input mt-1" />
+          <input
+            name="start_time"
+            placeholder="09:00"
+            inputMode="numeric"
+            pattern="[0-9]{1,2}:[0-9]{2}"
+            className="input mt-1 w-24"
+          />
         </label>
         <label className="block text-sm font-medium text-slate-600">
           結束
-          <input type="time" name="end_time" className="input mt-1" />
+          <input
+            name="end_time"
+            placeholder="12:00"
+            inputMode="numeric"
+            pattern="[0-9]{1,2}:[0-9]{2}"
+            className="input mt-1 w-24"
+          />
         </label>
         <label className="block text-sm font-medium text-slate-600">
           每格(分)
