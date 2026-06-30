@@ -18,6 +18,11 @@ export default async function DiagPage() {
   const settings = await supabase.from("clinic_settings").select("clinic_id, booking_mode");
   const doctors = await supabase.from("doctors").select("id").limit(1);
 
+  // 直接以 app 的登入身分呼叫 auth_clinic_ids():
+  // - 回 [087f6757...] → 函式正常,問題在 clinic_settings/doctors 的 policy 定義(部署版本不對)
+  // - 回 [] → 函式在 app context 下回空(security definer 內 auth.uid() 取不到 → 改 invoker)
+  const fnIds = await supabase.rpc("auth_clinic_ids");
+
   const report = {
     env_NEXT_PUBLIC_CLINIC_ID: CLINIC_ID,
     auth_getUser: {
@@ -30,6 +35,7 @@ export default async function DiagPage() {
     clinic_members_visible: { rows: members.data, error: members.error?.message ?? null },
     clinic_settings_visible: { rows: settings.data, error: settings.error?.message ?? null },
     doctors_visible_count: { rows: doctors.data?.length ?? 0, error: doctors.error?.message ?? null },
+    auth_clinic_ids_rpc: { data: fnIds.data, error: fnIds.error?.message ?? null },
   };
 
   return (
