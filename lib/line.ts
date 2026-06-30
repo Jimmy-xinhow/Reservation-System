@@ -1,0 +1,92 @@
+import crypto from "node:crypto";
+
+const LINE_API = "https://api.line.me/v2/bot";
+const LINE_VERIFY = "https://api.line.me/oauth2/v2.1/verify";
+
+function accessToken(): string {
+  const t = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!t) throw new Error("缺少 LINE_CHANNEL_ACCESS_TOKEN");
+  return t;
+}
+
+/** LINE 任意 message 物件(Flex / text 等),不細究內部結構。 */
+export type LineMessage = Record<string, unknown>;
+
+export interface VerifiedLineProfile {
+  /** line_user_id */
+  sub: string;
+  name?: string;
+  picture?: string;
+}
+
+/**
+ * 後端驗證 LIFF ID token。
+ * 前端送來的 line_user_id 不可信;必須用此函式向 LINE 驗證後才採用回傳的 sub。
+ */
+export async function verifyLiffIdToken(idToken: string): Promise<VerifiedLineProfile> {
+  const clientId = process.env.LINE_LOGIN_CHANNEL_ID;
+  if (!clientId) throw new Error("缺少 LINE_LOGIN_CHANNEL_ID");
+  if (!idToken) throw new Error("缺少 id_token");
+
+  const res = await fetch(LINE_VERIFY, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ id_token: idToken, client_id: clientId }),
+  });
+  if (!res.ok) {
+    throw new Error("LINE ID token 驗證失敗");
+  }
+  const data = (await res.json()) as {
+    sub?: string;
+    name?: string;
+    picture?: string;
+  };
+  if (!data.sub) throw new Error("LINE ID token 無 sub");
+  return { sub: data.sub, name: data.name, picture: data.picture };
+}
+
+/**
+ * 驗 webhook 的 x-line-signature(HMAC-SHA256 / LINE_CHANNEL_SECRET,Base64)。
+ * @param rawBody 必須是「未經 parse」的原始 request body 字串。
+ */
+export function verifyLineSignature(rawBody: string, signature: string | null): boolean {
+  const secret = process.env.LINE_CHANNEL_SECRET;
+  if (!secret || !signature) return false;
+  const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+/** 主動推播一則或多則訊息給某 line_user_id。 */
+export async function pushMessages(to: string, messages: LineMessage[]): Promise<void> {
+  const res = await fetch(`${LINE_API}/message/push`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken()}`,
+    },
+    body: JSON.stringify({ to, messages }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`LINE push 失敗 (${res.status}): ${detail}`);
+  }
+}
+
+/** 以 replyToken 回覆訊息(webhook 用)。 */
+export async function replyMessages(replyToken: string, messages: LineMessage[]): Promise<void> {
+  const res = await fetch(`${LINE_API}/message/reply`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken()}`,
+    },
+    body: JSON.stringify({ replyToken, messages }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`LINE reply 失敗 (${res.status}): ${detail}`);
+  }
+}

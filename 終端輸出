@@ -1,0 +1,24 @@
+$ cd "C:/Users/User/Reservation System" && echo "=== 1) 原始碼中 Supabase 連線用的 key 變數 (排除 .next) ===" && grep -rn "NEXT_PUBLIC_SUPABASE_URL\|NEXT_PUBLIC_SUPABASE_ANON_KEY\|SUPABASE_SERVICE_ROLE_KEY" --include=*.ts . | grep -v "node_modules" && echo "" && echo "=== 2) 是否出現新版 sb_publishable_/sb_secret_ ===" && (grep -rn "sb_publishable_\|sb_secret_" --include=*.ts . | grep -v node_modules || echo "(無:程式未使用新版 publishable/secret key)") && echo "" && echo "=== 3) .env.example 的 Supabase 相關變數 ===" && grep -n "SUPABASE\|CLINIC_ID" .env.example
+
+=== 1) 原始碼中 Supabase 連線用的 key 變數 (排除 .next) ===
+./lib/supabase-browser.ts:8:    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+./lib/supabase-browser.ts:9:    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+./lib/supabase-server.ts:10:  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+./lib/supabase-server.ts:11:  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+./lib/supabase.ts:3:const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+./lib/supabase.ts:4:const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+./lib/supabase.ts:13:    throw new Error("缺少 NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY");
+./lib/supabase.ts:24: * service key 來自 SUPABASE_SERVICE_ROLE_KEY,絕不可出現在 client 或 NEXT_PUBLIC_*。
+./lib/supabase.ts:30:  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+./lib/supabase.ts:32:    throw new Error("缺少 NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
+./middleware.ts:9:    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+./middleware.ts:10:    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+
+=== 2) 是否出現新版 sb_publishable_/sb_secret_ ===
+(無:程式未使用新版 publishable/secret key)
+
+=== 3) .env.example 的 Supabase 相關變數 ===
+3:NEXT_PUBLIC_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+5:NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+7:SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+11:NEXT_PUBLIC_CLINIC_ID=00000000-0000-0000-0000-000000000000

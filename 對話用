@@ -1,0 +1,11 @@
+讀 CLAUDE.md。我已經在 GitHub 開好 repo,要把目前專案推上去。Railway 之後我自己在後台連。
+
+請依序做:
+1. 先安全檢查:確認 .gitignore 有包含 .env 與 .env.local(沒有就補上)。然後跑 git status,確認「待提交清單裡沒有任何 .env / .env.local / 含真實金鑰的檔案」。如果發現 .env.local 會被提交,立刻停下來告訴我,不要 push。
+2. 確認 .env.example 裡只有佔位字串、沒有真實 key,這份可以推。
+3. 若專案還沒初始化 git,執行 git init 並把預設分支設為 main。
+4. 加入遠端:git remote add origin https://github.com/Jimmy-xinhow/Reservation-System.git(若已存在 origin 就改用 set-url 指到這個網址)。
+5. git add . → git commit -m "initial commit: 診所預約系統" → git push -u origin main。
+6. push 成功後,回報:目前 commit 的 hash、推上去的檔案數量,以及「.env.local 確實沒有被推上去」的確認。
+
+整個過程不要動到任何程式邏輯,只做版控與推送。如果 push 因為 remote 已有內容被拒,先告訴我,不要強制 push。
