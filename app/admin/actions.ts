@@ -306,6 +306,28 @@ export async function toggleDoctorAction(fd: FormData) {
   revalidatePath("/admin/schedules");
 }
 
+// ── 診所公開資訊 clinics(名稱、LINE ID、電話、地址、簡介)──────
+export async function updateClinicProfileAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const name = str(fd, "name");
+  if (!name) throw new Error("請填診所名稱");
+  let lineId = str(fd, "line_basic_id");
+  if (lineId && !lineId.startsWith("@")) lineId = "@" + lineId; // 自動補 @
+  const { error } = await supabase
+    .from("clinics")
+    .update({
+      name,
+      line_basic_id: lineId || null,
+      phone: str(fd, "phone") || null,
+      address: str(fd, "address") || null,
+      intro: str(fd, "intro") || null,
+    })
+    .eq("id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/settings");
+  revalidatePath("/");
+}
+
 // ── 診所設定 clinic_settings ──────────────────────────────
 export async function updateSettingsAction(fd: FormData) {
   const { supabase } = await requireMember();

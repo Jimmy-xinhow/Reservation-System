@@ -1,8 +1,16 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
-import { updateSettingsAction } from "../actions";
+import { updateSettingsAction, updateClinicProfileAction } from "../actions";
 
 export const dynamic = "force-dynamic";
+
+interface Clinic {
+  name: string;
+  line_basic_id: string | null;
+  phone: string | null;
+  address: string | null;
+  intro: string | null;
+}
 
 interface Settings {
   booking_mode: "time" | "number";
@@ -19,12 +27,16 @@ interface Settings {
 
 export default async function SettingsPage() {
   const supabase = await createSupabaseServer();
-  const { data } = await supabase
-    .from("clinic_settings")
-    .select("*")
-    .eq("clinic_id", CLINIC_ID)
-    .maybeSingle();
+  const [{ data }, { data: clinicData }] = await Promise.all([
+    supabase.from("clinic_settings").select("*").eq("clinic_id", CLINIC_ID).maybeSingle(),
+    supabase
+      .from("clinics")
+      .select("name, line_basic_id, phone, address, intro")
+      .eq("id", CLINIC_ID)
+      .maybeSingle(),
+  ]);
   const s = data as Settings | null;
+  const clinic = clinicData as Clinic | null;
 
   if (!s) {
     return (
@@ -42,6 +54,48 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-900">診所設定</h1>
+
+      {/* 公開診所資訊(顯示於公開資訊頁) */}
+      <form action={updateClinicProfileAction} className="card space-y-4 p-5">
+        <h2 className="font-semibold text-slate-900">公開診所資訊</h2>
+        <p className="-mt-2 text-xs text-slate-400">顯示於公開資訊頁,病患看得到。</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label">診所名稱</label>
+            <input name="name" className="input" defaultValue={clinic?.name ?? ""} required />
+          </div>
+          <div>
+            <label className="label">LINE 官方帳號 ID</label>
+            <input
+              name="line_basic_id"
+              className="input"
+              defaultValue={clinic?.line_basic_id ?? ""}
+              placeholder="@738xusfj"
+            />
+            <p className="mt-1 text-xs text-slate-400">用於公開頁的「加入好友/線上預約」按鈕。</p>
+          </div>
+          <div>
+            <label className="label">電話</label>
+            <input name="phone" className="input" defaultValue={clinic?.phone ?? ""} />
+          </div>
+          <div>
+            <label className="label">地址</label>
+            <input name="address" className="input" defaultValue={clinic?.address ?? ""} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">簡介</label>
+            <textarea
+              name="intro"
+              rows={2}
+              className="input"
+              defaultValue={clinic?.intro ?? ""}
+              placeholder="例:看診時間、特色療程等"
+            />
+          </div>
+        </div>
+        <button className="btn btn-primary">儲存公開資訊</button>
+      </form>
+
       <form action={updateSettingsAction} className="space-y-6">
         {/* 1. 預約模式 */}
         <Section title="預約模式">

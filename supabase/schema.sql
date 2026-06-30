@@ -12,8 +12,18 @@ create table if not exists clinics (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   active boolean default true,
+  -- 公開診所資訊(顯示於公開資訊頁;非機密)
+  line_basic_id text,   -- LINE 官方帳號基本 ID,例 @738xusfj
+  phone text,
+  address text,
+  intro text,
   created_at timestamptz default now()
 );
+-- 既有資料庫補欄位(idempotent)
+alter table clinics add column if not exists line_basic_id text;
+alter table clinics add column if not exists phone text;
+alter table clinics add column if not exists address text;
+alter table clinics add column if not exists intro text;
 
 create table if not exists clinic_settings (
   clinic_id uuid primary key references clinics(id) on delete cascade,
