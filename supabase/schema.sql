@@ -90,6 +90,7 @@ create table if not exists patients (
   gender text,
   email text,
   marketing_opt_in boolean not null default false,     -- 同意行銷
+  blocked_until timestamptz,                            -- 黑名單:停權至此時間(null=正常)
   created_at timestamptz default now()
 );
 create index if not exists patients_clinic_phone_idx on patients (clinic_id, phone);
@@ -100,6 +101,7 @@ alter table patients add column if not exists birthday date;
 alter table patients add column if not exists gender text;
 alter table patients add column if not exists email text;
 alter table patients add column if not exists marketing_opt_in boolean not null default false;
+alter table patients add column if not exists blocked_until timestamptz;
 
 -- 看診服務項目(例:針灸、推拿、把脈調理)。病患預約時可選,記錄於約診。
 create table if not exists services (

@@ -1,43 +1,24 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
-import { formatDateTime } from "@/lib/slots";
-import { updatePatientAction } from "../actions";
 
 export const dynamic = "force-dynamic";
-
-const STATUS_LABEL: Record<string, string> = {
-  booked: "已預約",
-  confirmed: "已確認",
-  cancelled: "已取消",
-  done: "完成",
-  no_show: "未到",
-};
 
 interface Patient {
   id: string;
   name: string;
   phone: string;
-  note: string | null;
   tags: string | null;
-  birthday: string | null;
-  gender: string | null;
-  email: string | null;
-  marketing_opt_in: boolean;
+  blocked_until: string | null;
   created_at: string;
 }
-interface Appt {
-  id: string;
-  patient_id: string;
-  start_at: string;
-  status: string;
-  queue_number: number | null;
-  doctors: { name: string } | null;
-  services: { name: string } | null;
-}
 
-const PAGE_SIZE = 20;
-const SELECT = "id, name, phone, note, tags, birthday, gender, email, marketing_opt_in, created_at";
+const PAGE_SIZE = 30;
+const SELECT = "id, name, phone, tags, blocked_until, created_at";
+
+function isBlocked(p: Patient): boolean {
+  return !!p.blocked_until && new Date(p.blocked_until) > new Date();
+}
 
 export default async function PatientsPage({
   searchParams,
@@ -59,7 +40,7 @@ export default async function PatientsPage({
       .eq("clinic_id", CLINIC_ID)
       .or(`name.ilike.%${keyword}%,phone.ilike.%${keyword}%`)
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(100);
     patients = (data ?? []) as Patient[];
   } else {
     const { data, count } = await supabase
@@ -72,24 +53,29 @@ export default async function PatientsPage({
     total = count ?? 0;
   }
 
-  let appts: Appt[] = [];
+  // 各病患的約診/未到統計
+  const counts = new Map<string, { all: number; noShow: number }>();
   if (patients.length > 0) {
-    const { data } = await supabase
+    const { data: appts } = await supabase
       .from("appointments")
-      .select("id, patient_id, start_at, status, queue_number, doctors(name), services(name)")
+      .select("patient_id, status")
       .eq("clinic_id", CLINIC_ID)
       .in(
         "patient_id",
         patients.map((p) => p.id),
-      )
-      .order("start_at", { ascending: false });
-    appts = (data ?? []) as unknown as Appt[];
+      );
+    for (const a of appts ?? []) {
+      const c = counts.get(a.patient_id) ?? { all: 0, noShow: 0 };
+      c.all += 1;
+      if (a.status === "no_show") c.noShow += 1;
+      counts.set(a.patient_id, c);
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <h1 className="text-xl font-bold text-slate-900">病患查詢</h1>
 
       <form className="flex gap-2">
@@ -102,109 +88,73 @@ export default async function PatientsPage({
         )}
       </form>
 
-      {patients.length === 0 && (
-        <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-slate-400">
-          {keyword ? "查無符合的病患。" : "尚無病患。"}
-        </p>
-      )}
-
-      <div className="space-y-4">
-        {patients.map((p) => {
-          const history = appts.filter((a) => a.patient_id === p.id);
-          const tags = (p.tags ?? "")
-            .split(/[,，]/)
-            .map((t) => t.trim())
-            .filter(Boolean);
-          return (
-            <div key={p.id} className="card p-5">
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="text-base font-semibold text-slate-900">{p.name}</span>
-                <span className="text-sm text-slate-500">{p.phone}</span>
-                {p.marketing_opt_in && (
-                  <span className="badge bg-accent-500/10 text-accent-600">同意行銷</span>
-                )}
-                {tags.map((t) => (
-                  <span key={t} className="badge bg-brand-50 text-brand-700">
-                    {t}
-                  </span>
-                ))}
-              </div>
-
-              {/* 建檔記錄(可編輯) */}
-              <details className="mb-3 rounded-xl border border-slate-200">
-                <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-slate-600">
-                  建檔記錄 / 行銷資訊
-                </summary>
-                <form action={updatePatientAction} className="space-y-3 border-t border-slate-100 p-3">
-                  <input type="hidden" name="id" value={p.id} />
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium text-slate-600">生日</span>
-                      <input type="date" name="birthday" defaultValue={p.birthday ?? ""} className="input" />
-                    </label>
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium text-slate-600">性別</span>
-                      <select name="gender" defaultValue={p.gender ?? ""} className="input">
-                        <option value="">未填</option>
-                        <option value="男">男</option>
-                        <option value="女">女</option>
-                        <option value="其他">其他</option>
-                      </select>
-                    </label>
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium text-slate-600">Email</span>
-                      <input type="email" name="email" defaultValue={p.email ?? ""} className="input" />
-                    </label>
-                    <label className="text-sm">
-                      <span className="mb-1 block font-medium text-slate-600">標籤(逗號分隔)</span>
-                      <input name="tags" defaultValue={p.tags ?? ""} placeholder="VIP, 慢性, 初診優惠" className="input" />
-                    </label>
-                  </div>
-                  <label className="block text-sm">
-                    <span className="mb-1 block font-medium text-slate-600">備註 / 病況記錄</span>
-                    <textarea name="note" rows={2} defaultValue={p.note ?? ""} className="input" />
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      name="marketing_opt_in"
-                      defaultChecked={p.marketing_opt_in}
-                      className="h-4 w-4 accent-brand-600"
-                    />
-                    同意接收行銷訊息
-                  </label>
-                  <button className="btn btn-primary">儲存建檔</button>
-                </form>
-              </details>
-
-              {/* 約診歷史 */}
-              {history.length === 0 ? (
-                <p className="text-sm text-slate-400">無約診紀錄</p>
-              ) : (
-                <ul className="divide-y divide-slate-100 text-sm">
-                  {history.map((a) => (
-                    <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-slate-700">
-                      <span className="font-medium">{formatDateTime(a.start_at)}</span>
-                      <span className="text-slate-500">{a.doctors?.name}</span>
-                      {a.services?.name && (
-                        <span className="badge bg-slate-100 text-slate-600">{a.services.name}</span>
-                      )}
-                      {a.queue_number != null && (
-                        <span className="text-slate-500">第 {a.queue_number} 號</span>
-                      )}
-                      <span className="badge ml-auto bg-slate-100 text-slate-600">
-                        {STATUS_LABEL[a.status] ?? a.status}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          );
-        })}
+      <div className="card overflow-x-auto">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>姓名</th>
+              <th>電話</th>
+              <th>標籤</th>
+              <th>約診</th>
+              <th>未到</th>
+              <th>狀態</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {patients.length === 0 && (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-slate-400">
+                  {keyword ? "查無符合的病患" : "尚無病患"}
+                </td>
+              </tr>
+            )}
+            {patients.map((p) => {
+              const c = counts.get(p.id) ?? { all: 0, noShow: 0 };
+              const blocked = isBlocked(p);
+              const tags = (p.tags ?? "")
+                .split(/[,，]/)
+                .map((t) => t.trim())
+                .filter(Boolean);
+              return (
+                <tr key={p.id}>
+                  <td className="font-medium text-slate-800">{p.name}</td>
+                  <td className="text-slate-500">{p.phone}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-1">
+                      {tags.slice(0, 3).map((t) => (
+                        <span key={t} className="badge bg-brand-50 text-brand-700">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="text-slate-500">{c.all}</td>
+                  <td className={c.noShow >= 3 ? "font-semibold text-red-600" : "text-slate-500"}>
+                    {c.noShow}
+                  </td>
+                  <td>
+                    {blocked ? (
+                      <span className="badge bg-red-50 text-red-600">停權中</span>
+                    ) : (
+                      <span className="badge bg-accent-500/10 text-accent-600">正常</span>
+                    )}
+                  </td>
+                  <td>
+                    <Link
+                      href={`/admin/patients/${p.id}`}
+                      className="text-xs font-medium text-brand-600 hover:underline"
+                    >
+                      詳情
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
-      {/* 分頁(僅瀏覽全部時) */}
       {!keyword && totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 text-sm">
           {page > 1 ? (

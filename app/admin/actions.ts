@@ -54,7 +54,57 @@ export async function setStatusAction(fd: FormData) {
     .eq("id", id)
     .eq("clinic_id", CLINIC_ID);
   if (error) throw new Error(error.message);
+
+  // 未到自動停權:每累計滿 3 次未到 → 停權 1 個月
+  if (status === "no_show") {
+    const { data: appt } = await supabase
+      .from("appointments")
+      .select("patient_id")
+      .eq("id", id)
+      .eq("clinic_id", CLINIC_ID)
+      .maybeSingle();
+    if (appt?.patient_id) {
+      const { count } = await supabase
+        .from("appointments")
+        .select("id", { count: "exact", head: true })
+        .eq("clinic_id", CLINIC_ID)
+        .eq("patient_id", appt.patient_id)
+        .eq("status", "no_show");
+      const n = count ?? 0;
+      if (n > 0 && n % 3 === 0) {
+        const until = new Date();
+        until.setMonth(until.getMonth() + 1);
+        await supabase
+          .from("patients")
+          .update({ blocked_until: until.toISOString() })
+          .eq("id", appt.patient_id)
+          .eq("clinic_id", CLINIC_ID);
+      }
+    }
+    revalidatePath("/admin/patients");
+  }
   revalidatePath("/admin");
+}
+
+// 手動加入/解除黑名單(停權 1 個月 / 清除)
+export async function setPatientBlockAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  if (!id) throw new Error("缺少病患");
+  const block = str(fd, "block") === "1";
+  let blockedUntil: string | null = null;
+  if (block) {
+    const until = new Date();
+    until.setMonth(until.getMonth() + 1);
+    blockedUntil = until.toISOString();
+  }
+  const { error } = await supabase
+    .from("patients")
+    .update({ blocked_until: blockedUntil })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/patients");
 }
 
 export async function cancelAppointmentAction(fd: FormData) {

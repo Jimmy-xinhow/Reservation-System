@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
+import { formatDateTime } from "@/lib/slots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,13 +50,17 @@ export async function POST(req: NextRequest) {
     // 確認病患屬於本診所且為此 LINE 身分
     const { data: patient, error: pErr } = await svc
       .from("patients")
-      .select("id, clinic_id, line_user_id")
+      .select("id, clinic_id, line_user_id, blocked_until")
       .eq("id", body.patient_id)
       .maybeSingle();
     if (pErr) return fail(pErr.message, 500);
     if (!patient || patient.clinic_id !== CLINIC_ID) return fail("查無病患", 404);
     if (patient.line_user_id && patient.line_user_id !== lineUserId) {
       return fail("病患與目前 LINE 身分不符", 403);
+    }
+    // 黑名單:停權期間不可預約
+    if (patient.blocked_until && new Date(patient.blocked_until) > new Date()) {
+      return fail(`此就診者預約資格暫停至 ${formatDateTime(patient.blocked_until)},請洽櫃檯。`, 403);
     }
 
     const settings = await getClinicSettings(svc, CLINIC_ID);

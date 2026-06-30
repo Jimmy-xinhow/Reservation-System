@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const svc = createServiceClient();
     const { data, error } = await svc
       .from("patients")
-      .select("id, name, phone")
+      .select("id, name, phone, birthday, blocked_until")
       .eq("clinic_id", CLINIC_ID)
       .eq("line_user_id", lineUserId)
       .order("created_at");

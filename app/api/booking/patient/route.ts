@@ -19,13 +19,16 @@ export async function POST(req: NextRequest) {
       idToken?: string;
       name?: string;
       phone?: string;
+      birthday?: string;
     } | null;
     if (!body) return fail("請求格式錯誤");
 
     const name = body.name?.trim();
     const phone = body.phone?.trim();
+    const birthday = body.birthday?.trim();
     if (!name) return fail("請填寫姓名");
     if (!phone) return fail("請填寫電話");
+    if (!birthday || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return fail("請填寫出生年月日");
     if (!body.idToken) return fail("缺少 LINE 身分驗證");
 
     // 驗證 LINE 身分(信任前先驗)
@@ -49,10 +52,13 @@ export async function POST(req: NextRequest) {
     if (qErr) return fail(qErr.message, 500);
     const rows = existing ?? [];
 
-    // 同電話同姓名 → 沿用該筆,更新 line_user_id
+    // 同電話同姓名 → 沿用該筆,更新 line_user_id 與生日
     const sameName = rows.find((r) => r.name === name);
     if (sameName) {
-      await svc.from("patients").update({ line_user_id: lineUserId }).eq("id", sameName.id);
+      await svc
+        .from("patients")
+        .update({ line_user_id: lineUserId, birthday })
+        .eq("id", sameName.id);
       return ok({ patient_id: sameName.id, reused: true });
     }
 
@@ -70,7 +76,7 @@ export async function POST(req: NextRequest) {
 
     const { data: created, error: cErr } = await svc
       .from("patients")
-      .insert({ clinic_id: CLINIC_ID, name, phone, line_user_id: lineUserId })
+      .insert({ clinic_id: CLINIC_ID, name, phone, birthday, line_user_id: lineUserId })
       .select("id")
       .single();
     if (cErr) return fail(cErr.message, 500);
