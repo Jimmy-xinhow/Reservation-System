@@ -273,10 +273,27 @@ export async function createExceptionAction(fd: FormData) {
   const isClosed = str(fd, "kind") !== "extra"; // kind=closed(休診) / extra(加診)
   const start = str(fd, "start_time");
   const end = str(fd, "end_time");
+  const date = str(fd, "date");
+  const tplId = str(fd, "template_id");
+
+  // 休診某門診段且未選日期 → 永久停用該門診段(等同門診表停用)
+  if (isClosed && tplId && !date) {
+    const { error } = await supabase
+      .from("schedule_templates")
+      .update({ active: false })
+      .eq("id", tplId)
+      .eq("clinic_id", CLINIC_ID);
+    if (error) throw new Error(error.message);
+    revalidatePath("/admin/exceptions");
+    revalidatePath("/admin/schedules");
+    return;
+  }
+  if (!date) throw new Error("請選擇日期");
+
   const row: Record<string, unknown> = {
     clinic_id: CLINIC_ID,
     doctor_id: str(fd, "doctor_id"),
-    date: str(fd, "date"),
+    date,
     is_closed: isClosed,
   };
   if (isClosed) {

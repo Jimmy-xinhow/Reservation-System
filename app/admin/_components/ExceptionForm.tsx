@@ -99,8 +99,13 @@ export default function ExceptionForm({
       </label>
 
       <label className="block text-sm font-medium text-slate-600">
-        日期
-        <input type="date" name="date" required className="input mt-1" />
+        日期{kind === "closed" && tplId ? "(選填)" : ""}
+        <input
+          type="date"
+          name="date"
+          required={kind === "extra" || (kind === "closed" && !tplId)}
+          className="input mt-1"
+        />
       </label>
 
       <label className="block text-sm font-medium text-slate-600">
@@ -137,6 +142,12 @@ export default function ExceptionForm({
           {/* 只休某診時帶出時段;整天休診則留空 */}
           <input type="hidden" name="start_time" value={start} />
           <input type="hidden" name="end_time" value={end} />
+          <input type="hidden" name="template_id" value={tplId} />
+          {tplId && (
+            <p className="w-full text-xs text-slate-400">
+              選門診段後:不選日期 = 永久停診此門診段(門診表可重新啟用);選日期 = 只休那天的這一診。
+            </p>
+          )}
         </>
       )}
 
