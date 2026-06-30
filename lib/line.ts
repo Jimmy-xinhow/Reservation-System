@@ -59,6 +59,32 @@ export function verifyLineSignature(rawBody: string, signature: string | null): 
   return crypto.timingSafeEqual(a, b);
 }
 
+export interface LineBotInfo {
+  userId: string;
+  basicId?: string;
+  displayName?: string;
+  pictureUrl?: string;
+  chatMode?: string;
+}
+
+/** 取得官方帳號資訊(可用來驗證 access token 是否有效)。 */
+export async function getBotInfo(): Promise<LineBotInfo> {
+  const res = await fetch(`${LINE_API}/info`, {
+    headers: { Authorization: `Bearer ${accessToken()}` },
+  });
+  if (!res.ok) throw new Error(`LINE 連線失敗 (${res.status})`);
+  return (await res.json()) as LineBotInfo;
+}
+
+/** 取得推播額度。 */
+export async function getQuota(): Promise<{ type: string; value?: number }> {
+  const res = await fetch(`${LINE_API}/message/quota`, {
+    headers: { Authorization: `Bearer ${accessToken()}` },
+  });
+  if (!res.ok) throw new Error(`LINE 額度查詢失敗 (${res.status})`);
+  return (await res.json()) as { type: string; value?: number };
+}
+
 /** 主動推播一則或多則訊息給某 line_user_id。 */
 export async function pushMessages(to: string, messages: LineMessage[]): Promise<void> {
   const res = await fetch(`${LINE_API}/message/push`, {
