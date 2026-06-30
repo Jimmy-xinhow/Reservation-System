@@ -428,7 +428,7 @@ export default function BookPage() {
               </div>
             )}
             <div>
-              <label className="label">看診類型</label>
+              <label className="label">看診類型(請確認)</label>
               <div className="grid grid-cols-2 gap-2">
                 <TypeToggle active={visitType === "return"} onClick={() => setVisitType("return")}>
                   複診
@@ -437,6 +437,11 @@ export default function BookPage() {
                   初診
                 </TypeToggle>
               </div>
+              {visitType === "first" && (
+                <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
+                  🕒 初診需較完整的問診與評估,看診時間會比複診長,請預留充足時間前來。
+                </p>
+              )}
             </div>
             <label className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
               <input
