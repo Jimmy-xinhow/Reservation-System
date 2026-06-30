@@ -28,6 +28,7 @@ interface BoundPatient {
   id: string;
   name: string;
   phone: string;
+  blocked_until: string | null;
 }
 interface Slot {
   slot_start: string;
@@ -86,12 +87,14 @@ export default function BookPage() {
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [birthday, setBirthday] = useState("");
   const [visitType, setVisitType] = useState<"first" | "return">("return");
   const [isSelfPay, setIsSelfPay] = useState(false);
 
   // 綁定:此 LINE 身分已綁定的病患(null = 載入中)
   const [bound, setBound] = useState<BoundPatient[] | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState(""); // 病患 id 或 "__new__"
+  const [forWhom, setForWhom] = useState<"" | "self" | "other">(""); // 為自己 / 幫別人
 
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
@@ -165,8 +168,14 @@ export default function BookPage() {
 
   const slotPicked = config?.booking_mode === "time" ? !!pickedStart : !!pickedTemplate;
   const addingNew = selectedPatientId === "__new__";
-  const patientReady = addingNew ? !!name.trim() && !!phone.trim() : !!selectedPatientId;
-  const canSubmit = ready && patientReady && slotPicked && !submitting;
+  const selectedBound = (bound ?? []).find((p) => p.id === selectedPatientId) ?? null;
+  const selectedBlocked =
+    !!selectedBound?.blocked_until && new Date(selectedBound.blocked_until) > new Date();
+  const patientReady = addingNew
+    ? !!name.trim() && !!phone.trim() && /^\d{4}-\d{2}-\d{2}$/.test(birthday)
+    : !!selectedPatientId && !selectedBlocked;
+  const serviceReady = config ? config.services.length === 0 || !!serviceId : false;
+  const canSubmit = ready && patientReady && serviceReady && slotPicked && !submitting;
 
   async function handleSubmit() {
     if (!config || !idToken) return;
@@ -179,7 +188,7 @@ export default function BookPage() {
         const created = await api<{ patient_id: string }>("/api/booking/patient", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken, name: name.trim(), phone: phone.trim() }),
+          body: JSON.stringify({ idToken, name: name.trim(), phone: phone.trim(), birthday }),
         });
         patient_id = created.patient_id;
       }
@@ -259,6 +268,9 @@ export default function BookPage() {
                 需繳訂金 NT${result.deposit_amount},完成後即保留名額。詳情請洽櫃檯。
               </p>
             )}
+            <p className="rounded-xl bg-red-50 p-3 text-left text-xs leading-relaxed text-red-700">
+              ⚠️ 提醒:無法前來請務必提前取消。<strong>累計三次未提前取消而未到,將暫停一個月的線上預約資格。</strong>
+            </p>
             <button onClick={() => setResult(null)} className="btn btn-secondary w-full">
               再預約一筆
             </button>
@@ -286,115 +298,54 @@ export default function BookPage() {
         <MyAppointments idToken={idToken} mode={config.booking_mode} />
       ) : bound === null ? (
         <div className="card p-6 text-center text-sm text-slate-400">確認身分中…</div>
-      ) : bound.length === 0 ? (
-        <BindGate idToken={idToken} onBound={loadBound} />
+      ) : forWhom === "" ? (
+        // 先選:為自己 / 幫別人
+        <div className="space-y-3">
+          <p className="px-1 text-sm font-medium text-slate-600">請問這次要為誰預約?</p>
+          <button
+            type="button"
+            onClick={() => {
+              setForWhom("self");
+              setSelectedPatientId(bound[0]?.id ?? "__new__");
+            }}
+            className="card flex w-full items-center gap-3 p-5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50"
+          >
+            <span className="text-2xl">🧑</span>
+            <span>
+              <span className="block font-semibold text-slate-900">為我自己</span>
+              <span className="block text-xs text-slate-400">用本人資料預約</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setForWhom("other");
+              setSelectedPatientId("__new__");
+            }}
+            className="card flex w-full items-center gap-3 p-5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50"
+          >
+            <span className="text-2xl">👪</span>
+            <span>
+              <span className="block font-semibold text-slate-900">幫別人預約</span>
+              <span className="block text-xs text-slate-400">家人 / 朋友(填寫對方資料)</span>
+            </span>
+          </button>
+        </div>
       ) : (
       <>
       <div className="space-y-4">
-        {/* 步驟 1:選醫師與日期 */}
+        {/* 步驟 1:就診者資料 */}
         <section className="card p-5">
-          <SectionTitle n={1} title="選擇醫師與日期" done={stepDone.doctor && stepDone.date} />
-          <div className="space-y-4">
-            <div>
-              <label className="label">醫師</label>
-              <select
-                className="input"
-                value={doctorId}
-                onChange={(e) => setDoctorId(e.target.value)}
-              >
-                <option value="">請選擇醫師</option>
-                {config.doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                    {d.specialty ? `(${d.specialty})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {config.services.length > 0 && (
-              <div>
-                <label className="label">看診服務</label>
-                <select
-                  className="input"
-                  value={serviceId}
-                  onChange={(e) => setServiceId(e.target.value)}
-                >
-                  <option value="">不指定</option>
-                  {config.services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div>
-              <label className="label">日期</label>
-              <input
-                type="date"
-                className="input"
-                value={date}
-                min={todayStr()}
-                max={maxDate}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </div>
+          <div className="mb-2 flex items-center justify-between">
+            <SectionTitle n={1} title="就診者資料" done={patientReady} />
+            <button
+              type="button"
+              onClick={() => setForWhom("")}
+              className="text-xs text-slate-400 hover:text-brand-600"
+            >
+              重新選擇
+            </button>
           </div>
-        </section>
-
-        {/* 步驟 2:選時段/診次 */}
-        {doctorId && date && (
-          <section className="card p-5">
-            <SectionTitle
-              n={2}
-              title={config.booking_mode === "time" ? "選擇時段" : "選擇診次"}
-              done={stepDone.slot}
-            />
-            {availLoading && <p className="text-sm text-slate-400">查詢中…</p>}
-            {availMsg && (
-              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">{availMsg}</p>
-            )}
-
-            {config.booking_mode === "time" && !availLoading && (
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {slots.map((s) => (
-                  <button
-                    key={s.slot_start}
-                    type="button"
-                    onClick={() => setPickedStart(s.slot_start)}
-                    className={`pill flex flex-col items-center ${pickedStart === s.slot_start ? "pill-active" : ""}`}
-                  >
-                    <span className="font-medium">{formatTime(s.slot_start)}</span>
-                    <span className="text-[11px] opacity-70">剩 {s.remaining}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {config.booking_mode === "number" && !availLoading && (
-              <div className="space-y-2">
-                {sessions.map((s) => (
-                  <button
-                    key={s.template_id}
-                    type="button"
-                    onClick={() => setPickedTemplate(s.template_id)}
-                    className={`pill flex w-full items-center justify-between ${pickedTemplate === s.template_id ? "pill-active" : ""}`}
-                  >
-                    <span className="font-medium">
-                      {formatDateSession(s.session_start)}　{formatTime(s.session_start)}–
-                      {formatTime(s.session_end)}
-                    </span>
-                    <span className="text-xs opacity-70">剩 {s.remaining} 號</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* 步驟 3:就診資料 */}
-        <section className="card p-5">
-          <SectionTitle n={3} title="就診資料" done={patientReady} />
           <div className="space-y-4">
             <div>
               <label className="label">為誰預約</label>
@@ -414,6 +365,11 @@ export default function BookPage() {
                   )}
               </select>
             </div>
+            {selectedBlocked && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+                此就診者目前暫停線上預約,請洽櫃檯。
+              </p>
+            )}
             {addingNew && (
               <>
                 <div>
@@ -435,7 +391,41 @@ export default function BookPage() {
                     placeholder="聯絡電話"
                   />
                 </div>
+                <div>
+                  <label className="label">出生年月日</label>
+                  <input
+                    type="date"
+                    className="input"
+                    value={birthday}
+                    max={todayStr()}
+                    onChange={(e) => setBirthday(e.target.value)}
+                  />
+                </div>
               </>
+            )}
+          </div>
+        </section>
+
+        {/* 步驟 2:看診服務與類型 */}
+        <section className="card p-5">
+          <SectionTitle n={2} title="看診服務" done={serviceReady} />
+          <div className="space-y-4">
+            {config.services.length > 0 && (
+              <div>
+                <label className="label">服務項目</label>
+                <select
+                  className="input"
+                  value={serviceId}
+                  onChange={(e) => setServiceId(e.target.value)}
+                >
+                  <option value="">請選擇服務</option>
+                  {config.services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
             <div>
               <label className="label">看診類型</label>
@@ -457,6 +447,82 @@ export default function BookPage() {
               />
               自費就診
             </label>
+          </div>
+        </section>
+
+        {/* 步驟 3:選醫師、日期與時段(資料填妥後) */}
+        <section className={`card p-5 ${!patientReady || !serviceReady ? "pointer-events-none opacity-50" : ""}`}>
+          <SectionTitle n={3} title="選擇時間" done={stepDone.slot} />
+          {(!patientReady || !serviceReady) && (
+            <p className="mb-3 text-sm text-slate-400">請先完成上方就診者資料與服務,再選擇時間。</p>
+          )}
+          <div className="space-y-4">
+            <div>
+              <label className="label">醫師</label>
+              <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+                <option value="">請選擇醫師</option>
+                {config.doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                    {d.specialty ? `(${d.specialty})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">日期</label>
+              <input
+                type="date"
+                className="input"
+                value={date}
+                min={todayStr()}
+                max={maxDate}
+                onChange={(e) => setDate(e.target.value)}
+              />
+            </div>
+
+            {doctorId && date && (
+              <div>
+                <p className="label">{config.booking_mode === "time" ? "時段" : "診次"}</p>
+                {availLoading && <p className="text-sm text-slate-400">查詢中…</p>}
+                {availMsg && (
+                  <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">{availMsg}</p>
+                )}
+                {config.booking_mode === "time" && !availLoading && (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {slots.map((s) => (
+                      <button
+                        key={s.slot_start}
+                        type="button"
+                        onClick={() => setPickedStart(s.slot_start)}
+                        className={`pill flex flex-col items-center ${pickedStart === s.slot_start ? "pill-active" : ""}`}
+                      >
+                        <span className="font-medium">{formatTime(s.slot_start)}</span>
+                        <span className="text-[11px] opacity-70">剩 {s.remaining}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {config.booking_mode === "number" && !availLoading && (
+                  <div className="space-y-2">
+                    {sessions.map((s) => (
+                      <button
+                        key={s.template_id}
+                        type="button"
+                        onClick={() => setPickedTemplate(s.template_id)}
+                        className={`pill flex w-full items-center justify-between ${pickedTemplate === s.template_id ? "pill-active" : ""}`}
+                      >
+                        <span className="font-medium">
+                          {formatDateSession(s.session_start)}　{formatTime(s.session_start)}–
+                          {formatTime(s.session_end)}
+                        </span>
+                        <span className="text-xs opacity-70">剩 {s.remaining} 號</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -629,65 +695,6 @@ function TypeToggle({
     <button type="button" onClick={onClick} className={`pill text-center ${active ? "pill-active" : ""}`}>
       {children}
     </button>
-  );
-}
-
-function BindGate({ idToken, onBound }: { idToken: string | null; onBound: () => void }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  async function submit() {
-    if (!idToken) return;
-    setSubmitting(true);
-    setErr(null);
-    try {
-      await api("/api/booking/patient", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, name: name.trim(), phone: phone.trim() }),
-      });
-      onBound();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "綁定失敗");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  const ok = !!name.trim() && !!phone.trim() && !submitting;
-
-  return (
-    <section className="card p-5">
-      <h2 className="mb-1 font-semibold text-slate-900">首次使用,請先綁定</h2>
-      <p className="mb-4 text-sm text-slate-500">填寫一次姓名與電話完成綁定,之後預約免再填寫。</p>
-      <div className="space-y-4">
-        <div>
-          <label className="label">姓名</label>
-          <input
-            className="input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="就診者姓名"
-          />
-        </div>
-        <div>
-          <label className="label">電話</label>
-          <input
-            className="input"
-            value={phone}
-            inputMode="tel"
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="聯絡電話"
-          />
-        </div>
-        {err && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>}
-        <button type="button" disabled={!ok} onClick={submit} className="btn btn-primary w-full">
-          {submitting ? "綁定中…" : "完成綁定"}
-        </button>
-      </div>
-    </section>
   );
 }
 
