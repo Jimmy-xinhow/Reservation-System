@@ -222,6 +222,26 @@ export async function createTemplateAction(fd: FormData) {
   revalidatePath("/admin/schedules");
 }
 
+export async function updateTemplateAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  if (!id) throw new Error("缺少 id");
+  const { error } = await supabase
+    .from("schedule_templates")
+    .update({
+      doctor_id: str(fd, "doctor_id"),
+      weekday: intOr(fd, "weekday", 1),
+      start_time: str(fd, "start_time"),
+      end_time: str(fd, "end_time"),
+      slot_minutes: intOr(fd, "slot_minutes", 15),
+      capacity: intOr(fd, "capacity", 1),
+    })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/schedules");
+}
+
 export async function toggleTemplateAction(fd: FormData) {
   const { supabase } = await requireMember();
   const id = str(fd, "id");

@@ -29,19 +29,22 @@ export default function ScheduleEditor({
   doctors,
   templates,
   createAction,
+  updateAction,
   toggleAction,
   deleteAction,
 }: {
   doctors: Doctor[];
   templates: Template[];
   createAction: ServerAction;
+  updateAction: ServerAction;
   toggleAction: ServerAction;
   deleteAction: ServerAction;
 }) {
   const activeDocs = doctors.filter((d) => d.active);
   const docName = (id: string) => doctors.find((d) => d.id === id)?.name ?? "—";
 
-  // 受控表單(可被「複製」帶入,送出後保留值方便連續新增)
+  // 受控表單。editingId 有值 = 編輯既有列;null = 新增。
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState(activeDocs[0]?.id ?? "");
   const [weekday, setWeekday] = useState("1");
   const [start, setStart] = useState("09:00");
@@ -49,7 +52,7 @@ export default function ScheduleEditor({
   const [slot, setSlot] = useState("15");
   const [cap, setCap] = useState("1");
 
-  function copyFrom(t: Template) {
+  function fill(t: Template) {
     setDoctorId(t.doctor_id);
     setWeekday(String(t.weekday));
     setStart(hhmm(t.start_time));
@@ -58,12 +61,27 @@ export default function ScheduleEditor({
     setCap(String(t.capacity));
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
+  function editFrom(t: Template) {
+    setEditingId(t.id);
+    fill(t);
+  }
+  function copyFrom(t: Template) {
+    setEditingId(null); // 複製 = 以此值新增一筆
+    fill(t);
+  }
+  function cancelEdit() {
+    setEditingId(null);
+  }
 
   return (
     <section className="space-y-3">
       <h2 className="font-semibold text-slate-900">門診段(同醫師同一天可多診次)</h2>
 
-      <form action={createAction} className="card flex flex-wrap items-end gap-3 p-4">
+      <form
+        action={editingId ? updateAction : createAction}
+        className={`card flex flex-wrap items-end gap-3 p-4 ${editingId ? "ring-2 ring-brand-200" : ""}`}
+      >
+        {editingId && <input type="hidden" name="id" value={editingId} />}
         <label className="block text-sm font-medium text-slate-600">
           醫師
           <select
@@ -142,10 +160,17 @@ export default function ScheduleEditor({
             className="input mt-1 w-20"
           />
         </label>
-        <button className="btn btn-primary">新增門診段</button>
+        <button className="btn btn-primary">{editingId ? "儲存修改" : "新增門診段"}</button>
+        {editingId && (
+          <button type="button" onClick={cancelEdit} className="btn btn-secondary">
+            取消編輯
+          </button>
+        )}
       </form>
       <p className="text-xs text-slate-400">
-        時間直接輸入(例 09:00)。送出後表單會保留,改個星期或時間即可快速再新增;也可在下方按「複製」帶入某列。
+        {editingId
+          ? "編輯中:修改上方欄位後按「儲存修改」更新這一列;或按「取消編輯」。"
+          : "時間直接輸入(例 09:00)。下方每列可「編輯」就地修改、「複製」帶入後新增一筆;送出後表單會保留方便連續新增。"}
       </p>
 
       <div className="card overflow-x-auto">
@@ -170,7 +195,7 @@ export default function ScheduleEditor({
               </tr>
             )}
             {templates.map((t) => (
-              <tr key={t.id}>
+              <tr key={t.id} className={editingId === t.id ? "bg-brand-50/60" : ""}>
                 <td>週{WD[t.weekday]}</td>
                 <td>{docName(t.doctor_id)}</td>
                 <td>
@@ -187,8 +212,15 @@ export default function ScheduleEditor({
                   <div className="flex gap-3">
                     <button
                       type="button"
-                      onClick={() => copyFrom(t)}
+                      onClick={() => editFrom(t)}
                       className="text-xs font-medium text-brand-600 hover:underline"
+                    >
+                      編輯
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => copyFrom(t)}
+                      className="text-xs font-medium text-slate-600 hover:underline"
                     >
                       複製
                     </button>

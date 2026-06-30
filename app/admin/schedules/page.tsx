@@ -2,6 +2,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import {
   createTemplateAction,
+  updateTemplateAction,
   toggleTemplateAction,
   deleteTemplateAction,
   createDoctorAction,
@@ -83,6 +84,7 @@ export default async function SchedulesPage() {
         doctors={docs}
         templates={tpls}
         createAction={createTemplateAction}
+        updateAction={updateTemplateAction}
         toggleAction={toggleTemplateAction}
         deleteAction={deleteTemplateAction}
       />
