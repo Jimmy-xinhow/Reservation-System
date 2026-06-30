@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
+import { Brand } from "@/components/Brand";
 
 interface Doctor {
   id: string;
@@ -66,8 +67,8 @@ export default function BookPage() {
   const [availLoading, setAvailLoading] = useState(false);
   const [availMsg, setAvailMsg] = useState<string | null>(null);
 
-  const [pickedStart, setPickedStart] = useState<string | null>(null); // time 模式 start_at
-  const [pickedTemplate, setPickedTemplate] = useState<string | null>(null); // number 模式 template_id
+  const [pickedStart, setPickedStart] = useState<string | null>(null);
+  const [pickedTemplate, setPickedTemplate] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -78,7 +79,6 @@ export default function BookPage() {
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [result, setResult] = useState<ReserveResult | null>(null);
 
-  // 載入設定 + 醫師
   useEffect(() => {
     api<Config>("/api/booking/config")
       .then(setConfig)
@@ -90,7 +90,6 @@ export default function BookPage() {
     [config],
   );
 
-  // 查空檔
   const loadAvailability = useCallback(async () => {
     if (!config || !doctorId || !date) return;
     setAvailLoading(true);
@@ -124,26 +123,20 @@ export default function BookPage() {
     if (doctorId && date) loadAvailability();
   }, [doctorId, date, loadAvailability]);
 
-  const canSubmit =
-    ready &&
-    !!name.trim() &&
-    !!phone.trim() &&
-    (config?.booking_mode === "time" ? !!pickedStart : !!pickedTemplate) &&
-    !submitting;
+  const slotPicked = config?.booking_mode === "time" ? !!pickedStart : !!pickedTemplate;
+  const canSubmit = ready && !!name.trim() && !!phone.trim() && slotPicked && !submitting;
 
   async function handleSubmit() {
     if (!config || !idToken) return;
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      // 1) 建立/取得病患
       const { patient_id } = await api<{ patient_id: string }>("/api/booking/patient", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken, name: name.trim(), phone: phone.trim() }),
       });
 
-      // 2) 訂位
       const payload: Record<string, unknown> = {
         idToken,
         patient_id,
@@ -171,199 +164,266 @@ export default function BookPage() {
   }
 
   // ── 畫面 ──
-  if (liffError) return <Centered>{liffError}</Centered>;
-  if (loadErr) return <Centered>{loadErr}</Centered>;
+  if (liffError) return <Centered tone="error">{liffError}</Centered>;
+  if (loadErr) return <Centered tone="error">{loadErr}</Centered>;
   if (!config) return <Centered>載入中…</Centered>;
 
   if (result) {
     return (
-      <main className="mx-auto max-w-md p-6">
-        <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
-          <h1 className="mb-2 text-xl font-bold text-green-700">預約成功</h1>
-          {result.queue_number != null && (
-            <p className="my-3 text-3xl font-bold text-green-800">第 {result.queue_number} 號</p>
-          )}
-          {result.start_at && (
-            <p className="text-gray-700">
-              {config.booking_mode === "time"
-                ? `${formatDateSession(result.start_at)} ${formatTime(result.start_at)}`
-                : formatDateSession(result.start_at)}
-            </p>
-          )}
-          {result.deposit_status === "pending" && (
-            <p className="mt-4 rounded-lg bg-amber-100 p-3 text-sm text-amber-800">
-              需繳訂金 NT${result.deposit_amount},完成後即保留名額。詳情請洽櫃檯。
-            </p>
-          )}
-          <p className="mt-4 text-sm text-gray-500">看診前會以 LINE 提醒您。</p>
+      <Shell>
+        <div className="card overflow-hidden">
+          <div className="bg-gradient-to-br from-brand-500 to-accent-600 p-6 text-center text-white">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
+              <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8">
+                <path
+                  d="M5 13l4 4L19 7"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h1 className="text-xl font-bold">預約成功</h1>
+            <p className="mt-1 text-sm text-white/80">看診前會以 LINE 提醒您</p>
+          </div>
+
+          <div className="space-y-4 p-6 text-center">
+            {result.queue_number != null && (
+              <div>
+                <div className="text-sm text-slate-500">您的號次</div>
+                <div className="text-4xl font-bold text-brand-700">
+                  {result.queue_number}
+                  <span className="ml-1 text-lg">號</span>
+                </div>
+              </div>
+            )}
+            {result.start_at && (
+              <div className="rounded-xl bg-slate-50 p-3 text-slate-700">
+                {config.booking_mode === "time"
+                  ? `${formatDateSession(result.start_at)} ${formatTime(result.start_at)}`
+                  : formatDateSession(result.start_at)}
+              </div>
+            )}
+            {result.deposit_status === "pending" && (
+              <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                需繳訂金 NT${result.deposit_amount},完成後即保留名額。詳情請洽櫃檯。
+              </p>
+            )}
+            <button onClick={() => setResult(null)} className="btn btn-secondary w-full">
+              再預約一筆
+            </button>
+          </div>
         </div>
-      </main>
+      </Shell>
     );
   }
 
+  const stepDone = { doctor: !!doctorId, date: !!date, slot: slotPicked };
+
   return (
-    <main className="mx-auto max-w-md p-4">
-      <h1 className="mb-4 text-xl font-bold">
-        {config.booking_mode === "time" ? "預約看診" : "線上掛號"}
-      </h1>
-
-      <Field label="醫師">
-        <select
-          className="w-full rounded-lg border border-gray-300 p-2"
-          value={doctorId}
-          onChange={(e) => setDoctorId(e.target.value)}
-        >
-          <option value="">請選擇</option>
-          {config.doctors.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-              {d.specialty ? `(${d.specialty})` : ""}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="日期">
-        <input
-          type="date"
-          className="w-full rounded-lg border border-gray-300 p-2"
-          value={date}
-          min={todayStr()}
-          max={maxDate}
-          onChange={(e) => setDate(e.target.value)}
-        />
-      </Field>
-
-      {doctorId && date && (
-        <div className="mb-4">
-          <p className="mb-2 text-sm font-medium text-gray-600">
-            {config.booking_mode === "time" ? "可預約時段" : "可掛號診次"}
-          </p>
-          {availLoading && <p className="text-sm text-gray-500">查詢中…</p>}
-          {availMsg && <p className="text-sm text-red-600">{availMsg}</p>}
-
-          {config.booking_mode === "time" && (
-            <div className="grid grid-cols-3 gap-2">
-              {slots.map((s) => (
-                <button
-                  key={s.slot_start}
-                  type="button"
-                  onClick={() => setPickedStart(s.slot_start)}
-                  className={`rounded-lg border p-2 text-sm ${
-                    pickedStart === s.slot_start
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-gray-300 bg-white"
-                  }`}
-                >
-                  <div>{formatTime(s.slot_start)}</div>
-                  <div className="text-xs opacity-80">剩 {s.remaining}</div>
-                </button>
-              ))}
+    <Shell>
+      <div className="space-y-4">
+        {/* 步驟 1:選醫師與日期 */}
+        <section className="card p-5">
+          <SectionTitle n={1} title="選擇醫師與日期" done={stepDone.doctor && stepDone.date} />
+          <div className="space-y-4">
+            <div>
+              <label className="label">醫師</label>
+              <select
+                className="input"
+                value={doctorId}
+                onChange={(e) => setDoctorId(e.target.value)}
+              >
+                <option value="">請選擇醫師</option>
+                {config.doctors.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                    {d.specialty ? `(${d.specialty})` : ""}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
-
-          {config.booking_mode === "number" && (
-            <div className="flex flex-col gap-2">
-              {sessions.map((s) => (
-                <button
-                  key={s.template_id}
-                  type="button"
-                  onClick={() => setPickedTemplate(s.template_id)}
-                  className={`flex items-center justify-between rounded-lg border p-3 text-sm ${
-                    pickedTemplate === s.template_id
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-300 bg-white"
-                  }`}
-                >
-                  <span>
-                    {formatDateSession(s.session_start)}　{formatTime(s.session_start)}–
-                    {formatTime(s.session_end)}
-                  </span>
-                  <span className="text-gray-500">剩 {s.remaining} 號</span>
-                </button>
-              ))}
+            <div>
+              <label className="label">日期</label>
+              <input
+                type="date"
+                className="input"
+                value={date}
+                min={todayStr()}
+                max={maxDate}
+                onChange={(e) => setDate(e.target.value)}
+              />
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        </section>
 
-      <Field label="姓名">
-        <input
-          className="w-full rounded-lg border border-gray-300 p-2"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="就診者姓名"
-        />
-      </Field>
-
-      <Field label="電話">
-        <input
-          className="w-full rounded-lg border border-gray-300 p-2"
-          value={phone}
-          inputMode="tel"
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="聯絡電話"
-        />
-      </Field>
-
-      <Field label="初診 / 複診">
-        <div className="flex gap-4">
-          <label className="flex items-center gap-1">
-            <input
-              type="radio"
-              checked={visitType === "return"}
-              onChange={() => setVisitType("return")}
+        {/* 步驟 2:選時段/診次 */}
+        {doctorId && date && (
+          <section className="card p-5">
+            <SectionTitle
+              n={2}
+              title={config.booking_mode === "time" ? "選擇時段" : "選擇診次"}
+              done={stepDone.slot}
             />
-            複診
-          </label>
-          <label className="flex items-center gap-1">
-            <input
-              type="radio"
-              checked={visitType === "first"}
-              onChange={() => setVisitType("first")}
-            />
-            初診
-          </label>
-        </div>
-      </Field>
+            {availLoading && <p className="text-sm text-slate-400">查詢中…</p>}
+            {availMsg && (
+              <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">{availMsg}</p>
+            )}
 
-      <label className="mb-4 flex items-center gap-2">
-        <input type="checkbox" checked={isSelfPay} onChange={(e) => setIsSelfPay(e.target.checked)} />
-        <span className="text-sm text-gray-700">自費就診</span>
-      </label>
+            {config.booking_mode === "time" && !availLoading && (
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {slots.map((s) => (
+                  <button
+                    key={s.slot_start}
+                    type="button"
+                    onClick={() => setPickedStart(s.slot_start)}
+                    className={`pill flex flex-col items-center ${pickedStart === s.slot_start ? "pill-active" : ""}`}
+                  >
+                    <span className="font-medium">{formatTime(s.slot_start)}</span>
+                    <span className="text-[11px] opacity-70">剩 {s.remaining}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-      {submitErr && (
-        <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{submitErr}</p>
-      )}
+            {config.booking_mode === "number" && !availLoading && (
+              <div className="space-y-2">
+                {sessions.map((s) => (
+                  <button
+                    key={s.template_id}
+                    type="button"
+                    onClick={() => setPickedTemplate(s.template_id)}
+                    className={`pill flex w-full items-center justify-between ${pickedTemplate === s.template_id ? "pill-active" : ""}`}
+                  >
+                    <span className="font-medium">
+                      {formatDateSession(s.session_start)}　{formatTime(s.session_start)}–
+                      {formatTime(s.session_end)}
+                    </span>
+                    <span className="text-xs opacity-70">剩 {s.remaining} 號</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
-      <button
-        type="button"
-        disabled={!canSubmit}
-        onClick={handleSubmit}
-        className="w-full rounded-lg bg-blue-600 p-3 font-medium text-white disabled:bg-gray-300"
-      >
-        {submitting ? "送出中…" : "確認預約"}
-      </button>
-      {!ready && !liffError && (
-        <p className="mt-2 text-center text-xs text-gray-400">正在確認 LINE 身分…</p>
-      )}
+        {/* 步驟 3:就診資料 */}
+        <section className="card p-5">
+          <SectionTitle n={3} title="就診資料" done={!!name.trim() && !!phone.trim()} />
+          <div className="space-y-4">
+            <div>
+              <label className="label">姓名</label>
+              <input
+                className="input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="就診者姓名"
+              />
+            </div>
+            <div>
+              <label className="label">電話</label>
+              <input
+                className="input"
+                value={phone}
+                inputMode="tel"
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="聯絡電話"
+              />
+            </div>
+            <div>
+              <label className="label">看診類型</label>
+              <div className="grid grid-cols-2 gap-2">
+                <TypeToggle active={visitType === "return"} onClick={() => setVisitType("return")}>
+                  複診
+                </TypeToggle>
+                <TypeToggle active={visitType === "first"} onClick={() => setVisitType("first")}>
+                  初診
+                </TypeToggle>
+              </div>
+            </div>
+            <label className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-brand-600"
+                checked={isSelfPay}
+                onChange={(e) => setIsSelfPay(e.target.checked)}
+              />
+              自費就診
+            </label>
+          </div>
+        </section>
+
+        {submitErr && (
+          <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{submitErr}</p>
+        )}
+      </div>
+
+      {/* 固定底部送出列 */}
+      <div className="sticky bottom-0 -mx-4 mt-4 border-t border-slate-200 bg-white/90 p-4 backdrop-blur">
+        <button type="button" disabled={!canSubmit} onClick={handleSubmit} className="btn btn-primary w-full">
+          {submitting ? "送出中…" : "確認預約"}
+        </button>
+        {!ready && !liffError && (
+          <p className="mt-2 text-center text-xs text-slate-400">正在確認 LINE 身分…</p>
+        )}
+      </div>
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="mx-auto min-h-screen max-w-md px-4 pb-4">
+      <header className="flex items-center justify-between py-4">
+        <Brand subtitle="線上預約" />
+      </header>
+      {children}
     </main>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function SectionTitle({ n, title, done }: { n: number; title: string; done?: boolean }) {
   return (
-    <div className="mb-4">
-      <label className="mb-1 block text-sm font-medium text-gray-600">{label}</label>
-      {children}
+    <div className="mb-4 flex items-center gap-2.5">
+      <span
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+          done ? "bg-accent-600 text-white" : "bg-brand-100 text-brand-700"
+        }`}
+      >
+        {done ? "✓" : n}
+      </span>
+      <h2 className="font-semibold text-slate-900">{title}</h2>
     </div>
   );
 }
 
-function Centered({ children }: { children: React.ReactNode }) {
+function TypeToggle({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <main className="flex min-h-screen items-center justify-center p-6 text-center text-gray-600">
+    <button type="button" onClick={onClick} className={`pill text-center ${active ? "pill-active" : ""}`}>
       {children}
+    </button>
+  );
+}
+
+function Centered({
+  children,
+  tone,
+}: {
+  children: React.ReactNode;
+  tone?: "error";
+}) {
+  return (
+    <main className="flex min-h-screen items-center justify-center p-6 text-center">
+      <p className={tone === "error" ? "text-red-600" : "text-slate-500"}>{children}</p>
     </main>
   );
 }

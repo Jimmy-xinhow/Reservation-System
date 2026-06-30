@@ -63,39 +63,45 @@ export default async function PatientsPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold">病患查詢</h1>
+      <h1 className="text-xl font-bold text-slate-900">病患查詢</h1>
 
       <form className="flex gap-2">
         <input
           name="q"
           defaultValue={keyword}
           placeholder="輸入姓名或電話"
-          className="w-64 rounded border p-2 text-sm"
+          className="input max-w-xs"
         />
-        <button className="rounded bg-blue-600 px-3 py-2 text-sm text-white">搜尋</button>
+        <button className="btn btn-primary">搜尋</button>
       </form>
 
-      {keyword && patients.length === 0 && <p className="text-gray-400">查無符合的病患。</p>}
+      {keyword && patients.length === 0 && (
+        <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-slate-400">查無符合的病患。</p>
+      )}
 
       <div className="space-y-4">
         {patients.map((p) => {
           const history = appts.filter((a) => a.patient_id === p.id);
           return (
-            <div key={p.id} className="rounded-xl border bg-white p-4">
-              <div className="mb-2 flex items-baseline gap-3">
-                <span className="font-semibold">{p.name}</span>
-                <span className="text-sm text-gray-500">{p.phone}</span>
+            <div key={p.id} className="card p-5">
+              <div className="mb-3 flex items-baseline gap-3">
+                <span className="text-base font-semibold text-slate-900">{p.name}</span>
+                <span className="text-sm text-slate-500">{p.phone}</span>
               </div>
               {history.length === 0 ? (
-                <p className="text-sm text-gray-400">無約診紀錄</p>
+                <p className="text-sm text-slate-400">無約診紀錄</p>
               ) : (
-                <ul className="space-y-1 text-sm">
+                <ul className="divide-y divide-slate-100 text-sm">
                   {history.map((a) => (
-                    <li key={a.id} className="flex gap-3 text-gray-700">
-                      <span>{formatDateTime(a.start_at)}</span>
-                      <span>{a.doctors?.name}</span>
-                      {a.queue_number != null && <span>第 {a.queue_number} 號</span>}
-                      <span className="text-gray-500">{STATUS_LABEL[a.status] ?? a.status}</span>
+                    <li key={a.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-slate-700">
+                      <span className="font-medium">{formatDateTime(a.start_at)}</span>
+                      <span className="text-slate-500">{a.doctors?.name}</span>
+                      {a.queue_number != null && (
+                        <span className="text-slate-500">第 {a.queue_number} 號</span>
+                      )}
+                      <span className="badge ml-auto bg-slate-100 text-slate-600">
+                        {STATUS_LABEL[a.status] ?? a.status}
+                      </span>
                     </li>
                   ))}
                 </ul>

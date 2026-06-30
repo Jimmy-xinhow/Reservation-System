@@ -32,6 +32,14 @@ const STATUS_LABEL: Record<string, string> = {
   no_show: "未到",
 };
 
+const STATUS_STYLE: Record<string, string> = {
+  booked: "bg-brand-50 text-brand-700",
+  confirmed: "bg-accent-500/10 text-accent-600",
+  done: "bg-slate-100 text-slate-600",
+  cancelled: "bg-red-50 text-red-600",
+  no_show: "bg-amber-50 text-amber-700",
+};
+
 function taipeiToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 }
@@ -72,14 +80,17 @@ export default async function TodayPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">今日約診 · {today}</h1>
-        <span className="text-sm text-gray-500">
-          {settingsUnavailable ? "模式:讀不到設定" : `模式:${mode === "time" ? "時間制" : "號次制"}`}
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">今日約診</h1>
+          <p className="text-sm text-slate-400">{today}</p>
+        </div>
+        <span className="badge bg-brand-50 text-brand-700">
+          {settingsUnavailable ? "讀不到設定" : mode === "time" ? "時間制" : "號次制"}
         </span>
       </div>
 
       {settingsUnavailable && (
-        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+        <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
           讀不到此診所設定(clinic_settings)。請確認登入帳號已對應到本診所(clinic_members),
           否則畫面模式與部分功能會不正確。
         </p>
@@ -93,69 +104,79 @@ export default async function TodayPage() {
         rescheduleAction={rescheduleAppointmentAction}
       />
 
-      <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-gray-500">
+      <div className="card overflow-x-auto">
+        <table className="tbl">
+          <thead>
             <tr>
-              <th className="p-2">{mode === "time" ? "時間" : "號次"}</th>
-              <th className="p-2">醫師</th>
-              <th className="p-2">病患</th>
-              <th className="p-2">初/複</th>
-              <th className="p-2">狀態</th>
-              <th className="p-2">訂金</th>
-              <th className="p-2">操作</th>
+              <th>{mode === "time" ? "時間" : "號次"}</th>
+              <th>醫師</th>
+              <th>病患</th>
+              <th>初/複</th>
+              <th>狀態</th>
+              <th>訂金</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-4 text-center text-gray-400">
+                <td colSpan={7} className="py-10 text-center text-slate-400">
                   今日尚無約診
                 </td>
               </tr>
             )}
             {rows.map((r) => (
-              <tr key={r.id} className="border-t align-top">
-                <td className="p-2 font-medium">
+              <tr key={r.id}>
+                <td className="font-semibold text-slate-900">
                   {mode === "time" ? formatTime(r.start_at) : `第 ${r.queue_number} 號`}
                 </td>
-                <td className="p-2">{r.doctors?.name}</td>
-                <td className="p-2">
-                  <div>{r.patients?.name}</div>
-                  <div className="text-xs text-gray-400">{r.patients?.phone}</div>
+                <td>{r.doctors?.name}</td>
+                <td>
+                  <div className="font-medium text-slate-800">{r.patients?.name}</div>
+                  <div className="text-xs text-slate-400">{r.patients?.phone}</div>
                 </td>
-                <td className="p-2">{r.visit_type === "first" ? "初診" : "複診"}</td>
-                <td className="p-2">{STATUS_LABEL[r.status] ?? r.status}</td>
-                <td className="p-2">
-                  {r.deposit_status === "none" ? (
-                    <span className="text-gray-300">—</span>
+                <td>
+                  {r.visit_type === "first" ? (
+                    <span className="badge bg-accent-500/10 text-accent-600">初診</span>
                   ) : (
-                    <form action={setDepositAction} className="flex items-center gap-1">
+                    <span className="text-slate-500">複診</span>
+                  )}
+                </td>
+                <td>
+                  <span className={`badge ${STATUS_STYLE[r.status] ?? "bg-slate-100 text-slate-600"}`}>
+                    {STATUS_LABEL[r.status] ?? r.status}
+                  </span>
+                </td>
+                <td>
+                  {r.deposit_status === "none" ? (
+                    <span className="text-slate-300">—</span>
+                  ) : (
+                    <form action={setDepositAction} className="flex items-center gap-1.5">
                       <input type="hidden" name="id" value={r.id} />
                       <select
                         name="deposit_status"
                         defaultValue={r.deposit_status}
-                        className="rounded border p-1 text-xs"
+                        className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
                       >
                         <option value="pending">待繳</option>
                         <option value="paid">已繳</option>
                         <option value="waived">免收</option>
                         <option value="refunded">已退</option>
                       </select>
-                      <button className="text-xs text-blue-600">更新</button>
-                      <span className="text-xs text-gray-400">${r.deposit_amount}</span>
+                      <button className="text-xs font-medium text-brand-600 hover:underline">更新</button>
+                      <span className="text-xs text-slate-400">${r.deposit_amount}</span>
                     </form>
                   )}
                 </td>
-                <td className="p-2">
+                <td>
                   {r.status !== "cancelled" && r.status !== "done" && (
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex flex-wrap gap-1.5">
                       <StatusBtn id={r.id} status="confirmed" label="確認" />
                       <StatusBtn id={r.id} status="done" label="完成" />
                       <StatusBtn id={r.id} status="no_show" label="未到" />
                       <form action={cancelAppointmentAction}>
                         <input type="hidden" name="id" value={r.id} />
-                        <button className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-600">
+                        <button className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50">
                           取消
                         </button>
                       </form>
@@ -176,7 +197,7 @@ function StatusBtn({ id, status, label }: { id: string; status: string; label: s
     <form action={setStatusAction}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="status" value={status} />
-      <button className="rounded border px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50">
+      <button className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
         {label}
       </button>
     </form>

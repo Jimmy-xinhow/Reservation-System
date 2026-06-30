@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
+import { Brand } from "@/components/Brand";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -27,31 +28,32 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <form onSubmit={onSubmit} className="w-full max-w-sm rounded-xl border bg-white p-6 shadow-sm">
-        <h1 className="mb-4 text-lg font-bold">後台登入</h1>
-        <label className="mb-1 block text-sm text-gray-600">Email</label>
+    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+      <Brand align="center" size="lg" subtitle="櫃檯後台" />
+      <form onSubmit={onSubmit} className="card w-full max-w-sm p-6">
+        <h1 className="mb-5 text-lg font-bold text-slate-900">後台登入</h1>
+        <label className="label">Email</label>
         <input
           type="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="mb-3 w-full rounded-lg border border-gray-300 p-2"
+          className="input mb-4"
+          placeholder="you@clinic.com"
         />
-        <label className="mb-1 block text-sm text-gray-600">密碼</label>
+        <label className="label">密碼</label>
         <input
           type="password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="mb-4 w-full rounded-lg border border-gray-300 p-2"
+          className="input mb-5"
+          placeholder="••••••••"
         />
-        {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-blue-600 p-2 font-medium text-white disabled:bg-gray-300"
-        >
+        {error && (
+          <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
+        )}
+        <button type="submit" disabled={loading} className="btn btn-primary w-full">
           {loading ? "登入中…" : "登入"}
         </button>
       </form>

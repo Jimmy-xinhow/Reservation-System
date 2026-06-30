@@ -41,13 +41,13 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold">診所設定</h1>
+      <h1 className="text-xl font-bold text-slate-900">診所設定</h1>
       <form action={updateSettingsAction} className="space-y-6">
         {/* 1. 預約模式 */}
         <Section title="預約模式">
           <label className="text-sm">
             模式
-            <select name="booking_mode" defaultValue={s.booking_mode} className="mt-1 block rounded border p-2">
+            <select name="booking_mode" defaultValue={s.booking_mode} className="input mt-1">
               <option value="time">時間制(選確切時段)</option>
               <option value="number">號次制(選診次給號)</option>
             </select>
@@ -57,7 +57,7 @@ export default async function SettingsPage() {
         {/* 2. 初診延長 */}
         <Section title="初診延長(時間制)">
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="first_visit_extends" defaultChecked={s.first_visit_extends} />
+            <input type="checkbox" className="h-4 w-4 accent-brand-600" name="first_visit_extends" defaultChecked={s.first_visit_extends} />
             初診佔較長時段
           </label>
           <label className="text-sm">
@@ -66,7 +66,7 @@ export default async function SettingsPage() {
               type="number"
               name="first_visit_minutes"
               defaultValue={s.first_visit_minutes ?? ""}
-              className="mt-1 block w-28 rounded border p-2"
+              className="input mt-1 w-28"
             />
           </label>
         </Section>
@@ -77,6 +77,7 @@ export default async function SettingsPage() {
             <input
               type="checkbox"
               name="allow_multi_patient_per_phone"
+              className="h-4 w-4 accent-brand-600"
               defaultChecked={s.allow_multi_patient_per_phone}
             />
             允許同一電話登記多名病患
@@ -88,7 +89,7 @@ export default async function SettingsPage() {
               name="max_patients_per_phone"
               min={1}
               defaultValue={s.max_patients_per_phone}
-              className="mt-1 block w-28 rounded border p-2"
+              className="input mt-1 w-28"
             />
           </label>
         </Section>
@@ -96,7 +97,7 @@ export default async function SettingsPage() {
         {/* 4. 訂金 */}
         <Section title="訂金(僅記錄狀態,不串金流)">
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="deposit_enabled" defaultChecked={s.deposit_enabled} />
+            <input type="checkbox" className="h-4 w-4 accent-brand-600" name="deposit_enabled" defaultChecked={s.deposit_enabled} />
             啟用訂金
           </label>
           <label className="text-sm">
@@ -106,12 +107,12 @@ export default async function SettingsPage() {
               name="deposit_amount"
               min={0}
               defaultValue={s.deposit_amount}
-              className="mt-1 block w-28 rounded border p-2"
+              className="input mt-1 w-28"
             />
           </label>
           <label className="text-sm">
             套用範圍
-            <select name="deposit_scope" defaultValue={s.deposit_scope} className="mt-1 block rounded border p-2">
+            <select name="deposit_scope" defaultValue={s.deposit_scope} className="input mt-1">
               <option value="self_pay">僅自費</option>
               <option value="all">全部</option>
               <option value="none">不套用</option>
@@ -128,7 +129,7 @@ export default async function SettingsPage() {
               name="min_lead_minutes"
               min={0}
               defaultValue={s.min_lead_minutes}
-              className="mt-1 block w-28 rounded border p-2"
+              className="input mt-1 w-28"
             />
           </label>
           <label className="text-sm">
@@ -138,12 +139,12 @@ export default async function SettingsPage() {
               name="max_advance_days"
               min={1}
               defaultValue={s.max_advance_days}
-              className="mt-1 block w-28 rounded border p-2"
+              className="input mt-1 w-28"
             />
           </label>
         </Section>
 
-        <button className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white">儲存設定</button>
+        <button className="btn btn-primary">儲存設定</button>
       </form>
     </div>
   );
@@ -151,8 +152,8 @@ export default async function SettingsPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset className="rounded-xl border bg-white p-4">
-      <legend className="px-2 text-sm font-semibold text-gray-700">{title}</legend>
+    <fieldset className="card p-5">
+      <legend className="px-2 text-sm font-semibold text-brand-700">{title}</legend>
       <div className="flex flex-wrap items-end gap-4">{children}</div>
     </fieldset>
   );

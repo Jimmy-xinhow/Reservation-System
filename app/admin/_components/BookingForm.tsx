@@ -86,8 +86,8 @@ export default function BookingForm({
   const action = isReschedule ? rescheduleAction : createAction;
 
   return (
-    <form action={action} className="rounded-xl border bg-white p-4">
-      <h2 className="mb-3 font-bold">建立 / 改期預約</h2>
+    <form action={action} className="card p-5">
+      <h2 className="mb-4 font-semibold text-slate-900">建立 / 改期預約</h2>
       <input type="hidden" name="mode" value={mode} />
       {isReschedule && <input type="hidden" name="old_id" value={targetId} />}
       <input
@@ -98,10 +98,10 @@ export default function BookingForm({
       {mode === "number" && <input type="hidden" name="date" value={date} />}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="text-sm">
+        <label className="block text-sm font-medium text-slate-600">
           動作
           <select
-            className="mt-1 w-full rounded border p-2"
+            className="input mt-1"
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
           >
@@ -114,11 +114,11 @@ export default function BookingForm({
           </select>
         </label>
 
-        <label className="text-sm">
+        <label className="block text-sm font-medium text-slate-600">
           醫師
           <select
             name="doctor_id"
-            className="mt-1 w-full rounded border p-2"
+            className="input mt-1"
             value={doctorId}
             onChange={(e) => setDoctorId(e.target.value)}
             required
@@ -132,11 +132,11 @@ export default function BookingForm({
           </select>
         </label>
 
-        <label className="text-sm">
+        <label className="block text-sm font-medium text-slate-600">
           日期
           <input
             type="date"
-            className="mt-1 w-full rounded border p-2"
+            className="input mt-1"
             value={date}
             min={todayStr()}
             onChange={(e) => setDate(e.target.value)}
@@ -146,35 +146,37 @@ export default function BookingForm({
 
         {!isReschedule && (
           <>
-            <label className="text-sm">
+            <label className="block text-sm font-medium text-slate-600">
               姓名
-              <input name="name" className="mt-1 w-full rounded border p-2" required />
+              <input name="name" className="input mt-1" required />
             </label>
-            <label className="text-sm">
+            <label className="block text-sm font-medium text-slate-600">
               電話
-              <input name="phone" className="mt-1 w-full rounded border p-2" required />
+              <input name="phone" className="input mt-1" required />
             </label>
           </>
         )}
 
-        <label className="text-sm">
+        <label className="block text-sm font-medium text-slate-600">
           初/複診
-          <select name="visit_type" className="mt-1 w-full rounded border p-2">
+          <select name="visit_type" className="input mt-1">
             <option value="return">複診</option>
             <option value="first">初診</option>
           </select>
         </label>
-        <label className="flex items-end gap-2 text-sm">
-          <input type="checkbox" name="is_self_pay" /> 自費
+        <label className="flex items-center gap-2 self-end rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+          <input type="checkbox" name="is_self_pay" className="h-4 w-4 accent-brand-600" /> 自費
         </label>
       </div>
 
       {doctorId && date && (
-        <div className="mt-3">
-          <p className="mb-1 text-sm text-gray-600">
+        <div className="mt-4">
+          <p className="mb-2 text-sm font-medium text-slate-600">
             {mode === "time" ? "選時段" : "選診次"}
           </p>
-          {msg && <p className="text-sm text-red-600">{msg}</p>}
+          {msg && (
+            <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{msg}</p>
+          )}
           <div className="flex flex-wrap gap-2">
             {mode === "time" &&
               slots.map((s) => (
@@ -182,9 +184,7 @@ export default function BookingForm({
                   key={s.slot_start}
                   type="button"
                   onClick={() => setPicked(s.slot_start)}
-                  className={`rounded border px-2 py-1 text-sm ${
-                    picked === s.slot_start ? "bg-blue-600 text-white" : "bg-white"
-                  }`}
+                  className={`pill ${picked === s.slot_start ? "pill-active" : ""}`}
                 >
                   {timeOf(s.slot_start)}(剩{s.remaining})
                 </button>
@@ -195,9 +195,7 @@ export default function BookingForm({
                   key={s.template_id}
                   type="button"
                   onClick={() => setPicked(s.template_id)}
-                  className={`rounded border px-2 py-1 text-sm ${
-                    picked === s.template_id ? "bg-blue-600 text-white" : "bg-white"
-                  }`}
+                  className={`pill ${picked === s.template_id ? "pill-active" : ""}`}
                 >
                   {timeOf(s.session_start)}–{timeOf(s.session_end)}(剩{s.remaining}號)
                 </button>
@@ -206,11 +204,7 @@ export default function BookingForm({
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={!picked || !doctorId}
-        className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:bg-gray-300"
-      >
+      <button type="submit" disabled={!picked || !doctorId} className="btn btn-primary mt-5">
         {isReschedule ? "確認改期" : "建立預約"}
       </button>
     </form>

@@ -1,10 +1,121 @@
 @import "tailwindcss";
 
+/* ── 設計系統:清爽醫療藍 ───────────────────────────────── */
+@theme {
+  --font-sans: "Noto Sans TC", ui-sans-serif, system-ui, "PingFang TC",
+    "Microsoft JhengHei", sans-serif;
+
+  /* 主色:沉穩醫療藍 */
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+
+  /* 輔色:中醫意象的青玉綠(僅點綴) */
+  --color-accent-500: #14b8a6;
+  --color-accent-600: #0d9488;
+}
+
 :root {
   color-scheme: light;
 }
 
 html,
 body {
-  @apply bg-gray-50 text-gray-900 antialiased;
+  @apply min-h-full text-slate-800 antialiased;
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(1200px 500px at 50% -10%, var(--color-brand-50), transparent 60%),
+    #f8fafc;
+}
+
+/* ── 可重用元件樣式 ─────────────────────────────────────── */
+@layer components {
+  .card {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-sm;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors;
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+  .btn-primary {
+    @apply bg-brand-600 text-white shadow-sm;
+  }
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-brand-700;
+  }
+  .btn-secondary {
+    @apply border border-slate-300 bg-white text-slate-700;
+  }
+  .btn-secondary:hover:not(:disabled) {
+    @apply bg-slate-50;
+  }
+  .btn-ghost {
+    @apply text-slate-600;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    @apply bg-slate-100;
+  }
+  .btn-danger {
+    @apply border border-red-200 bg-white text-red-600;
+  }
+  .btn-danger:hover:not(:disabled) {
+    @apply bg-red-50;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition;
+  }
+  .input:focus {
+    @apply border-brand-500 ring-2 ring-brand-100;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-slate-600;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+
+  /* 可點選的時段/診次 pill */
+  .pill {
+    @apply rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors;
+  }
+  .pill:hover {
+    @apply border-brand-300 bg-brand-50;
+  }
+  .pill-active {
+    @apply border-brand-600 bg-brand-600 text-white;
+  }
+  .pill-active:hover {
+    @apply border-brand-600 bg-brand-600;
+  }
+
+  /* 表格 */
+  .tbl {
+    @apply w-full text-sm;
+  }
+  .tbl thead {
+    @apply bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+  .tbl th {
+    @apply px-3 py-2.5;
+  }
+  .tbl td {
+    @apply px-3 py-2.5 align-top;
+  }
+  .tbl tbody tr {
+    @apply border-t border-slate-100;
+  }
+  .tbl tbody tr:hover {
+    @apply bg-slate-50/60;
+  }
 }
