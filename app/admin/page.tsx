@@ -45,10 +45,16 @@ function taipeiToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 }
 
+function shiftDate(base: string, days: number): string {
+  const d = new Date(`${base}T00:00:00+08:00`);
+  d.setDate(d.getDate() + days);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(d);
+}
+
 export default async function TodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ doctor?: string; status?: string }>;
+  searchParams: Promise<{ doctor?: string; status?: string; date?: string }>;
 }) {
   const sp = await searchParams;
   const fDoctor = sp.doctor ?? "";
@@ -56,8 +62,9 @@ export default async function TodayPage({
 
   const supabase = await createSupabaseServer();
   const today = taipeiToday();
-  const dayStart = new Date(`${today}T00:00:00+08:00`).toISOString();
-  const dayEnd = new Date(`${today}T23:59:59.999+08:00`).toISOString();
+  const viewDate = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : today;
+  const dayStart = new Date(`${viewDate}T00:00:00+08:00`).toISOString();
+  const dayEnd = new Date(`${viewDate}T23:59:59.999+08:00`).toISOString();
 
   let apptQuery = supabase
     .from("appointments")
@@ -88,16 +95,40 @@ export default async function TodayPage({
       label: `${r.patients?.name ?? ""} ${mode === "time" ? formatTime(r.start_at) : `第${r.queue_number}號`}`,
     }));
 
+  // 切換日期時保留醫師/狀態篩選
+  const dayLink = (d: string) => {
+    const u = new URLSearchParams();
+    u.set("date", d);
+    if (fDoctor) u.set("doctor", fDoctor);
+    if (fStatus) u.set("status", fStatus);
+    return `/admin?${u.toString()}`;
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">今日約診</h1>
-          <p className="text-sm text-slate-400">{today}</p>
+          <h1 className="text-xl font-bold text-slate-900">
+            約診 · {viewDate}
+            {viewDate === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
+          </h1>
         </div>
         <span className="badge bg-brand-50 text-brand-700">
           {settingsUnavailable ? "讀不到設定" : mode === "time" ? "時間制" : "號次制"}
         </span>
+      </div>
+
+      {/* 日期切換 */}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <a href={dayLink(shiftDate(viewDate, -1))} className="btn btn-secondary px-3 py-1.5">
+          ← 前一天
+        </a>
+        <a href={dayLink(today)} className="btn btn-ghost px-3 py-1.5">
+          今天
+        </a>
+        <a href={dayLink(shiftDate(viewDate, 1))} className="btn btn-secondary px-3 py-1.5">
+          後一天 →
+        </a>
       </div>
 
       {settingsUnavailable && (
@@ -124,8 +155,12 @@ export default async function TodayPage({
         />
       )}
 
-      {/* 篩選列 + 今日筆數 */}
+      {/* 篩選列 + 筆數 */}
       <form className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="label">日期</label>
+          <input type="date" name="date" defaultValue={viewDate} className="input" />
+        </div>
         <div>
           <label className="label">醫師</label>
           <select name="doctor" defaultValue={fDoctor} className="input">
@@ -154,7 +189,7 @@ export default async function TodayPage({
             清除
           </a>
         )}
-        <span className="ml-auto self-center text-sm text-slate-400">今日 {rows.length} 筆</span>
+        <span className="ml-auto self-center text-sm text-slate-400">{rows.length} 筆</span>
       </form>
 
       <div className="card overflow-x-auto">
@@ -175,7 +210,7 @@ export default async function TodayPage({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={8} className="py-10 text-center text-slate-400">
-                  今日尚無約診
+                  本日尚無約診
                 </td>
               </tr>
             )}
