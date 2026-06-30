@@ -57,6 +57,9 @@ export default async function TodayPage() {
       .order("queue_number", { nullsFirst: true }),
   ]);
 
+  // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
+  // 以 settingsUnavailable 明確提示;mode 僅用於排版,真正的狀態以警示呈現。
+  const settingsUnavailable = !settings;
   const mode = (settings?.booking_mode as "time" | "number") ?? "time";
   const rows = (appts ?? []) as unknown as Row[];
   const rescheduleOptions = rows
@@ -71,9 +74,16 @@ export default async function TodayPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">今日約診 · {today}</h1>
         <span className="text-sm text-gray-500">
-          模式:{mode === "time" ? "時間制" : "號次制"}
+          {settingsUnavailable ? "模式:讀不到設定" : `模式:${mode === "time" ? "時間制" : "號次制"}`}
         </span>
       </div>
+
+      {settingsUnavailable && (
+        <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          讀不到此診所設定(clinic_settings)。請確認登入帳號已對應到本診所(clinic_members),
+          否則畫面模式與部分功能會不正確。
+        </p>
+      )}
 
       <BookingForm
         mode={mode}

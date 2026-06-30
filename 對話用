@@ -1,8 +1,12 @@
-讀 CLAUDE.md。後台有頁面回報「查無診所設定,請先於 Supabase insert 一筆 clinic_settings」,但 clinic_settings 確實存在(今日約診頁右上角能正確讀到「模式:時間制」),且 Railway 的 NEXT_PUBLIC_CLINIC_ID 與資料庫的 clinic id 一致(087f6757-d1b6-4c4f-a82d-8bb5bc7c4733)。
+讀 CLAUDE.md。釐清一個被誤導的問題:後台「診所設定/門診表」讀不到 clinic_settings。已確認三件事:
+(a) 資料庫 RLS 正確 —— 用登入身分(auth.uid()=7c9f75dd-761d-41a9-8d13-fa83f908f3e1)直接查 clinic_members 撈得到對應那筆,auth_clinic_ids() 在登入身分下會回傳 087f6757...。
+(b) clinic_settings 的 authenticated policy 已存在(for all to authenticated, using clinic_id in (select auth_clinic_ids()))。
+(c) Railway 線上跑的就是最新 commit。
 
-請排查:
-1. 找出顯示這段紅字的是哪一頁、哪段程式碼(可能是門診表或診所設定頁)。
-2. 比對它讀取 clinic_settings 的方式,跟「今日約診」頁能成功讀取的方式有何不同——重點看是用哪一種 client(authenticated 一般查詢 vs service-role)、查詢條件帶的 clinic_id 從哪來、以及 clinic_settings 的 RLS policy 是否涵蓋 authenticated 後台帳號讀取自己診所設定。
-3. 很可能是 clinic_settings 少了一條讓登入櫃檯 SELECT 自己診所設定的 RLS policy,或這頁用錯 client。判斷出根因後修正,維持安全原則(病患端仍走 service-role、後台走 authenticated + 限自己 clinic_id),不要為了讓它能讀就放寬成全開。
-4. 若需要補 RLS policy,把對應 SQL 一併更新進 supabase/schema.sql,並另外給我一段「可單獨在 Supabase SQL Editor 補跑」的 SQL。
-修正後跑 tsc --noEmit 與 next build 確認沒壞,回報根因與改了什麼。
+你上一次的「修正」只是讓今日約診頁用 settings?.booking_mode ?? 'time' 蓋掉讀不到的情況,並沒有真正修好讀取 —— 兩頁其實都讀不到設定。
+
+請從這個方向查根因:後台頁面查 clinic_settings 時,用的 Supabase client 是否真的帶著登入使用者的 session(authenticated 身分)？很可能用到了未綁定使用者 session 的 client(導致 auth.uid() 為 null、RLS 擋下、回 0 rows)。
+1. 找出 settings 頁、schedules 頁實際查 clinic_settings 用的是哪個 client、有沒有正確從 cookie 帶入登入 session。
+2. 對照能在登入身分下正確讀取的頁面，看差異。
+3. 真正修正成「以登入使用者的 authenticated session 查詢」，不要再用預設值掩蓋、也不要改用 service-role 繞過 RLS 來假裝修好。
+修正後說明根因與改動，push 並回報 commit hash。
