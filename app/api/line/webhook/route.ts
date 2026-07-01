@@ -319,10 +319,9 @@ async function replyMyAppointments(
         type: "box",
         layout: "vertical",
         backgroundColor: "#0d9488",
-        paddingAll: "md",
+        paddingAll: "sm",
         contents: [
           { type: "text", text: "我的預約", size: "md", weight: "bold", color: "#ffffff", align: "center" },
-          { type: "text", text: when, size: "xs", color: "#d1fae5", align: "center", wrap: true, margin: "xs" },
         ],
       },
       body: {
@@ -331,6 +330,7 @@ async function replyMyAppointments(
         spacing: "sm",
         paddingAll: "lg",
         contents: [
+          infoRow(mode === "time" ? "時間" : "診次", when),
           infoRow("就診者", r.patients?.name ?? "—"),
           infoRow("醫師", r.doctors?.name ?? "—"),
           infoRow("服務", r.services?.name ?? "一般看診"),
@@ -441,10 +441,9 @@ async function replyProgress(
         type: "box",
         layout: "vertical",
         backgroundColor: "#0d9488",
-        paddingAll: "md",
+        paddingAll: "sm",
         contents: [
           { type: "text", text: "看診進度", size: "md", weight: "bold", color: "#ffffff", align: "center" },
-          { type: "text", text: `${s.doctorName}　${s.label}`, size: "xs", color: "#d1fae5", align: "center", wrap: true, margin: "xs" },
         ],
       },
       body: {
@@ -453,6 +452,7 @@ async function replyProgress(
         spacing: "md",
         paddingAll: "lg",
         contents: [
+          { type: "text", text: `${s.doctorName}　${s.label}`, size: "xs", color: "#64748b", align: "center", wrap: true },
           {
             type: "box",
             layout: "horizontal",
