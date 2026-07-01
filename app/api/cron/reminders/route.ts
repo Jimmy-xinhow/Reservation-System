@@ -142,24 +142,17 @@ function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
           { type: "text", text: when, wrap: true, size: "md", weight: "bold" },
           { type: "text", text: `醫師:${doctor}`, size: "sm", color: "#555555" },
           ...(patient ? [{ type: "text", text: `就診者:${patient}`, size: "sm", color: "#555555" }] : []),
-          { type: "text", text: "請確認是否赴診。", size: "sm", color: "#888888", margin: "md" },
+          { type: "text", text: "無法前來請點下方取消。", size: "sm", color: "#888888", margin: "md" },
         ],
       },
       footer: {
         type: "box",
-        layout: "horizontal",
-        spacing: "sm",
+        layout: "vertical",
         contents: [
           {
             type: "button",
-            style: "primary",
-            color: "#16a34a",
-            action: { type: "postback", label: "確認赴診", data: `action=confirm&id=${a.id}`, displayText: "確認赴診" },
-          },
-          {
-            type: "button",
             style: "secondary",
-            action: { type: "postback", label: "取消", data: `action=cancel&id=${a.id}`, displayText: "取消預約" },
+            action: { type: "postback", label: "無法前來 · 取消預約", data: `action=cancel&id=${a.id}`, displayText: "取消預約" },
           },
         ],
       },

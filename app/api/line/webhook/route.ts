@@ -338,19 +338,12 @@ async function replyMyAppointments(
           {
             type: "box",
             layout: "vertical",
-            backgroundColor: r.status === "confirmed" ? "#f0fdfa" : "#eff6ff",
+            backgroundColor: "#f0fdfa",
             cornerRadius: "md",
             paddingAll: "sm",
             margin: "md",
             contents: [
-              {
-                type: "text",
-                text: r.status === "confirmed" ? "已確認赴診" : "已預約(未確認)",
-                size: "xs",
-                weight: "bold",
-                align: "center",
-                color: r.status === "confirmed" ? "#0d9488" : "#2563eb",
-              },
+              { type: "text", text: "預約成功", size: "xs", weight: "bold", align: "center", color: "#0d9488" },
             ],
           },
         ],

@@ -27,7 +27,7 @@ interface Row {
 
 const STATUS_LABEL: Record<string, string> = {
   booked: "已預約",
-  confirmed: "已確認",
+  confirmed: "已預約", // 不再區分赴診確認
   cancelled: "已取消",
   done: "完成",
   no_show: "未到",
@@ -35,7 +35,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_STYLE: Record<string, string> = {
   booked: "bg-brand-50 text-brand-700",
-  confirmed: "bg-accent-500/10 text-accent-600",
+  confirmed: "bg-brand-50 text-brand-700",
   done: "bg-slate-100 text-slate-600",
   cancelled: "bg-red-50 text-red-600",
   no_show: "bg-amber-50 text-amber-700",
@@ -272,7 +272,6 @@ export default async function TodayPage({
                 <td>
                   {r.status !== "cancelled" && r.status !== "done" && (
                     <div className="flex flex-wrap gap-1.5">
-                      <StatusBtn id={r.id} status="confirmed" label="確認" />
                       <StatusBtn id={r.id} status="done" label="完成" />
                       <StatusBtn id={r.id} status="no_show" label="未到" />
                       <form action={cancelAppointmentAction}>

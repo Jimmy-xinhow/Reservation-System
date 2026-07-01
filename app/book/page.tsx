@@ -712,8 +712,7 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
             </div>
             <div className="mt-0.5 text-xs text-slate-500">
               {a.doctors?.name}
-              {a.patients?.name ? ` · ${a.patients.name}` : ""} ·{" "}
-              {a.status === "confirmed" ? "已確認" : "已預約"}
+              {a.patients?.name ? ` · ${a.patients.name}` : ""} · 預約成功
             </div>
           </div>
           <button
