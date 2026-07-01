@@ -27,6 +27,96 @@ function intOr(fd: FormData, k: string, dflt: number): number {
   return Number.isFinite(n) ? n : dflt;
 }
 
+// ── 使用者(櫃檯帳號)管理 ─────────────────────────────────
+export interface StaffMember {
+  userId: string;
+  email: string;
+  isSelf: boolean;
+  createdAt: string | null;
+}
+
+/** 列出本診所的櫃檯帳號(需先 requireMember)。 */
+export async function listStaff(): Promise<StaffMember[]> {
+  const { user } = await requireMember();
+  const svc = createServiceClient();
+  const { data: members } = await svc
+    .from("clinic_members")
+    .select("user_id, created_at")
+    .eq("clinic_id", CLINIC_ID);
+  const rows = members ?? [];
+  if (rows.length === 0) return [];
+
+  const { data: list } = await svc.auth.admin.listUsers({ page: 1, perPage: 1000 });
+  const emailMap = new Map((list?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+  return rows.map((m) => ({
+    userId: m.user_id as string,
+    email: emailMap.get(m.user_id as string) ?? "(未知)",
+    isSelf: m.user_id === user.id,
+    createdAt: (m.created_at as string) ?? null,
+  }));
+}
+
+export async function createStaffAction(fd: FormData) {
+  await requireMember();
+  const email = str(fd, "email").toLowerCase();
+  const password = str(fd, "password");
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("請填正確 Email");
+  if (password.length < 8) throw new Error("密碼至少 8 碼");
+
+  const svc = createServiceClient();
+  // 建立帳號;若已存在則沿用該帳號
+  let userId: string | null = null;
+  const { data: created, error } = await svc.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (created?.user) {
+    userId = created.user.id;
+  } else if (error) {
+    // 已註冊 → 找出其 id
+    const { data: list } = await svc.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    const found = (list?.users ?? []).find((u) => (u.email ?? "").toLowerCase() === email);
+    if (!found) throw new Error(error.message);
+    userId = found.id;
+  }
+  if (!userId) throw new Error("建立帳號失敗");
+
+  const { error: mErr } = await svc
+    .from("clinic_members")
+    .upsert({ clinic_id: CLINIC_ID, user_id: userId }, { onConflict: "clinic_id,user_id" });
+  if (mErr) throw new Error(mErr.message);
+  revalidatePath("/admin/users");
+}
+
+export async function removeStaffAction(fd: FormData) {
+  const { user } = await requireMember();
+  const userId = str(fd, "user_id");
+  if (!userId) throw new Error("缺少帳號");
+  if (userId === user.id) throw new Error("無法移除自己");
+  const svc = createServiceClient();
+  // 僅移除本診所權限(不刪除 auth 帳號)
+  const { error } = await svc
+    .from("clinic_members")
+    .delete()
+    .eq("clinic_id", CLINIC_ID)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/users");
+}
+
+export async function resetStaffPasswordAction(fd: FormData) {
+  await requireMember();
+  const userId = str(fd, "user_id");
+  const password = str(fd, "password");
+  if (!userId) throw new Error("缺少帳號");
+  if (password.length < 8) throw new Error("密碼至少 8 碼");
+  const svc = createServiceClient();
+  const { error } = await svc.auth.admin.updateUserById(userId, { password });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/users");
+}
+
 // ── LINE 測試推播 ─────────────────────────────────────────
 export async function sendTestPushAction(fd: FormData) {
   await requireMember();

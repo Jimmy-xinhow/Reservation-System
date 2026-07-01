@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { taipeiDateString } from "@/lib/slots";
+import { getQueueForDate } from "@/lib/queue";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +50,7 @@ export default async function DashboardPage({
   const winStartIso = new Date(`${winStart}T00:00:00+08:00`).toISOString();
   const winEndIso = new Date(`${winEnd}T23:59:59.999+08:00`).toISOString();
 
-  const [{ data: apptData }, { count: patientCount }] = await Promise.all([
+  const [{ data: apptData }, { count: patientCount }, { data: cs }] = await Promise.all([
     supabase
       .from("appointments")
       .select("start_at, status, doctors(name)")
@@ -59,7 +61,12 @@ export default async function DashboardPage({
       .from("patients")
       .select("id", { count: "exact", head: true })
       .eq("clinic_id", CLINIC_ID),
+    supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", CLINIC_ID).maybeSingle(),
   ]);
+
+  // 今日叫號狀態
+  const mode = (cs?.booking_mode as "time" | "number") ?? "time";
+  const queue = await getQueueForDate(supabase, CLINIC_ID, today, mode);
 
   const appts = (apptData ?? []) as unknown as Appt[];
   const active = appts.filter((a) => a.status !== "cancelled");
@@ -97,6 +104,44 @@ export default async function DashboardPage({
         <Stat label="未來 7 日預約" value={weekCount} />
         <Stat label="病患總數" value={patientCount ?? 0} />
       </div>
+
+      {/* 今日叫號狀態 */}
+      <section className="card p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="font-semibold text-slate-900">今日叫號</h2>
+          <Link href="/admin/queue" className="text-sm text-brand-600 hover:underline">
+            前往叫號 →
+          </Link>
+        </div>
+        {queue.length === 0 ? (
+          <p className="text-sm text-slate-400">今日無看診門診段。</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {queue.map((s) => {
+              const onWait = s.online.filter((a) => a.seq > s.onlineCurrent && a.status !== "no_show").length;
+              const offWait = s.offline.filter((a) => a.seq > s.offlineCurrent && a.status !== "no_show").length;
+              return (
+                <div key={`${s.doctorId}-${s.key}`} className="rounded-xl border border-slate-200 p-4">
+                  <div className="mb-2 flex items-baseline justify-between">
+                    <span className="font-medium text-slate-800">{s.doctorName}</span>
+                    <span className="text-xs text-slate-400">{s.label}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="rounded-lg bg-brand-50 p-2 text-center">
+                      <div className="text-[11px] text-brand-700/70">線上目前 · 候診 {onWait}</div>
+                      <div className="text-2xl font-bold text-brand-700">{s.onlineCurrent || "—"}</div>
+                    </div>
+                    <div className="rounded-lg bg-accent-500/10 p-2 text-center">
+                      <div className="text-[11px] text-accent-600/80">現場目前 · 候診 {offWait}</div>
+                      <div className="text-2xl font-bold text-accent-600">{s.offlineCurrent || "—"}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {/* 每日趨勢 */}
       <section className="card p-5">
