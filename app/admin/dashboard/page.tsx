@@ -4,6 +4,7 @@ import { CLINIC_ID } from "@/lib/supabase";
 import { taipeiDateString } from "@/lib/slots";
 import { getQueueForDate } from "@/lib/queue";
 import { advanceServingAction } from "../actions";
+import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
@@ -104,7 +105,11 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900">總覽</h1>
+      <AutoRefresh seconds={30} />
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-slate-900">總覽</h1>
+        <span className="text-xs text-slate-400">每 30 秒自動更新</span>
+      </div>
 
       {/* 統計卡片 */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -181,14 +186,19 @@ export default async function DashboardPage({
         <div className="flex h-36 items-end gap-1.5">
           {perDay.map((d) => (
             <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+              <span className={`text-[10px] font-medium ${d.count > 0 ? "text-slate-500" : "text-transparent"}`}>
+                {d.count}
+              </span>
               <div className="flex w-full flex-1 items-end">
                 <div
                   className={`w-full rounded-t ${d.date === today ? "bg-brand-600" : "bg-brand-200"}`}
-                  style={{ height: `${(d.count / maxDay) * 100}%` }}
+                  style={{ height: d.count > 0 ? `${Math.max(6, (d.count / maxDay) * 100)}%` : "2px" }}
                   title={`${d.date}:${d.count} 筆`}
                 />
               </div>
-              <span className="text-[10px] text-slate-400">{d.date.slice(5)}</span>
+              <span className={`text-[10px] ${d.date === today ? "font-bold text-brand-700" : "text-slate-400"}`}>
+                {d.date.slice(5)}
+              </span>
             </div>
           ))}
         </div>
