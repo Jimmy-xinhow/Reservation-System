@@ -110,6 +110,16 @@ alter table patients add column if not exists email text;
 alter table patients add column if not exists marketing_opt_in boolean not null default false;
 alter table patients add column if not exists blocked_until timestamptz;
 
+-- 病況紀錄(逐筆,櫃檯/醫師記錄)
+create table if not exists patient_records (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  patient_id uuid not null references patients(id) on delete cascade,
+  content text not null,
+  created_at timestamptz default now()
+);
+create index if not exists patient_records_patient_idx on patient_records (patient_id, created_at desc);
+
 -- 看診服務項目(例:針灸、推拿、把脈調理)。病患預約時可選,記錄於約診。
 create table if not exists services (
   id uuid primary key default gen_random_uuid(),
@@ -466,6 +476,7 @@ alter table reminder_logs enable row level security;
 alter table clinic_members enable row level security;
 alter table services enable row level security;
 alter table serving_numbers enable row level security;
+alter table patient_records enable row level security;
 alter table line_auto_replies enable row level security;
 alter table line_richmenu enable row level security;
 
@@ -514,6 +525,11 @@ create policy services_member on services for all to authenticated
 
 drop policy if exists serving_member on serving_numbers;
 create policy serving_member on serving_numbers for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+
+drop policy if exists patient_records_member on patient_records;
+create policy patient_records_member on patient_records for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
   with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 

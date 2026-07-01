@@ -677,7 +677,6 @@ export async function updatePatientAction(fd: FormData) {
   const { error } = await supabase
     .from("patients")
     .update({
-      note: str(fd, "note") || null,
       tags: str(fd, "tags") || null,
       birthday: str(fd, "birthday") || null,
       gender: str(fd, "gender") || null,
@@ -687,7 +686,37 @@ export async function updatePatientAction(fd: FormData) {
     .eq("id", id)
     .eq("clinic_id", CLINIC_ID);
   if (error) throw new Error(error.message);
-  revalidatePath("/admin/patients");
+  revalidatePath(`/admin/patients/${id}`);
+}
+
+// ── 病況紀錄 patient_records(逐筆)──────────────────────────
+export async function addPatientRecordAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const patientId = str(fd, "patient_id");
+  const content = str(fd, "content");
+  if (!patientId) throw new Error("缺少病患");
+  if (!content) throw new Error("請填寫病況內容");
+  const { error } = await supabase.from("patient_records").insert({
+    clinic_id: CLINIC_ID,
+    patient_id: patientId,
+    content,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath(`/admin/patients/${patientId}`);
+}
+
+export async function deletePatientRecordAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const patientId = str(fd, "patient_id");
+  if (!id) throw new Error("缺少紀錄");
+  const { error } = await supabase
+    .from("patient_records")
+    .delete()
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/admin/patients/${patientId}`);
 }
 
 // ── 看診服務 services ─────────────────────────────────────
