@@ -4,6 +4,7 @@ import { getClinicSettings } from "@/lib/http";
 import { verifyLineSignature, replyMessages, type LineMessage } from "@/lib/line";
 import { formatDateSession, formatTime } from "@/lib/slots";
 import { getPatientQueueToday, getQueueForDate, taipeiToday } from "@/lib/queue";
+import { buildLineMessage, type MsgKind, type MsgData } from "@/lib/lineMessage";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   const [{ data: rules }, { data: cs }] = await Promise.all([
     svc
       .from("line_auto_replies")
-      .select("keywords, action, reply_text")
+      .select("keywords, action, reply_text, message_id")
       .eq("clinic_id", CLINIC_ID)
       .eq("active", true)
       .order("sort"),
@@ -60,7 +61,12 @@ export async function POST(req: NextRequest) {
       .eq("clinic_id", CLINIC_ID)
       .maybeSingle(),
   ]);
-  const replyRules = (rules ?? []) as { keywords: string; action: string; reply_text: string | null }[];
+  const replyRules = (rules ?? []) as {
+    keywords: string;
+    action: string;
+    reply_text: string | null;
+    message_id: string | null;
+  }[];
   const welcomeText = cs?.line_welcome_text || null;
   const fallbackText = cs?.line_fallback_text || null;
   const menuCfg: MenuConfig = {
@@ -94,6 +100,10 @@ export async function POST(req: NextRequest) {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
         } else if (rule?.action === "booking") {
           await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
+        } else if (rule?.action === "message" && rule.message_id) {
+          const msg = await buildMessageById(svc, rule.message_id, baseUrl);
+          if (msg) await replyMessages(ev.replyToken, [msg]);
+          else await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg)]);
         } else if (rule?.action === "text" && rule.reply_text) {
           await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }]);
         } else {
@@ -436,6 +446,22 @@ async function replyMyAppointments(
   await replyMessages(replyToken, [
     { type: "flex", altText: "您的預約", contents: { type: "carousel", contents: bubbles } },
   ]);
+}
+
+// 依訊息素材 id 建構 LINE 訊息
+async function buildMessageById(
+  svc: SupabaseClient,
+  messageId: string,
+  baseUrl: string,
+): Promise<LineMessage | null> {
+  const { data } = await svc
+    .from("line_messages")
+    .select("kind, data")
+    .eq("id", messageId)
+    .eq("clinic_id", CLINIC_ID)
+    .maybeSingle();
+  if (!data) return null;
+  return buildLineMessage(data.kind as MsgKind, data.data as MsgData, { liffUrl: liffUrl(), baseUrl }) as LineMessage | null;
 }
 
 // 分類資訊列:左標籤(圖示)+ 右內容

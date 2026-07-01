@@ -165,12 +165,14 @@ create table if not exists line_auto_replies (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references clinics(id) on delete cascade,
   keywords text not null,              -- 以逗號分隔,任一命中即觸發
-  action text not null default 'text' check (action in ('text','booking','query','progress')),
+  action text not null default 'text' check (action in ('text','booking','query','progress','message')),
   reply_text text,                     -- action=text 時回覆的內容
+  message_id uuid references line_messages(id) on delete set null, -- action=message 時對應的訊息素材
   sort int not null default 0,
   active boolean not null default true,
   created_at timestamptz default now()
 );
+alter table line_auto_replies add column if not exists message_id uuid references line_messages(id) on delete set null;
 
 -- 歡迎詞與找不到指令時的預設回覆(存 clinic_settings)
 alter table clinic_settings add column if not exists line_welcome_text text;
@@ -183,6 +185,16 @@ alter table clinic_settings add column if not exists line_menu_btn_progress bool
 alter table clinic_settings add column if not exists line_menu_btn_info boolean not null default true;
 alter table clinic_settings add column if not exists line_menu_link_label text;
 alter table clinic_settings add column if not exists line_menu_link_url text;
+
+-- LINE 訊息素材(可綁關鍵字回覆):文字 / 圖文卡 / 多頁(carousel)
+create table if not exists line_messages (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  name text not null,
+  kind text not null default 'text' check (kind in ('text','card','carousel')),
+  data jsonb not null default '{}',      -- 內容(文字/圖片URL/標題/內文/按鈕)
+  created_at timestamptz default now()
+);
 
 -- LINE 圖文選單(Rich Menu)設定(每診所一筆)
 create table if not exists line_richmenu (
@@ -478,6 +490,7 @@ alter table services enable row level security;
 alter table serving_numbers enable row level security;
 alter table patient_records enable row level security;
 alter table line_auto_replies enable row level security;
+alter table line_messages enable row level security;
 alter table line_richmenu enable row level security;
 
 -- authenticated:只能讀寫自己所屬診所的資料。
@@ -535,6 +548,11 @@ create policy patient_records_member on patient_records for all to authenticated
 
 drop policy if exists line_replies_member on line_auto_replies;
 create policy line_replies_member on line_auto_replies for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+
+drop policy if exists line_messages_member on line_messages;
+create policy line_messages_member on line_messages for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
   with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 

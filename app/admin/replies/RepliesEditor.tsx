@@ -7,6 +7,7 @@ export interface Reply {
   keywords: string;
   action: string;
   reply_text: string | null;
+  message_id: string | null;
   sort: number;
   active: boolean;
 }
@@ -14,6 +15,7 @@ type ServerAction = (fd: FormData) => Promise<void>;
 
 const ACTION_LABEL: Record<string, string> = {
   text: "回覆自訂文字",
+  message: "回覆訊息素材",
   booking: "開啟預約",
   query: "查詢預約",
   progress: "看診進度",
@@ -21,12 +23,14 @@ const ACTION_LABEL: Record<string, string> = {
 
 export default function RepliesEditor({
   replies,
+  messages,
   createAction,
   updateAction,
   toggleAction,
   deleteAction,
 }: {
   replies: Reply[];
+  messages: { id: string; name: string }[];
   createAction: ServerAction;
   updateAction: ServerAction;
   toggleAction: ServerAction;
@@ -36,6 +40,7 @@ export default function RepliesEditor({
   const [keywords, setKeywords] = useState("");
   const [action, setAction] = useState("text");
   const [replyText, setReplyText] = useState("");
+  const [messageId, setMessageId] = useState("");
   const [sort, setSort] = useState("0");
 
   function edit(r: Reply) {
@@ -43,6 +48,7 @@ export default function RepliesEditor({
     setKeywords(r.keywords);
     setAction(r.action);
     setReplyText(r.reply_text ?? "");
+    setMessageId(r.message_id ?? "");
     setSort(String(r.sort));
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -51,6 +57,7 @@ export default function RepliesEditor({
     setKeywords("");
     setAction("text");
     setReplyText("");
+    setMessageId("");
     setSort("0");
   }
 
@@ -96,6 +103,22 @@ export default function RepliesEditor({
               placeholder="病患輸入關鍵字時回覆的內容"
               className="input"
             />
+          </label>
+        )}
+        {action === "message" && (
+          <label className="block text-sm">
+            <span className="mb-1 block font-medium text-slate-600">選擇訊息素材</span>
+            <select name="message_id" value={messageId} onChange={(e) => setMessageId(e.target.value)} className="input">
+              <option value="">請選擇</option>
+              {messages.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+            {messages.length === 0 && (
+              <p className="mt-1 text-xs text-amber-600">尚無訊息素材,請先到「訊息素材」建立。</p>
+            )}
           </label>
         )}
         <div className="flex items-end gap-3">

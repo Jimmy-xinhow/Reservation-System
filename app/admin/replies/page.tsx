@@ -13,10 +13,10 @@ export const dynamic = "force-dynamic";
 
 export default async function RepliesPage() {
   const supabase = await createSupabaseServer();
-  const [{ data: replies }, { data: settings }] = await Promise.all([
+  const [{ data: replies }, { data: settings }, { data: msgs }] = await Promise.all([
     supabase
       .from("line_auto_replies")
-      .select("id, keywords, action, reply_text, sort, active")
+      .select("id, keywords, action, reply_text, message_id, sort, active")
       .eq("clinic_id", CLINIC_ID)
       .order("sort"),
     supabase
@@ -26,8 +26,10 @@ export default async function RepliesPage() {
       )
       .eq("clinic_id", CLINIC_ID)
       .maybeSingle(),
+    supabase.from("line_messages").select("id, name").eq("clinic_id", CLINIC_ID).order("created_at"),
   ]);
   const s = settings as Record<string, unknown> | null;
+  const messages = (msgs ?? []) as { id: string; name: string }[];
 
   return (
     <div className="space-y-6">
@@ -103,6 +105,7 @@ export default async function RepliesPage() {
 
       <RepliesEditor
         replies={(replies ?? []) as Reply[]}
+        messages={messages}
         createAction={createReplyAction}
         updateAction={updateReplyAction}
         toggleAction={toggleReplyAction}

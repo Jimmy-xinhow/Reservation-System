@@ -39,6 +39,7 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/line", label: "LINE 連線" },
       { href: "/admin/replies", label: "LINE 回覆" },
+      { href: "/admin/messages", label: "訊息素材" },
       { href: "/admin/richmenu", label: "圖文選單" },
     ],
   },

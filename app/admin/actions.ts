@@ -774,7 +774,7 @@ export async function deleteServiceAction(fd: FormData) {
 }
 
 // ── LINE 自動回覆規則 ─────────────────────────────────────
-const REPLY_ACTIONS = ["text", "booking", "query", "progress"] as const;
+const REPLY_ACTIONS = ["text", "booking", "query", "progress", "message"] as const;
 export async function createReplyAction(fd: FormData) {
   const { supabase } = await requireMember();
   const keywords = str(fd, "keywords");
@@ -786,6 +786,7 @@ export async function createReplyAction(fd: FormData) {
     keywords,
     action,
     reply_text: str(fd, "reply_text") || null,
+    message_id: str(fd, "message_id") || null,
     sort: intOr(fd, "sort", 0),
     active: true,
   });
@@ -806,6 +807,7 @@ export async function updateReplyAction(fd: FormData) {
       keywords,
       action,
       reply_text: str(fd, "reply_text") || null,
+      message_id: str(fd, "message_id") || null,
       sort: intOr(fd, "sort", 0),
     })
     .eq("id", id)
@@ -857,6 +859,49 @@ export async function updateLineTextsAction(fd: FormData) {
     .eq("clinic_id", CLINIC_ID);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/replies");
+}
+
+// ── LINE 訊息素材 line_messages ───────────────────────────
+export async function saveMessageAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const name = str(fd, "name");
+  const kind = str(fd, "kind");
+  const dataRaw = str(fd, "data");
+  if (!name) throw new Error("請填訊息名稱");
+  if (!["text", "card", "carousel"].includes(kind)) throw new Error("類型錯誤");
+  let data: unknown;
+  try {
+    data = JSON.parse(dataRaw || "{}");
+  } catch {
+    throw new Error("內容格式錯誤");
+  }
+  if (id) {
+    const { error } = await supabase
+      .from("line_messages")
+      .update({ name, kind, data })
+      .eq("id", id)
+      .eq("clinic_id", CLINIC_ID);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase
+      .from("line_messages")
+      .insert({ clinic_id: CLINIC_ID, name, kind, data });
+    if (error) throw new Error(error.message);
+  }
+  revalidatePath("/admin/messages");
+}
+
+export async function deleteMessageAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const { error } = await supabase
+    .from("line_messages")
+    .delete()
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/messages");
 }
 
 // ── LINE 圖文選單 Rich Menu ───────────────────────────────
