@@ -95,26 +95,20 @@ export default function BookingForm({
   const action = isReschedule ? rescheduleAction : createAction;
 
   return (
-    <form action={action} className="card p-5">
-      <h2 className="mb-4 font-semibold text-slate-900">建立 / 改期預約</h2>
-      <input type="hidden" name="mode" value={mode} />
-      {isReschedule && <input type="hidden" name="old_id" value={targetId} />}
-      <input
-        type="hidden"
-        name={mode === "time" ? "start_at" : "template_id"}
-        value={picked}
-      />
-      {mode === "number" && <input type="hidden" name="date" value={date} />}
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <label className="block text-sm font-medium text-slate-600">
+    <form action={action} className="card overflow-hidden">
+      {/* 表頭 + 動作切換 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-3">
+        <h2 className="font-semibold text-slate-900">
+          {isReschedule ? "改期預約" : "建立預約"}
+        </h2>
+        <label className="flex items-center gap-2 text-sm text-slate-500">
           動作
           <select
-            className="input mt-1"
+            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm"
             value={targetId}
             onChange={(e) => setTargetId(e.target.value)}
           >
-            <option value="">新增預約</option>
+            <option value="">＋ 新增預約</option>
             {appointments.map((a) => (
               <option key={a.id} value={a.id}>
                 改期:{a.label}
@@ -122,117 +116,146 @@ export default function BookingForm({
             ))}
           </select>
         </label>
-
-        {singleDoctor ? (
-          <input type="hidden" name="doctor_id" value={singleDoctor.id} />
-        ) : (
-          <label className="block text-sm font-medium text-slate-600">
-            醫師
-            <select
-              name="doctor_id"
-              className="input mt-1"
-              value={doctorId}
-              onChange={(e) => setDoctorId(e.target.value)}
-              required
-            >
-              <option value="">請選擇</option>
-              {doctors.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <label className="block text-sm font-medium text-slate-600">
-          日期
-          <input
-            type="date"
-            className="input mt-1"
-            value={date}
-            min={todayStr()}
-            onChange={(e) => setDate(e.target.value)}
-            required
-          />
-        </label>
-
-        {!isReschedule && (
-          <>
-            <label className="block text-sm font-medium text-slate-600">
-              姓名
-              <input name="name" className="input mt-1" required />
-            </label>
-            <label className="block text-sm font-medium text-slate-600">
-              電話
-              <input name="phone" className="input mt-1" required />
-            </label>
-          </>
-        )}
-
-        <label className="block text-sm font-medium text-slate-600">
-          初/複診
-          <select name="visit_type" className="input mt-1">
-            <option value="return">複診</option>
-            <option value="first">初診</option>
-          </select>
-        </label>
-        {services.length > 0 && (
-          <label className="block text-sm font-medium text-slate-600">
-            看診服務
-            <select name="service_id" className="input mt-1">
-              <option value="">不指定</option>
-              {services.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="flex items-center gap-2 self-end rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-          <input type="checkbox" name="is_self_pay" className="h-4 w-4 accent-brand-600" /> 自費
-        </label>
       </div>
 
-      {doctorId && date && (
-        <div className="mt-4">
-          <p className="mb-2 text-sm font-medium text-slate-600">
-            {mode === "time" ? "選時段" : "選診次"}
-          </p>
-          {msg && (
-            <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{msg}</p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {mode === "time" &&
-              slots.map((s) => (
-                <button
-                  key={s.slot_start}
-                  type="button"
-                  onClick={() => setPicked(s.slot_start)}
-                  className={`pill ${picked === s.slot_start ? "pill-active" : ""}`}
-                >
-                  {timeOf(s.slot_start)}(剩{s.remaining})
-                </button>
-              ))}
-            {mode === "number" &&
-              sessions.map((s) => (
-                <button
-                  key={s.template_id}
-                  type="button"
-                  onClick={() => setPicked(s.template_id)}
-                  className={`pill ${picked === s.template_id ? "pill-active" : ""}`}
-                >
-                  {timeOf(s.session_start)}–{timeOf(s.session_end)}(剩{s.remaining}號)
-                </button>
-              ))}
-          </div>
-        </div>
-      )}
+      <input type="hidden" name="mode" value={mode} />
+      {isReschedule && <input type="hidden" name="old_id" value={targetId} />}
+      <input type="hidden" name={mode === "time" ? "start_at" : "template_id"} value={picked} />
+      {mode === "number" && <input type="hidden" name="date" value={date} />}
+      {singleDoctor && <input type="hidden" name="doctor_id" value={singleDoctor.id} />}
 
-      <button type="submit" disabled={!picked || !doctorId} className="btn btn-primary mt-5">
-        {isReschedule ? "確認改期" : "建立預約"}
-      </button>
+      <div className="space-y-5 p-5">
+        {/* 主要:就診者 */}
+        {!isReschedule && (
+          <section>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">就診者</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm font-medium text-slate-600">
+                姓名
+                <input name="name" className="input mt-1" placeholder="就診者姓名" required />
+              </label>
+              <label className="block text-sm font-medium text-slate-600">
+                電話
+                <input name="phone" className="input mt-1" inputMode="tel" placeholder="聯絡電話" required />
+              </label>
+            </div>
+          </section>
+        )}
+
+        {/* 主要:時間 */}
+        <section>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">看診時間</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {!singleDoctor && (
+              <label className="block text-sm font-medium text-slate-600">
+                醫師
+                <select
+                  name="doctor_id"
+                  className="input mt-1"
+                  value={doctorId}
+                  onChange={(e) => setDoctorId(e.target.value)}
+                  required
+                >
+                  <option value="">請選擇</option>
+                  {doctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="block text-sm font-medium text-slate-600">
+              日期
+              <input
+                type="date"
+                className="input mt-1"
+                value={date}
+                min={todayStr()}
+                onChange={(e) => setDate(e.target.value)}
+                required
+              />
+            </label>
+          </div>
+
+          {doctorId && date && (
+            <div className="mt-3 rounded-xl bg-slate-50 p-3">
+              <p className="mb-2 text-xs text-slate-500">{mode === "time" ? "選擇時段" : "選擇診次"}</p>
+              {msg && <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{msg}</p>}
+              <div className="flex flex-wrap gap-2">
+                {mode === "time" &&
+                  slots.map((s) => (
+                    <button
+                      key={s.slot_start}
+                      type="button"
+                      onClick={() => setPicked(s.slot_start)}
+                      className={`pill ${picked === s.slot_start ? "pill-active" : ""}`}
+                    >
+                      {timeOf(s.slot_start)}(剩{s.remaining})
+                    </button>
+                  ))}
+                {mode === "number" &&
+                  sessions.map((s) => (
+                    <button
+                      key={s.template_id}
+                      type="button"
+                      onClick={() => setPicked(s.template_id)}
+                      className={`pill ${picked === s.template_id ? "pill-active" : ""}`}
+                    >
+                      {timeOf(s.session_start)}–{timeOf(s.session_end)}(剩{s.remaining}號)
+                    </button>
+                  ))}
+                {mode === "time" && slots.length === 0 && !msg && (
+                  <p className="text-sm text-slate-400">此日無可用時段</p>
+                )}
+                {mode === "number" && sessions.length === 0 && !msg && (
+                  <p className="text-sm text-slate-400">此日無可掛診次</p>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* 次要:看診細節 */}
+        <section>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">看診細節</p>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="block text-sm font-medium text-slate-600">
+              初/複診
+              <select name="visit_type" className="input mt-1">
+                <option value="return">複診</option>
+                <option value="first">初診</option>
+              </select>
+            </label>
+            {services.length > 0 && (
+              <label className="block text-sm font-medium text-slate-600">
+                看診服務
+                <select name="service_id" className="input mt-1">
+                  <option value="">不指定</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="flex items-center gap-2 self-end rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+              <input type="checkbox" name="is_self_pay" className="h-4 w-4 accent-brand-600" /> 自費
+            </label>
+          </div>
+        </section>
+      </div>
+
+      {/* 送出列 */}
+      <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-3">
+        <span className="text-xs text-slate-400">
+          {picked ? "已選擇時段" : "請先選擇日期與時段"}
+        </span>
+        <button type="submit" disabled={!picked || !doctorId} className="btn btn-primary">
+          {isReschedule ? "確認改期" : "建立預約"}
+        </button>
+      </div>
     </form>
   );
 }
