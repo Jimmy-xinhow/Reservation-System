@@ -22,7 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <button className="btn btn-ghost px-3 py-1.5 text-sm">登出</button>
             </form>
           </div>
-          <div className="-mx-1 overflow-x-auto pb-2">
+          <div className="pb-2">
             <AdminNav />
           </div>
         </div>
