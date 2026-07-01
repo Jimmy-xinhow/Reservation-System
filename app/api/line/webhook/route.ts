@@ -463,11 +463,21 @@ async function replyProgress(
   }
   const settings = await getClinicSettings(svc, CLINIC_ID);
   const mode = settings?.booking_mode ?? "time";
-  const sessions = await getQueueForDate(svc, CLINIC_ID, taipeiToday(), mode);
+  const allSessions = await getQueueForDate(svc, CLINIC_ID, taipeiToday(), mode);
   const mine = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
 
+  // 只保留:病患有號碼、且診次尚未結束的診次(過診次後不再顯示)
+  const nowMs = Date.now();
+  const sessions = allSessions.filter((s) => {
+    const notEnded = !s.sessionEnd || new Date(s.sessionEnd).getTime() > nowMs;
+    const hasMine = mine.some((m) => m.doctorName === s.doctorName && m.label === s.label);
+    return notEnded && hasMine;
+  });
+
   if (sessions.length === 0) {
-    await replyMessages(replyToken, [{ type: "text", text: "今日尚無看診資料。" }]);
+    await replyMessages(replyToken, [
+      { type: "text", text: "您目前沒有進行中的看診。若已看診完成或診次已結束,恕不再顯示進度。" },
+    ]);
     return;
   }
 
@@ -475,12 +485,25 @@ async function replyProgress(
   const bubbles = sessions.map((s) => {
     const myItems = mine.filter((m) => m.doctorName === s.doctorName && m.label === s.label);
     const myBlocks = myItems.map((m) => {
+      // 狀態:過號 / 看診中 / 即將(前2位內)/ 候診
+      const passed = m.current > 0 && m.current > m.yourNumber;
+      const serving = m.current > 0 && m.current === m.yourNumber;
+      const near = m.current > 0 && m.yourNumber - m.current > 0 && m.yourNumber - m.current <= 2;
       const waiting = m.current ? Math.max(0, m.yourNumber - m.current) : m.yourNumber;
-      const near = !!m.current && m.yourNumber <= m.current;
+      const statusText = passed
+        ? "您的號碼已過,如仍需看診請洽櫃檯"
+        : serving
+          ? "輪到您看診了,請就位"
+          : near
+            ? "即將輪到您,請就位"
+            : `尚有約 ${waiting} 位候診`;
+      const highlight = serving || near;
+      const bg = passed ? "#f1f5f9" : highlight ? "#fef2f2" : "#eff6ff";
+      const fg = passed ? "#94a3b8" : highlight ? "#dc2626" : "#1d4ed8";
       return {
         type: "box",
         layout: "vertical",
-        backgroundColor: near ? "#fef2f2" : "#eff6ff",
+        backgroundColor: bg,
         cornerRadius: "md",
         paddingAll: "md",
         margin: "md",
@@ -491,15 +514,16 @@ async function replyProgress(
             size: "sm",
             weight: "bold",
             align: "center",
-            color: near ? "#dc2626" : "#1d4ed8",
+            color: fg,
           },
           {
             type: "text",
-            text: near ? "即將輪到您,請就位" : `尚有約 ${waiting} 位候診`,
+            text: statusText,
             size: "xs",
             align: "center",
-            color: near ? "#dc2626" : "#64748b",
+            color: passed ? "#94a3b8" : highlight ? "#dc2626" : "#64748b",
             margin: "xs",
+            wrap: true,
           },
         ],
       };
