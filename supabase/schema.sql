@@ -442,8 +442,9 @@ create index if not exists clinic_members_user_clinic_idx on clinic_members (use
 
 -- 注意:不要用 security definer 的 helper 函式(例如 auth_clinic_ids())包住 auth.uid() 再給 policy 呼叫。
 -- 實測該函式單獨當 RPC 會回正確值,但放進 RLS policy 的子查詢內,其中的 auth.uid() 取不到值 → policy 永遠比對不到 → 0 rows。
--- 因此 policy 一律直接內聯 auth.uid() 子查詢(下方),這也是 clinic_members 自身 policy 已驗證可用的寫法。
-drop function if exists auth_clinic_ids();
+-- 因此 policy 一律直接內聯 auth.uid() 子查詢(下方)。
+-- 舊 helper auth_clinic_ids() 於「所有 policy 重建之後」才 drop(見 §6 結尾),
+-- 否則既有 DB 的舊 policy 仍依賴它會導致 drop 失敗。
 
 -- ──────────────────────────────────────────────────────────────────────────
 -- §6 RLS 與權限
@@ -534,8 +535,9 @@ drop policy if exists clinic_members_self on clinic_members;
 create policy clinic_members_self on clinic_members for select to authenticated
   using (user_id = auth.uid());
 
--- 舊版 helper 一律清掉,避免有人再用到「policy 內失效」的函式。
+-- 舊版 helper 一律清掉(此時所有 policy 已改為內聯 auth.uid(),不再依賴這些函式)。
 drop function if exists is_clinic_member(uuid);
+drop function if exists auth_clinic_ids();
 
 -- RPC:全 security definer。撤掉 anon/authenticated,只給 service_role(病患端走 service_role)。
 revoke execute on function get_available_slots(uuid,uuid,date) from anon, authenticated;
