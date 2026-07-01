@@ -6,6 +6,10 @@ interface Doctor {
   id: string;
   name: string;
 }
+interface Service {
+  id: string;
+  name: string;
+}
 interface ApptOption {
   id: string;
   label: string;
@@ -40,20 +44,24 @@ function todayStr() {
 export default function BookingForm({
   mode,
   doctors,
+  services,
   appointments,
+  defaultDate,
   createAction,
   rescheduleAction,
 }: {
   mode: "time" | "number";
   doctors: Doctor[];
+  services: Service[];
   appointments: ApptOption[];
+  defaultDate?: string;
   createAction: ServerAction;
   rescheduleAction: ServerAction;
 }) {
   const singleDoctor = doctors.length === 1 ? doctors[0] : null;
   const [targetId, setTargetId] = useState(""); // 空=新增,有值=改期
   const [doctorId, setDoctorId] = useState(singleDoctor?.id ?? "");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(defaultDate ?? todayStr());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [picked, setPicked] = useState(""); // start_at 或 template_id
@@ -169,6 +177,19 @@ export default function BookingForm({
             <option value="first">初診</option>
           </select>
         </label>
+        {services.length > 0 && (
+          <label className="block text-sm font-medium text-slate-600">
+            看診服務
+            <select name="service_id" className="input mt-1">
+              <option value="">不指定</option>
+              {services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="flex items-center gap-2 self-end rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
           <input type="checkbox" name="is_self_pay" className="h-4 w-4 accent-brand-600" /> 自費
         </label>

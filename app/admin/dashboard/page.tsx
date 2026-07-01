@@ -3,6 +3,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { taipeiDateString } from "@/lib/slots";
 import { getQueueForDate } from "@/lib/queue";
+import { advanceServingAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,17 @@ export default async function DashboardPage({
             {queue.map((s) => {
               const onWait = s.online.filter((a) => a.seq > s.onlineCurrent && a.status !== "no_show").length;
               const offWait = s.offline.filter((a) => a.seq > s.offlineCurrent && a.status !== "no_show").length;
+              const maxOnline = s.online.length ? Math.max(0, ...s.online.map((a) => a.seq)) : 0;
+              const maxOffline = s.offline.length ? Math.max(0, ...s.offline.map((a) => a.seq)) : 0;
+              const hidden = (
+                <>
+                  <input type="hidden" name="doctor_id" value={s.doctorId} />
+                  <input type="hidden" name="date" value={today} />
+                  <input type="hidden" name="session_key" value={s.key} />
+                  <input type="hidden" name="max_online" value={maxOnline} />
+                  <input type="hidden" name="max_offline" value={maxOffline} />
+                </>
+              );
               return (
                 <div key={`${s.doctorId}-${s.key}`} className="rounded-xl border border-slate-200 p-4">
                   <div className="mb-2 flex items-baseline justify-between">
@@ -130,10 +142,20 @@ export default async function DashboardPage({
                     <div className="rounded-lg bg-brand-50 p-2 text-center">
                       <div className="text-[11px] text-brand-700/70">線上目前 · 候診 {onWait}</div>
                       <div className="text-2xl font-bold text-brand-700">{s.onlineCurrent || "—"}</div>
+                      <form action={advanceServingAction} className="mt-1">
+                        {hidden}
+                        <input type="hidden" name="op" value="next_online" />
+                        <button className="btn btn-primary w-full px-2 py-1 text-xs">叫下一位</button>
+                      </form>
                     </div>
                     <div className="rounded-lg bg-accent-500/10 p-2 text-center">
                       <div className="text-[11px] text-accent-600/80">現場目前 · 候診 {offWait}</div>
                       <div className="text-2xl font-bold text-accent-600">{s.offlineCurrent || "—"}</div>
+                      <form action={advanceServingAction} className="mt-1">
+                        {hidden}
+                        <input type="hidden" name="op" value="next_offline" />
+                        <button className="btn btn-secondary w-full px-2 py-1 text-xs">叫下一位</button>
+                      </form>
                     </div>
                   </div>
                 </div>

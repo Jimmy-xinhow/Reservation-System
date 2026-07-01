@@ -77,10 +77,11 @@ export default async function TodayPage({
   if (fDoctor) apptQuery = apptQuery.eq("doctor_id", fDoctor);
   if (fStatus) apptQuery = apptQuery.eq("status", fStatus);
 
-  const [{ data: settings }, { data: doctors }, { data: appts }] = await Promise.all([
+  const [{ data: settings }, { data: doctors }, { data: appts }, { data: services }] = await Promise.all([
     supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", CLINIC_ID).maybeSingle(),
     supabase.from("doctors").select("id, name").eq("clinic_id", CLINIC_ID).eq("active", true).order("name"),
     apptQuery.order("start_at").order("queue_number", { nullsFirst: true }),
+    supabase.from("services").select("id, name").eq("clinic_id", CLINIC_ID).eq("active", true).order("created_at"),
   ]);
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
@@ -149,7 +150,9 @@ export default async function TodayPage({
         <BookingForm
           mode={mode}
           doctors={doctors ?? []}
+          services={services ?? []}
           appointments={rescheduleOptions}
+          defaultDate={viewDate}
           createAction={createAppointmentAction}
           rescheduleAction={rescheduleAppointmentAction}
         />
@@ -237,7 +240,7 @@ export default async function TodayPage({
                   {r.visit_type === "first" ? (
                     <span className="badge bg-accent-500/10 text-accent-600">初診</span>
                   ) : (
-                    <span className="text-slate-500">複診</span>
+                    <span className="badge bg-slate-100 text-slate-600">複診</span>
                   )}
                 </td>
                 <td>

@@ -72,7 +72,15 @@ body {
   }
 
   .input {
-    @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition;
+    @apply w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  /* iOS date/time 欄位預設會撐開,強制填滿容器 */
+  input[type="date"].input,
+  input[type="time"].input {
+    @apply block;
+    min-height: 2.75rem;
   }
   .input:focus {
     @apply border-brand-500 ring-2 ring-brand-100;

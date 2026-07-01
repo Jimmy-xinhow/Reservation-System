@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireMember } from "@/lib/admin";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   pushMessages,
   createRichMenu,
@@ -13,6 +14,7 @@ import {
   clearDefaultRichMenu,
 } from "@/lib/line";
 import { LAYOUTS, slotBounds, slotAction, type Layout, type Slot } from "@/lib/richmenu";
+import { getQueueForDate } from "@/lib/queue";
 import { headers } from "next/headers";
 
 function str(fd: FormData, k: string): string {
@@ -243,6 +245,9 @@ export async function advanceServingAction(fd: FormData) {
     else if (hasOffline) callOffline();
   }
 
+  const prevOnline = cur?.online_current ?? 0;
+  const prevOffline = cur?.offline_current ?? 0;
+
   const { error } = await supabase.from("serving_numbers").upsert(
     {
       clinic_id: CLINIC_ID,
@@ -258,7 +263,45 @@ export async function advanceServingAction(fd: FormData) {
     { onConflict: "clinic_id,doctor_id,date,session_key" },
   );
   if (error) throw new Error(error.message);
+
+  // 叫下一位時,把「剛才那位」(前一個目前號)自動標記為完成
+  if (lastKind === "online" && online > prevOnline && prevOnline > 0) {
+    await completeServed(supabase, date, sessionKey, "online", prevOnline);
+  } else if (lastKind === "offline" && offline > prevOffline && prevOffline > 0) {
+    await completeServed(supabase, date, sessionKey, "offline", prevOffline);
+  }
+
   revalidatePath("/admin/queue");
+  revalidatePath("/admin/dashboard");
+}
+
+/** 把某門診段某序列 seq 號的病患標為完成(若仍在候診)。 */
+async function completeServed(
+  supabase: SupabaseClient,
+  date: string,
+  sessionKey: string,
+  stream: "online" | "offline",
+  seq: number,
+) {
+  const { data: cs } = await supabase
+    .from("clinic_settings")
+    .select("booking_mode")
+    .eq("clinic_id", CLINIC_ID)
+    .maybeSingle();
+  const mode = (cs?.booking_mode as "time" | "number") ?? "time";
+  const sessions = await getQueueForDate(supabase, CLINIC_ID, date, mode);
+  const sess = sessions.find((s) => s.key === sessionKey);
+  if (!sess) return;
+  const list = stream === "online" ? sess.online : sess.offline;
+  const appt = list.find((a) => a.seq === seq);
+  if (!appt) return;
+  if (appt.status === "booked" || appt.status === "confirmed") {
+    await supabase
+      .from("appointments")
+      .update({ status: "done" })
+      .eq("id", appt.id)
+      .eq("clinic_id", CLINIC_ID);
+  }
 }
 
 // 設定自動穿插:每 N 個線上插 1 個現場(0=關閉自動)
@@ -365,6 +408,7 @@ async function book(opts: {
   startAt?: string;
   templateId?: string;
   date?: string;
+  serviceId?: string;
 }): Promise<void> {
   const svc = createServiceClient();
   let apptId: string | null = null;
@@ -395,8 +439,12 @@ async function book(opts: {
     const row = Array.isArray(data) ? data[0] : data;
     apptId = (row?.appointment_id as string) ?? null;
   }
-  // 後台建立 = 現場(offline)
-  if (apptId) await svc.from("appointments").update({ source: "offline" }).eq("id", apptId);
+  // 後台建立 = 現場(offline);順帶記錄服務
+  if (apptId) {
+    const patch: Record<string, unknown> = { source: "offline" };
+    if (opts.serviceId) patch.service_id = opts.serviceId;
+    await svc.from("appointments").update(patch).eq("id", apptId);
+  }
 }
 
 export async function createAppointmentAction(fd: FormData) {
@@ -419,6 +467,7 @@ export async function createAppointmentAction(fd: FormData) {
     startAt: str(fd, "start_at") || undefined,
     templateId: str(fd, "template_id") || undefined,
     date: str(fd, "date") || undefined,
+    serviceId: str(fd, "service_id") || undefined,
   });
   revalidatePath("/admin");
 }

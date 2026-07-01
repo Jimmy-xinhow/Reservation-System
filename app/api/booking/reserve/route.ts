@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
-import { formatDateTime } from "@/lib/slots";
+import { formatDateTime, taipeiDateString } from "@/lib/slots";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +65,28 @@ export async function POST(req: NextRequest) {
 
     const settings = await getClinicSettings(svc, CLINIC_ID);
     if (!settings) return fail("查無診所設定", 500);
+
+    // 同一就診者同一天不可重複預約
+    const targetDate =
+      settings.booking_mode === "time" && body.start_at
+        ? taipeiDateString(body.start_at)
+        : body.date ?? "";
+    if (targetDate) {
+      const dayStart = new Date(`${targetDate}T00:00:00+08:00`).toISOString();
+      const dayEnd = new Date(`${targetDate}T23:59:59.999+08:00`).toISOString();
+      const { data: dup } = await svc
+        .from("appointments")
+        .select("id")
+        .eq("clinic_id", CLINIC_ID)
+        .eq("patient_id", body.patient_id)
+        .in("status", ["booked", "confirmed", "done"])
+        .gte("start_at", dayStart)
+        .lte("start_at", dayEnd)
+        .limit(1);
+      if ((dup ?? []).length > 0) {
+        return fail("此就診者當天已有預約,無法重複預約。", 409);
+      }
+    }
 
     let appointmentId: string;
     let queueNumber: number | null = null;

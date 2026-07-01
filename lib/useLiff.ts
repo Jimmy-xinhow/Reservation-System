@@ -7,6 +7,7 @@ interface LiffSdk {
   isLoggedIn: () => boolean;
   login: () => void;
   getIDToken: () => string | null;
+  openWindow?: (config: { url: string; external?: boolean }) => void;
 }
 
 declare global {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { Brand } from "@/components/Brand";
-import { googleCalendarUrl, icsContent, type CalEvent } from "@/lib/calendar";
+import { googleCalendarUrl, type CalEvent } from "@/lib/calendar";
 
 interface Doctor {
   id: string;
@@ -659,10 +659,25 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between px-1">
+        <p className="text-sm font-medium text-slate-600">
+          {progress.length > 0 ? "今日看診進度" : "我的預約"}
+        </p>
+        <button
+          type="button"
+          onClick={load}
+          className="flex items-center gap-1 text-sm text-brand-600 hover:underline"
+        >
+          <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+            <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.311h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clipRule="evenodd" />
+          </svg>
+          重新整理
+        </button>
+      </div>
+
       {/* 今日看診進度 */}
       {progress.length > 0 && (
         <div className="space-y-2">
-          <p className="px-1 text-sm font-medium text-slate-600">今日看診進度</p>
           {progress.map((pr, i) => (
             <div
               key={i}
@@ -770,41 +785,35 @@ function CalendarButtons({
   doctor: string | null;
   service: string | null;
 }) {
-  const ev: CalEvent = {
-    title: "慈愛中醫診所 看診",
-    startIso: start,
-    endIso: end && end !== start ? end : new Date(new Date(start).getTime() + 30 * 60000).toISOString(),
-    details: [doctor ? `醫師:${doctor}` : "", service ? `服務:${service}` : "", "看診前請提前抵達;無法前來請提前取消。"]
-      .filter(Boolean)
-      .join("\n"),
-    location: "慈愛中醫診所",
-  };
+  const endIso = end && end !== start ? end : new Date(new Date(start).getTime() + 30 * 60000).toISOString();
+  const details = [doctor ? `醫師:${doctor}` : "", service ? `服務:${service}` : "", "看診前請提前抵達;無法前來請提前取消。"]
+    .filter(Boolean)
+    .join("\n");
+  const ev: CalEvent = { title: "慈愛中醫診所 看診", startIso: start, endIso, details, location: "慈愛中醫診所" };
 
-  function downloadIcs() {
-    const blob = new Blob([icsContent(ev)], { type: "text/calendar;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "看診預約.ics";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  // 在 LINE 內建瀏覽器,直接開連結(blob 下載常失效);有 LIFF 就用外部瀏覽器開
+  function openUrl(url: string) {
+    const liff = typeof window !== "undefined" ? window.liff : undefined;
+    if (liff?.openWindow) {
+      liff.openWindow({ url, external: true });
+    } else {
+      window.open(url, "_blank");
+    }
   }
+
+  const icsUrl =
+    `/api/booking/ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(endIso)}` +
+    `&title=${encodeURIComponent(ev.title)}&details=${encodeURIComponent(details)}&location=${encodeURIComponent("慈愛中醫診所")}`;
+  const absIcsUrl = typeof window !== "undefined" ? new URL(icsUrl, window.location.origin).toString() : icsUrl;
 
   return (
     <div className="space-y-2">
       <p className="text-xs text-slate-400">加入行事曆,手機會在看診前自動提醒您</p>
       <div className="grid grid-cols-2 gap-2">
-        <a
-          href={googleCalendarUrl(ev)}
-          target="_blank"
-          rel="noreferrer"
-          className="btn btn-secondary text-sm"
-        >
+        <button type="button" onClick={() => openUrl(googleCalendarUrl(ev))} className="btn btn-secondary text-sm">
           Google 日曆
-        </a>
-        <button type="button" onClick={downloadIcs} className="btn btn-secondary text-sm">
+        </button>
+        <button type="button" onClick={() => openUrl(absIcsUrl)} className="btn btn-secondary text-sm">
           加入行事曆
         </button>
       </div>
