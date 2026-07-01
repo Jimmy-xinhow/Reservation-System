@@ -23,9 +23,9 @@ export default async function QueueBoard() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-5">
+    <main className="mx-auto max-w-2xl p-4 sm:p-6 lg:max-w-4xl">
       <AutoRefresh seconds={20} />
-      <header className="mb-5 flex items-center justify-between">
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-2">
         <Brand subtitle="看診進度" />
         <span className="text-sm text-slate-400">{today}</span>
       </header>
@@ -37,15 +37,15 @@ export default async function QueueBoard() {
           {sessions.map((s) => {
             const waiting = s.appts.filter((a) => a.seq > s.current && a.status !== "no_show").length;
             return (
-              <div key={`${s.doctorId}-${s.key}`} className="card flex items-center justify-between p-5">
+              <div key={`${s.doctorId}-${s.key}`} className="card flex items-center justify-between p-5 sm:p-6">
                 <div>
-                  <div className="text-lg font-semibold text-slate-900">{s.doctorName}</div>
-                  <div className="text-sm text-slate-400">{s.label}</div>
-                  <div className="mt-1 text-xs text-slate-400">尚有 {waiting} 位候診</div>
+                  <div className="text-lg font-semibold text-slate-900 sm:text-2xl">{s.doctorName}</div>
+                  <div className="text-sm text-slate-400 sm:text-base">{s.label}</div>
+                  <div className="mt-1 text-xs text-slate-400 sm:text-sm">尚有 {waiting} 位候診</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-xs text-slate-400">目前看診號</div>
-                  <div className="text-5xl font-bold text-brand-700">{s.current || "—"}</div>
+                  <div className="text-xs text-slate-400 sm:text-sm">目前看診號</div>
+                  <div className="text-5xl font-bold text-brand-700 sm:text-7xl">{s.current || "—"}</div>
                 </div>
               </div>
             );
