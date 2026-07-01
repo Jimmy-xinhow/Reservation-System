@@ -113,12 +113,17 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 回傳訂金狀態供成功頁顯示
+    // 回傳訂金狀態與行事曆所需資訊供成功頁顯示
     const { data: appt } = await svc
       .from("appointments")
-      .select("deposit_status, deposit_amount, start_at")
+      .select("deposit_status, deposit_amount, start_at, end_at, doctors(name), services(name)")
       .eq("id", appointmentId)
       .single();
+
+    const doctors = appt?.doctors as { name: string } | { name: string }[] | null;
+    const services = appt?.services as { name: string } | { name: string }[] | null;
+    const doctorName = Array.isArray(doctors) ? doctors[0]?.name : doctors?.name;
+    const serviceName = Array.isArray(services) ? services[0]?.name : services?.name;
 
     return ok({
       appointment_id: appointmentId,
@@ -126,6 +131,9 @@ export async function POST(req: NextRequest) {
       deposit_status: appt?.deposit_status ?? "none",
       deposit_amount: appt?.deposit_amount ?? 0,
       start_at: appt?.start_at ?? body.start_at ?? null,
+      end_at: appt?.end_at ?? null,
+      doctor_name: doctorName ?? null,
+      service_name: serviceName ?? null,
     });
   } catch (e) {
     return fail(e instanceof Error ? e.message : "預約失敗", 500);

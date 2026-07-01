@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { Brand } from "@/components/Brand";
+import { googleCalendarUrl, icsContent, type CalEvent } from "@/lib/calendar";
 
 interface Doctor {
   id: string;
@@ -49,6 +50,9 @@ interface ReserveResult {
   deposit_status: string;
   deposit_amount: number;
   start_at: string | null;
+  end_at: string | null;
+  doctor_name: string | null;
+  service_name: string | null;
 }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -273,6 +277,14 @@ export default function BookPage() {
               <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
                 需繳訂金 NT${result.deposit_amount},完成後即保留名額。詳情請洽櫃檯。
               </p>
+            )}
+            {result.start_at && (
+              <CalendarButtons
+                start={result.start_at}
+                end={result.end_at ?? result.start_at}
+                doctor={result.doctor_name}
+                service={result.service_name}
+              />
             )}
             <p className="rounded-xl bg-red-50 p-3 text-left text-xs leading-relaxed text-red-700">
               ⚠️ 提醒:無法前來請務必提前取消。<strong>累計三次未提前取消而未到,將暫停一個月的線上預約資格。</strong>
@@ -741,6 +753,59 @@ function TypeToggle({
     <button type="button" onClick={onClick} className={`pill text-center ${active ? "pill-active" : ""}`}>
       {children}
     </button>
+  );
+}
+
+function CalendarButtons({
+  start,
+  end,
+  doctor,
+  service,
+}: {
+  start: string;
+  end: string;
+  doctor: string | null;
+  service: string | null;
+}) {
+  const ev: CalEvent = {
+    title: "慈愛中醫診所 看診",
+    startIso: start,
+    endIso: end && end !== start ? end : new Date(new Date(start).getTime() + 30 * 60000).toISOString(),
+    details: [doctor ? `醫師:${doctor}` : "", service ? `服務:${service}` : "", "看診前請提前抵達;無法前來請提前取消。"]
+      .filter(Boolean)
+      .join("\n"),
+    location: "慈愛中醫診所",
+  };
+
+  function downloadIcs() {
+    const blob = new Blob([icsContent(ev)], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "看診預約.ics";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-slate-400">加入行事曆,手機會在看診前自動提醒您</p>
+      <div className="grid grid-cols-2 gap-2">
+        <a
+          href={googleCalendarUrl(ev)}
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-secondary text-sm"
+        >
+          Google 日曆
+        </a>
+        <button type="button" onClick={downloadIcs} className="btn btn-secondary text-sm">
+          加入行事曆
+        </button>
+      </div>
+    </div>
   );
 }
 

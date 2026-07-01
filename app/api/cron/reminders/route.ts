@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { getClinicSettings } from "@/lib/http";
 import { pushMessages, type LineMessage } from "@/lib/line";
+import { emailEnabled, sendEmail } from "@/lib/email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
 
 export const runtime = "nodejs";
@@ -12,7 +13,7 @@ interface ApptRow {
   start_at: string;
   queue_number: number | null;
   doctors: { name: string } | null;
-  patients: { name: string; line_user_id: string | null } | null;
+  patients: { name: string; line_user_id: string | null; email: string | null } | null;
 }
 
 /**
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
 
     const { data: appts, error } = await svc
       .from("appointments")
-      .select("id, start_at, queue_number, doctors(name), patients(name, line_user_id)")
+      .select("id, start_at, queue_number, doctors(name), patients(name, line_user_id, email)")
       .eq("clinic_id", CLINIC_ID)
       .eq("status", "booked")
       .gt("start_at", now.toISOString())
@@ -50,41 +51,64 @@ export async function GET(req: NextRequest) {
     if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
 
     const rows = (appts ?? []) as unknown as ApptRow[];
-    const candidates = rows.filter((a) => a.patients?.line_user_id);
-    if (candidates.length === 0) {
-      return Response.json({ ok: true, sent: 0, skipped: 0 });
-    }
+    if (rows.length === 0) return Response.json({ ok: true, line: 0, email: 0 });
 
-    // 已發過 line 提醒的 appointment_id
+    // 已發過的提醒紀錄(依管道)
     const { data: logs } = await svc
       .from("reminder_logs")
-      .select("appointment_id")
-      .eq("channel", "line")
+      .select("appointment_id, channel")
       .in(
         "appointment_id",
-        candidates.map((a) => a.id),
+        rows.map((a) => a.id),
       );
-    const sentSet = new Set((logs ?? []).map((l) => l.appointment_id as string));
+    const done = new Set((logs ?? []).map((l) => `${l.appointment_id}|${l.channel}`));
 
-    let sent = 0;
-    let failed = 0;
-    for (const a of candidates) {
-      if (sentSet.has(a.id)) continue;
-      const lineUserId = a.patients!.line_user_id!;
+    // ── LINE 推播(會計入額度)──
+    let lineSent = 0;
+    let lineFailed = 0;
+    for (const a of rows) {
+      if (!a.patients?.line_user_id) continue;
+      if (done.has(`${a.id}|line`)) continue;
       const flex = buildReminderFlex(a, settings.booking_mode);
       try {
-        await pushMessages(lineUserId, [flex]);
+        await pushMessages(a.patients.line_user_id, [flex]);
         const { error: logErr } = await svc
           .from("reminder_logs")
           .insert({ appointment_id: a.id, channel: "line", result: "sent" });
-        // unique 衝突(並行重複)忽略
-        if (!logErr) sent += 1;
+        if (!logErr) lineSent += 1;
       } catch {
-        failed += 1; // 不寫 log,下次 cron 會重試
+        lineFailed += 1;
       }
     }
 
-    return Response.json({ ok: true, sent, failed, scanned: candidates.length });
+    // ── Email 提醒(免費/低成本,設定 RESEND_API_KEY 才啟用)──
+    let emailSent = 0;
+    let emailFailed = 0;
+    if (emailEnabled()) {
+      for (const a of rows) {
+        const to = a.patients?.email;
+        if (!to) continue;
+        if (done.has(`${a.id}|email`)) continue;
+        try {
+          await sendEmail(to, "慈愛中醫診所 看診提醒", buildReminderHtml(a, settings.booking_mode));
+          const { error: logErr } = await svc
+            .from("reminder_logs")
+            .insert({ appointment_id: a.id, channel: "email", result: "sent" });
+          if (!logErr) emailSent += 1;
+        } catch {
+          emailFailed += 1;
+        }
+      }
+    }
+
+    return Response.json({
+      ok: true,
+      line: lineSent,
+      lineFailed,
+      email: emailSent,
+      emailFailed,
+      scanned: rows.length,
+    });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : "提醒排程失敗" },
@@ -139,4 +163,24 @@ function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
       },
     },
   };
+}
+
+function buildReminderHtml(a: ApptRow, mode: "time" | "number"): string {
+  const doctor = a.doctors?.name ?? "醫師";
+  const patient = a.patients?.name ?? "";
+  const when =
+    mode === "time"
+      ? formatDateTime(a.start_at)
+      : `${formatDateSession(a.start_at)} 第 ${a.queue_number ?? "?"} 號`;
+  return `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px">
+      <h2 style="color:#1d4ed8;margin:0 0 12px">看診提醒</h2>
+      <p style="font-size:18px;font-weight:bold;margin:0 0 8px">${when}</p>
+      <p style="color:#555;margin:0 0 4px">醫師:${doctor}</p>
+      ${patient ? `<p style="color:#555;margin:0 0 4px">就診者:${patient}</p>` : ""}
+      <p style="color:#888;margin:12px 0 0;font-size:14px">
+        無法前來請務必提前取消。累計三次未提前取消而未到,將暫停一個月線上預約資格。
+      </p>
+      <p style="color:#aaa;margin:16px 0 0;font-size:12px">慈愛中醫診所</p>
+    </div>`;
 }
