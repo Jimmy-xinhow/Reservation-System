@@ -3,7 +3,7 @@ import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { getClinicSettings } from "@/lib/http";
 import { verifyLineSignature, replyMessages, type LineMessage } from "@/lib/line";
 import { formatDateSession, formatTime } from "@/lib/slots";
-import { getPatientQueueToday } from "@/lib/queue";
+import { getPatientQueueToday, getQueueForDate, taipeiToday } from "@/lib/queue";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -356,21 +356,29 @@ async function replyProgress(
   }
   const settings = await getClinicSettings(svc, CLINIC_ID);
   const mode = settings?.booking_mode ?? "time";
-  const items = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
+  const sessions = await getQueueForDate(svc, CLINIC_ID, taipeiToday(), mode);
+  const mine = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
 
-  if (items.length === 0) {
-    await replyMessages(replyToken, [
-      {
-        type: "flex",
-        altText: "您今日沒有約診",
-        contents: infoBubble("今日看診進度", "您今日沒有約診。", baseUrl),
-      },
-    ]);
+  if (sessions.length === 0) {
+    await replyMessages(replyToken, [{ type: "text", text: "今日尚無看診資料。" }]);
     return;
   }
 
-  const bubbles = items.map((i) => {
-    const waiting = i.current ? Math.max(0, i.yourNumber - i.current) : i.yourNumber;
+  // 每個門診段一張卡:直接顯示線上/現場目前叫號;若病患有號碼則標出
+  const bubbles = sessions.map((s) => {
+    const myItems = mine.filter((m) => m.doctorName === s.doctorName && m.label === s.label);
+    const myLines = myItems.map((m) => {
+      const waiting = m.current ? Math.max(0, m.yourNumber - m.current) : m.yourNumber;
+      const near = m.current && m.yourNumber <= m.current;
+      return {
+        type: "text",
+        text: `您的號碼:${m.source === "offline" ? "現場" : "線上"} ${m.yourNumber} 號　${near ? "即將輪到您" : `尚有約 ${waiting} 位`}`,
+        size: "xs",
+        color: near ? "#dc2626" : "#2563eb",
+        wrap: true,
+        margin: "sm",
+      };
+    });
     return {
       type: "bubble",
       size: "kilo",
@@ -380,42 +388,19 @@ async function replyProgress(
         spacing: "md",
         contents: [
           { type: "text", text: "看診進度", size: "sm", color: "#0d9488", weight: "bold" },
-          { type: "text", text: `${i.doctorName}　${i.label}`, size: "xs", color: "#888888", wrap: true },
+          { type: "text", text: `${s.doctorName}　${s.label}`, size: "xs", color: "#888888", wrap: true },
           {
             type: "box",
             layout: "horizontal",
             margin: "md",
             contents: [
-              numberBox("您的號碼", `${i.source === "offline" ? "現場" : "線上"} ${i.yourNumber}`, "#2563eb"),
-              numberBox("目前看診", i.current ? `${i.current}` : "未開始", "#0d9488"),
+              numberBox("線上目前", s.onlineCurrent ? `${s.onlineCurrent}` : "未開始", "#2563eb"),
+              numberBox("現場目前", s.offlineCurrent ? `${s.offlineCurrent}` : "未開始", "#0d9488"),
             ],
           },
-          {
-            type: "text",
-            text: i.current && i.yourNumber <= i.current ? "即將輪到您,請就位" : `尚有約 ${waiting} 位`,
-            size: "xs",
-            color: "#888888",
-            align: "center",
-            margin: "sm",
-          },
+          ...myLines,
         ],
       },
-      ...(baseUrl
-        ? {
-            footer: {
-              type: "box",
-              layout: "vertical",
-              contents: [
-                {
-                  type: "button",
-                  style: "link",
-                  height: "sm",
-                  action: { type: "uri", label: "查看完整叫號", uri: `${baseUrl}/q` },
-                },
-              ],
-            },
-          }
-        : {}),
     };
   });
 
@@ -438,39 +423,6 @@ function numberBox(label: string, value: string, color: string): LineMessage {
 }
 
 // 通用資訊卡(標題 + 內文 + 選單按鈕)
-function infoBubble(title: string, body: string, baseUrl: string): LineMessage {
-  const liff = liffUrl();
-  const buttons: LineMessage[] = [];
-  if (liff) {
-    buttons.push({
-      type: "button",
-      style: "primary",
-      color: "#2563eb",
-      height: "sm",
-      action: { type: "uri", label: "立即預約", uri: liff },
-    });
-  }
-  buttons.push({
-    type: "button",
-    style: "secondary",
-    height: "sm",
-    action: { type: "postback", label: "查詢我的預約", data: "action=my", displayText: "查詢我的預約" },
-  });
-  return {
-    type: "bubble",
-    body: {
-      type: "box",
-      layout: "vertical",
-      spacing: "md",
-      contents: [
-        { type: "text", text: title, weight: "bold", size: "lg", color: "#0d9488" },
-        { type: "text", text: body, size: "sm", color: "#555555", wrap: true },
-      ],
-    },
-    footer: { type: "box", layout: "vertical", spacing: "sm", contents: buttons },
-  };
-}
-
 // ── 確認 / 取消(提醒按鈕 + LINE 查詢內的取消)──────────────
 async function handleStatusPostback(
   replyToken: string,
