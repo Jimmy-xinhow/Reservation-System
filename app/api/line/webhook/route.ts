@@ -220,18 +220,54 @@ function menuMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig):
 function bookingPrompt(baseUrl: string): LineMessage {
   const liff = liffUrl();
   if (liff) {
+    const rule = (text: string): LineMessage => ({
+      type: "box",
+      layout: "baseline",
+      spacing: "sm",
+      contents: [
+        { type: "text", text: "•", size: "sm", color: "#0d9488", flex: 0 },
+        { type: "text", text, size: "sm", color: "#475569", wrap: true, flex: 1 },
+      ],
+    });
     return {
       type: "flex",
       altText: "線上預約",
       contents: {
         type: "bubble",
+        size: "kilo",
+        header: {
+          type: "box",
+          layout: "vertical",
+          backgroundColor: "#0d9488",
+          paddingAll: "sm",
+          contents: [{ type: "text", text: "線上預約", weight: "bold", size: "md", color: "#ffffff", align: "center" }],
+        },
         body: {
           type: "box",
           layout: "vertical",
+          paddingAll: "lg",
           spacing: "md",
           contents: [
-            { type: "text", text: "線上預約", weight: "bold", size: "lg", color: "#0d9488" },
-            { type: "text", text: "點下方按鈕開始預約看診。", size: "sm", color: "#555555", wrap: true },
+            { type: "text", text: "預約前請留意", size: "sm", weight: "bold", color: "#0f172a" },
+            rule("請依實際看診者資料預約,一位就診者同一天限預約一筆。"),
+            rule("初診需較完整問診,看診時間較長,請預留充足時間。"),
+            rule("無法前來請務必提前取消,以免影響他人。"),
+            {
+              type: "box",
+              layout: "vertical",
+              backgroundColor: "#fef2f2",
+              cornerRadius: "md",
+              paddingAll: "sm",
+              contents: [
+                {
+                  type: "text",
+                  text: "⚠️ 累計三次未提前取消而未到,將暫停一個月線上預約資格。",
+                  size: "xs",
+                  color: "#dc2626",
+                  wrap: true,
+                },
+              ],
+            },
           ],
         },
         footer: {

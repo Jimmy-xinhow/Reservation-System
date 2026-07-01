@@ -175,6 +175,7 @@ function translateDbError(msg: string): string {
     "查無此門診段",
     "本診已休診",
     "此時段已休診",
+    "本診已結束",
   ];
   const hit = known.find((k) => msg.includes(k));
   return hit ?? "此時段無法預約,請重新選擇";

@@ -370,16 +370,15 @@ begin
   select x.id,
          ((p_date + x.start_time) at time zone 'Asia/Taipei'),
          ((p_date + x.end_time) at time zone 'Asia/Taipei'),
-         x.capacity, count(a.id)::int, (x.capacity - count(a.id))::int
+         x.capacity, count(a.id)::int, greatest(0, x.capacity - count(a.id))::int
   from sess x
   left join public.appointments a
     on a.template_id=x.id
    and a.start_at = ((p_date + x.start_time) at time zone 'Asia/Taipei')
    and a.status in ('booked','confirmed','done')
-  -- 只顯示未來、且距現在已達最短前置時間的診次(今天已過或太接近的不顯示)
-  where ((p_date + x.start_time) at time zone 'Asia/Taipei') > now() + (v_lead||' minutes')::interval
-  group by x.id, x.start_time, x.end_time, x.capacity
-  having (x.capacity - count(a.id)) > 0;
+  -- 只要診次「尚未結束」就顯示(含已額滿);已結束才隱藏
+  where ((p_date + x.end_time) at time zone 'Asia/Taipei') > now()
+  group by x.id, x.start_time, x.end_time, x.capacity;
 end; $$;
 
 create or replace function book_number(
@@ -402,8 +401,8 @@ begin
 
   v_start_at := (p_date + v_start) at time zone 'Asia/Taipei';
   v_end_at   := (p_date + v_end) at time zone 'Asia/Taipei';
-  if v_start_at < now() + (coalesce(st.min_lead_minutes,30)||' minutes')::interval
-    then raise exception '已超過可預約時間'; end if;
+  -- 號次制:只要診次尚未結束都可掛號(額滿另外擋);已結束才擋下
+  if v_end_at <= now() then raise exception '本診已結束'; end if;
 
   -- 整天休診或只休此診則擋下
   if exists (select 1 from public.schedule_exceptions ec

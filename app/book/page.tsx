@@ -93,7 +93,6 @@ export default function BookPage() {
   const [phone, setPhone] = useState("");
   const [birthday, setBirthday] = useState("");
   const [visitType, setVisitType] = useState<"first" | "return">("return");
-  const [isSelfPay, setIsSelfPay] = useState(false);
 
   // 綁定:此 LINE 身分已綁定的病患(null = 載入中)
   const [bound, setBound] = useState<BoundPatient[] | null>(null);
@@ -209,7 +208,7 @@ export default function BookPage() {
         doctor_id: doctorId,
         service_id: serviceId || undefined,
         visit_type: visitType,
-        is_self_pay: isSelfPay,
+        is_self_pay: false,
       };
       if (config.booking_mode === "time") {
         payload.start_at = pickedStart;
@@ -229,6 +228,22 @@ export default function BookPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // 再預約一筆:回到最初「為自己/為他人」選擇,並清空選擇
+  function bookAnother() {
+    setResult(null);
+    setForWhom("");
+    setSelectedPatientId("");
+    setName("");
+    setPhone("");
+    setBirthday("");
+    setServiceId("");
+    setDate("");
+    setPickedStart(null);
+    setPickedTemplate(null);
+    setVisitType("return");
+    setSubmitErr(null);
   }
 
   // ── 畫面 ──
@@ -289,7 +304,7 @@ export default function BookPage() {
             <p className="rounded-xl bg-red-50 p-3 text-left text-xs leading-relaxed text-red-700">
               ⚠️ 提醒:無法前來請務必提前取消。<strong>累計三次未提前取消而未到,將暫停一個月的線上預約資格。</strong>
             </p>
-            <button onClick={() => setResult(null)} className="btn btn-secondary w-full">
+            <button onClick={bookAnother} className="btn btn-secondary w-full">
               再預約一筆
             </button>
           </div>
@@ -461,15 +476,6 @@ export default function BookPage() {
                 </p>
               )}
             </div>
-            <label className="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-brand-600"
-                checked={isSelfPay}
-                onChange={(e) => setIsSelfPay(e.target.checked)}
-              />
-              自費就診
-            </label>
           </div>
         </section>
 
@@ -530,20 +536,34 @@ export default function BookPage() {
                 )}
                 {config.booking_mode === "number" && !availLoading && (
                   <div className="space-y-2">
-                    {sessions.map((s) => (
-                      <button
-                        key={s.template_id}
-                        type="button"
-                        onClick={() => setPickedTemplate(s.template_id)}
-                        className={`pill flex w-full items-center justify-between ${pickedTemplate === s.template_id ? "pill-active" : ""}`}
-                      >
-                        <span className="font-medium">
-                          {formatDateSession(s.session_start)}　{formatTime(s.session_start)}–
-                          {formatTime(s.session_end)}
-                        </span>
-                        <span className="text-xs opacity-70">剩 {s.remaining} 號</span>
-                      </button>
-                    ))}
+                    {sessions.map((s) => {
+                      const full = s.remaining <= 0;
+                      return (
+                        <button
+                          key={s.template_id}
+                          type="button"
+                          disabled={full}
+                          onClick={() => !full && setPickedTemplate(s.template_id)}
+                          className={`pill flex w-full items-center justify-between ${
+                            full
+                              ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                              : pickedTemplate === s.template_id
+                                ? "pill-active"
+                                : ""
+                          }`}
+                        >
+                          <span className="font-medium">
+                            {formatDateSession(s.session_start)}　{formatTime(s.session_start)}–
+                            {formatTime(s.session_end)}
+                          </span>
+                          {full ? (
+                            <span className="text-xs font-medium text-red-500">名額已滿</span>
+                          ) : (
+                            <span className="text-xs opacity-70">剩 {s.remaining} 號</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
