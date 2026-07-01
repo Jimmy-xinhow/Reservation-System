@@ -285,13 +285,15 @@ async function replyMyAppointments(
     return;
   }
 
+  // 以「今天開始」為界(而非現在),否則號次制當天已到時段但仍候診的預約會被漏掉
+  const todayStartIso = new Date(`${taipeiToday()}T00:00:00+08:00`).toISOString();
   const { data } = await svc
     .from("appointments")
     .select("id, start_at, queue_number, status, doctors(name)")
     .eq("clinic_id", CLINIC_ID)
     .in("patient_id", ids)
     .in("status", ["booked", "confirmed"])
-    .gte("start_at", new Date().toISOString())
+    .gte("start_at", todayStartIso)
     .order("start_at")
     .limit(10);
 

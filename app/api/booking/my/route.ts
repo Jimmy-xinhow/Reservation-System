@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
-import { getPatientQueueToday } from "@/lib/queue";
+import { getPatientQueueToday, taipeiToday } from "@/lib/queue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,13 +38,15 @@ export async function POST(req: NextRequest) {
     const mode = settings?.booking_mode ?? "time";
     const progress = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
 
+    // 以「今天開始」為界(而非現在),避免號次制當天已到時段但仍候診的預約被漏掉
+    const todayStartIso = new Date(`${taipeiToday()}T00:00:00+08:00`).toISOString();
     const { data, error } = await svc
       .from("appointments")
       .select("id, start_at, queue_number, status, doctors(name), patients(name)")
       .eq("clinic_id", CLINIC_ID)
       .in("patient_id", ids)
       .in("status", ["booked", "confirmed"])
-      .gte("start_at", new Date().toISOString())
+      .gte("start_at", todayStartIso)
       .order("start_at");
     if (error) return fail(error.message, 500);
 
