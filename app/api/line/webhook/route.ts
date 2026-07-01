@@ -306,12 +306,37 @@ async function replyMyAppointments(
     return;
   }
 
-  // 每筆一個 bubble:綠色表頭 + 分類資訊列 + 取消
+  // 每筆一個 bubble:標題表頭 + 主視覺(日期/號碼)+ 分隔線 + 資訊列 + 取消
   const bubbles = rows.map((r) => {
-    const when =
-      mode === "time"
-        ? `${formatDateSession(r.start_at)} ${formatTime(r.start_at)}`
-        : `${formatDateSession(r.start_at)} 第 ${r.queue_number ?? "?"} 號`;
+    // 主視覺:診次(日期)與號碼/時間分開呈現
+    const hero: LineMessage[] = [
+      { type: "text", text: formatDateSession(r.start_at), size: "sm", color: "#0d9488", align: "center", weight: "bold", wrap: true },
+    ];
+    if (mode === "number") {
+      hero.push({
+        type: "box",
+        layout: "vertical",
+        backgroundColor: "#0d9488",
+        cornerRadius: "lg",
+        paddingAll: "md",
+        margin: "md",
+        contents: [
+          { type: "text", text: "看診號碼", size: "xxs", color: "#d1fae5", align: "center" },
+          { type: "text", text: `${r.queue_number ?? "?"}`, size: "3xl", weight: "bold", color: "#ffffff", align: "center" },
+        ],
+      });
+    } else {
+      hero.push({
+        type: "text",
+        text: formatTime(r.start_at),
+        size: "3xl",
+        weight: "bold",
+        color: "#0f172a",
+        align: "center",
+        margin: "sm",
+      });
+    }
+
     return {
       type: "bubble",
       size: "kilo",
@@ -327,23 +352,31 @@ async function replyMyAppointments(
       body: {
         type: "box",
         layout: "vertical",
-        spacing: "sm",
         paddingAll: "lg",
         contents: [
-          infoRow(mode === "time" ? "時間" : "診次", when),
-          infoRow("就診者", r.patients?.name ?? "—"),
-          infoRow("醫師", r.doctors?.name ?? "—"),
-          infoRow("服務", r.services?.name ?? "一般看診"),
-          infoRow("類型", r.visit_type === "first" ? "初診" : "複診"),
+          ...hero,
+          { type: "separator", margin: "lg", color: "#e2e8f0" },
+          {
+            type: "box",
+            layout: "vertical",
+            spacing: "md",
+            margin: "lg",
+            contents: [
+              infoRow("就診者", r.patients?.name ?? "—"),
+              infoRow("醫師", r.doctors?.name ?? "—"),
+              infoRow("服務", r.services?.name ?? "一般看診"),
+              infoRow("類型", r.visit_type === "first" ? "初診" : "複診"),
+            ],
+          },
           {
             type: "box",
             layout: "vertical",
             backgroundColor: "#f0fdfa",
             cornerRadius: "md",
             paddingAll: "sm",
-            margin: "md",
+            margin: "lg",
             contents: [
-              { type: "text", text: "預約成功", size: "xs", weight: "bold", align: "center", color: "#0d9488" },
+              { type: "text", text: "✓ 預約成功", size: "xs", weight: "bold", align: "center", color: "#0d9488" },
             ],
           },
         ],
@@ -351,6 +384,7 @@ async function replyMyAppointments(
       footer: {
         type: "box",
         layout: "vertical",
+        paddingTop: "none",
         contents: [
           {
             type: "button",
@@ -368,14 +402,14 @@ async function replyMyAppointments(
   ]);
 }
 
-// 分類資訊列:左標籤 + 右內容
+// 分類資訊列:左標籤(圖示)+ 右內容
 function infoRow(label: string, value: string): LineMessage {
   return {
     type: "box",
     layout: "horizontal",
     contents: [
-      { type: "text", text: label, size: "sm", color: "#94a3b8", flex: 2 },
-      { type: "text", text: value, size: "sm", color: "#334155", weight: "bold", flex: 5, wrap: true, align: "end" },
+      { type: "text", text: label, size: "sm", color: "#94a3b8", flex: 2, gravity: "center" },
+      { type: "text", text: value, size: "sm", color: "#334155", weight: "bold", flex: 5, wrap: true, align: "end", gravity: "center" },
     ],
   };
 }
