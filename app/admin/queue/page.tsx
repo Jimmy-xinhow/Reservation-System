@@ -94,7 +94,7 @@ export default async function QueuePage({
                   <span className="ml-2 text-sm text-slate-400">{s.label}</span>
                 </div>
                 {/* 自動穿插設定 */}
-                <form action={setQueueAutoAction} className="flex items-center gap-2 text-sm">
+                <form action={setQueueAutoAction} className="flex flex-wrap items-center gap-2 text-sm">
                   {hidden}
                   <span className="text-slate-500">每</span>
                   <input
@@ -111,7 +111,7 @@ export default async function QueuePage({
 
               {/* 自動下一位(依規則) */}
               <div className="border-b border-slate-100 px-5 py-3">
-                <form action={advanceServingAction} className="flex items-center gap-3">
+                <form action={advanceServingAction} className="flex flex-wrap items-center gap-3">
                   {hidden}
                   <input type="hidden" name="op" value="auto" />
                   <button className="btn btn-primary">自動下一位 →</button>
