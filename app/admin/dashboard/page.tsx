@@ -252,7 +252,7 @@ export default async function DashboardPage({
 
 function Stat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
   return (
-    <div className={`card p-4 ${accent ? "bg-gradient-to-br from-brand-500 to-accent-600 text-white" : ""}`}>
+    <div className={`card py-4 pl-4 pr-6 text-right ${accent ? "bg-gradient-to-br from-brand-500 to-accent-600 text-white" : ""}`}>
       <div className={`text-xs ${accent ? "text-white/80" : "text-slate-400"}`}>{label}</div>
       <div className={`mt-1 text-2xl font-bold ${accent ? "text-white" : "text-slate-900"}`}>{value}</div>
     </div>
