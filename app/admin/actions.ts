@@ -84,6 +84,7 @@ export async function setStatusAction(fd: FormData) {
     revalidatePath("/admin/patients");
   }
   revalidatePath("/admin");
+  revalidatePath("/admin/queue");
 }
 
 // ── 叫號:推進/回退/重設某門診段目前看診號 ──────────────
