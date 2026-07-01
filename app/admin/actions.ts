@@ -87,27 +87,62 @@ export async function setStatusAction(fd: FormData) {
   revalidatePath("/admin/queue");
 }
 
-// ── 叫號:推進/回退/重設某門診段目前看診號 ──────────────
+// ── 叫號:線上/現場兩條序列,支援手動與自動穿插 ──────────────
+// op: next_online / next_offline / auto / prev_online / prev_offline / reset
 export async function advanceServingAction(fd: FormData) {
   const { supabase } = await requireMember();
   const doctorId = str(fd, "doctor_id");
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
-  const op = str(fd, "op"); // next / prev / reset
+  const op = str(fd, "op");
+  // 各序列現有最大號(自動模式判斷是否還有現場可插)
+  const maxOnline = intOr(fd, "max_online", 0);
+  const maxOffline = intOr(fd, "max_offline", 0);
   if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
 
   const { data: cur } = await supabase
     .from("serving_numbers")
-    .select("current_number")
+    .select("online_current, offline_current, auto_every, online_run")
     .eq("clinic_id", CLINIC_ID)
     .eq("doctor_id", doctorId)
     .eq("date", date)
     .eq("session_key", sessionKey)
     .maybeSingle();
-  let n = cur?.current_number ?? 0;
-  if (op === "next") n += 1;
-  else if (op === "prev") n = Math.max(0, n - 1);
-  else if (op === "reset") n = 0;
+
+  let online = cur?.online_current ?? 0;
+  let offline = cur?.offline_current ?? 0;
+  const autoEvery = cur?.auto_every ?? 0;
+  let run = cur?.online_run ?? 0;
+  let lastKind = "";
+
+  const callOnline = () => {
+    online += 1;
+    run += 1;
+    lastKind = "online";
+  };
+  const callOffline = () => {
+    offline += 1;
+    run = 0;
+    lastKind = "offline";
+  };
+
+  if (op === "next_online") callOnline();
+  else if (op === "next_offline") callOffline();
+  else if (op === "prev_online") online = Math.max(0, online - 1);
+  else if (op === "prev_offline") offline = Math.max(0, offline - 1);
+  else if (op === "reset") {
+    online = 0;
+    offline = 0;
+    run = 0;
+    lastKind = "";
+  } else if (op === "auto") {
+    // 每叫滿 N 個線上,若還有現場候診就插一個現場,否則叫線上
+    const hasOffline = offline < maxOffline;
+    const hasOnline = online < maxOnline;
+    if (autoEvery > 0 && run >= autoEvery && hasOffline) callOffline();
+    else if (hasOnline) callOnline();
+    else if (hasOffline) callOffline();
+  }
 
   const { error } = await supabase.from("serving_numbers").upsert(
     {
@@ -115,7 +150,34 @@ export async function advanceServingAction(fd: FormData) {
       doctor_id: doctorId,
       date,
       session_key: sessionKey,
-      current_number: n,
+      online_current: online,
+      offline_current: offline,
+      online_run: run,
+      last_kind: lastKind || null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "clinic_id,doctor_id,date,session_key" },
+  );
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/queue");
+}
+
+// 設定自動穿插:每 N 個線上插 1 個現場(0=關閉自動)
+export async function setQueueAutoAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const doctorId = str(fd, "doctor_id");
+  const date = str(fd, "date");
+  const sessionKey = str(fd, "session_key");
+  if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
+  const autoEvery = Math.max(0, intOr(fd, "auto_every", 0));
+
+  const { error } = await supabase.from("serving_numbers").upsert(
+    {
+      clinic_id: CLINIC_ID,
+      doctor_id: doctorId,
+      date,
+      session_key: sessionKey,
+      auto_every: autoEvery,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "clinic_id,doctor_id,date,session_key" },
@@ -206,9 +268,10 @@ async function book(opts: {
   date?: string;
 }): Promise<void> {
   const svc = createServiceClient();
+  let apptId: string | null = null;
   if (opts.mode === "time") {
     if (!opts.startAt) throw new Error("缺少時間");
-    const { error } = await svc.rpc("book_time_slot", {
+    const { data, error } = await svc.rpc("book_time_slot", {
       p_clinic_id: CLINIC_ID,
       p_doctor_id: opts.doctorId,
       p_patient_id: opts.patientId,
@@ -217,9 +280,10 @@ async function book(opts: {
       p_is_self_pay: opts.isSelfPay,
     });
     if (error) throw new Error(error.message);
+    apptId = data as string;
   } else {
     if (!opts.templateId || !opts.date) throw new Error("缺少診次或日期");
-    const { error } = await svc.rpc("book_number", {
+    const { data, error } = await svc.rpc("book_number", {
       p_clinic_id: CLINIC_ID,
       p_doctor_id: opts.doctorId,
       p_patient_id: opts.patientId,
@@ -229,7 +293,11 @@ async function book(opts: {
       p_is_self_pay: opts.isSelfPay,
     });
     if (error) throw new Error(error.message);
+    const row = Array.isArray(data) ? data[0] : data;
+    apptId = (row?.appointment_id as string) ?? null;
   }
+  // 後台建立 = 現場(offline)
+  if (apptId) await svc.from("appointments").update({ source: "offline" }).eq("id", apptId);
 }
 
 export async function createAppointmentAction(fd: FormData) {

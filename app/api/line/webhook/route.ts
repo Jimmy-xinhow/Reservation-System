@@ -246,7 +246,7 @@ async function replyProgress(
   const lines = items
     .map(
       (i) =>
-        `${i.doctorName}(${i.label})\n　您的號碼:${i.yourNumber}　目前看診號:${i.current || "尚未開始"}`,
+        `${i.doctorName}(${i.label})\n　您的號碼:${i.source === "offline" ? "現場" : "線上"} ${i.yourNumber} 號　目前看診:${i.current || "尚未開始"} 號`,
     )
     .join("\n\n");
   await safeReply(replyToken, `今日看診進度\n\n${lines}${board}`);

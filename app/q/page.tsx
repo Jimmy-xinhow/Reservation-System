@@ -34,22 +34,24 @@ export default async function QueueBoard() {
         <p className="card p-8 text-center text-slate-400">今日尚無看診資料。</p>
       ) : (
         <div className="space-y-3">
-          {sessions.map((s) => {
-            const waiting = s.appts.filter((a) => a.seq > s.current && a.status !== "no_show").length;
-            return (
-              <div key={`${s.doctorId}-${s.key}`} className="card flex items-center justify-between p-5 sm:p-6">
-                <div>
-                  <div className="text-lg font-semibold text-slate-900 sm:text-2xl">{s.doctorName}</div>
-                  <div className="text-sm text-slate-400 sm:text-base">{s.label}</div>
-                  <div className="mt-1 text-xs text-slate-400 sm:text-sm">尚有 {waiting} 位候診</div>
+          {sessions.map((s) => (
+            <div key={`${s.doctorId}-${s.key}`} className="card p-5 sm:p-6">
+              <div className="mb-3 flex items-baseline justify-between">
+                <div className="text-lg font-semibold text-slate-900 sm:text-2xl">{s.doctorName}</div>
+                <div className="text-sm text-slate-400 sm:text-base">{s.label}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-brand-50 p-3 text-center">
+                  <div className="text-xs text-brand-700/70 sm:text-sm">線上目前</div>
+                  <div className="text-4xl font-bold text-brand-700 sm:text-6xl">{s.onlineCurrent || "—"}</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-xs text-slate-400 sm:text-sm">目前看診號</div>
-                  <div className="text-5xl font-bold text-brand-700 sm:text-7xl">{s.current || "—"}</div>
+                <div className="rounded-xl bg-accent-500/10 p-3 text-center">
+                  <div className="text-xs text-accent-600/80 sm:text-sm">現場目前</div>
+                  <div className="text-4xl font-bold text-accent-600 sm:text-6xl">{s.offlineCurrent || "—"}</div>
                 </div>
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
 

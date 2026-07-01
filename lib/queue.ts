@@ -31,6 +31,7 @@ export interface QueueAppt {
   name: string;
   status: string;
   start_at: string;
+  source: "online" | "offline";
 }
 export interface QueueSession {
   key: string;
@@ -38,8 +39,11 @@ export interface QueueSession {
   doctorName: string;
   label: string;
   startAt: string;
-  current: number;
-  appts: QueueAppt[];
+  onlineCurrent: number;
+  offlineCurrent: number;
+  autoEvery: number;
+  online: QueueAppt[];
+  offline: QueueAppt[];
 }
 
 interface SessRow {
@@ -85,7 +89,7 @@ export async function getQueueForDate(
   let apptQ = svc
     .from("appointments")
     .select(
-      "id, doctor_id, template_id, start_at, queue_number, created_at, status, patient_id, patients(name), doctors(name)",
+      "id, doctor_id, template_id, start_at, queue_number, created_at, status, source, patient_id, patients(name), doctors(name)",
     )
     .eq("clinic_id", clinicId)
     .gte("start_at", dayStart)
@@ -95,7 +99,7 @@ export async function getQueueForDate(
 
   let servQ = svc
     .from("serving_numbers")
-    .select("doctor_id, session_key, current_number")
+    .select("doctor_id, session_key, online_current, offline_current, auto_every")
     .eq("clinic_id", clinicId)
     .eq("date", date);
   if (doctorId) servQ = servQ.eq("doctor_id", doctorId);
@@ -113,7 +117,14 @@ export async function getQueueForDate(
   ];
   const sessById = new Map(sessRows.map((s) => [s.id, s]));
   const servMap = new Map(
-    (serv ?? []).map((s) => [`${s.doctor_id}|${s.session_key}`, s.current_number as number]),
+    (serv ?? []).map((s) => [
+      `${s.doctor_id}|${s.session_key}`,
+      {
+        online: (s.online_current as number) ?? 0,
+        offline: (s.offline_current as number) ?? 0,
+        auto: (s.auto_every as number) ?? 0,
+      },
+    ]),
   );
 
   // 把每筆約診歸到一個門診段 key
@@ -125,6 +136,7 @@ export async function getQueueForDate(
     queue_number: number | null;
     created_at: string;
     status: string;
+    source: string | null;
     patient_id: string;
     patients: { name: string } | null;
     doctors: { name: string } | null;
@@ -153,35 +165,46 @@ export async function getQueueForDate(
     groups.set(gk, g);
   }
 
-  const sessions: QueueSession[] = [];
-  for (const [gk, g] of groups) {
-    const key = gk.split("|").slice(1).join("|");
-    const sorted = [...g.rows].sort((a, b) => {
-      if (mode === "number") return (a.queue_number ?? 0) - (b.queue_number ?? 0);
-      return a.start_at < b.start_at ? -1 : a.start_at > b.start_at ? 1 : a.created_at < b.created_at ? -1 : 1;
-    });
-    const appts: QueueAppt[] = sorted.map((r, i) => ({
+  // 依來源分別編號(線上一串、現場一串)
+  const numberStream = (list: Row[]): QueueAppt[] => {
+    const sorted = [...list].sort((a, b) =>
+      a.start_at < b.start_at ? -1 : a.start_at > b.start_at ? 1 : a.created_at < b.created_at ? -1 : 1,
+    );
+    return sorted.map((r, i) => ({
       id: r.id,
       patientId: r.patient_id,
-      seq: mode === "number" ? (r.queue_number ?? i + 1) : i + 1,
+      seq: i + 1,
       name: r.patients?.name ?? "",
       status: r.status,
       start_at: r.start_at,
+      source: r.source === "offline" ? "offline" : "online",
     }));
+  };
+
+  const sessions: QueueSession[] = [];
+  for (const [gk, g] of groups) {
+    const key = gk.split("|").slice(1).join("|");
+    const online = numberStream(g.rows.filter((r) => r.source !== "offline"));
+    const offline = numberStream(g.rows.filter((r) => r.source === "offline"));
     const sess = sessById.get(key);
     const label = sess
       ? `${hhmm(sess.start_time)}–${hhmm(sess.end_time)}`
       : mode === "number"
         ? "診次"
         : "其他";
+    const state = servMap.get(`${g.doctorId}|${key}`);
+    const startAt = [...online, ...offline].sort((a, b) => (a.start_at < b.start_at ? -1 : 1))[0]?.start_at ?? dayStart;
     sessions.push({
       key,
       doctorId: g.doctorId,
       doctorName: g.doctorName,
       label,
-      startAt: sorted[0]?.start_at ?? dayStart,
-      current: servMap.get(`${g.doctorId}|${key}`) ?? 0,
-      appts,
+      startAt,
+      onlineCurrent: state?.online ?? 0,
+      offlineCurrent: state?.offline ?? 0,
+      autoEvery: state?.auto ?? 0,
+      online,
+      offline,
     });
   }
 
@@ -205,9 +228,10 @@ export interface PatientQueueItem {
   current: number;
   status: string;
   start_at: string;
+  source: "online" | "offline";
 }
 
-/** 取得某 LINE 身分今日約診的叫號進度。 */
+/** 取得某 LINE 身分今日約診的叫號進度(依線上/現場各自的目前叫號)。 */
 export async function getPatientQueueToday(
   svc: SupabaseClient,
   clinicId: string,
@@ -226,15 +250,16 @@ export async function getPatientQueueToday(
   const sessions = await getQueueForDate(svc, clinicId, date, mode);
   const out: PatientQueueItem[] = [];
   for (const s of sessions) {
-    for (const a of s.appts) {
+    for (const a of [...s.online, ...s.offline]) {
       if (ids.has(a.patientId) && a.status !== "cancelled") {
         out.push({
           doctorName: s.doctorName,
           label: s.label,
           yourNumber: a.seq,
-          current: s.current,
+          current: a.source === "offline" ? s.offlineCurrent : s.onlineCurrent,
           status: a.status,
           start_at: a.start_at,
+          source: a.source,
         });
       }
     }

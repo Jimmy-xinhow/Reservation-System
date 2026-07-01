@@ -100,6 +100,9 @@ export async function POST(req: NextRequest) {
       queueNumber = row.queue_number as number;
     }
 
+    // 標記為線上預約(RPC 不含此欄)
+    await svc.from("appointments").update({ source: "online" }).eq("id", appointmentId);
+
     // 記錄所選服務(RPC 不含此欄,訂位成功後補寫;驗證服務屬於本診所)
     if (body.service_id) {
       const { data: svcRow } = await svc

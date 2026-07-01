@@ -1,7 +1,7 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
-import { getQueueForDate, taipeiToday } from "@/lib/queue";
-import { advanceServingAction, setStatusAction } from "../actions";
+import { getQueueForDate, taipeiToday, type QueueAppt } from "@/lib/queue";
+import { advanceServingAction, setQueueAutoAction, setStatusAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +32,10 @@ export default async function QueuePage({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-bold text-slate-900">
-          叫號 · {date}
-          {date === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
-        </h1>
-      </div>
+      <h1 className="text-xl font-bold text-slate-900">
+        叫號 · {date}
+        {date === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
+      </h1>
 
       <form className="flex flex-wrap items-end gap-3">
         <div>
@@ -61,8 +59,8 @@ export default async function QueuePage({
       </form>
 
       <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-xs leading-relaxed text-slate-500">
-        線上與現場(後台建立)的預約已依{mode === "time" ? "看診時間" : "掛號順序"}統一排成同一組號碼,
-        直接按「叫下一位」推進即可;可用每位下方的「完成 / 未到」記錄看診狀態。
+        線上與現場各自一組號碼,互不影響。可分別「叫下一位」;或開啟自動穿插(每 N 位線上插 1 位現場),
+        按「自動下一位」即依規則輪流叫號,現場病患不會被排到最後。
       </p>
 
       {sessions.length === 0 && (
@@ -71,75 +69,89 @@ export default async function QueuePage({
 
       <div className="space-y-4">
         {sessions.map((s) => {
-          const active = s.appts.filter((a) => a.status !== "no_show");
-          const currentAppt = s.appts.find((a) => a.seq === s.current);
-          const nextAppt = active.find((a) => a.seq > s.current);
-          const waiting = active.filter((a) => a.seq > s.current).length;
+          const maxOnline = s.online.filter((a) => a.status !== "no_show").length
+            ? Math.max(0, ...s.online.map((a) => a.seq))
+            : 0;
+          const maxOffline = s.offline.length ? Math.max(0, ...s.offline.map((a) => a.seq)) : 0;
+          const nextOnline = s.online.find((a) => a.seq > s.onlineCurrent && a.status !== "no_show");
+          const nextOffline = s.offline.find((a) => a.seq > s.offlineCurrent && a.status !== "no_show");
+
+          const hidden = (
+            <>
+              <input type="hidden" name="doctor_id" value={s.doctorId} />
+              <input type="hidden" name="date" value={date} />
+              <input type="hidden" name="session_key" value={s.key} />
+              <input type="hidden" name="max_online" value={maxOnline} />
+              <input type="hidden" name="max_offline" value={maxOffline} />
+            </>
+          );
 
           return (
             <section key={`${s.doctorId}-${s.key}`} className="card overflow-hidden">
-              {/* 標頭 */}
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
                 <div>
                   <span className="font-semibold text-slate-900">{s.doctorName}</span>
                   <span className="ml-2 text-sm text-slate-400">{s.label}</span>
                 </div>
-                <span className="text-xs text-slate-400">尚有 {waiting} 位候診</span>
+                {/* 自動穿插設定 */}
+                <form action={setQueueAutoAction} className="flex items-center gap-2 text-sm">
+                  {hidden}
+                  <span className="text-slate-500">每</span>
+                  <input
+                    name="auto_every"
+                    type="number"
+                    min={0}
+                    defaultValue={s.autoEvery}
+                    className="input w-16 px-2 py-1"
+                  />
+                  <span className="text-slate-500">位線上插 1 位現場</span>
+                  <button className="btn btn-ghost px-2 py-1 text-xs">儲存</button>
+                </form>
               </div>
 
-              {/* 現在看診 + 下一位 + 叫下一位 */}
-              <div className="grid gap-4 p-5 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
-                <div className="rounded-xl bg-brand-50 p-4 text-center">
-                  <div className="text-xs text-brand-700/70">現在看診</div>
-                  <div className="text-4xl font-bold text-brand-700">{s.current || "—"}</div>
-                  <div className="mt-0.5 truncate text-sm text-slate-600">
-                    {currentAppt ? currentAppt.name : s.current ? "(此號無人/已略過)" : "尚未開始"}
-                  </div>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4 text-center">
-                  <div className="text-xs text-slate-400">下一位</div>
-                  <div className="text-4xl font-bold text-slate-500">{nextAppt ? nextAppt.seq : "—"}</div>
-                  <div className="mt-0.5 truncate text-sm text-slate-500">
-                    {nextAppt ? nextAppt.name : "已無候診"}
-                  </div>
-                </div>
-                <div className="flex gap-2 sm:flex-col">
-                  <ServeBtn d={s.doctorId} date={date} k={s.key} op="next" label="叫下一位 →" cls="btn-primary" />
-                  <ServeBtn d={s.doctorId} date={date} k={s.key} op="prev" label="上一號" cls="btn-secondary" />
-                  <ServeBtn d={s.doctorId} date={date} k={s.key} op="reset" label="重設" cls="btn-ghost" />
-                </div>
+              {/* 自動下一位(依規則) */}
+              <div className="border-b border-slate-100 px-5 py-3">
+                <form action={advanceServingAction} className="flex items-center gap-3">
+                  {hidden}
+                  <input type="hidden" name="op" value="auto" />
+                  <button className="btn btn-primary">自動下一位 →</button>
+                  <span className="text-xs text-slate-400">
+                    {s.autoEvery > 0 ? `自動:每 ${s.autoEvery} 位線上插 1 位現場` : "自動未開啟(等同叫線上)"}
+                  </span>
+                </form>
               </div>
 
-              {/* 全部號碼清單 */}
-              <div className="border-t border-slate-100 p-4">
-                <div className="space-y-1.5">
-                  {s.appts.map((a) => (
-                    <div
-                      key={a.id}
-                      className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm ${
-                        a.seq === s.current
-                          ? "bg-brand-600 text-white"
-                          : a.status === "done"
-                            ? "bg-slate-50 text-slate-400"
-                            : a.status === "no_show"
-                              ? "bg-amber-50 text-amber-700"
-                              : "bg-white"
-                      }`}
-                    >
-                      <span className="w-8 shrink-0 text-center text-base font-bold">{a.seq}</span>
-                      <span className="flex-1 truncate">{a.name}</span>
-                      <span className={`shrink-0 text-xs ${a.seq === s.current ? "text-white/80" : "text-slate-400"}`}>
-                        {STATUS_LABEL[a.status] ?? a.status}
-                      </span>
-                      {a.status !== "done" && a.status !== "no_show" && (
-                        <div className="flex shrink-0 gap-1">
-                          <StatusBtn id={a.id} status="done" label="完成" current={a.seq === s.current} />
-                          <StatusBtn id={a.id} status="no_show" label="未到" current={a.seq === s.current} />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+              {/* 兩條序列 */}
+              <div className="grid gap-0 sm:grid-cols-2">
+                <StreamPanel
+                  title="線上預約"
+                  accent="brand"
+                  current={s.onlineCurrent}
+                  next={nextOnline}
+                  appts={s.online}
+                  opNext="next_online"
+                  opPrev="prev_online"
+                  hidden={hidden}
+                />
+                <StreamPanel
+                  title="現場(後台建立)"
+                  accent="accent"
+                  current={s.offlineCurrent}
+                  next={nextOffline}
+                  appts={s.offline}
+                  opNext="next_offline"
+                  opPrev="prev_offline"
+                  hidden={hidden}
+                  bordered
+                />
+              </div>
+
+              <div className="border-t border-slate-100 px-5 py-2">
+                <form action={advanceServingAction}>
+                  {hidden}
+                  <input type="hidden" name="op" value="reset" />
+                  <button className="text-xs text-slate-400 hover:text-red-600">重設此診叫號</button>
+                </form>
               </div>
             </section>
           );
@@ -149,40 +161,98 @@ export default async function QueuePage({
   );
 }
 
-function ServeBtn({
-  d,
-  date,
-  k,
-  op,
-  label,
-  cls,
+function StreamPanel({
+  title,
+  accent,
+  current,
+  next,
+  appts,
+  opNext,
+  opPrev,
+  hidden,
+  bordered,
 }: {
-  d: string;
-  date: string;
-  k: string;
-  op: string;
-  label: string;
-  cls: string;
+  title: string;
+  accent: "brand" | "accent";
+  current: number;
+  next: QueueAppt | undefined;
+  appts: QueueAppt[];
+  opNext: string;
+  opPrev: string;
+  hidden: React.ReactNode;
+  bordered?: boolean;
 }) {
+  const curAppt = appts.find((a) => a.seq === current);
+  const color = accent === "brand" ? "text-brand-700" : "text-accent-600";
+  const bg = accent === "brand" ? "bg-brand-50" : "bg-accent-500/10";
   return (
-    <form action={advanceServingAction} className="contents">
-      <input type="hidden" name="doctor_id" value={d} />
-      <input type="hidden" name="date" value={date} />
-      <input type="hidden" name="session_key" value={k} />
-      <input type="hidden" name="op" value={op} />
-      <button className={`btn ${cls} w-full px-4 py-2 text-sm`}>{label}</button>
-    </form>
+    <div className={`p-5 ${bordered ? "border-t border-slate-100 sm:border-l sm:border-t-0" : ""}`}>
+      <div className="mb-3 text-sm font-semibold text-slate-700">{title}</div>
+      <div className={`mb-3 rounded-xl ${bg} p-4 text-center`}>
+        <div className="text-xs text-slate-500">現在看診</div>
+        <div className={`text-4xl font-bold ${color}`}>{current || "—"}</div>
+        <div className="mt-0.5 truncate text-sm text-slate-600">
+          {curAppt ? curAppt.name : current ? "(此號略過)" : "尚未開始"}
+        </div>
+        <div className="mt-1 text-xs text-slate-400">
+          下一位:{next ? `${next.seq} ${next.name}` : "已無候診"}
+        </div>
+      </div>
+      <div className="mb-3 flex gap-2">
+        <form action={advanceServingAction} className="flex-1">
+          {hidden}
+          <input type="hidden" name="op" value={opNext} />
+          <button className="btn btn-secondary w-full text-sm">叫下一位 →</button>
+        </form>
+        <form action={advanceServingAction}>
+          {hidden}
+          <input type="hidden" name="op" value={opPrev} />
+          <button className="btn btn-ghost px-3 text-sm">上一號</button>
+        </form>
+      </div>
+      <div className="space-y-1">
+        {appts.length === 0 && <p className="text-xs text-slate-400">尚無</p>}
+        {appts.map((a) => (
+          <div
+            key={a.id}
+            className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-sm ${
+              a.seq === current
+                ? accent === "brand"
+                  ? "bg-brand-600 text-white"
+                  : "bg-accent-600 text-white"
+                : a.status === "done"
+                  ? "bg-slate-50 text-slate-400"
+                  : a.status === "no_show"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-white"
+            }`}
+          >
+            <span className="w-6 shrink-0 text-center font-bold">{a.seq}</span>
+            <span className="flex-1 truncate">{a.name}</span>
+            <span className={`shrink-0 text-xs ${a.seq === current ? "text-white/80" : "text-slate-400"}`}>
+              {STATUS_LABEL[a.status] ?? a.status}
+            </span>
+            {a.status !== "done" && a.status !== "no_show" && (
+              <div className="flex shrink-0 gap-1">
+                <StatusBtn id={a.id} status="done" label="完成" light={a.seq === current} />
+                <StatusBtn id={a.id} status="no_show" label="未到" light={a.seq === current} />
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
-function StatusBtn({ id, status, label, current }: { id: string; status: string; label: string; current: boolean }) {
+function StatusBtn({ id, status, label, light }: { id: string; status: string; label: string; light: boolean }) {
   return (
     <form action={setStatusAction}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="status" value={status} />
       <button
-        className={`rounded-md border px-2 py-0.5 text-xs font-medium ${
-          current ? "border-white/40 text-white hover:bg-white/10" : "border-slate-300 text-slate-600 hover:bg-slate-50"
+        className={`rounded border px-1.5 py-0.5 text-xs font-medium ${
+          light ? "border-white/40 text-white hover:bg-white/10" : "border-slate-300 text-slate-600 hover:bg-slate-50"
         }`}
       >
         {label}

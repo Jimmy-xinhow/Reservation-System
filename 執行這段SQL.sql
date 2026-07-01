@@ -1,13 +1,15 @@
 -- ============================================================================
--- Email 提醒改為後台可自行設定(金鑰存 DB,僅 server 端讀取)。
--- 在 Supabase → SQL Editor 跑一次即可。
+-- 叫號分「線上」與「現場(線下)」兩條序列。在 Supabase → SQL Editor 跑一次。
 -- ============================================================================
 
-alter table clinic_settings add column if not exists email_enabled boolean not null default false;
-alter table clinic_settings add column if not exists resend_api_key text;
-alter table clinic_settings add column if not exists email_from text;
+-- 約診標記來源:線上預約 online / 現場(後台建立)offline
+alter table appointments add column if not exists source text not null default 'online';
 
-select clinic_id, email_enabled, email_from,
-       case when resend_api_key is null or resend_api_key = '' then '(未設定)' else '(已設定)' end as key_state
-from clinic_settings
-where clinic_id = '087f6757-d1b6-4c4f-a82d-8bb5bc7c4733';
+-- 叫號狀態:兩條序列 + 自動穿插設定
+alter table serving_numbers add column if not exists online_current int not null default 0;
+alter table serving_numbers add column if not exists offline_current int not null default 0;
+alter table serving_numbers add column if not exists auto_every int not null default 0;
+alter table serving_numbers add column if not exists online_run int not null default 0;
+alter table serving_numbers add column if not exists last_kind text;
+
+select 'queue split ready' as status;

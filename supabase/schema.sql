@@ -130,6 +130,7 @@ create table if not exists appointments (
   start_at timestamptz not null,
   end_at timestamptz not null,
   visit_type text not null default 'return' check (visit_type in ('first','return')),
+  source text not null default 'online' check (source in ('online','offline')), -- 線上預約 / 現場(後台建立)
   queue_number int,                                    -- 號次制專用
   status text not null default 'booked'
     check (status in ('booked','confirmed','cancelled','done','no_show')),
@@ -146,6 +147,7 @@ create index if not exists appt_start_idx on appointments (start_at);
 create index if not exists appt_template_start_idx on appointments (template_id, start_at);
 -- 既有資料庫補欄位(idempotent)
 alter table appointments add column if not exists service_id uuid references services(id);
+alter table appointments add column if not exists source text not null default 'online';
 
 -- 叫號:每個門診段(doctor+date+session_key)目前看診到第幾號
 -- session_key:號次制=template_id;時間制=該約診所屬門診段的 template/exception id
@@ -154,10 +156,20 @@ create table if not exists serving_numbers (
   doctor_id uuid not null references doctors(id) on delete cascade,
   date date not null,
   session_key text not null,
-  current_number int not null default 0,
+  current_number int not null default 0,          -- 保留(舊)
+  online_current int not null default 0,          -- 線上目前叫到第幾號
+  offline_current int not null default 0,         -- 現場目前叫到第幾號
+  auto_every int not null default 0,              -- 自動穿插:每 N 個線上插 1 個現場(0=手動)
+  online_run int not null default 0,              -- 自動模式:距上次插現場已叫幾個線上
+  last_kind text,                                 -- 最後叫的是 online / offline
   updated_at timestamptz default now(),
   primary key (clinic_id, doctor_id, date, session_key)
 );
+alter table serving_numbers add column if not exists online_current int not null default 0;
+alter table serving_numbers add column if not exists offline_current int not null default 0;
+alter table serving_numbers add column if not exists auto_every int not null default 0;
+alter table serving_numbers add column if not exists online_run int not null default 0;
+alter table serving_numbers add column if not exists last_kind text;
 
 create table if not exists reminder_logs (
   id uuid primary key default gen_random_uuid(),

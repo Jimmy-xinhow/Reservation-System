@@ -607,6 +607,7 @@ interface ProgressItem {
   yourNumber: number;
   current: number;
   status: string;
+  source: "online" | "offline";
 }
 
 function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time" | "number" }) {
@@ -669,7 +670,9 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
             >
               <div>
                 <div className="text-sm">{pr.doctorName} · {pr.label}</div>
-                <div className="text-xs text-white/80">您的號碼 {pr.yourNumber}</div>
+                <div className="text-xs text-white/80">
+                  您的號碼:{pr.source === "offline" ? "現場" : "線上"} {pr.yourNumber} 號
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-xs text-white/80">目前看診號</div>
