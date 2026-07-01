@@ -364,41 +364,68 @@ async function replyProgress(
     return;
   }
 
-  // 每個門診段一張卡:直接顯示線上/現場目前叫號;若病患有號碼則標出
+  // 每個門診段一張卡:色塊分類、內容置中
   const bubbles = sessions.map((s) => {
     const myItems = mine.filter((m) => m.doctorName === s.doctorName && m.label === s.label);
-    const myLines = myItems.map((m) => {
+    const myBlocks = myItems.map((m) => {
       const waiting = m.current ? Math.max(0, m.yourNumber - m.current) : m.yourNumber;
-      const near = m.current && m.yourNumber <= m.current;
+      const near = !!m.current && m.yourNumber <= m.current;
       return {
-        type: "text",
-        text: `您的號碼:${m.source === "offline" ? "現場" : "線上"} ${m.yourNumber} 號　${near ? "即將輪到您" : `尚有約 ${waiting} 位`}`,
-        size: "xs",
-        color: near ? "#dc2626" : "#2563eb",
-        wrap: true,
-        margin: "sm",
+        type: "box",
+        layout: "vertical",
+        backgroundColor: near ? "#fef2f2" : "#eff6ff",
+        cornerRadius: "md",
+        paddingAll: "md",
+        margin: "md",
+        contents: [
+          {
+            type: "text",
+            text: `您的號碼　${m.source === "offline" ? "現場" : "線上"} ${m.yourNumber} 號`,
+            size: "sm",
+            weight: "bold",
+            align: "center",
+            color: near ? "#dc2626" : "#1d4ed8",
+          },
+          {
+            type: "text",
+            text: near ? "即將輪到您,請就位" : `尚有約 ${waiting} 位候診`,
+            size: "xs",
+            align: "center",
+            color: near ? "#dc2626" : "#64748b",
+            margin: "xs",
+          },
+        ],
       };
     });
     return {
       type: "bubble",
       size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: "#0d9488",
+        paddingAll: "md",
+        contents: [
+          { type: "text", text: "看診進度", size: "md", weight: "bold", color: "#ffffff", align: "center" },
+          { type: "text", text: `${s.doctorName}　${s.label}`, size: "xs", color: "#d1fae5", align: "center", wrap: true, margin: "xs" },
+        ],
+      },
       body: {
         type: "box",
         layout: "vertical",
         spacing: "md",
+        paddingAll: "lg",
         contents: [
-          { type: "text", text: "看診進度", size: "sm", color: "#0d9488", weight: "bold" },
-          { type: "text", text: `${s.doctorName}　${s.label}`, size: "xs", color: "#888888", wrap: true },
           {
             type: "box",
             layout: "horizontal",
-            margin: "md",
+            spacing: "md",
             contents: [
-              numberBox("線上目前", s.onlineCurrent ? `${s.onlineCurrent}` : "未開始", "#2563eb"),
-              numberBox("現場目前", s.offlineCurrent ? `${s.offlineCurrent}` : "未開始", "#0d9488"),
+              currentBlock("線上目前", s.onlineCurrent, "#eff6ff", "#2563eb"),
+              currentBlock("現場目前", s.offlineCurrent, "#f0fdfa", "#0d9488"),
             ],
           },
-          ...myLines,
+          ...myBlocks,
         ],
       },
     };
@@ -409,15 +436,18 @@ async function replyProgress(
   ]);
 }
 
-// 小數字方塊(進度卡用)
-function numberBox(label: string, value: string, color: string): LineMessage {
+// 目前叫號色塊(置中)
+function currentBlock(label: string, value: number, bg: string, color: string): LineMessage {
   return {
     type: "box",
     layout: "vertical",
     flex: 1,
+    backgroundColor: bg,
+    cornerRadius: "md",
+    paddingAll: "md",
     contents: [
-      { type: "text", text: label, size: "xxs", color: "#aaaaaa", align: "center" },
-      { type: "text", text: value, size: "xl", weight: "bold", color, align: "center" },
+      { type: "text", text: label, size: "xxs", color: "#94a3b8", align: "center" },
+      { type: "text", text: value ? `${value}` : "未開始", size: "xxl", weight: "bold", color, align: "center" },
     ],
   };
 }
