@@ -115,50 +115,114 @@ function liffUrl(): string | null {
   return id ? `https://liff.line.me/${id}` : null;
 }
 
-function menuQuickReply(baseUrl: string): LineMessage {
+
+// 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 三顆按鈕(只顯示文字,不露網址)
+function menuBubble(title: string, body: string, baseUrl: string): LineMessage {
   const liff = liffUrl();
-  const items: LineMessage[] = [
-    {
-      type: "action",
-      action: liff
-        ? { type: "uri", label: "立即預約", uri: liff }
-        : { type: "message", label: "立即預約", text: "預約" },
+  const buttons: LineMessage[] = [];
+  buttons.push({
+    type: "button",
+    style: "primary",
+    color: "#2563eb",
+    height: "sm",
+    action: liff
+      ? { type: "uri", label: "立即預約", uri: liff }
+      : { type: "message", label: "立即預約", text: "預約" },
+  });
+  buttons.push({
+    type: "button",
+    style: "secondary",
+    height: "sm",
+    action: { type: "postback", label: "查詢我的預約", data: "action=my", displayText: "查詢我的預約" },
+  });
+  buttons.push({
+    type: "button",
+    style: "secondary",
+    height: "sm",
+    action: { type: "postback", label: "看診進度", data: "action=progress", displayText: "看診進度" },
+  });
+  return {
+    type: "flex",
+    altText: title,
+    contents: {
+      type: "bubble",
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          { type: "text", text: title, weight: "bold", size: "lg", color: "#0d9488" },
+          { type: "text", text: body, size: "sm", color: "#555555", wrap: true },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        contents: [
+          ...buttons,
+          ...(baseUrl
+            ? [
+                {
+                  type: "button",
+                  style: "link",
+                  height: "sm",
+                  action: { type: "uri", label: "診所資訊", uri: baseUrl },
+                },
+              ]
+            : []),
+        ],
+      },
     },
-    { type: "action", action: { type: "postback", label: "查詢預約", data: "action=my", displayText: "查詢我的預約" } },
-    { type: "action", action: { type: "postback", label: "看診進度", data: "action=progress", displayText: "看診進度" } },
-  ];
-  if (baseUrl) {
-    items.push({ type: "action", action: { type: "uri", label: "診所資訊", uri: baseUrl } });
-  }
-  return { items };
+  };
 }
 
 function welcomeMessage(baseUrl: string, custom?: string | null): LineMessage {
-  return {
-    type: "text",
-    text: custom || "歡迎加入慈愛中醫診所 🌿\n您可以在這裡線上預約、查詢或取消看診。請點下方按鈕開始。",
-    quickReply: menuQuickReply(baseUrl),
-  };
+  return menuBubble(
+    "歡迎加入慈愛中醫診所 🌿",
+    custom || "您可以在這裡線上預約、查詢或取消看診。請點下方按鈕開始。",
+    baseUrl,
+  );
 }
 
 function menuMessage(baseUrl: string, custom?: string | null): LineMessage {
-  return {
-    type: "text",
-    text: custom || "您好,請問需要什麼服務?可點下方按鈕,或直接輸入「預約」「查詢」。",
-    quickReply: menuQuickReply(baseUrl),
-  };
+  return menuBubble("慈愛中醫診所", custom || "請問需要什麼服務?請點下方按鈕。", baseUrl);
 }
 
 function bookingPrompt(baseUrl: string): LineMessage {
   const liff = liffUrl();
   if (liff) {
     return {
-      type: "text",
-      text: "請點下方按鈕開啟預約頁。",
-      quickReply: { items: [{ type: "action", action: { type: "uri", label: "開啟預約", uri: liff } }] },
+      type: "flex",
+      altText: "線上預約",
+      contents: {
+        type: "bubble",
+        body: {
+          type: "box",
+          layout: "vertical",
+          spacing: "md",
+          contents: [
+            { type: "text", text: "線上預約", weight: "bold", size: "lg", color: "#0d9488" },
+            { type: "text", text: "點下方按鈕開始預約看診。", size: "sm", color: "#555555", wrap: true },
+          ],
+        },
+        footer: {
+          type: "box",
+          layout: "vertical",
+          contents: [
+            {
+              type: "button",
+              style: "primary",
+              color: "#2563eb",
+              height: "sm",
+              action: { type: "uri", label: "開始預約", uri: liff },
+            },
+          ],
+        },
+      },
     };
   }
-  return { type: "text", text: "預約功能即將開放,請稍後或洽櫃檯。", quickReply: menuQuickReply(baseUrl) };
+  return menuBubble("慈愛中醫診所", "預約功能即將開放,請稍後或洽櫃檯。", baseUrl);
 }
 
 // ── 查詢我的預約 ────────────────────────────────────────────
@@ -265,18 +329,118 @@ async function replyProgress(
   const settings = await getClinicSettings(svc, CLINIC_ID);
   const mode = settings?.booking_mode ?? "time";
   const items = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
-  const board = baseUrl ? `\n\n完整看診進度:${baseUrl}/q` : "";
+
   if (items.length === 0) {
-    await safeReply(replyToken, `您今日沒有約診。${board}`);
+    await replyMessages(replyToken, [
+      {
+        type: "flex",
+        altText: "您今日沒有約診",
+        contents: infoBubble("今日看診進度", "您今日沒有約診。", baseUrl),
+      },
+    ]);
     return;
   }
-  const lines = items
-    .map(
-      (i) =>
-        `${i.doctorName}(${i.label})\n　您的號碼:${i.source === "offline" ? "現場" : "線上"} ${i.yourNumber} 號　目前看診:${i.current || "尚未開始"} 號`,
-    )
-    .join("\n\n");
-  await safeReply(replyToken, `今日看診進度\n\n${lines}${board}`);
+
+  const bubbles = items.map((i) => {
+    const waiting = i.current ? Math.max(0, i.yourNumber - i.current) : i.yourNumber;
+    return {
+      type: "bubble",
+      size: "kilo",
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "md",
+        contents: [
+          { type: "text", text: "看診進度", size: "sm", color: "#0d9488", weight: "bold" },
+          { type: "text", text: `${i.doctorName}　${i.label}`, size: "xs", color: "#888888", wrap: true },
+          {
+            type: "box",
+            layout: "horizontal",
+            margin: "md",
+            contents: [
+              numberBox("您的號碼", `${i.source === "offline" ? "現場" : "線上"} ${i.yourNumber}`, "#2563eb"),
+              numberBox("目前看診", i.current ? `${i.current}` : "未開始", "#0d9488"),
+            ],
+          },
+          {
+            type: "text",
+            text: i.current && i.yourNumber <= i.current ? "即將輪到您,請就位" : `尚有約 ${waiting} 位`,
+            size: "xs",
+            color: "#888888",
+            align: "center",
+            margin: "sm",
+          },
+        ],
+      },
+      ...(baseUrl
+        ? {
+            footer: {
+              type: "box",
+              layout: "vertical",
+              contents: [
+                {
+                  type: "button",
+                  style: "link",
+                  height: "sm",
+                  action: { type: "uri", label: "查看完整叫號", uri: `${baseUrl}/q` },
+                },
+              ],
+            },
+          }
+        : {}),
+    };
+  });
+
+  await replyMessages(replyToken, [
+    { type: "flex", altText: "今日看診進度", contents: { type: "carousel", contents: bubbles } },
+  ]);
+}
+
+// 小數字方塊(進度卡用)
+function numberBox(label: string, value: string, color: string): LineMessage {
+  return {
+    type: "box",
+    layout: "vertical",
+    flex: 1,
+    contents: [
+      { type: "text", text: label, size: "xxs", color: "#aaaaaa", align: "center" },
+      { type: "text", text: value, size: "xl", weight: "bold", color, align: "center" },
+    ],
+  };
+}
+
+// 通用資訊卡(標題 + 內文 + 選單按鈕)
+function infoBubble(title: string, body: string, baseUrl: string): LineMessage {
+  const liff = liffUrl();
+  const buttons: LineMessage[] = [];
+  if (liff) {
+    buttons.push({
+      type: "button",
+      style: "primary",
+      color: "#2563eb",
+      height: "sm",
+      action: { type: "uri", label: "立即預約", uri: liff },
+    });
+  }
+  buttons.push({
+    type: "button",
+    style: "secondary",
+    height: "sm",
+    action: { type: "postback", label: "查詢我的預約", data: "action=my", displayText: "查詢我的預約" },
+  });
+  return {
+    type: "bubble",
+    body: {
+      type: "box",
+      layout: "vertical",
+      spacing: "md",
+      contents: [
+        { type: "text", text: title, weight: "bold", size: "lg", color: "#0d9488" },
+        { type: "text", text: body, size: "sm", color: "#555555", wrap: true },
+      ],
+    },
+    footer: { type: "box", layout: "vertical", spacing: "sm", contents: buttons },
+  };
 }
 
 // ── 確認 / 取消(提醒按鈕 + LINE 查詢內的取消)──────────────
