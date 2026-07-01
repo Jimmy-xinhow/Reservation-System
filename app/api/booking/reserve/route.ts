@@ -155,7 +155,5 @@ function translateDbError(msg: string): string {
     "此時段已休診",
   ];
   const hit = known.find((k) => msg.includes(k));
-  if (hit) return hit;
-  // 未歸類的資料庫錯誤:回傳原始訊息以利診斷(通常代表資料庫函式/欄位版本不對)
-  return `無法預約(系統訊息:${(msg ?? "").slice(0, 200)})`;
+  return hit ?? "此時段無法預約,請重新選擇";
 }

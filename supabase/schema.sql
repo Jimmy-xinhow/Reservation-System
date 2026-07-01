@@ -412,10 +412,10 @@ begin
     then raise exception '本診已休診'; end if;
 
   perform pg_advisory_xact_lock(hashtext(p_template_id::text || p_date::text));
-  select count(*) filter (where status in ('booked','confirmed','done')),
-         coalesce(max(queue_number),0)
+  select count(*) filter (where a.status in ('booked','confirmed','done')),
+         coalesce(max(a.queue_number),0)
     into v_used, v_no
-  from public.appointments where template_id=p_template_id and start_at=v_start_at;
+  from public.appointments a where a.template_id=p_template_id and a.start_at=v_start_at;
   if v_used >= v_cap then raise exception '本診已額滿'; end if;
   v_no := v_no + 1;   -- 接續最大號,取消的號不回收
 
