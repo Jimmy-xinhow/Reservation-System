@@ -114,6 +114,8 @@ export default async function DashboardPage({
         <Stat label="病患總數" value={patientCount ?? 0} />
       </div>
 
+      {/* 目前診次叫號(左)+ 近14日每日預約(右)雙欄 */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       {/* 目前診次叫號 */}
       <section className="card p-5">
         <div className="mb-4 flex items-center justify-between">
@@ -125,7 +127,7 @@ export default async function DashboardPage({
         {queue.length === 0 ? (
           <p className="text-sm text-slate-400">目前沒有進行中的診次。</p>
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3">
             {queue.map((s) => {
               const onWait = s.online.filter((a) => a.seq > s.onlineCurrent && a.status !== "no_show").length;
               const offWait = s.offline.filter((a) => a.seq > s.offlineCurrent && a.status !== "no_show").length;
@@ -191,6 +193,7 @@ export default async function DashboardPage({
           ))}
         </div>
       </section>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* 狀態分佈 */}
