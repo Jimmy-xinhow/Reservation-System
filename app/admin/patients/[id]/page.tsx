@@ -162,6 +162,20 @@ export default async function PatientDetailPage({
         <button className="btn btn-primary">儲存建檔</button>
       </form>
 
+      {/* 新增病況紀錄(輸入欄放此,列表在右欄) */}
+      <form action={addPatientRecordAction} className="card space-y-2 p-5">
+        <h2 className="font-semibold text-slate-900">新增病況紀錄</h2>
+        <input type="hidden" name="patient_id" value={p.id} />
+        <textarea
+          name="content"
+          rows={2}
+          required
+          placeholder="輸入病況、醫囑或處置,送出即新增一筆…"
+          className="input"
+        />
+        <button className="btn btn-primary">新增病況紀錄</button>
+      </form>
+
       {/* 約診歷史(左)+ 病況紀錄(右)雙欄 */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* 約診歷史 */}
@@ -190,20 +204,9 @@ export default async function PatientDetailPage({
           )}
         </section>
 
-        {/* 病況紀錄 */}
+        {/* 病況紀錄(列表) */}
         <section className="card p-5">
           <h2 className="mb-3 font-semibold text-slate-900">病況紀錄</h2>
-          <form action={addPatientRecordAction} className="mb-4 flex items-start gap-2">
-            <input type="hidden" name="patient_id" value={p.id} />
-            <textarea
-              name="content"
-              rows={2}
-              required
-              placeholder="輸入病況、醫囑或處置,送出即新增一筆…"
-              className="input flex-1"
-            />
-            <button className="btn btn-primary shrink-0">新增</button>
-          </form>
           {records.length === 0 ? (
             <p className="text-sm text-slate-400">尚無病況紀錄</p>
           ) : (
