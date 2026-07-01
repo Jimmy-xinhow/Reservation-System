@@ -1,22 +1,25 @@
-// 免費/低成本 Email 提醒(可選)。設定 RESEND_API_KEY 才啟用。
-// Resend 免費方案每月約 3,000 封,足以覆蓋一般診所提醒量。
+// Email 提醒(可選)。設定值改由後台存於 clinic_settings,cron 讀取後傳入。
+// Resend 免費方案每月約 3,000 封。
 
-export function emailEnabled(): boolean {
-  return !!process.env.RESEND_API_KEY && !!process.env.REMINDER_EMAIL_FROM;
+export interface EmailConfig {
+  apiKey: string;
+  from: string;
 }
 
-export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
-  const key = process.env.RESEND_API_KEY;
-  const from = process.env.REMINDER_EMAIL_FROM;
-  if (!key || !from) throw new Error("Email 未設定(RESEND_API_KEY / REMINDER_EMAIL_FROM)");
-
+export async function sendEmail(
+  cfg: EmailConfig,
+  to: string,
+  subject: string,
+  html: string,
+): Promise<void> {
+  if (!cfg.apiKey || !cfg.from) throw new Error("Email 未設定");
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${key}`,
+      Authorization: `Bearer ${cfg.apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ from, to, subject, html }),
+    body: JSON.stringify({ from: cfg.from, to, subject, html }),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");

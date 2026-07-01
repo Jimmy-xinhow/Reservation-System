@@ -37,8 +37,15 @@ create table if not exists clinic_settings (
   deposit_scope text not null default 'self_pay' check (deposit_scope in ('all','self_pay','none')),
   min_lead_minutes smallint not null default 30,
   max_advance_days smallint not null default 30,
+  -- Email 提醒(後台可自行設定;金鑰僅 server 端讀取,anon 無 policy 讀不到)
+  email_enabled boolean not null default false,
+  resend_api_key text,
+  email_from text,
   updated_at timestamptz default now()
 );
+alter table clinic_settings add column if not exists email_enabled boolean not null default false;
+alter table clinic_settings add column if not exists resend_api_key text;
+alter table clinic_settings add column if not exists email_from text;
 
 create table if not exists doctors (
   id uuid primary key default gen_random_uuid(),

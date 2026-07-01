@@ -527,6 +527,23 @@ export async function deleteServiceAction(fd: FormData) {
   revalidatePath("/admin/services");
 }
 
+// ── Email 提醒設定(存於 clinic_settings;金鑰留空則沿用舊值)──────
+export async function updateEmailSettingsAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const patch: Record<string, unknown> = {
+    email_enabled: bool(fd, "email_enabled"),
+    email_from: str(fd, "email_from") || null,
+  };
+  // 只有輸入新金鑰才更新(避免用遮罩值覆蓋);輸入 "-" 代表清除
+  const key = str(fd, "resend_api_key");
+  if (key === "-") patch.resend_api_key = null;
+  else if (key) patch.resend_api_key = key;
+
+  const { error } = await supabase.from("clinic_settings").update(patch).eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/settings");
+}
+
 // ── 診所公開資訊 clinics(名稱、LINE ID、電話、地址、簡介)──────
 export async function updateClinicProfileAction(fd: FormData) {
   const { supabase } = await requireMember();

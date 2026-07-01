@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { getClinicSettings } from "@/lib/http";
 import { pushMessages, type LineMessage } from "@/lib/line";
-import { emailEnabled, sendEmail } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
 
 export const runtime = "nodejs";
@@ -81,16 +81,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── Email 提醒(免費/低成本,設定 RESEND_API_KEY 才啟用)──
+    // ── Email 提醒(後台自行設定;clinic_settings.email_enabled + resend_api_key + email_from)──
     let emailSent = 0;
     let emailFailed = 0;
-    if (emailEnabled()) {
+    const emailOn = settings.email_enabled && !!settings.resend_api_key && !!settings.email_from;
+    if (emailOn) {
+      const cfg = { apiKey: settings.resend_api_key!, from: settings.email_from! };
       for (const a of rows) {
         const to = a.patients?.email;
         if (!to) continue;
         if (done.has(`${a.id}|email`)) continue;
         try {
-          await sendEmail(to, "慈愛中醫診所 看診提醒", buildReminderHtml(a, settings.booking_mode));
+          await sendEmail(cfg, to, "慈愛中醫診所 看診提醒", buildReminderHtml(a, settings.booking_mode));
           const { error: logErr } = await svc
             .from("reminder_logs")
             .insert({ appointment_id: a.id, channel: "email", result: "sent" });

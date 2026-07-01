@@ -21,6 +21,9 @@ export interface ClinicSettings {
   deposit_scope: "all" | "self_pay" | "none";
   min_lead_minutes: number;
   max_advance_days: number;
+  email_enabled: boolean;
+  resend_api_key: string | null;
+  email_from: string | null;
 }
 
 /** 讀取診所設定;查無回 null。 */

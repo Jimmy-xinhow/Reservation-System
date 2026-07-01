@@ -1,6 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
-import { updateSettingsAction, updateClinicProfileAction } from "../actions";
+import { updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,9 @@ interface Settings {
   deposit_scope: "all" | "self_pay" | "none";
   min_lead_minutes: number;
   max_advance_days: number;
+  email_enabled: boolean;
+  resend_api_key: string | null;
+  email_from: string | null;
 }
 
 export default async function SettingsPage() {
@@ -199,6 +202,54 @@ export default async function SettingsPage() {
         </Section>
 
         <button className="btn btn-primary">儲存設定</button>
+      </form>
+
+      {/* Email 提醒(選用,需自備 Resend 金鑰)*/}
+      <form action={updateEmailSettingsAction} className="card space-y-4 p-5">
+        <div>
+          <h2 className="font-semibold text-slate-900">Email 看診提醒(選用)</h2>
+          <p className="mt-1 text-xs text-slate-400">
+            自行到 resend.com 申請 API 金鑰(免費約 3,000 封/月)填入即可啟用。留空不影響 LINE 提醒。
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            name="email_enabled"
+            defaultChecked={s.email_enabled}
+            className="h-4 w-4 accent-brand-600"
+          />
+          啟用 Email 提醒
+        </label>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-slate-600">寄件人</span>
+            <input
+              name="email_from"
+              defaultValue={s.email_from ?? ""}
+              placeholder="慈愛中醫 <noreply@yourdomain.com>"
+              className="input"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-slate-600">Resend API 金鑰</span>
+            <input
+              name="resend_api_key"
+              type="password"
+              placeholder={s.resend_api_key ? "已設定(留空不變,輸入 - 清除)" : "re_..."}
+              className="input"
+            />
+          </label>
+        </div>
+        <div className="flex items-center gap-3">
+          <button className="btn btn-primary">儲存 Email 設定</button>
+          <span className={`text-xs ${s.resend_api_key ? "text-accent-600" : "text-slate-400"}`}>
+            金鑰狀態:{s.resend_api_key ? "已設定 ✓" : "未設定"}
+          </span>
+        </div>
+        <p className="text-xs text-slate-400">
+          寄件人網域需先在 Resend 完成驗證;病患需在「病患查詢」建檔留有 Email 才會收到。
+        </p>
       </form>
     </div>
   );
