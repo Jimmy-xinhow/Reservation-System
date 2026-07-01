@@ -259,7 +259,10 @@ interface ApptRow {
   start_at: string;
   queue_number: number | null;
   status: string;
+  visit_type: string;
   doctors: { name: string } | null;
+  patients: { name: string } | null;
+  services: { name: string } | null;
 }
 
 async function replyMyAppointments(
@@ -289,7 +292,7 @@ async function replyMyAppointments(
   const todayStartIso = new Date(`${taipeiToday()}T00:00:00+08:00`).toISOString();
   const { data } = await svc
     .from("appointments")
-    .select("id, start_at, queue_number, status, doctors(name)")
+    .select("id, start_at, queue_number, status, visit_type, doctors(name), patients(name), services(name)")
     .eq("clinic_id", CLINIC_ID)
     .in("patient_id", ids)
     .in("status", ["booked", "confirmed"])
@@ -303,46 +306,85 @@ async function replyMyAppointments(
     return;
   }
 
-  // 每筆一個 bubble,附「取消」postback
-  const bubbles = rows.map((r) => ({
-    type: "bubble",
-    size: "kilo",
-    body: {
-      type: "box",
-      layout: "vertical",
-      spacing: "sm",
-      contents: [
-        {
-          type: "text",
-          text:
-            mode === "time"
-              ? `${formatDateSession(r.start_at)} ${formatTime(r.start_at)}`
-              : `${formatDateSession(r.start_at)} 第 ${r.queue_number ?? "?"} 號`,
-          weight: "bold",
-          wrap: true,
-          size: "sm",
-        },
-        { type: "text", text: `醫師:${r.doctors?.name ?? ""}`, size: "xs", color: "#888888" },
-        { type: "text", text: r.status === "confirmed" ? "已確認" : "已預約", size: "xs", color: "#2563eb" },
-      ],
-    },
-    footer: {
-      type: "box",
-      layout: "vertical",
-      contents: [
-        {
-          type: "button",
-          style: "secondary",
-          height: "sm",
-          action: { type: "postback", label: "取消這筆", data: `action=cancel&id=${r.id}`, displayText: "取消預約" },
-        },
-      ],
-    },
-  }));
+  // 每筆一個 bubble:綠色表頭 + 分類資訊列 + 取消
+  const bubbles = rows.map((r) => {
+    const when =
+      mode === "time"
+        ? `${formatDateSession(r.start_at)} ${formatTime(r.start_at)}`
+        : `${formatDateSession(r.start_at)} 第 ${r.queue_number ?? "?"} 號`;
+    return {
+      type: "bubble",
+      size: "kilo",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: "#0d9488",
+        paddingAll: "md",
+        contents: [
+          { type: "text", text: "我的預約", size: "md", weight: "bold", color: "#ffffff", align: "center" },
+          { type: "text", text: when, size: "xs", color: "#d1fae5", align: "center", wrap: true, margin: "xs" },
+        ],
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        spacing: "sm",
+        paddingAll: "lg",
+        contents: [
+          infoRow("就診者", r.patients?.name ?? "—"),
+          infoRow("醫師", r.doctors?.name ?? "—"),
+          infoRow("服務", r.services?.name ?? "一般看診"),
+          infoRow("類型", r.visit_type === "first" ? "初診" : "複診"),
+          {
+            type: "box",
+            layout: "vertical",
+            backgroundColor: r.status === "confirmed" ? "#f0fdfa" : "#eff6ff",
+            cornerRadius: "md",
+            paddingAll: "sm",
+            margin: "md",
+            contents: [
+              {
+                type: "text",
+                text: r.status === "confirmed" ? "已確認赴診" : "已預約(未確認)",
+                size: "xs",
+                weight: "bold",
+                align: "center",
+                color: r.status === "confirmed" ? "#0d9488" : "#2563eb",
+              },
+            ],
+          },
+        ],
+      },
+      footer: {
+        type: "box",
+        layout: "vertical",
+        contents: [
+          {
+            type: "button",
+            style: "secondary",
+            height: "sm",
+            action: { type: "postback", label: "取消這筆", data: `action=cancel&id=${r.id}`, displayText: "取消預約" },
+          },
+        ],
+      },
+    };
+  });
 
   await replyMessages(replyToken, [
     { type: "flex", altText: "您的預約", contents: { type: "carousel", contents: bubbles } },
   ]);
+}
+
+// 分類資訊列:左標籤 + 右內容
+function infoRow(label: string, value: string): LineMessage {
+  return {
+    type: "box",
+    layout: "horizontal",
+    contents: [
+      { type: "text", text: label, size: "sm", color: "#94a3b8", flex: 2 },
+      { type: "text", text: value, size: "sm", color: "#334155", weight: "bold", flex: 5, wrap: true, align: "end" },
+    ],
+  };
 }
 
 // ── 看診進度 ────────────────────────────────────────────────
