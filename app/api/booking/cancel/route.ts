@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
     let lineUserId: string;
     try {
       lineUserId = (await verifyLiffIdToken(body.idToken)).sub;
-    } catch {
-      return fail("LINE 身分驗證失敗,請重新開啟預約頁", 401);
+    } catch (e) {
+      return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟預約頁"), 401);
     }
 
     const svc = createServiceClient();

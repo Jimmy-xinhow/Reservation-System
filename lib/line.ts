@@ -34,7 +34,9 @@ export async function verifyLiffIdToken(idToken: string): Promise<VerifiedLinePr
     body: new URLSearchParams({ id_token: idToken, client_id: clientId }),
   });
   if (!res.ok) {
-    throw new Error("LINE ID token 驗證失敗");
+    // 帶出 LINE 的實際錯誤(如 aud 不符、id token 過期)以利診斷
+    const detail = await res.text().catch(() => "");
+    throw new Error(`LINE ID token 驗證失敗 (${res.status}): ${detail}`);
   }
   const data = (await res.json()) as {
     sub?: string;
