@@ -39,17 +39,19 @@ export default async function QueuePage({
           <label className="label">日期</label>
           <input type="date" name="date" defaultValue={date} className="input" />
         </div>
-        <div>
-          <label className="label">醫師</label>
-          <select name="doctor" defaultValue={doctorId ?? ""} className="input">
-            <option value="">全部醫師</option>
-            {(doctors ?? []).map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {(doctors ?? []).length > 1 && (
+          <div>
+            <label className="label">醫師</label>
+            <select name="doctor" defaultValue={doctorId ?? ""} className="input">
+              <option value="">全部醫師</option>
+              {(doctors ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <button className="btn btn-secondary">套用</button>
       </form>
 

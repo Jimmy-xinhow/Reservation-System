@@ -1,22 +1,38 @@
 -- ============================================================================
--- 叫號功能:每個門診段目前看診到第幾號。
--- 在 Supabase → SQL Editor 跑一次即可。
+-- 設為單一醫師「張勝雄院長」。在 Supabase → SQL Editor 跑一次即可。
+-- 規則:保留最早建立的一位醫師改名為張勝雄院長並啟用,其餘停用(不硬刪,保留約診)。
+--      若完全沒有醫師則新增一位。
 -- ============================================================================
 
-create table if not exists serving_numbers (
-  clinic_id uuid not null references clinics(id) on delete cascade,
-  doctor_id uuid not null references doctors(id) on delete cascade,
-  date date not null,
-  session_key text not null,
-  current_number int not null default 0,
-  updated_at timestamptz default now(),
-  primary key (clinic_id, doctor_id, date, session_key)
+-- 1) 已有醫師:最早一位改名並啟用
+with keep as (
+  select id from doctors
+  where clinic_id = '087f6757-d1b6-4c4f-a82d-8bb5bc7c4733'
+  order by created_at
+  limit 1
+)
+update doctors
+set name = '張勝雄院長', specialty = null, active = true
+where id in (select id from keep);
+
+-- 2) 其餘醫師停用(soft-delete,保留其歷史約診)
+update doctors
+set active = false
+where clinic_id = '087f6757-d1b6-4c4f-a82d-8bb5bc7c4733'
+  and id not in (
+    select id from doctors
+    where clinic_id = '087f6757-d1b6-4c4f-a82d-8bb5bc7c4733'
+    order by created_at
+    limit 1
+  );
+
+-- 3) 完全沒有醫師才新增
+insert into doctors (clinic_id, name)
+select '087f6757-d1b6-4c4f-a82d-8bb5bc7c4733', '張勝雄院長'
+where not exists (
+  select 1 from doctors where clinic_id = '087f6757-d1b6-4c4f-a82d-8bb5bc7c4733'
 );
 
-alter table serving_numbers enable row level security;
-drop policy if exists serving_member on serving_numbers;
-create policy serving_member on serving_numbers for all to authenticated
-  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
-  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
-
-select 'serving_numbers ready' as status;
+select id, name, active from doctors
+where clinic_id = '087f6757-d1b6-4c4f-a82d-8bb5bc7c4733'
+order by created_at;

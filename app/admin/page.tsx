@@ -161,17 +161,19 @@ export default async function TodayPage({
           <label className="label">日期</label>
           <input type="date" name="date" defaultValue={viewDate} className="input" />
         </div>
-        <div>
-          <label className="label">醫師</label>
-          <select name="doctor" defaultValue={fDoctor} className="input">
-            <option value="">全部醫師</option>
-            {(doctors ?? []).map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {(doctors ?? []).length > 1 && (
+          <div>
+            <label className="label">醫師</label>
+            <select name="doctor" defaultValue={fDoctor} className="input">
+              <option value="">全部醫師</option>
+              {(doctors ?? []).map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div>
           <label className="label">狀態</label>
           <select name="status" defaultValue={fStatus} className="input">

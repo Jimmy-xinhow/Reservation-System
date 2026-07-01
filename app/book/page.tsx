@@ -133,6 +133,12 @@ export default function BookPage() {
     [config],
   );
 
+  // 單一醫師診所:只有一位醫師時自動選取,不顯示選單
+  const singleDoctor = config?.doctors.length === 1 ? config.doctors[0] : null;
+  useEffect(() => {
+    if (singleDoctor && doctorId !== singleDoctor.id) setDoctorId(singleDoctor.id);
+  }, [singleDoctor, doctorId]);
+
   const loadAvailability = useCallback(async () => {
     if (!config || !doctorId || !date) return;
     setAvailLoading(true);
@@ -462,18 +468,20 @@ export default function BookPage() {
             <p className="mb-3 text-sm text-slate-400">請先完成上方就診者資料與服務,再選擇時間。</p>
           )}
           <div className="space-y-4">
-            <div>
-              <label className="label">醫師</label>
-              <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-                <option value="">請選擇醫師</option>
-                {config.doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                    {d.specialty ? `(${d.specialty})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!singleDoctor && (
+              <div>
+                <label className="label">醫師</label>
+                <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+                  <option value="">請選擇醫師</option>
+                  {config.doctors.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                      {d.specialty ? `(${d.specialty})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="label">日期</label>
               <input

@@ -43,6 +43,7 @@ export default function ScheduleEditor({
   const activeDocs = doctors.filter((d) => d.active);
   const docName = (id: string) => doctors.find((d) => d.id === id)?.name ?? "—";
 
+  const singleDoctor = activeDocs.length === 1 ? activeDocs[0] : null;
   // 受控表單。editingId 有值 = 編輯既有列;null = 新增。
   const [editingId, setEditingId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState(activeDocs[0]?.id ?? "");
@@ -82,11 +83,12 @@ export default function ScheduleEditor({
         className={`card flex flex-wrap items-end gap-3 p-4 ${editingId ? "ring-2 ring-brand-200" : ""}`}
       >
         {editingId && <input type="hidden" name="id" value={editingId} />}
-        <label className="block text-sm font-medium text-slate-600">
+        {singleDoctor && <input type="hidden" name="doctor_id" value={singleDoctor.id} />}
+        <label className={`block text-sm font-medium text-slate-600 ${singleDoctor ? "hidden" : ""}`}>
           醫師
           <select
-            name="doctor_id"
-            required
+            name={singleDoctor ? undefined : "doctor_id"}
+            required={!singleDoctor}
             value={doctorId}
             onChange={(e) => setDoctorId(e.target.value)}
             className="input mt-1"

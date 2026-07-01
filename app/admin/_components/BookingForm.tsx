@@ -50,8 +50,9 @@ export default function BookingForm({
   createAction: ServerAction;
   rescheduleAction: ServerAction;
 }) {
+  const singleDoctor = doctors.length === 1 ? doctors[0] : null;
   const [targetId, setTargetId] = useState(""); // 空=新增,有值=改期
-  const [doctorId, setDoctorId] = useState("");
+  const [doctorId, setDoctorId] = useState(singleDoctor?.id ?? "");
   const [date, setDate] = useState("");
   const [slots, setSlots] = useState<Slot[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -114,23 +115,27 @@ export default function BookingForm({
           </select>
         </label>
 
-        <label className="block text-sm font-medium text-slate-600">
-          醫師
-          <select
-            name="doctor_id"
-            className="input mt-1"
-            value={doctorId}
-            onChange={(e) => setDoctorId(e.target.value)}
-            required
-          >
-            <option value="">請選擇</option>
-            {doctors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {singleDoctor ? (
+          <input type="hidden" name="doctor_id" value={singleDoctor.id} />
+        ) : (
+          <label className="block text-sm font-medium text-slate-600">
+            醫師
+            <select
+              name="doctor_id"
+              className="input mt-1"
+              value={doctorId}
+              onChange={(e) => setDoctorId(e.target.value)}
+              required
+            >
+              <option value="">請選擇</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="block text-sm font-medium text-slate-600">
           日期

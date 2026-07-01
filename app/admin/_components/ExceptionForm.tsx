@@ -33,7 +33,8 @@ export default function ExceptionForm({
   templates: Template[];
   createAction: ServerAction;
 }) {
-  const [doctorId, setDoctorId] = useState("");
+  const singleDoctor = doctors.length === 1 ? doctors[0] : null;
+  const [doctorId, setDoctorId] = useState(singleDoctor?.id ?? "");
   const [kind, setKind] = useState<"closed" | "extra">("closed");
   const [tplId, setTplId] = useState("");
   const [start, setStart] = useState("");
@@ -77,11 +78,12 @@ export default function ExceptionForm({
 
   return (
     <form action={createAction} className="card flex flex-wrap items-end gap-3 p-4">
-      <label className="block text-sm font-medium text-slate-600">
+      {singleDoctor && <input type="hidden" name="doctor_id" value={singleDoctor.id} />}
+      <label className={`block text-sm font-medium text-slate-600 ${singleDoctor ? "hidden" : ""}`}>
         醫師
         <select
-          name="doctor_id"
-          required
+          name={singleDoctor ? undefined : "doctor_id"}
+          required={!singleDoctor}
           value={doctorId}
           onChange={(e) => {
             setDoctorId(e.target.value);
