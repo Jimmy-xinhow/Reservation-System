@@ -596,6 +596,85 @@ export async function deleteServiceAction(fd: FormData) {
   revalidatePath("/admin/services");
 }
 
+// ── LINE 自動回覆規則 ─────────────────────────────────────
+const REPLY_ACTIONS = ["text", "booking", "query", "progress"] as const;
+export async function createReplyAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const keywords = str(fd, "keywords");
+  const action = str(fd, "action");
+  if (!keywords) throw new Error("請填關鍵字");
+  if (!REPLY_ACTIONS.includes(action as (typeof REPLY_ACTIONS)[number])) throw new Error("動作錯誤");
+  const { error } = await supabase.from("line_auto_replies").insert({
+    clinic_id: CLINIC_ID,
+    keywords,
+    action,
+    reply_text: str(fd, "reply_text") || null,
+    sort: intOr(fd, "sort", 0),
+    active: true,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/replies");
+}
+
+export async function updateReplyAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const keywords = str(fd, "keywords");
+  const action = str(fd, "action");
+  if (!id || !keywords) throw new Error("缺少必要欄位");
+  if (!REPLY_ACTIONS.includes(action as (typeof REPLY_ACTIONS)[number])) throw new Error("動作錯誤");
+  const { error } = await supabase
+    .from("line_auto_replies")
+    .update({
+      keywords,
+      action,
+      reply_text: str(fd, "reply_text") || null,
+      sort: intOr(fd, "sort", 0),
+    })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/replies");
+}
+
+export async function toggleReplyAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const active = bool(fd, "active");
+  const { error } = await supabase
+    .from("line_auto_replies")
+    .update({ active: !active })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/replies");
+}
+
+export async function deleteReplyAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const { error } = await supabase
+    .from("line_auto_replies")
+    .delete()
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/replies");
+}
+
+export async function updateLineTextsAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const { error } = await supabase
+    .from("clinic_settings")
+    .update({
+      line_welcome_text: str(fd, "line_welcome_text") || null,
+      line_fallback_text: str(fd, "line_fallback_text") || null,
+    })
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/replies");
+}
+
 // ── Email 提醒設定(存於 clinic_settings;金鑰留空則沿用舊值)──────
 export async function updateEmailSettingsAction(fd: FormData) {
   const { supabase } = await requireMember();

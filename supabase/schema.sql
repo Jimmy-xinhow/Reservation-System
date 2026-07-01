@@ -149,6 +149,23 @@ create index if not exists appt_template_start_idx on appointments (template_id,
 alter table appointments add column if not exists service_id uuid references services(id);
 alter table appointments add column if not exists source text not null default 'online';
 
+-- LINE 自動回覆規則(後台可編輯)。keywords 命中(包含)→ 依 action 回覆。
+-- action:text=自訂文字 / booking=開啟預約 / query=查詢預約 / progress=看診進度
+create table if not exists line_auto_replies (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  keywords text not null,              -- 以逗號分隔,任一命中即觸發
+  action text not null default 'text' check (action in ('text','booking','query','progress')),
+  reply_text text,                     -- action=text 時回覆的內容
+  sort int not null default 0,
+  active boolean not null default true,
+  created_at timestamptz default now()
+);
+
+-- 歡迎詞與找不到指令時的預設回覆(存 clinic_settings)
+alter table clinic_settings add column if not exists line_welcome_text text;
+alter table clinic_settings add column if not exists line_fallback_text text;
+
 -- 叫號:每個門診段(doctor+date+session_key)目前看診到第幾號
 -- session_key:號次制=template_id;時間制=該約診所屬門診段的 template/exception id
 create table if not exists serving_numbers (
@@ -427,6 +444,7 @@ alter table reminder_logs enable row level security;
 alter table clinic_members enable row level security;
 alter table services enable row level security;
 alter table serving_numbers enable row level security;
+alter table line_auto_replies enable row level security;
 
 -- authenticated:只能讀寫自己所屬診所的資料。
 -- 一律內聯 auth.uid() 子查詢比對 clinic_members(不要包成 security definer 函式,理由見上方)。
@@ -473,6 +491,11 @@ create policy services_member on services for all to authenticated
 
 drop policy if exists serving_member on serving_numbers;
 create policy serving_member on serving_numbers for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+
+drop policy if exists line_replies_member on line_auto_replies;
+create policy line_replies_member on line_auto_replies for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
   with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 

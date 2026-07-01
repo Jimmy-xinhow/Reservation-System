@@ -13,6 +13,7 @@ const NAV = [
   { href: "/admin/patients", label: "病患查詢" },
   { href: "/admin/settings", label: "診所設定" },
   { href: "/admin/line", label: "LINE 連線" },
+  { href: "/admin/replies", label: "LINE 回覆" },
 ];
 
 export function AdminNav() {

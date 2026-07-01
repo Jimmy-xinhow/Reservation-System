@@ -44,22 +44,49 @@ export async function POST(req: NextRequest) {
 
   const svc = createServiceClient();
 
+  // 讀取後台自訂的回覆規則與歡迎/預設文字
+  const [{ data: rules }, { data: cs }] = await Promise.all([
+    svc
+      .from("line_auto_replies")
+      .select("keywords, action, reply_text")
+      .eq("clinic_id", CLINIC_ID)
+      .eq("active", true)
+      .order("sort"),
+    svc
+      .from("clinic_settings")
+      .select("line_welcome_text, line_fallback_text")
+      .eq("clinic_id", CLINIC_ID)
+      .maybeSingle(),
+  ]);
+  const replyRules = (rules ?? []) as { keywords: string; action: string; reply_text: string | null }[];
+  const welcomeText = cs?.line_welcome_text || null;
+  const fallbackText = cs?.line_fallback_text || null;
+
   for (const ev of events) {
     if (!ev.replyToken) continue;
     try {
       if (ev.type === "follow") {
-        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl)]);
+        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText)]);
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim();
-        // 查詢關鍵字優先(否則「預約查詢」會被「預約」先攔截)
-        if (/進度|叫號|看診號/.test(text)) {
+        // 依後台規則(排序)找第一個命中的關鍵字
+        const rule = replyRules.find((r) =>
+          r.keywords
+            .split(/[,,、\s]+/)
+            .map((k) => k.trim())
+            .filter(Boolean)
+            .some((k) => text.includes(k)),
+        );
+        if (rule?.action === "progress") {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, baseUrl);
-        } else if (/查詢|查預約|我的預約|取消/.test(text)) {
+        } else if (rule?.action === "query") {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
-        } else if (/預約|掛號/.test(text)) {
+        } else if (rule?.action === "booking") {
           await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
+        } else if (rule?.action === "text" && rule.reply_text) {
+          await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }]);
         } else {
-          await replyMessages(ev.replyToken, [menuMessage(baseUrl)]);
+          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText)]);
         }
       } else if (ev.type === "postback" && ev.postback?.data) {
         const params = new URLSearchParams(ev.postback.data);
@@ -106,18 +133,18 @@ function menuQuickReply(baseUrl: string): LineMessage {
   return { items };
 }
 
-function welcomeMessage(baseUrl: string): LineMessage {
+function welcomeMessage(baseUrl: string, custom?: string | null): LineMessage {
   return {
     type: "text",
-    text: "歡迎加入慈愛中醫診所 🌿\n您可以在這裡線上預約、查詢或取消看診。請點下方按鈕開始。",
+    text: custom || "歡迎加入慈愛中醫診所 🌿\n您可以在這裡線上預約、查詢或取消看診。請點下方按鈕開始。",
     quickReply: menuQuickReply(baseUrl),
   };
 }
 
-function menuMessage(baseUrl: string): LineMessage {
+function menuMessage(baseUrl: string, custom?: string | null): LineMessage {
   return {
     type: "text",
-    text: "您好,請問需要什麼服務?可點下方按鈕,或直接輸入「預約」「查詢」。",
+    text: custom || "您好,請問需要什麼服務?可點下方按鈕,或直接輸入「預約」「查詢」。",
     quickReply: menuQuickReply(baseUrl),
   };
 }
