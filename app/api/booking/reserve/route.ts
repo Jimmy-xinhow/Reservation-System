@@ -145,7 +145,15 @@ export async function POST(req: NextRequest) {
 
 /** RPC raise 的中文訊息直接回前端;其餘給通用訊息。 */
 function translateDbError(msg: string): string {
-  const known = ["時段已額滿", "本診已額滿", "已超過可預約時間", "此時段非門診時間", "查無此門診段"];
+  const known = [
+    "時段已額滿",
+    "本診已額滿",
+    "已超過可預約時間",
+    "此時段非門診時間",
+    "查無此門診段",
+    "本診已休診",
+    "此時段已休診",
+  ];
   const hit = known.find((k) => msg.includes(k));
   return hit ?? "此時段無法預約,請重新選擇";
 }

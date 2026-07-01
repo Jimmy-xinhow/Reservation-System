@@ -1,31 +1,41 @@
 -- ============================================================================
--- LINE 主選單卡片自訂 + 圖文選單(Rich Menu)設定。
--- 在 Supabase → SQL Editor 跑一次即可。
+-- 修復:號次制查診次時,濾掉「今天已過/太接近現在」的診次(避免顯示卻無法掛號)。
+-- 在 Supabase → SQL Editor 跑一次即可(只更新這個函式)。
 -- ============================================================================
 
--- 主選單卡片自訂欄位
-alter table clinic_settings add column if not exists line_menu_title text;
-alter table clinic_settings add column if not exists line_menu_btn_booking boolean not null default true;
-alter table clinic_settings add column if not exists line_menu_btn_query boolean not null default true;
-alter table clinic_settings add column if not exists line_menu_btn_progress boolean not null default true;
-alter table clinic_settings add column if not exists line_menu_btn_info boolean not null default true;
-alter table clinic_settings add column if not exists line_menu_link_label text;
-alter table clinic_settings add column if not exists line_menu_link_url text;
+create or replace function get_available_sessions(
+  p_clinic_id uuid, p_doctor_id uuid, p_date date
+)
+returns table (template_id uuid, session_start timestamptz, session_end timestamptz,
+               total int, taken int, remaining int)
+language plpgsql security definer set search_path = '' as $$
+declare
+  v_weekday smallint := extract(dow from p_date);
+  v_lead int := coalesce((select min_lead_minutes from public.clinic_settings where clinic_id=p_clinic_id),30);
+begin
+  return query
+  with sess as (
+    select t.id, t.start_time, t.end_time, t.capacity from public.schedule_templates t
+      where t.clinic_id=p_clinic_id and t.doctor_id=p_doctor_id and t.weekday=v_weekday and t.active
+        and not exists (select 1 from public.schedule_exceptions e where e.clinic_id=p_clinic_id
+              and e.doctor_id=p_doctor_id and e.date=p_date and e.is_closed
+              and (e.start_time is null or e.start_time = t.start_time))
+    union all
+    select e.id, e.start_time, e.end_time, coalesce(e.capacity,40) from public.schedule_exceptions e
+      where e.clinic_id=p_clinic_id and e.doctor_id=p_doctor_id and e.date=p_date and not e.is_closed
+  )
+  select x.id,
+         ((p_date + x.start_time) at time zone 'Asia/Taipei'),
+         ((p_date + x.end_time) at time zone 'Asia/Taipei'),
+         x.capacity, count(a.id)::int, (x.capacity - count(a.id))::int
+  from sess x
+  left join public.appointments a
+    on a.template_id=x.id
+   and a.start_at = ((p_date + x.start_time) at time zone 'Asia/Taipei')
+   and a.status in ('booked','confirmed','done')
+  where ((p_date + x.start_time) at time zone 'Asia/Taipei') > now() + (v_lead||' minutes')::interval
+  group by x.id, x.start_time, x.end_time, x.capacity
+  having (x.capacity - count(a.id)) > 0;
+end; $$;
 
--- 圖文選單設定
-create table if not exists line_richmenu (
-  clinic_id uuid primary key references clinics(id) on delete cascade,
-  layout text not null default 'full-3',
-  chat_bar_text text not null default '選單',
-  slots jsonb not null default '[]',
-  published_id text,
-  updated_at timestamptz default now()
-);
-
-alter table line_richmenu enable row level security;
-drop policy if exists line_richmenu_member on line_richmenu;
-create policy line_richmenu_member on line_richmenu for all to authenticated
-  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
-  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
-
-select 'line menu + richmenu ready' as status;
+select 'get_available_sessions updated' as status;

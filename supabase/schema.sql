@@ -352,7 +352,9 @@ create or replace function get_available_sessions(
 returns table (template_id uuid, session_start timestamptz, session_end timestamptz,
                total int, taken int, remaining int)
 language plpgsql security definer set search_path = '' as $$
-declare v_weekday smallint := extract(dow from p_date);
+declare
+  v_weekday smallint := extract(dow from p_date);
+  v_lead int := coalesce((select min_lead_minutes from public.clinic_settings where clinic_id=p_clinic_id),30);
 begin
   return query
   with sess as (
@@ -374,6 +376,8 @@ begin
     on a.template_id=x.id
    and a.start_at = ((p_date + x.start_time) at time zone 'Asia/Taipei')
    and a.status in ('booked','confirmed','done')
+  -- 只顯示未來、且距現在已達最短前置時間的診次(今天已過或太接近的不顯示)
+  where ((p_date + x.start_time) at time zone 'Asia/Taipei') > now() + (v_lead||' minutes')::interval
   group by x.id, x.start_time, x.end_time, x.capacity
   having (x.capacity - count(a.id)) > 0;
 end; $$;
