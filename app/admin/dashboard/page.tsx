@@ -65,9 +65,17 @@ export default async function DashboardPage({
     supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", CLINIC_ID).maybeSingle(),
   ]);
 
-  // 今日叫號狀態
+  // 今日叫號狀態:只顯示「目前正在進行」的診次(現在落在該診次時間內)
   const mode = (cs?.booking_mode as "time" | "number") ?? "time";
-  const queue = await getQueueForDate(supabase, CLINIC_ID, today, mode);
+  const allQueue = await getQueueForDate(supabase, CLINIC_ID, today, mode);
+  const nowMs = Date.now();
+  const queue = allQueue.filter(
+    (s) =>
+      s.sessionStart &&
+      s.sessionEnd &&
+      new Date(s.sessionStart).getTime() <= nowMs &&
+      nowMs < new Date(s.sessionEnd).getTime(),
+  );
 
   const appts = (apptData ?? []) as unknown as Appt[];
   const active = appts.filter((a) => a.status !== "cancelled");
@@ -106,16 +114,16 @@ export default async function DashboardPage({
         <Stat label="病患總數" value={patientCount ?? 0} />
       </div>
 
-      {/* 今日叫號狀態 */}
+      {/* 目前診次叫號 */}
       <section className="card p-5">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold text-slate-900">今日叫號</h2>
+          <h2 className="font-semibold text-slate-900">目前診次叫號</h2>
           <Link href="/admin/queue" className="text-sm text-brand-600 hover:underline">
             前往叫號 →
           </Link>
         </div>
         {queue.length === 0 ? (
-          <p className="text-sm text-slate-400">今日無看診門診段。</p>
+          <p className="text-sm text-slate-400">目前沒有進行中的診次。</p>
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {queue.map((s) => {

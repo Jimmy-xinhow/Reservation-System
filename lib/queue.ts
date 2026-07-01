@@ -39,6 +39,8 @@ export interface QueueSession {
   doctorName: string;
   label: string;
   startAt: string;
+  sessionStart: string | null; // 診次表定開始(ISO);無排程時為 null
+  sessionEnd: string | null; // 診次表定結束(ISO)
   onlineCurrent: number;
   offlineCurrent: number;
   autoEvery: number;
@@ -194,12 +196,16 @@ export async function getQueueForDate(
         : "其他";
     const state = servMap.get(`${g.doctorId}|${key}`);
     const startAt = [...online, ...offline].sort((a, b) => (a.start_at < b.start_at ? -1 : 1))[0]?.start_at ?? dayStart;
+    const sessionStart = sess ? new Date(`${date}T${hhmm(sess.start_time)}:00+08:00`).toISOString() : null;
+    const sessionEnd = sess ? new Date(`${date}T${hhmm(sess.end_time)}:00+08:00`).toISOString() : null;
     sessions.push({
       key,
       doctorId: g.doctorId,
       doctorName: g.doctorName,
       label,
       startAt,
+      sessionStart,
+      sessionEnd,
       onlineCurrent: state?.online ?? 0,
       offlineCurrent: state?.offline ?? 0,
       autoEvery: state?.auto ?? 0,
