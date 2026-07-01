@@ -140,6 +140,18 @@ create index if not exists appt_template_start_idx on appointments (template_id,
 -- 既有資料庫補欄位(idempotent)
 alter table appointments add column if not exists service_id uuid references services(id);
 
+-- 叫號:每個門診段(doctor+date+session_key)目前看診到第幾號
+-- session_key:號次制=template_id;時間制=該約診所屬門診段的 template/exception id
+create table if not exists serving_numbers (
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  doctor_id uuid not null references doctors(id) on delete cascade,
+  date date not null,
+  session_key text not null,
+  current_number int not null default 0,
+  updated_at timestamptz default now(),
+  primary key (clinic_id, doctor_id, date, session_key)
+);
+
 create table if not exists reminder_logs (
   id uuid primary key default gen_random_uuid(),
   appointment_id uuid not null references appointments(id) on delete cascade,
@@ -395,6 +407,7 @@ alter table appointments enable row level security;
 alter table reminder_logs enable row level security;
 alter table clinic_members enable row level security;
 alter table services enable row level security;
+alter table serving_numbers enable row level security;
 
 -- authenticated:只能讀寫自己所屬診所的資料。
 -- 一律內聯 auth.uid() 子查詢比對 clinic_members(不要包成 security definer 函式,理由見上方)。
@@ -436,6 +449,11 @@ create policy appointments_member on appointments for all to authenticated
 
 drop policy if exists services_member on services;
 create policy services_member on services for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+
+drop policy if exists serving_member on serving_numbers;
+create policy serving_member on serving_numbers for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
   with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 

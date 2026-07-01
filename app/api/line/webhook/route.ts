@@ -3,6 +3,7 @@ import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { getClinicSettings } from "@/lib/http";
 import { verifyLineSignature, replyMessages, type LineMessage } from "@/lib/line";
 import { formatDateSession, formatTime } from "@/lib/slots";
+import { getPatientQueueToday } from "@/lib/queue";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -51,7 +52,9 @@ export async function POST(req: NextRequest) {
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim();
         // 查詢關鍵字優先(否則「預約查詢」會被「預約」先攔截)
-        if (/查詢|查預約|我的預約|取消/.test(text)) {
+        if (/進度|叫號|看診號/.test(text)) {
+          await replyProgress(ev.replyToken, ev.source?.userId, svc, baseUrl);
+        } else if (/查詢|查預約|我的預約|取消/.test(text)) {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
         } else if (/預約|掛號/.test(text)) {
           await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
@@ -63,6 +66,8 @@ export async function POST(req: NextRequest) {
         const action = params.get("action");
         if (action === "my") {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
+        } else if (action === "progress") {
+          await replyProgress(ev.replyToken, ev.source?.userId, svc, baseUrl);
         } else if (action === "confirm" || action === "cancel") {
           await handleStatusPostback(ev.replyToken, action, params.get("id"), svc);
         } else {
@@ -93,6 +98,7 @@ function menuQuickReply(baseUrl: string): LineMessage {
         : { type: "message", label: "立即預約", text: "預約" },
     },
     { type: "action", action: { type: "postback", label: "查詢預約", data: "action=my", displayText: "查詢我的預約" } },
+    { type: "action", action: { type: "postback", label: "看診進度", data: "action=progress", displayText: "看診進度" } },
   ];
   if (baseUrl) {
     items.push({ type: "action", action: { type: "uri", label: "診所資訊", uri: baseUrl } });
@@ -216,6 +222,34 @@ async function replyMyAppointments(
   await replyMessages(replyToken, [
     { type: "flex", altText: "您的預約", contents: { type: "carousel", contents: bubbles } },
   ]);
+}
+
+// ── 看診進度 ────────────────────────────────────────────────
+async function replyProgress(
+  replyToken: string,
+  lineUserId: string | undefined,
+  svc: SupabaseClient,
+  baseUrl: string,
+): Promise<void> {
+  if (!lineUserId) {
+    await safeReply(replyToken, "無法取得您的 LINE 身分,請稍後再試。");
+    return;
+  }
+  const settings = await getClinicSettings(svc, CLINIC_ID);
+  const mode = settings?.booking_mode ?? "time";
+  const items = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
+  const board = baseUrl ? `\n\n完整看診進度:${baseUrl}/q` : "";
+  if (items.length === 0) {
+    await safeReply(replyToken, `您今日沒有約診。${board}`);
+    return;
+  }
+  const lines = items
+    .map(
+      (i) =>
+        `${i.doctorName}(${i.label})\n　您的號碼:${i.yourNumber}　目前看診號:${i.current || "尚未開始"}`,
+    )
+    .join("\n\n");
+  await safeReply(replyToken, `今日看診進度\n\n${lines}${board}`);
 }
 
 // ── 確認 / 取消(提醒按鈕 + LINE 查詢內的取消)──────────────

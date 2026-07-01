@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
-import { ok, fail } from "@/lib/http";
+import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
+import { getPatientQueueToday } from "@/lib/queue";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,11 @@ export async function POST(req: NextRequest) {
       .eq("line_user_id", lineUserId);
     if (pErr) return fail(pErr.message, 500);
     const ids = (patients ?? []).map((p) => p.id);
-    if (ids.length === 0) return ok({ appointments: [] });
+    if (ids.length === 0) return ok({ appointments: [], progress: [] });
+
+    const settings = await getClinicSettings(svc, CLINIC_ID);
+    const mode = settings?.booking_mode ?? "time";
+    const progress = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
 
     const { data, error } = await svc
       .from("appointments")
@@ -43,7 +48,7 @@ export async function POST(req: NextRequest) {
       .order("start_at");
     if (error) return fail(error.message, 500);
 
-    return ok({ appointments: data ?? [] });
+    return ok({ appointments: data ?? [], progress });
   } catch (e) {
     return fail(e instanceof Error ? e.message : "查詢失敗", 500);
   }

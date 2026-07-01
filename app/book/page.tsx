@@ -581,9 +581,17 @@ interface MyAppt {
   doctors: { name: string } | null;
   patients: { name: string } | null;
 }
+interface ProgressItem {
+  doctorName: string;
+  label: string;
+  yourNumber: number;
+  current: number;
+  status: string;
+}
 
 function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time" | "number" }) {
   const [list, setList] = useState<MyAppt[] | null>(null);
+  const [progress, setProgress] = useState<ProgressItem[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
 
@@ -591,12 +599,13 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
     if (!idToken) return;
     setErr(null);
     try {
-      const data = await api<{ appointments: MyAppt[] }>("/api/booking/my", {
+      const data = await api<{ appointments: MyAppt[]; progress: ProgressItem[] }>("/api/booking/my", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
       });
       setList(data.appointments);
+      setProgress(data.progress ?? []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "查詢失敗");
     }
@@ -626,14 +635,36 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
 
   if (err) return <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>;
   if (list === null) return <p className="px-1 text-sm text-slate-400">載入中…</p>;
-  if (list.length === 0)
-    return (
-      <div className="card p-6 text-center text-sm text-slate-400">目前沒有未來的預約。</div>
-    );
 
   return (
-    <div className="space-y-3">
-      {list.map((a) => (
+    <div className="space-y-4">
+      {/* 今日看診進度 */}
+      {progress.length > 0 && (
+        <div className="space-y-2">
+          <p className="px-1 text-sm font-medium text-slate-600">今日看診進度</p>
+          {progress.map((pr, i) => (
+            <div
+              key={i}
+              className="card flex items-center justify-between bg-gradient-to-br from-brand-500 to-accent-600 p-4 text-white"
+            >
+              <div>
+                <div className="text-sm">{pr.doctorName} · {pr.label}</div>
+                <div className="text-xs text-white/80">您的號碼 {pr.yourNumber}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-white/80">目前看診號</div>
+                <div className="text-3xl font-bold">{pr.current || "—"}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {list.length === 0 ? (
+        <div className="card p-6 text-center text-sm text-slate-400">目前沒有未來的預約。</div>
+      ) : (
+        <div className="space-y-3">
+          {list.map((a) => (
         <div key={a.id} className="card flex items-center justify-between p-4">
           <div>
             <div className="font-medium text-slate-900">
@@ -656,7 +687,9 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
             {cancelling === a.id ? "取消中…" : "取消"}
           </button>
         </div>
-      ))}
+          ))}
+        </div>
+      )}
     </div>
   );
 }

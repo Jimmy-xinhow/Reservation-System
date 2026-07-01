@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const NAV = [
   { href: "/admin/dashboard", label: "總覽" },
   { href: "/admin", label: "今日約診" },
+  { href: "/admin/queue", label: "叫號" },
   { href: "/admin/schedules", label: "門診表" },
   { href: "/admin/exceptions", label: "休診/加診" },
   { href: "/admin/services", label: "看診服務" },

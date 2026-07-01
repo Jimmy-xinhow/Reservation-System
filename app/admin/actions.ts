@@ -86,6 +86,43 @@ export async function setStatusAction(fd: FormData) {
   revalidatePath("/admin");
 }
 
+// ── 叫號:推進/回退/重設某門診段目前看診號 ──────────────
+export async function advanceServingAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const doctorId = str(fd, "doctor_id");
+  const date = str(fd, "date");
+  const sessionKey = str(fd, "session_key");
+  const op = str(fd, "op"); // next / prev / reset
+  if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
+
+  const { data: cur } = await supabase
+    .from("serving_numbers")
+    .select("current_number")
+    .eq("clinic_id", CLINIC_ID)
+    .eq("doctor_id", doctorId)
+    .eq("date", date)
+    .eq("session_key", sessionKey)
+    .maybeSingle();
+  let n = cur?.current_number ?? 0;
+  if (op === "next") n += 1;
+  else if (op === "prev") n = Math.max(0, n - 1);
+  else if (op === "reset") n = 0;
+
+  const { error } = await supabase.from("serving_numbers").upsert(
+    {
+      clinic_id: CLINIC_ID,
+      doctor_id: doctorId,
+      date,
+      session_key: sessionKey,
+      current_number: n,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "clinic_id,doctor_id,date,session_key" },
+  );
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/queue");
+}
+
 // 手動加入/解除黑名單(停權 1 個月 / 清除)
 export async function setPatientBlockAction(fd: FormData) {
   const { supabase } = await requireMember();
