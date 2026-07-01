@@ -85,6 +85,71 @@ export async function getQuota(): Promise<{ type: string; value?: number }> {
   return (await res.json()) as { type: string; value?: number };
 }
 
+// ── Rich Menu(圖文選單)──────────────────────────────────
+const LINE_DATA_API = "https://api-data.line.me/v2/bot";
+
+export interface RichMenuArea {
+  bounds: { x: number; y: number; width: number; height: number };
+  action: Record<string, unknown>;
+}
+
+/** 建立 rich menu 物件,回傳 richMenuId。 */
+export async function createRichMenu(body: {
+  size: { width: number; height: number };
+  selected: boolean;
+  name: string;
+  chatBarText: string;
+  areas: RichMenuArea[];
+}): Promise<string> {
+  const res = await fetch(`${LINE_API}/richmenu`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken()}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`建立圖文選單失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  const data = (await res.json()) as { richMenuId: string };
+  return data.richMenuId;
+}
+
+/** 上傳 rich menu 圖片(jpeg/png,尺寸須完全符合)。 */
+export async function uploadRichMenuImage(
+  richMenuId: string,
+  bytes: ArrayBuffer,
+  contentType: string,
+): Promise<void> {
+  const res = await fetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
+    method: "POST",
+    headers: { "Content-Type": contentType, Authorization: `Bearer ${accessToken()}` },
+    body: bytes,
+  });
+  if (!res.ok) throw new Error(`上傳圖片失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
+/** 設為所有使用者的預設 rich menu。 */
+export async function setDefaultRichMenu(richMenuId: string): Promise<void> {
+  const res = await fetch(`${LINE_API}/user/all/richmenu/${richMenuId}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken()}` },
+  });
+  if (!res.ok) throw new Error(`設定預設選單失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
+/** 刪除 rich menu。 */
+export async function deleteRichMenu(richMenuId: string): Promise<void> {
+  await fetch(`${LINE_API}/richmenu/${richMenuId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken()}` },
+  }).catch(() => {});
+}
+
+/** 取消所有使用者的預設 rich menu。 */
+export async function clearDefaultRichMenu(): Promise<void> {
+  await fetch(`${LINE_API}/user/all/richmenu`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken()}` },
+  }).catch(() => {});
+}
+
 /** 主動推播一則或多則訊息給某 line_user_id。 */
 export async function pushMessages(to: string, messages: LineMessage[]): Promise<void> {
   const res = await fetch(`${LINE_API}/message/push`, {

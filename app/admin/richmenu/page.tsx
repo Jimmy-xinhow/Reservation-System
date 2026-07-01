@@ -1,0 +1,82 @@
+import { createSupabaseServer } from "@/lib/supabase-server";
+import { CLINIC_ID } from "@/lib/supabase";
+import { LAYOUTS, type Layout, type Slot } from "@/lib/richmenu";
+import { saveRichMenuAction, publishRichMenuAction, unpublishRichMenuAction } from "../actions";
+import RichMenuEditor from "./RichMenuEditor";
+
+export const dynamic = "force-dynamic";
+
+export default async function RichMenuPage() {
+  const supabase = await createSupabaseServer();
+  const { data } = await supabase
+    .from("line_richmenu")
+    .select("layout, chat_bar_text, slots, published_id")
+    .eq("clinic_id", CLINIC_ID)
+    .maybeSingle();
+
+  const layout = (data?.layout as Layout) ?? "full-3";
+  const chatBar = (data?.chat_bar_text as string) ?? "選單";
+  const slots = (data?.slots as Slot[]) ?? [];
+  const publishedId = (data?.published_id as string | null) ?? null;
+  const spec = LAYOUTS[layout] ?? LAYOUTS["full-3"];
+  const lineReady = !!process.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">圖文選單(Rich Menu)</h1>
+        <p className="text-sm text-slate-400">
+          設定官方帳號聊天室下方的常駐大選單。設定好版型與按鈕、上傳對應尺寸圖片即可發布。
+        </p>
+      </div>
+
+      {!lineReady && (
+        <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          尚未設定 LINE_CHANNEL_ACCESS_TOKEN,無法發布圖文選單。
+        </p>
+      )}
+
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-slate-500">目前狀態:</span>
+        {publishedId ? (
+          <span className="badge bg-accent-500/10 text-accent-600">已發布</span>
+        ) : (
+          <span className="badge bg-slate-100 text-slate-500">未發布</span>
+        )}
+      </div>
+
+      <RichMenuEditor
+        initialLayout={layout}
+        initialChatBar={chatBar}
+        initialSlots={slots}
+        saveAction={saveRichMenuAction}
+      />
+
+      {/* 上傳圖片 + 發布 */}
+      <form action={publishRichMenuAction} className="card space-y-4 p-5">
+        <h2 className="font-semibold text-slate-900">上傳圖片並發布</h2>
+        <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-700">
+          目前版型需要圖片尺寸:<strong>{spec.width} × {spec.height} px</strong>(JPG/PNG,&lt; 1MB)。
+          請先在上方「儲存選單設定」,再上傳圖片發布。
+        </p>
+        <input
+          type="file"
+          name="image"
+          accept="image/png,image/jpeg"
+          required
+          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-white"
+        />
+        <button className="btn btn-primary" disabled={!lineReady}>
+          發布圖文選單
+        </button>
+      </form>
+
+      {publishedId && (
+        <form action={unpublishRichMenuAction} className="card p-5">
+          <p className="mb-3 text-sm text-slate-600">移除後,病患聊天室下方將不再顯示圖文選單。</p>
+          <button className="btn btn-danger">移除圖文選單</button>
+        </form>
+      )}
+    </div>
+  );
+}

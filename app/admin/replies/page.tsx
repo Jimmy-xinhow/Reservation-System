@@ -21,10 +21,13 @@ export default async function RepliesPage() {
       .order("sort"),
     supabase
       .from("clinic_settings")
-      .select("line_welcome_text, line_fallback_text")
+      .select(
+        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url",
+      )
       .eq("clinic_id", CLINIC_ID)
       .maybeSingle(),
   ]);
+  const s = settings as Record<string, unknown> | null;
 
   return (
     <div className="space-y-6">
@@ -58,6 +61,43 @@ export default async function RepliesPage() {
             className="input"
           />
         </label>
+
+        <div className="rounded-xl border border-slate-200 p-4">
+          <p className="mb-3 text-sm font-medium text-slate-700">主選單卡片按鈕</p>
+          <label className="mb-3 block text-sm">
+            <span className="mb-1 block font-medium text-slate-600">卡片標題(留空用預設)</span>
+            <input name="line_menu_title" defaultValue={(s?.line_menu_title as string) ?? ""} className="input" />
+          </label>
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            {[
+              ["line_menu_btn_booking", "立即預約"],
+              ["line_menu_btn_query", "查詢預約"],
+              ["line_menu_btn_progress", "看診進度"],
+              ["line_menu_btn_info", "診所資訊"],
+            ].map(([name, label]) => (
+              <label key={name} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name={name}
+                  defaultChecked={s?.[name] !== false}
+                  className="h-4 w-4 accent-brand-600"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-600">自訂按鈕文字(選填)</span>
+              <input name="line_menu_link_label" defaultValue={(s?.line_menu_link_label as string) ?? ""} placeholder="例:官方網站" className="input" />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block font-medium text-slate-600">自訂按鈕連結</span>
+              <input name="line_menu_link_url" defaultValue={(s?.line_menu_link_url as string) ?? ""} placeholder="https://..." className="input" />
+            </label>
+          </div>
+        </div>
+
         <button className="btn btn-primary">儲存</button>
       </form>
 

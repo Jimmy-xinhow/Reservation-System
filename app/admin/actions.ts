@@ -4,7 +4,16 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireMember } from "@/lib/admin";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
-import { pushMessages } from "@/lib/line";
+import {
+  pushMessages,
+  createRichMenu,
+  uploadRichMenuImage,
+  setDefaultRichMenu,
+  deleteRichMenu,
+  clearDefaultRichMenu,
+} from "@/lib/line";
+import { LAYOUTS, slotBounds, slotAction, type Layout, type Slot } from "@/lib/richmenu";
+import { headers } from "next/headers";
 
 function str(fd: FormData, k: string): string {
   return (fd.get(k) ?? "").toString().trim();
@@ -669,10 +678,119 @@ export async function updateLineTextsAction(fd: FormData) {
     .update({
       line_welcome_text: str(fd, "line_welcome_text") || null,
       line_fallback_text: str(fd, "line_fallback_text") || null,
+      line_menu_title: str(fd, "line_menu_title") || null,
+      line_menu_btn_booking: bool(fd, "line_menu_btn_booking"),
+      line_menu_btn_query: bool(fd, "line_menu_btn_query"),
+      line_menu_btn_progress: bool(fd, "line_menu_btn_progress"),
+      line_menu_btn_info: bool(fd, "line_menu_btn_info"),
+      line_menu_link_label: str(fd, "line_menu_link_label") || null,
+      line_menu_link_url: str(fd, "line_menu_link_url") || null,
     })
     .eq("clinic_id", CLINIC_ID);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/replies");
+}
+
+// ── LINE 圖文選單 Rich Menu ───────────────────────────────
+export async function saveRichMenuAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const layout = str(fd, "layout") as Layout;
+  if (!LAYOUTS[layout]) throw new Error("版型錯誤");
+  const count = LAYOUTS[layout].slots;
+  const slots: Slot[] = [];
+  for (let i = 0; i < count; i++) {
+    slots.push({
+      label: str(fd, `label_${i}`) || `按鈕${i + 1}`,
+      action: (str(fd, `action_${i}`) || "none") as Slot["action"],
+      value: str(fd, `value_${i}`) || undefined,
+    });
+  }
+  const { error } = await supabase.from("line_richmenu").upsert(
+    {
+      clinic_id: CLINIC_ID,
+      layout,
+      chat_bar_text: str(fd, "chat_bar_text") || "選單",
+      slots,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "clinic_id" },
+  );
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/richmenu");
+}
+
+export async function publishRichMenuAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const { data: cfg } = await supabase
+    .from("line_richmenu")
+    .select("layout, chat_bar_text, slots, published_id")
+    .eq("clinic_id", CLINIC_ID)
+    .maybeSingle();
+  if (!cfg) throw new Error("請先儲存選單設定");
+
+  const layout = cfg.layout as Layout;
+  const spec = LAYOUTS[layout];
+  if (!spec) throw new Error("版型錯誤");
+
+  const file = fd.get("image");
+  if (!(file instanceof File) || file.size === 0) throw new Error("請選擇圖片");
+  if (file.size > 1024 * 1024) throw new Error("圖片需小於 1MB");
+  const contentType = file.type === "image/png" ? "image/png" : "image/jpeg";
+
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const baseUrl = host ? `${proto}://${host}` : "";
+  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+  const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null;
+
+  const bounds = slotBounds(layout);
+  const slots = (cfg.slots as Slot[]) ?? [];
+  const areas = bounds
+    .map((b, i) => {
+      const action = slots[i] ? slotAction(slots[i], liffUrl, baseUrl) : null;
+      return action ? { bounds: b, action } : null;
+    })
+    .filter(Boolean) as { bounds: (typeof bounds)[number]; action: Record<string, unknown> }[];
+  if (areas.length === 0) throw new Error("請至少設定一個有動作的按鈕");
+
+  // 建立新選單 → 上傳圖片 → 設為預設 → 刪除舊選單
+  const newId = await createRichMenu({
+    size: { width: spec.width, height: spec.height },
+    selected: true,
+    name: `clinic-menu-${Date.now() % 100000}`,
+    chatBarText: (cfg.chat_bar_text as string) || "選單",
+    areas,
+  });
+  try {
+    await uploadRichMenuImage(newId, await file.arrayBuffer(), contentType);
+    await setDefaultRichMenu(newId);
+  } catch (e) {
+    await deleteRichMenu(newId);
+    throw e;
+  }
+  const oldId = cfg.published_id as string | null;
+  if (oldId && oldId !== newId) await deleteRichMenu(oldId);
+
+  await supabase
+    .from("line_richmenu")
+    .update({ published_id: newId, updated_at: new Date().toISOString() })
+    .eq("clinic_id", CLINIC_ID);
+  revalidatePath("/admin/richmenu");
+}
+
+export async function unpublishRichMenuAction() {
+  const { supabase } = await requireMember();
+  const { data: cfg } = await supabase
+    .from("line_richmenu")
+    .select("published_id")
+    .eq("clinic_id", CLINIC_ID)
+    .maybeSingle();
+  await clearDefaultRichMenu();
+  const id = cfg?.published_id as string | null;
+  if (id) await deleteRichMenu(id);
+  await supabase.from("line_richmenu").update({ published_id: null }).eq("clinic_id", CLINIC_ID);
+  revalidatePath("/admin/richmenu");
 }
 
 // ── Email 提醒設定(存於 clinic_settings;金鑰留空則沿用舊值)──────

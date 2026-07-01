@@ -165,6 +165,24 @@ create table if not exists line_auto_replies (
 -- 歡迎詞與找不到指令時的預設回覆(存 clinic_settings)
 alter table clinic_settings add column if not exists line_welcome_text text;
 alter table clinic_settings add column if not exists line_fallback_text text;
+-- 主選單卡片自訂
+alter table clinic_settings add column if not exists line_menu_title text;
+alter table clinic_settings add column if not exists line_menu_btn_booking boolean not null default true;
+alter table clinic_settings add column if not exists line_menu_btn_query boolean not null default true;
+alter table clinic_settings add column if not exists line_menu_btn_progress boolean not null default true;
+alter table clinic_settings add column if not exists line_menu_btn_info boolean not null default true;
+alter table clinic_settings add column if not exists line_menu_link_label text;
+alter table clinic_settings add column if not exists line_menu_link_url text;
+
+-- LINE 圖文選單(Rich Menu)設定(每診所一筆)
+create table if not exists line_richmenu (
+  clinic_id uuid primary key references clinics(id) on delete cascade,
+  layout text not null default 'full-3',      -- full-3 / full-6 / compact-2 / compact-3
+  chat_bar_text text not null default '選單',
+  slots jsonb not null default '[]',           -- [{label, action, value}]
+  published_id text,                           -- 已發布的 LINE richMenuId
+  updated_at timestamptz default now()
+);
 
 -- 叫號:每個門診段(doctor+date+session_key)目前看診到第幾號
 -- session_key:號次制=template_id;時間制=該約診所屬門診段的 template/exception id
@@ -445,6 +463,7 @@ alter table clinic_members enable row level security;
 alter table services enable row level security;
 alter table serving_numbers enable row level security;
 alter table line_auto_replies enable row level security;
+alter table line_richmenu enable row level security;
 
 -- authenticated:只能讀寫自己所屬診所的資料。
 -- 一律內聯 auth.uid() 子查詢比對 clinic_members(不要包成 security definer 函式,理由見上方)。
@@ -496,6 +515,11 @@ create policy serving_member on serving_numbers for all to authenticated
 
 drop policy if exists line_replies_member on line_auto_replies;
 create policy line_replies_member on line_auto_replies for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+
+drop policy if exists line_richmenu_member on line_richmenu;
+create policy line_richmenu_member on line_richmenu for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
   with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
 

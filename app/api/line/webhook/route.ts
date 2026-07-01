@@ -54,19 +54,30 @@ export async function POST(req: NextRequest) {
       .order("sort"),
     svc
       .from("clinic_settings")
-      .select("line_welcome_text, line_fallback_text")
+      .select(
+        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url",
+      )
       .eq("clinic_id", CLINIC_ID)
       .maybeSingle(),
   ]);
   const replyRules = (rules ?? []) as { keywords: string; action: string; reply_text: string | null }[];
   const welcomeText = cs?.line_welcome_text || null;
   const fallbackText = cs?.line_fallback_text || null;
+  const menuCfg: MenuConfig = {
+    title: cs?.line_menu_title || null,
+    booking: cs?.line_menu_btn_booking ?? true,
+    query: cs?.line_menu_btn_query ?? true,
+    progress: cs?.line_menu_btn_progress ?? true,
+    info: cs?.line_menu_btn_info ?? true,
+    linkLabel: cs?.line_menu_link_label || null,
+    linkUrl: cs?.line_menu_link_url || null,
+  };
 
   for (const ev of events) {
     if (!ev.replyToken) continue;
     try {
       if (ev.type === "follow") {
-        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText)]);
+        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg)]);
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim();
         // 依後台規則(排序)找第一個命中的關鍵字
@@ -86,7 +97,7 @@ export async function POST(req: NextRequest) {
         } else if (rule?.action === "text" && rule.reply_text) {
           await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }]);
         } else {
-          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText)]);
+          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg)]);
         }
       } else if (ev.type === "postback" && ev.postback?.data) {
         const params = new URLSearchParams(ev.postback.data);
@@ -116,31 +127,64 @@ function liffUrl(): string | null {
 }
 
 
-// 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 三顆按鈕(只顯示文字,不露網址)
-function menuBubble(title: string, body: string, baseUrl: string): LineMessage {
+interface MenuConfig {
+  title: string | null;
+  booking: boolean;
+  query: boolean;
+  progress: boolean;
+  info: boolean;
+  linkLabel: string | null;
+  linkUrl: string | null;
+}
+
+// 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
+function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig): LineMessage {
   const liff = liffUrl();
+  const c = cfg ?? { title: null, booking: true, query: true, progress: true, info: true, linkLabel: null, linkUrl: null };
   const buttons: LineMessage[] = [];
-  buttons.push({
-    type: "button",
-    style: "primary",
-    color: "#2563eb",
-    height: "sm",
-    action: liff
-      ? { type: "uri", label: "立即預約", uri: liff }
-      : { type: "message", label: "立即預約", text: "預約" },
-  });
-  buttons.push({
-    type: "button",
-    style: "secondary",
-    height: "sm",
-    action: { type: "postback", label: "查詢我的預約", data: "action=my", displayText: "查詢我的預約" },
-  });
-  buttons.push({
-    type: "button",
-    style: "secondary",
-    height: "sm",
-    action: { type: "postback", label: "看診進度", data: "action=progress", displayText: "看診進度" },
-  });
+  if (c.booking) {
+    buttons.push({
+      type: "button",
+      style: "primary",
+      color: "#2563eb",
+      height: "sm",
+      action: liff
+        ? { type: "uri", label: "立即預約", uri: liff }
+        : { type: "message", label: "立即預約", text: "預約" },
+    });
+  }
+  if (c.query) {
+    buttons.push({
+      type: "button",
+      style: "secondary",
+      height: "sm",
+      action: { type: "postback", label: "查詢我的預約", data: "action=my", displayText: "查詢我的預約" },
+    });
+  }
+  if (c.progress) {
+    buttons.push({
+      type: "button",
+      style: "secondary",
+      height: "sm",
+      action: { type: "postback", label: "看診進度", data: "action=progress", displayText: "看診進度" },
+    });
+  }
+  if (c.info && baseUrl) {
+    buttons.push({
+      type: "button",
+      style: "link",
+      height: "sm",
+      action: { type: "uri", label: "診所資訊", uri: baseUrl },
+    });
+  }
+  if (c.linkLabel && c.linkUrl) {
+    buttons.push({
+      type: "button",
+      style: "link",
+      height: "sm",
+      action: { type: "uri", label: c.linkLabel, uri: c.linkUrl },
+    });
+  }
   return {
     type: "flex",
     altText: title,
@@ -151,42 +195,26 @@ function menuBubble(title: string, body: string, baseUrl: string): LineMessage {
         layout: "vertical",
         spacing: "md",
         contents: [
-          { type: "text", text: title, weight: "bold", size: "lg", color: "#0d9488" },
+          { type: "text", text: title, weight: "bold", size: "lg", color: "#0d9488", wrap: true },
           { type: "text", text: body, size: "sm", color: "#555555", wrap: true },
         ],
       },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        contents: [
-          ...buttons,
-          ...(baseUrl
-            ? [
-                {
-                  type: "button",
-                  style: "link",
-                  height: "sm",
-                  action: { type: "uri", label: "診所資訊", uri: baseUrl },
-                },
-              ]
-            : []),
-        ],
-      },
+      footer: { type: "box", layout: "vertical", spacing: "sm", contents: buttons },
     },
   };
 }
 
-function welcomeMessage(baseUrl: string, custom?: string | null): LineMessage {
+function welcomeMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig): LineMessage {
   return menuBubble(
-    "歡迎加入慈愛中醫診所 🌿",
+    cfg?.title || "歡迎加入慈愛中醫診所 🌿",
     custom || "您可以在這裡線上預約、查詢或取消看診。請點下方按鈕開始。",
     baseUrl,
+    cfg,
   );
 }
 
-function menuMessage(baseUrl: string, custom?: string | null): LineMessage {
-  return menuBubble("慈愛中醫診所", custom || "請問需要什麼服務?請點下方按鈕。", baseUrl);
+function menuMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig): LineMessage {
+  return menuBubble(cfg?.title || "慈愛中醫診所", custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg);
 }
 
 function bookingPrompt(baseUrl: string): LineMessage {

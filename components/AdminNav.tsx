@@ -14,6 +14,7 @@ const NAV = [
   { href: "/admin/settings", label: "診所設定" },
   { href: "/admin/line", label: "LINE 連線" },
   { href: "/admin/replies", label: "LINE 回覆" },
+  { href: "/admin/richmenu", label: "圖文選單" },
 ];
 
 export function AdminNav() {
