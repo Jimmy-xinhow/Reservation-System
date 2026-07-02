@@ -928,68 +928,73 @@ export async function saveRichMenuAction(fd: FormData) {
     },
     { onConflict: "clinic_id" },
   );
-  if (error) throw new Error(error.message);
-  revalidatePath("/admin/richmenu");
+  redirect(error ? `/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}` : "/admin/richmenu?saved=1");
 }
 
 export async function publishRichMenuAction(fd: FormData) {
   const { supabase } = await requireMember();
-  const { data: cfg } = await supabase
-    .from("line_richmenu")
-    .select("layout, chat_bar_text, slots, published_id")
-    .eq("clinic_id", CLINIC_ID)
-    .maybeSingle();
-  if (!cfg) throw new Error("請先儲存選單設定");
-
-  const layout = cfg.layout as Layout;
-  const spec = LAYOUTS[layout];
-  if (!spec) throw new Error("版型錯誤");
-
-  const file = fd.get("image");
-  if (!(file instanceof File) || file.size === 0) throw new Error("請選擇圖片");
-  if (file.size > 1024 * 1024) throw new Error("圖片需小於 1MB");
-  const contentType = file.type === "image/png" ? "image/png" : "image/jpeg";
-
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  const baseUrl = host ? `${proto}://${host}` : "";
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null;
-
-  const bounds = slotBounds(layout);
-  const slots = (cfg.slots as Slot[]) ?? [];
-  const areas = bounds
-    .map((b, i) => {
-      const action = slots[i] ? slotAction(slots[i], liffUrl, baseUrl) : null;
-      return action ? { bounds: b, action } : null;
-    })
-    .filter(Boolean) as { bounds: (typeof bounds)[number]; action: Record<string, unknown> }[];
-  if (areas.length === 0) throw new Error("請至少設定一個有動作的按鈕");
-
-  // 建立新選單 → 上傳圖片 → 設為預設 → 刪除舊選單
-  const newId = await createRichMenu({
-    size: { width: spec.width, height: spec.height },
-    selected: true,
-    name: `clinic-menu-${Date.now() % 100000}`,
-    chatBarText: (cfg.chat_bar_text as string) || "選單",
-    areas,
-  });
+  let errMsg: string | null = null;
   try {
-    await uploadRichMenuImage(newId, await file.arrayBuffer(), contentType);
-    await setDefaultRichMenu(newId);
-  } catch (e) {
-    await deleteRichMenu(newId);
-    throw e;
-  }
-  const oldId = cfg.published_id as string | null;
-  if (oldId && oldId !== newId) await deleteRichMenu(oldId);
+    const { data: cfg } = await supabase
+      .from("line_richmenu")
+      .select("layout, chat_bar_text, slots, published_id")
+      .eq("clinic_id", CLINIC_ID)
+      .maybeSingle();
+    if (!cfg) throw new Error("請先按「儲存選單設定」再發布");
 
-  await supabase
-    .from("line_richmenu")
-    .update({ published_id: newId, updated_at: new Date().toISOString() })
-    .eq("clinic_id", CLINIC_ID);
-  revalidatePath("/admin/richmenu");
+    const layout = cfg.layout as Layout;
+    const spec = LAYOUTS[layout];
+    if (!spec) throw new Error("版型錯誤");
+
+    const file = fd.get("image");
+    if (!(file instanceof File) || file.size === 0) throw new Error("請選擇圖片");
+    if (file.size > 1024 * 1024) throw new Error("圖片需小於 1MB");
+    const contentType = file.type === "image/png" ? "image/png" : "image/jpeg";
+
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+    const proto = h.get("x-forwarded-proto") ?? "https";
+    const baseUrl = host ? `${proto}://${host}` : "";
+    const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+    const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null;
+
+    const bounds = slotBounds(layout);
+    const slots = (cfg.slots as Slot[]) ?? [];
+    const areas = bounds
+      .map((b, i) => {
+        const action = slots[i] ? slotAction(slots[i], liffUrl, baseUrl) : null;
+        return action ? { bounds: b, action } : null;
+      })
+      .filter(Boolean) as { bounds: (typeof bounds)[number]; action: Record<string, unknown> }[];
+    if (areas.length === 0) throw new Error("請至少設定一個有動作的按鈕");
+
+    // 建立新選單 → 上傳圖片 → 設為預設 → 刪除舊選單
+    const newId = await createRichMenu({
+      size: { width: spec.width, height: spec.height },
+      selected: true,
+      name: `clinic-menu-${Date.now() % 100000}`,
+      chatBarText: (cfg.chat_bar_text as string) || "選單",
+      areas,
+    });
+    try {
+      await uploadRichMenuImage(newId, await file.arrayBuffer(), contentType);
+      await setDefaultRichMenu(newId);
+    } catch (e) {
+      await deleteRichMenu(newId);
+      throw e;
+    }
+    const oldId = cfg.published_id as string | null;
+    if (oldId && oldId !== newId) await deleteRichMenu(oldId);
+
+    await supabase
+      .from("line_richmenu")
+      .update({ published_id: newId, updated_at: new Date().toISOString() })
+      .eq("clinic_id", CLINIC_ID);
+  } catch (e) {
+    errMsg = e instanceof Error ? e.message : "發布失敗";
+  }
+  // redirect 放 try/catch 外;把真正錯誤帶回頁面顯示(正式環境不會顯示 server action 例外訊息)
+  redirect(errMsg ? `/admin/richmenu?err=${encodeURIComponent(errMsg.slice(0, 200))}` : "/admin/richmenu?ok=1");
 }
 
 export async function unpublishRichMenuAction() {

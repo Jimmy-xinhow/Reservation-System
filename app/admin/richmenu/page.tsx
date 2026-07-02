@@ -6,7 +6,12 @@ import RichMenuEditor from "./RichMenuEditor";
 
 export const dynamic = "force-dynamic";
 
-export default async function RichMenuPage() {
+export default async function RichMenuPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ err?: string; ok?: string; saved?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createSupabaseServer();
   const { data } = await supabase
     .from("line_richmenu")
@@ -29,6 +34,16 @@ export default async function RichMenuPage() {
           設定官方帳號聊天室下方的常駐大選單。設定好版型與按鈕、上傳對應尺寸圖片即可發布。
         </p>
       </div>
+
+      {sp.err && (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">發布失敗:{sp.err}</p>
+      )}
+      {sp.ok && (
+        <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">已成功發布圖文選單 ✓</p>
+      )}
+      {sp.saved && (
+        <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">選單設定已儲存 ✓</p>
+      )}
 
       {!lineReady && (
         <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-700">
