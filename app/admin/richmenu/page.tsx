@@ -1,8 +1,9 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { LAYOUTS, type Layout, type Slot } from "@/lib/richmenu";
-import { saveRichMenuAction, publishRichMenuAction, unpublishRichMenuAction } from "../actions";
+import { saveRichMenuAction, unpublishRichMenuAction } from "../actions";
 import RichMenuEditor from "./RichMenuEditor";
+import PublishForm from "./PublishForm";
 
 export const dynamic = "force-dynamic";
 
@@ -67,24 +68,9 @@ export default async function RichMenuPage({
         saveAction={saveRichMenuAction}
       />
 
-      {/* 上傳圖片 + 發布 */}
-      <form action={publishRichMenuAction} className="card space-y-4 p-5">
-        <h2 className="font-semibold text-slate-900">上傳圖片並發布</h2>
-        <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-700">
-          目前版型需要圖片尺寸:<strong>{spec.width} × {spec.height} px</strong>(JPG/PNG,&lt; 1MB)。
-          請先在上方「儲存選單設定」,再上傳圖片發布。
-        </p>
-        <input
-          type="file"
-          name="image"
-          accept="image/png,image/jpeg"
-          required
-          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-white"
-        />
-        <button className="btn btn-primary" disabled={!lineReady}>
-          發布圖文選單
-        </button>
-      </form>
+      {/* 上傳圖片(自動裁尺寸)+ 發布 */}
+      <PublishForm width={spec.width} height={spec.height} disabled={!lineReady} />
+      <p className="-mt-4 text-xs text-slate-400">提醒:請先按上方「儲存選單設定」,再上傳圖片發布。</p>
 
       {publishedId && (
         <form action={unpublishRichMenuAction} className="card p-5">
