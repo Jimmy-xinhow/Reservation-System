@@ -39,19 +39,21 @@ interface BuildCtx {
 type Flex = Record<string, unknown>;
 
 function actionObj(b: MsgButton, ctx: BuildCtx): Flex | null {
+  const lbl = (b.label ?? "").trim();
+  if (!lbl) return null; // Flex 按鈕的文字即 label,空白則不建立此按鈕
   switch (b.action) {
     case "booking":
       return ctx.liffUrl
-        ? { type: "uri", label: b.label, uri: ctx.liffUrl }
-        : { type: "message", label: b.label, text: "預約" };
+        ? { type: "uri", label: lbl, uri: ctx.liffUrl }
+        : { type: "message", label: lbl, text: "預約" };
     case "query":
-      return { type: "message", label: b.label, text: "查詢" };
+      return { type: "message", label: lbl, text: "查詢" };
     case "progress":
-      return { type: "message", label: b.label, text: "進度" };
+      return { type: "message", label: lbl, text: "進度" };
     case "uri":
-      return b.value ? { type: "uri", label: b.label, uri: b.value } : null;
+      return b.value ? { type: "uri", label: lbl, uri: b.value } : null;
     case "text":
-      return b.value ? { type: "message", label: b.label, text: b.value } : null;
+      return b.value ? { type: "message", label: lbl, text: b.value } : null;
     default:
       return null;
   }
@@ -92,7 +94,9 @@ export function buildLineMessage(kind: MsgKind, data: MsgData, ctx: BuildCtx): F
   }
   if (kind === "card") {
     if (!data.card) return null;
-    return { type: "flex", altText: data.card.title || "訊息", contents: cardBubble(data.card, ctx) };
+    const bubble = cardBubble(data.card, ctx);
+    if (!bubble.hero && !bubble.body && !bubble.footer) return null; // 空卡不送
+    return { type: "flex", altText: data.card.title || "訊息", contents: bubble };
   }
   if (kind === "carousel") {
     const cards = (data.cards ?? []).filter((c) => c.imageUrl || c.title || c.text);
@@ -100,7 +104,7 @@ export function buildLineMessage(kind: MsgKind, data: MsgData, ctx: BuildCtx): F
     return {
       type: "flex",
       altText: cards[0]?.title || "訊息",
-      contents: { type: "carousel", contents: cards.map((c) => cardBubble(c, ctx)) },
+      contents: { type: "carousel", contents: cards.slice(0, 12).map((c) => cardBubble(c, ctx)) },
     };
   }
   return null;

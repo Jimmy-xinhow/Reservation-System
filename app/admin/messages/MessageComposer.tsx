@@ -173,6 +173,15 @@ function CardEditor({ card, onChange }: { card: MsgCard; onChange: (c: MsgCard) 
             >
               移除
             </button>
+            {(() => {
+              const noLabel = !b.label.trim();
+              const noValue = (b.action === "uri" || b.action === "text") && !(b.value ?? "").trim();
+              return noLabel || noValue ? (
+                <p className="text-xs text-amber-600 sm:col-span-4">
+                  ⚠ 此按鈕{noLabel ? "缺按鈕文字" : "缺連結/文字內容"},將不會顯示。
+                </p>
+              ) : null;
+            })()}
           </div>
         ))}
         {card.buttons.length < 3 && (
