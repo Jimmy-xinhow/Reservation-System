@@ -913,7 +913,7 @@ export async function saveRichMenuAction(fd: FormData) {
   const slots: Slot[] = [];
   for (let i = 0; i < count; i++) {
     slots.push({
-      label: str(fd, `label_${i}`) || `按鈕${i + 1}`,
+      label: str(fd, `label_${i}`), // 空白就存空白,不自動命名
       action: (str(fd, `action_${i}`) || "none") as Slot["action"],
       value: str(fd, `value_${i}`) || undefined,
     });

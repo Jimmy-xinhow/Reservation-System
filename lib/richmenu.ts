@@ -52,27 +52,27 @@ export function slotBounds(layout: Layout): Bounds[] {
   return out;
 }
 
-/** 把一格的動作轉成 LINE action 物件。 */
+/** 把一格的動作轉成 LINE action 物件。label 空白則省略(LINE 不接受空字串 label)。 */
 export function slotAction(
   slot: Slot,
   liffUrl: string | null,
   baseUrl: string,
 ): Record<string, unknown> | null {
+  const lbl = (slot.label ?? "").trim();
+  const withLabel = (a: Record<string, unknown>) => (lbl ? { ...a, label: lbl } : a);
   switch (slot.action) {
     case "booking":
-      return liffUrl
-        ? { type: "uri", label: slot.label, uri: liffUrl }
-        : { type: "message", label: slot.label, text: "預約" };
+      return withLabel(liffUrl ? { type: "uri", uri: liffUrl } : { type: "message", text: "預約" });
     case "query":
-      return { type: "message", label: slot.label, text: "查詢" };
+      return withLabel({ type: "message", text: "查詢" });
     case "progress":
-      return { type: "message", label: slot.label, text: "進度" };
+      return withLabel({ type: "message", text: "進度" });
     case "info":
-      return baseUrl ? { type: "uri", label: slot.label, uri: baseUrl } : null;
+      return baseUrl ? withLabel({ type: "uri", uri: baseUrl }) : null;
     case "uri":
-      return slot.value ? { type: "uri", label: slot.label, uri: slot.value } : null;
+      return slot.value ? withLabel({ type: "uri", uri: slot.value }) : null;
     case "text":
-      return slot.value ? { type: "message", label: slot.label, text: slot.value } : null;
+      return slot.value ? withLabel({ type: "message", text: slot.value }) : null;
     default:
       return null;
   }

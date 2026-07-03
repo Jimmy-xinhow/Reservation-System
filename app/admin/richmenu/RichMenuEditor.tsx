@@ -66,7 +66,7 @@ export default function RichMenuEditor({
       >
         {slots.map((s, i) => (
           <div key={i} className="flex items-center justify-center rounded bg-white text-center text-xs text-slate-500">
-            {i + 1}. {s.label}
+            {s.label ? s.label : ""}
           </div>
         ))}
       </div>
