@@ -88,7 +88,8 @@ export default async function RichMenuPage({
       {/* ④ 背景圖片(自動裁尺寸)+ 發布 */}
       <PublishForm width={spec.width} height={spec.height} disabled={!lineReady} />
       <p className="-mt-4 text-xs text-slate-400">
-        操作順序:①②③ 設好後按「儲存選單設定」→ 再到 ④ 上傳背景圖並發布。
+        首次:①②③ 設好 → 按「儲存選單設定」→ 到 ④ 上傳背景圖並發布。
+        之後只要改動作/格數,按「儲存選單設定」就會用現有背景圖**自動更新**已發布的選單(要換圖才需重新到 ④ 上傳)。
       </p>
 
       {publishedId && (

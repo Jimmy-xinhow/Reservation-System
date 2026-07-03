@@ -12,6 +12,7 @@ import {
   setDefaultRichMenu,
   deleteRichMenu,
   clearDefaultRichMenu,
+  getRichMenuImage,
 } from "@/lib/line";
 import { LAYOUTS, slotBounds, slotAction, type Layout, type Slot } from "@/lib/richmenu";
 import { getQueueForDate } from "@/lib/queue";
@@ -905,6 +906,51 @@ export async function deleteMessageAction(fd: FormData) {
 }
 
 // ── LINE 圖文選單 Rich Menu ───────────────────────────────
+// 依 slots 建立新 rich menu、上傳圖、設為預設、刪舊。回傳新 id。
+async function buildAndPublishRichMenu(opts: {
+  layout: Layout;
+  slots: Slot[];
+  chatBarText: string;
+  imageBytes: ArrayBuffer;
+  contentType: string;
+  oldId: string | null;
+  baseUrl: string;
+}): Promise<string> {
+  const spec = LAYOUTS[opts.layout];
+  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+  const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null;
+  const bounds = slotBounds(opts.layout);
+  const areas = bounds
+    .map((b, i) => {
+      const action = opts.slots[i] ? slotAction(opts.slots[i], liffUrl, opts.baseUrl) : null;
+      return action ? { bounds: b, action } : null;
+    })
+    .filter(Boolean) as { bounds: (typeof bounds)[number]; action: Record<string, unknown> }[];
+  if (areas.length === 0) throw new Error("請至少設定一個有動作的格子");
+  const newId = await createRichMenu({
+    size: { width: spec.width, height: spec.height },
+    selected: true,
+    name: `clinic-menu-${Date.now() % 100000}`,
+    chatBarText: opts.chatBarText || "選單",
+    areas,
+  });
+  try {
+    await uploadRichMenuImage(newId, opts.imageBytes, opts.contentType);
+    await setDefaultRichMenu(newId);
+  } catch (e) {
+    await deleteRichMenu(newId);
+    throw e;
+  }
+  if (opts.oldId && opts.oldId !== newId) await deleteRichMenu(opts.oldId);
+  return newId;
+}
+
+function reqBaseUrl(h: Headers): string {
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  return host ? `${proto}://${host}` : "";
+}
+
 export async function saveRichMenuAction(fd: FormData) {
   const { supabase } = await requireMember();
   const layout = str(fd, "layout") as Layout;
@@ -913,22 +959,53 @@ export async function saveRichMenuAction(fd: FormData) {
   const slots: Slot[] = [];
   for (let i = 0; i < count; i++) {
     slots.push({
-      label: str(fd, `label_${i}`), // 空白就存空白,不自動命名
+      label: str(fd, `label_${i}`),
       action: (str(fd, `action_${i}`) || "none") as Slot["action"],
       value: str(fd, `value_${i}`) || undefined,
     });
   }
+  const chatBarText = str(fd, "chat_bar_text") || "選單";
   const { error } = await supabase.from("line_richmenu").upsert(
-    {
-      clinic_id: CLINIC_ID,
-      layout,
-      chat_bar_text: str(fd, "chat_bar_text") || "選單",
-      slots,
-      updated_at: new Date().toISOString(),
-    },
+    { clinic_id: CLINIC_ID, layout, chat_bar_text: chatBarText, slots, updated_at: new Date().toISOString() },
     { onConflict: "clinic_id" },
   );
-  redirect(error ? `/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}` : "/admin/richmenu?saved=1");
+  if (error) redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
+
+  // 若已發布過,用「現有背景圖」立即同步更新選單(動作/格數變更馬上生效,不必重傳圖)
+  let syncErr: string | null = null;
+  try {
+    const { data: cfg } = await supabase
+      .from("line_richmenu")
+      .select("published_id")
+      .eq("clinic_id", CLINIC_ID)
+      .maybeSingle();
+    const oldId = (cfg?.published_id as string | null) ?? null;
+    if (oldId) {
+      const img = await getRichMenuImage(oldId);
+      if (img) {
+        const newId = await buildAndPublishRichMenu({
+          layout,
+          slots,
+          chatBarText,
+          imageBytes: img.bytes,
+          contentType: img.contentType,
+          oldId,
+          baseUrl: reqBaseUrl(await headers()),
+        });
+        await supabase
+          .from("line_richmenu")
+          .update({ published_id: newId, updated_at: new Date().toISOString() })
+          .eq("clinic_id", CLINIC_ID);
+      }
+    }
+  } catch (e) {
+    syncErr = e instanceof Error ? e.message : "更新選單失敗";
+  }
+  redirect(
+    syncErr
+      ? `/admin/richmenu?err=${encodeURIComponent(syncErr.slice(0, 200))}`
+      : "/admin/richmenu?saved=1",
+  );
 }
 
 export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
@@ -951,40 +1028,15 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
     if (file.size > 1024 * 1024) throw new Error("圖片需小於 1MB");
     const contentType = file.type === "image/png" ? "image/png" : "image/jpeg";
 
-    const h = await headers();
-    const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
-    const proto = h.get("x-forwarded-proto") ?? "https";
-    const baseUrl = host ? `${proto}://${host}` : "";
-    const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-    const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null;
-
-    const bounds = slotBounds(layout);
-    const slots = (cfg.slots as Slot[]) ?? [];
-    const areas = bounds
-      .map((b, i) => {
-        const action = slots[i] ? slotAction(slots[i], liffUrl, baseUrl) : null;
-        return action ? { bounds: b, action } : null;
-      })
-      .filter(Boolean) as { bounds: (typeof bounds)[number]; action: Record<string, unknown> }[];
-    if (areas.length === 0) throw new Error("請至少設定一個有動作的按鈕");
-
-    // 建立新選單 → 上傳圖片 → 設為預設 → 刪除舊選單
-    const newId = await createRichMenu({
-      size: { width: spec.width, height: spec.height },
-      selected: true,
-      name: `clinic-menu-${Date.now() % 100000}`,
+    const newId = await buildAndPublishRichMenu({
+      layout,
+      slots: (cfg.slots as Slot[]) ?? [],
       chatBarText: (cfg.chat_bar_text as string) || "選單",
-      areas,
+      imageBytes: await file.arrayBuffer(),
+      contentType,
+      oldId: (cfg.published_id as string | null) ?? null,
+      baseUrl: reqBaseUrl(await headers()),
     });
-    try {
-      await uploadRichMenuImage(newId, await file.arrayBuffer(), contentType);
-      await setDefaultRichMenu(newId);
-    } catch (e) {
-      await deleteRichMenu(newId);
-      throw e;
-    }
-    const oldId = cfg.published_id as string | null;
-    if (oldId && oldId !== newId) await deleteRichMenu(oldId);
 
     await supabase
       .from("line_richmenu")
