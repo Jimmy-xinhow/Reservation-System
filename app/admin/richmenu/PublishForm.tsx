@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { publishRichMenuAction } from "../actions";
 
 // 上傳前用 canvas 自動把圖片裁成版型要求的精確尺寸(cover,置中),壓到 <1MB。
@@ -13,6 +14,7 @@ export default function PublishForm({
   height: number;
   disabled?: boolean;
 }) {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,7 +74,14 @@ export default function PublishForm({
       const blob = await resizeToBlob(file);
       const fd = new FormData();
       fd.append("image", new File([blob], "menu.jpg", { type: "image/jpeg" }));
-      await publishRichMenuAction(fd); // 成功/失敗都會 redirect 回本頁顯示結果
+      const res = await publishRichMenuAction(fd);
+      if (res.ok) {
+        router.push("/admin/richmenu?ok=1");
+        router.refresh();
+      } else {
+        setErr(res.error ?? "發布失敗");
+        setBusy(false);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "發布失敗");
       setBusy(false);

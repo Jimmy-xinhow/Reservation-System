@@ -931,7 +931,7 @@ export async function saveRichMenuAction(fd: FormData) {
   redirect(error ? `/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}` : "/admin/richmenu?saved=1");
 }
 
-export async function publishRichMenuAction(fd: FormData) {
+export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
   const { supabase } = await requireMember();
   let errMsg: string | null = null;
   try {
@@ -993,8 +993,9 @@ export async function publishRichMenuAction(fd: FormData) {
   } catch (e) {
     errMsg = e instanceof Error ? e.message : "發布失敗";
   }
-  // redirect 放 try/catch 外;把真正錯誤帶回頁面顯示(正式環境不會顯示 server action 例外訊息)
-  redirect(errMsg ? `/admin/richmenu?err=${encodeURIComponent(errMsg.slice(0, 200))}` : "/admin/richmenu?ok=1");
+  revalidatePath("/admin/richmenu");
+  // 回傳結果(此 action 由 client 端程式呼叫,不能用 redirect,否則會丟出 NEXT_REDIRECT)
+  return errMsg ? { ok: false, error: errMsg } : { ok: true };
 }
 
 export async function unpublishRichMenuAction() {
