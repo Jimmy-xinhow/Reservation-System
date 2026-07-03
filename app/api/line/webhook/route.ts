@@ -119,9 +119,20 @@ export async function POST(req: NextRequest) {
         } else if (action === "booking") {
           await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
         } else if (action === "msg") {
-          const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl);
-          if (msg) await replyMessages(ev.replyToken, [msg]);
-          else await safeReply(ev.replyToken, "此訊息不存在或已刪除");
+          try {
+            const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl);
+            if (msg) await replyMessages(ev.replyToken, [msg]);
+            else
+              await safeReply(
+                ev.replyToken,
+                "找不到此訊息素材或內容為空(請確認素材有填圖片、標題或文字)。",
+              );
+          } catch (e) {
+            await safeReply(
+              ev.replyToken,
+              "訊息回覆失敗:" + (e instanceof Error ? e.message.slice(0, 300) : ""),
+            );
+          }
         } else if (action === "confirm" || action === "cancel") {
           await handleStatusPostback(ev.replyToken, action, params.get("id"), svc);
         } else {
