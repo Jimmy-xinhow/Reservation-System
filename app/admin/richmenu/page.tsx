@@ -14,11 +14,15 @@ export default async function RichMenuPage({
 }) {
   const sp = await searchParams;
   const supabase = await createSupabaseServer();
-  const { data } = await supabase
-    .from("line_richmenu")
-    .select("layout, chat_bar_text, slots, published_id")
-    .eq("clinic_id", CLINIC_ID)
-    .maybeSingle();
+  const [{ data }, { data: msgs }] = await Promise.all([
+    supabase
+      .from("line_richmenu")
+      .select("layout, chat_bar_text, slots, published_id")
+      .eq("clinic_id", CLINIC_ID)
+      .maybeSingle(),
+    supabase.from("line_messages").select("id, name").eq("clinic_id", CLINIC_ID).order("created_at"),
+  ]);
+  const messages = (msgs ?? []) as { id: string; name: string }[];
 
   const layout = (data?.layout as Layout) ?? "full-3";
   const chatBar = (data?.chat_bar_text as string) ?? "選單";
@@ -77,6 +81,7 @@ export default async function RichMenuPage({
         initialLayout={layout}
         initialChatBar={chatBar}
         initialSlots={slots}
+        messages={messages}
         saveAction={saveRichMenuAction}
       />
 

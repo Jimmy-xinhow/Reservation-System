@@ -20,8 +20,8 @@ export const LAYOUTS: Record<Layout, LayoutSpec> = {
 
 export interface Slot {
   label: string;
-  action: "booking" | "query" | "progress" | "info" | "uri" | "text" | "none";
-  value?: string; // uri/text 用
+  action: "booking" | "query" | "progress" | "info" | "uri" | "message" | "none";
+  value?: string; // uri=網址;message=訊息素材 id
 }
 
 export interface Bounds {
@@ -60,19 +60,25 @@ export function slotAction(
 ): Record<string, unknown> | null {
   const lbl = (slot.label ?? "").trim();
   const withLabel = (a: Record<string, unknown>) => (lbl ? { ...a, label: lbl } : a);
+  // 內建動作改用 postback:點了由 webhook 直接回覆,不需另設關鍵字規則
   switch (slot.action) {
     case "booking":
-      return withLabel(liffUrl ? { type: "uri", uri: liffUrl } : { type: "message", text: "預約" });
+      return withLabel(
+        liffUrl
+          ? { type: "uri", uri: liffUrl }
+          : { type: "postback", data: "action=booking", displayText: "預約" },
+      );
     case "query":
-      return withLabel({ type: "message", text: "查詢" });
+      return withLabel({ type: "postback", data: "action=my", displayText: "查詢預約" });
     case "progress":
-      return withLabel({ type: "message", text: "進度" });
+      return withLabel({ type: "postback", data: "action=progress", displayText: "看診進度" });
     case "info":
       return baseUrl ? withLabel({ type: "uri", uri: baseUrl }) : null;
     case "uri":
       return slot.value ? withLabel({ type: "uri", uri: slot.value }) : null;
-    case "text":
-      return slot.value ? withLabel({ type: "message", text: slot.value }) : null;
+    case "message":
+      // 值 = 訊息素材 id;點了直接回覆該訊息
+      return slot.value ? withLabel({ type: "postback", data: `action=msg&id=${slot.value}` }) : null;
     default:
       return null;
   }
@@ -84,6 +90,6 @@ export const ACTION_OPTIONS: { value: Slot["action"]; label: string }[] = [
   { value: "progress", label: "看診進度" },
   { value: "info", label: "診所資訊" },
   { value: "uri", label: "自訂連結" },
-  { value: "text", label: "送出文字" },
+  { value: "message", label: "回覆訊息素材" },
   { value: "none", label: "(不設定)" },
 ];

@@ -116,6 +116,12 @@ export async function POST(req: NextRequest) {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
         } else if (action === "progress") {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, baseUrl);
+        } else if (action === "booking") {
+          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
+        } else if (action === "msg") {
+          const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl);
+          if (msg) await replyMessages(ev.replyToken, [msg]);
+          else await safeReply(ev.replyToken, "此訊息不存在或已刪除");
         } else if (action === "confirm" || action === "cancel") {
           await handleStatusPostback(ev.replyToken, action, params.get("id"), svc);
         } else {

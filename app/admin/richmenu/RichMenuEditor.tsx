@@ -9,11 +9,13 @@ export default function RichMenuEditor({
   initialLayout,
   initialChatBar,
   initialSlots,
+  messages,
   saveAction,
 }: {
   initialLayout: Layout;
   initialChatBar: string;
   initialSlots: Slot[];
+  messages: { id: string; name: string }[];
   saveAction: ServerAction;
 }) {
   const [layout, setLayout] = useState<Layout>(initialLayout);
@@ -96,16 +98,39 @@ export default function RichMenuEditor({
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-slate-500">
-                  {s.action === "uri" ? "連結網址" : s.action === "text" ? "送出的文字" : "(此動作免填)"}
+                  {s.action === "uri" ? "連結網址" : s.action === "message" ? "選擇訊息素材" : "(此動作免填)"}
                 </span>
-                <input
-                  name={`value_${i}`}
-                  value={s.value ?? ""}
-                  onChange={(e) => setSlot(i, { value: e.target.value })}
-                  disabled={s.action !== "uri" && s.action !== "text"}
-                  placeholder={s.action === "uri" ? "https://..." : ""}
-                  className="input disabled:bg-slate-50"
-                />
+                {s.action === "message" ? (
+                  <>
+                    <select
+                      name={`value_${i}`}
+                      value={s.value ?? ""}
+                      onChange={(e) => setSlot(i, { value: e.target.value })}
+                      className="input"
+                    >
+                      <option value="">請選擇</option>
+                      {messages.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                    {messages.length === 0 && (
+                      <span className="mt-1 block text-xs text-amber-600">
+                        尚無訊息素材,請先到「訊息素材」建立。
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <input
+                    name={`value_${i}`}
+                    value={s.value ?? ""}
+                    onChange={(e) => setSlot(i, { value: e.target.value })}
+                    disabled={s.action !== "uri"}
+                    placeholder={s.action === "uri" ? "https://..." : ""}
+                    className="input disabled:bg-slate-50"
+                  />
+                )}
               </label>
             </div>
           </div>
