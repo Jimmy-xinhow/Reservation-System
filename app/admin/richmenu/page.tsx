@@ -85,9 +85,11 @@ export default async function RichMenuPage({
         saveAction={saveRichMenuAction}
       />
 
-      {/* 上傳圖片(自動裁尺寸)+ 發布 */}
+      {/* ④ 背景圖片(自動裁尺寸)+ 發布 */}
       <PublishForm width={spec.width} height={spec.height} disabled={!lineReady} />
-      <p className="-mt-4 text-xs text-slate-400">提醒:請先按上方「儲存選單設定」,再上傳圖片發布。</p>
+      <p className="-mt-4 text-xs text-slate-400">
+        操作順序:①②③ 設好後按「儲存選單設定」→ 再到 ④ 上傳背景圖並發布。
+      </p>
 
       {publishedId && (
         <form action={unpublishRichMenuAction} className="card p-5">

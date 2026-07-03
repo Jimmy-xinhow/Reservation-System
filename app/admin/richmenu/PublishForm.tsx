@@ -90,7 +90,7 @@ export default function PublishForm({
 
   return (
     <form onSubmit={submit} className="card space-y-4 p-5">
-      <h2 className="font-semibold text-slate-900">上傳圖片並發布</h2>
+      <h3 className="font-semibold text-slate-900">④ 背景圖片與發布</h3>
       <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-700">
         系統會自動把圖片裁成 <strong>{width} × {height} px</strong>(等比填滿、置中裁切)並壓縮,
         你不必自己調尺寸;建議上傳解析度足夠、比例接近的圖較不失真。
