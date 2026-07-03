@@ -61,6 +61,18 @@ export default async function RichMenuPage({
         )}
       </div>
 
+      {publishedId && (
+        <div className="card p-4">
+          <div className="mb-2 text-sm font-medium text-slate-600">目前已發布的選單圖</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/admin/richmenu-image?v=${encodeURIComponent(publishedId)}`}
+            alt="已發布的圖文選單"
+            className="w-full max-w-xl rounded-lg border border-slate-200"
+          />
+        </div>
+      )}
+
       <RichMenuEditor
         initialLayout={layout}
         initialChatBar={chatBar}

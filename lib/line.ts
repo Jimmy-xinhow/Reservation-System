@@ -127,6 +127,18 @@ export async function uploadRichMenuImage(
   if (!res.ok) throw new Error(`上傳圖片失敗 (${res.status}): ${await res.text().catch(() => "")}`);
 }
 
+/** 取得已上傳的 rich menu 圖片內容(供後台預覽)。 */
+export async function getRichMenuImage(
+  richMenuId: string,
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+  const res = await fetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
+    headers: { Authorization: `Bearer ${accessToken()}` },
+  });
+  if (!res.ok) return null;
+  const contentType = res.headers.get("content-type") || "image/jpeg";
+  return { bytes: await res.arrayBuffer(), contentType };
+}
+
 /** 設為所有使用者的預設 rich menu。 */
 export async function setDefaultRichMenu(richMenuId: string): Promise<void> {
   const res = await fetch(`${LINE_API}/user/all/richmenu/${richMenuId}`, {
