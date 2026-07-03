@@ -65,8 +65,8 @@ export default function RichMenuEditor({
         }}
       >
         {slots.map((s, i) => (
-          <div key={i} className="flex items-center justify-center rounded bg-white text-center text-xs text-slate-500">
-            {s.label ? s.label : ""}
+          <div key={i} className="flex items-center justify-center rounded bg-white px-1 text-center text-xs text-slate-500">
+            {ACTION_OPTIONS.find((o) => o.value === s.action)?.label ?? "(未設定)"}
           </div>
         ))}
       </div>
@@ -75,17 +75,10 @@ export default function RichMenuEditor({
       <div className="space-y-3">
         {slots.map((s, i) => (
           <div key={i} className="rounded-xl border border-slate-200 p-3">
-            <div className="mb-2 text-sm font-medium text-slate-700">按鈕 {i + 1}</div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <label className="text-sm">
-                <span className="mb-1 block text-slate-500">顯示文字</span>
-                <input
-                  name={`label_${i}`}
-                  value={s.label}
-                  onChange={(e) => setSlot(i, { label: e.target.value })}
-                  className="input"
-                />
-              </label>
+            <div className="mb-2 text-sm font-medium text-slate-700">
+              第 {i + 1} 格<span className="ml-2 font-normal text-slate-400">(位置對應上方示意圖)</span>
+            </div>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="text-sm">
                 <span className="mb-1 block text-slate-500">動作</span>
                 <select
