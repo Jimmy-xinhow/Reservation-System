@@ -141,6 +141,17 @@ function CardEditor({ card, onChange }: { card: MsgCard; onChange: (c: MsgCard) 
         <span className="mb-1 block font-medium text-slate-600">內文</span>
         <textarea rows={2} value={card.text ?? ""} onChange={(e) => onChange({ ...card, text: e.target.value })} className="input" />
       </label>
+      <label className="block text-sm">
+        <span className="mb-1 block font-medium text-slate-600">
+          整張卡片點擊開啟(選填網址)
+        </span>
+        <input
+          value={card.linkUrl ?? ""}
+          onChange={(e) => onChange({ ...card, linkUrl: e.target.value })}
+          placeholder="https://…(設了之後點卡片圖片/內文就會開此頁)"
+          className="input"
+        />
+      </label>
 
       <div className="space-y-2">
         <span className="text-sm font-medium text-slate-600">按鈕</span>

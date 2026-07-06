@@ -12,6 +12,7 @@ export interface MsgCard {
   imageUrl?: string;
   title?: string;
   text?: string;
+  linkUrl?: string; // 設了則「整張卡片(圖+內文)點擊」會開啟此網址
   buttons: MsgButton[];
 }
 export interface MsgData {
@@ -62,6 +63,9 @@ function actionObj(b: MsgButton, ctx: BuildCtx): Flex | null {
 
 function cardBubble(c: MsgCard, ctx: BuildCtx): Flex {
   const bubble: Flex = { type: "bubble", size: "kilo" };
+  const tapAction = (c.linkUrl ?? "").trim()
+    ? { type: "uri", uri: (c.linkUrl ?? "").trim() }
+    : null;
   if (c.imageUrl) {
     bubble.hero = {
       type: "image",
@@ -69,13 +73,20 @@ function cardBubble(c: MsgCard, ctx: BuildCtx): Flex {
       size: "full",
       aspectRatio: "20:13",
       aspectMode: "cover",
+      ...(tapAction ? { action: tapAction } : {}),
     };
   }
   const body: Flex[] = [];
   if (c.title) body.push({ type: "text", text: c.title, weight: "bold", size: "md", wrap: true });
   if (c.text) body.push({ type: "text", text: c.text, size: "sm", color: "#555555", wrap: true, margin: "sm" });
   if (body.length) {
-    bubble.body = { type: "box", layout: "vertical", spacing: "sm", contents: body };
+    bubble.body = {
+      type: "box",
+      layout: "vertical",
+      spacing: "sm",
+      contents: body,
+      ...(tapAction ? { action: tapAction } : {}),
+    };
   }
   const btns = (c.buttons ?? [])
     .map((b) => actionObj(b, ctx))
