@@ -41,15 +41,16 @@ type Flex = Record<string, unknown>;
 function actionObj(b: MsgButton, ctx: BuildCtx): Flex | null {
   const lbl = (b.label ?? "").trim();
   if (!lbl) return null; // Flex 按鈕的文字即 label,空白則不建立此按鈕
+  // 內建動作用 uri/postback,點了直接生效,不需另設關鍵字規則
   switch (b.action) {
     case "booking":
       return ctx.liffUrl
         ? { type: "uri", label: lbl, uri: ctx.liffUrl }
-        : { type: "message", label: lbl, text: "預約" };
+        : { type: "postback", label: lbl, data: "action=booking", displayText: "預約" };
     case "query":
-      return { type: "message", label: lbl, text: "查詢" };
+      return { type: "postback", label: lbl, data: "action=my", displayText: "查詢預約" };
     case "progress":
-      return { type: "message", label: lbl, text: "進度" };
+      return { type: "postback", label: lbl, data: "action=progress", displayText: "看診進度" };
     case "uri":
       return b.value ? { type: "uri", label: lbl, uri: b.value } : null;
     case "text":
