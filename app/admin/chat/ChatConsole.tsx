@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { linkify } from "@/lib/linkify";
 
 export interface ChatThread {
   lineUserId: string;
@@ -199,7 +200,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
                             : "rounded-bl-sm bg-white text-slate-800 shadow-sm"
                         }`}
                       >
-                        {m.body}
+                        {linkify(m.body)}
                       </div>
                       <span className="mt-0.5 px-1 text-[10px] text-slate-400">{fmtTime(m.created_at)}</span>
                     </div>

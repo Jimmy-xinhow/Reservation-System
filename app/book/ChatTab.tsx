@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { linkify } from "@/lib/linkify";
 
 interface ChatMsg {
   id: string;
@@ -101,7 +102,7 @@ export default function ChatTab({ idToken }: { idToken: string | null }) {
                         : "rounded-bl-sm bg-white text-slate-800 shadow-sm"
                     }`}
                   >
-                    {m.body}
+                    {linkify(m.body)}
                   </div>
                   <span className="mt-0.5 px-1 text-[10px] text-slate-400">
                     {mine ? "" : "櫃檯 · "}
