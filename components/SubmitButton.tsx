@@ -1,6 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 /**
@@ -18,6 +19,7 @@ export function SubmitButton({
   ...rest
 }: ComponentProps<"button"> & { successText?: string }) {
   const { pending } = useFormStatus();
+  const router = useRouter();
   const [done, setDone] = useState(false);
   const wasPending = useRef(false);
 
@@ -29,10 +31,12 @@ export function SubmitButton({
       // 剛從「處理中」結束且仍留在此頁 → 視為成功
       wasPending.current = false;
       setDone(true);
+      // 強制重抓當前頁的 server 內容,讓畫面立即反映剛存的資料(免手動重整)
+      router.refresh();
       const t = setTimeout(() => setDone(false), 2000);
       return () => clearTimeout(t);
     }
-  }, [pending]);
+  }, [pending, router]);
 
   return (
     <button
