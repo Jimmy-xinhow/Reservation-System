@@ -34,7 +34,10 @@ const GROUPS: Group[] = [
   },
   {
     label: "病患",
-    items: [{ href: "/admin/patients", label: "病患查詢" }],
+    items: [
+      { href: "/admin/patients", label: "病患查詢" },
+      { href: "/admin/chat", label: "線上客服" },
+    ],
   },
   {
     label: "LINE",

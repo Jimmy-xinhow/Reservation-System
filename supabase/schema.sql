@@ -597,3 +597,23 @@ grant execute on function book_time_slot(uuid,uuid,uuid,timestamptz,text,boolean
 grant execute on function book_number(uuid,uuid,uuid,uuid,date,text,boolean) to service_role;
 
 -- 後台改期需取消舊約再以 RPC 建新約;取消只改 status(不 DELETE),走一般 update policy。
+
+-- ──────────────────────────────────────────────────────────────────────────
+-- 系統內真人客服聊天(見 supabase/migration_chat.sql)。以 line_user_id 為對話串。
+-- ──────────────────────────────────────────────────────────────────────────
+create table if not exists chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  line_user_id text not null,
+  sender text not null check (sender in ('patient','staff')),
+  body text not null,
+  read_by_staff boolean not null default false,
+  read_by_patient boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_messages_thread_idx on chat_messages (clinic_id, line_user_id, created_at);
+alter table chat_messages enable row level security;
+drop policy if exists chat_messages_member on chat_messages;
+create policy chat_messages_member on chat_messages for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));

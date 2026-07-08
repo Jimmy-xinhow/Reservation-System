@@ -5,6 +5,7 @@ import { useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { Brand } from "@/components/Brand";
 import { googleCalendarUrl, type CalEvent } from "@/lib/calendar";
+import ChatTab from "./ChatTab";
 
 interface Doctor {
   id: string;
@@ -103,7 +104,14 @@ export default function BookPage() {
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [result, setResult] = useState<ReserveResult | null>(null);
 
-  const [tab, setTab] = useState<"book" | "my">("book");
+  const [tab, setTab] = useState<"book" | "my" | "chat">("book");
+
+  // 深連結:圖文選單可用 ...?tab=chat 直接開客服分頁
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "chat" || t === "my") setTab(t);
+  }, []);
 
   useEffect(() => {
     api<Config>("/api/booking/config")
@@ -317,17 +325,22 @@ export default function BookPage() {
 
   return (
     <Shell>
-      {/* 分頁:預約 / 我的預約 */}
-      <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1">
+      {/* 分頁:預約 / 我的預約 / 線上客服 */}
+      <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
         <TabButton active={tab === "book"} onClick={() => setTab("book")}>
           預約看診
         </TabButton>
         <TabButton active={tab === "my"} onClick={() => setTab("my")}>
           我的預約
         </TabButton>
+        <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
+          線上客服
+        </TabButton>
       </div>
 
-      {tab === "my" ? (
+      {tab === "chat" ? (
+        <ChatTab idToken={idToken} />
+      ) : tab === "my" ? (
         <MyAppointments idToken={idToken} mode={config.booking_mode} />
       ) : bound === null ? (
         <div className="card p-6 text-center text-sm text-slate-400">確認身分中…</div>
