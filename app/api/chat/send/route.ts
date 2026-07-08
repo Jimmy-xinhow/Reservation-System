@@ -39,6 +39,15 @@ export async function POST(req: NextRequest) {
 
     const svc = createServiceClient();
 
+    // 黑名單:被封鎖者訊息一律靜默丟棄(不存、不回,對方無從得知被封,避免激怒)
+    const { data: blk } = await svc
+      .from("chat_blocks")
+      .select("line_user_id")
+      .eq("clinic_id", CLINIC_ID)
+      .eq("line_user_id", lineUserId)
+      .maybeSingle();
+    if (blk) return ok({ sent: true });
+
     // 非看診時間:先看最後一則,避免連續訊息重複貼同一句自動回覆
     const open = await isClinicOpenNow(svc, CLINIC_ID);
     let lastBody: string | null = null;

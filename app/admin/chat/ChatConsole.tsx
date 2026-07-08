@@ -10,6 +10,7 @@ export interface ChatThread {
   lastAt: string;
   lastSender: "patient" | "staff";
   unread: number;
+  blocked: boolean;
 }
 interface ChatMsg {
   id: string;
@@ -128,6 +129,26 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
     setThreads((ts) => ts.map((t) => (t.lineUserId === uid ? { ...t, unread: 0 } : t)));
   }
 
+  async function toggleBlock(uid: string, block: boolean) {
+    if (block && !confirm("封鎖後,對方在客服送出的訊息將被忽略(對方不會收到提示)。確定封鎖?")) return;
+    setErr(null);
+    // 樂觀更新
+    setThreads((ts) => ts.map((t) => (t.lineUserId === uid ? { ...t, blocked: block } : t)));
+    try {
+      const res = await fetch("/api/admin/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: block ? "block" : "unblock", lineUserId: uid }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string } | null;
+      if (!json?.ok) throw new Error(json?.error ?? "操作失敗");
+      refreshThreads();
+    } catch (e) {
+      setThreads((ts) => ts.map((t) => (t.lineUserId === uid ? { ...t, blocked: !block } : t)));
+      setErr(e instanceof Error ? e.message : "操作失敗");
+    }
+  }
+
   const activeThread = threads.find((t) => t.lineUserId === active) ?? null;
 
   return (
@@ -151,6 +172,11 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
                     <span className="truncate font-medium text-slate-800">
                       {t.name ?? "未建檔病患"}
                     </span>
+                    {t.blocked && (
+                      <span className="shrink-0 rounded bg-slate-200 px-1.5 text-[10px] font-medium text-slate-500">
+                        已封鎖
+                      </span>
+                    )}
                     {t.unread > 0 && (
                       <span className="ml-auto shrink-0 rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
                         {t.unread}
@@ -181,10 +207,24 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
           </div>
         ) : (
           <>
-            <div className="border-b border-slate-100 px-4 py-3">
+            <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
               <span className="font-semibold text-slate-800">
                 {activeThread.name ?? "未建檔病患"}
               </span>
+              {activeThread.blocked && (
+                <span className="rounded bg-slate-200 px-1.5 text-[10px] font-medium text-slate-500">
+                  已封鎖
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => toggleBlock(activeThread.lineUserId, !activeThread.blocked)}
+                className={`ml-auto text-xs font-medium hover:underline ${
+                  activeThread.blocked ? "text-brand-600" : "text-red-600"
+                }`}
+              >
+                {activeThread.blocked ? "解除封鎖" : "封鎖"}
+              </button>
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4" style={{ height: "50vh" }}>

@@ -8,6 +8,7 @@ export interface ChatThread {
   lastAt: string;
   lastSender: "patient" | "staff";
   unread: number;
+  blocked: boolean;
 }
 export interface ChatMsg {
   id: string;
@@ -42,6 +43,7 @@ export async function buildThreads(
         lastAt: m.created_at as string,
         lastSender: m.sender as "patient" | "staff",
         unread: 0,
+        blocked: false,
       };
       map.set(uid, t);
     }
@@ -50,18 +52,58 @@ export async function buildThreads(
 
   const uids = [...map.keys()];
   if (uids.length > 0) {
-    const { data: pats } = await supabase
-      .from("patients")
-      .select("line_user_id, name")
-      .eq("clinic_id", clinicId)
-      .in("line_user_id", uids);
+    const [{ data: pats }, blocked] = await Promise.all([
+      supabase
+        .from("patients")
+        .select("line_user_id, name")
+        .eq("clinic_id", clinicId)
+        .in("line_user_id", uids),
+      getBlockedSet(supabase, clinicId),
+    ]);
     for (const p of pats ?? []) {
       const t = map.get(p.line_user_id as string);
       if (t && !t.name) t.name = p.name as string;
     }
+    for (const t of map.values()) if (blocked.has(t.lineUserId)) t.blocked = true;
   }
 
   return [...map.values()].sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1));
+}
+
+/** 本診所客服黑名單的 line_user_id 集合(資料表未建時回空集)。 */
+export async function getBlockedSet(
+  supabase: SupabaseClient,
+  clinicId: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("chat_blocks")
+    .select("line_user_id")
+    .eq("clinic_id", clinicId);
+  if (error) return new Set();
+  return new Set((data ?? []).map((r) => r.line_user_id as string));
+}
+
+/** 封鎖 / 解除封鎖某 line_user_id。 */
+export async function setChatBlock(
+  supabase: SupabaseClient,
+  clinicId: string,
+  lineUserId: string,
+  blocked: boolean,
+): Promise<void> {
+  if (!lineUserId) throw new Error("缺少對話對象");
+  if (blocked) {
+    const { error } = await supabase
+      .from("chat_blocks")
+      .upsert({ clinic_id: clinicId, line_user_id: lineUserId }, { onConflict: "clinic_id,line_user_id" });
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase
+      .from("chat_blocks")
+      .delete()
+      .eq("clinic_id", clinicId)
+      .eq("line_user_id", lineUserId);
+    if (error) throw new Error(error.message);
+  }
 }
 
 /** 讀取某對話串訊息(由舊到新),並把病患未讀訊息標記為櫃檯已讀。 */

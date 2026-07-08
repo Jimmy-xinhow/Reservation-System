@@ -7,6 +7,7 @@ import {
   getThreadMessages,
   unreadCount,
   insertStaffMessage,
+  setChatBlock,
 } from "@/lib/chatQueries";
 
 export const runtime = "nodejs";
@@ -44,14 +45,23 @@ export async function POST(req: NextRequest) {
     return fail("未授權", 401);
   }
   const payload = (await req.json().catch(() => null)) as {
+    action?: "send" | "block" | "unblock";
     lineUserId?: string;
     body?: string;
   } | null;
   if (!payload?.lineUserId) return fail("缺少對話對象");
   try {
+    if (payload.action === "block") {
+      await setChatBlock(supabase, CLINIC_ID, payload.lineUserId, true);
+      return ok({ blocked: true });
+    }
+    if (payload.action === "unblock") {
+      await setChatBlock(supabase, CLINIC_ID, payload.lineUserId, false);
+      return ok({ blocked: false });
+    }
     await insertStaffMessage(supabase, CLINIC_ID, payload.lineUserId, payload.body ?? "");
     return ok({ sent: true });
   } catch (e) {
-    return fail(e instanceof Error ? e.message : "送出失敗", 500);
+    return fail(e instanceof Error ? e.message : "操作失敗", 500);
   }
 }

@@ -617,3 +617,17 @@ drop policy if exists chat_messages_member on chat_messages;
 create policy chat_messages_member on chat_messages for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
   with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+
+-- 客服黑名單(見 supabase/migration_chat_blocks.sql)。被封鎖者訊息靜默丟棄。
+create table if not exists chat_blocks (
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  line_user_id text not null,
+  reason text,
+  created_at timestamptz not null default now(),
+  primary key (clinic_id, line_user_id)
+);
+alter table chat_blocks enable row level security;
+drop policy if exists chat_blocks_member on chat_blocks;
+create policy chat_blocks_member on chat_blocks for all to authenticated
+  using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
+  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
