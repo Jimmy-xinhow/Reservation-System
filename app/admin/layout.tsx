@@ -23,6 +23,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .maybeSingle();
   const role: Role = member?.role === "admin" ? "admin" : "staff";
 
+  // 客服未讀數(給導覽列紅點初始值);資料表未建時回 0,不讓後台報錯
+  const { count: chatUnread } = await supabase
+    .from("chat_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("clinic_id", CLINIC_ID)
+    .eq("sender", "patient")
+    .eq("read_by_staff", false);
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/85 backdrop-blur">
@@ -34,7 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </form>
           </div>
           <div className="pb-2">
-            <AdminNav role={role} />
+            <AdminNav role={role} chatUnread={chatUnread ?? 0} />
           </div>
         </div>
       </header>

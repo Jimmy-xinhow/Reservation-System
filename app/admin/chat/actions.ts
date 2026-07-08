@@ -18,15 +18,29 @@ export interface ChatMsg {
   created_at: string;
 }
 
+/** 尚未被櫃檯讀取的病患訊息數(給導覽列紅點用)。資料表未建時回 0,不讓後台整頁報錯。 */
+export async function getChatUnreadCount(): Promise<number> {
+  const { supabase } = await requireMember();
+  const { count, error } = await supabase
+    .from("chat_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("clinic_id", CLINIC_ID)
+    .eq("sender", "patient")
+    .eq("read_by_staff", false);
+  if (error) return 0;
+  return count ?? 0;
+}
+
 /** 對話串列表:依 line_user_id 聚合最近訊息、未讀數,並帶入病患姓名。 */
 export async function listChatThreads(): Promise<ChatThread[]> {
   const { supabase } = await requireMember();
-  const { data: rows } = await supabase
+  const { data: rows, error } = await supabase
     .from("chat_messages")
     .select("line_user_id, sender, body, read_by_staff, created_at")
     .eq("clinic_id", CLINIC_ID)
     .order("created_at", { ascending: false })
     .limit(800);
+  if (error) return []; // 資料表未建(尚未跑 migration_chat.sql)時,顯示空頁而非報錯
   const msgs = rows ?? [];
 
   const map = new Map<string, ChatThread>();

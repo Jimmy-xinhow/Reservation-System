@@ -85,6 +85,12 @@ body {
   .input:focus {
     @apply border-brand-500 ring-2 ring-brand-100;
   }
+  /* 手機:字級 <16px 時 iOS 聚焦會自動放大整頁,強制 16px 避免版面被撐開 */
+  @media (max-width: 640px) {
+    .input {
+      font-size: 16px;
+    }
+  }
   .label {
     @apply mb-1.5 block text-sm font-medium text-slate-600;
   }

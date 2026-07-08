@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getChatUnreadCount } from "@/app/admin/chat/actions";
 
 interface Item {
   href: string;
@@ -34,10 +35,11 @@ const GROUPS: Group[] = [
   },
   {
     label: "病患",
-    items: [
-      { href: "/admin/patients", label: "病患查詢" },
-      { href: "/admin/chat", label: "線上客服" },
-    ],
+    items: [{ href: "/admin/patients", label: "病患查詢" }],
+  },
+  {
+    label: "線上客服",
+    items: [{ href: "/admin/chat", label: "線上客服" }],
   },
   {
     label: "LINE",
@@ -62,10 +64,32 @@ function isActive(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
 }
 
-export function AdminNav({ role }: { role: "admin" | "staff" }) {
+export function AdminNav({
+  role,
+  chatUnread = 0,
+}: {
+  role: "admin" | "staff";
+  chatUnread?: number;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState<string | null>(null);
+  const [unread, setUnread] = useState(chatUnread);
   const isAdmin = role === "admin";
+
+  // 未讀客服訊息:每 5 秒輪詢,讓紅點在其他頁面也能即時亮起
+  useEffect(() => {
+    let alive = true;
+    const tick = () => getChatUnreadCount().then((n) => alive && setUnread(n)).catch(() => {});
+    const t = setInterval(tick, 5000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+  // 進到客服頁後,未讀會被清掉,同步歸零
+  useEffect(() => {
+    if (pathname.startsWith("/admin/chat")) setUnread(0);
+  }, [pathname]);
 
   // 非管理員:隱藏 adminOnly 群組與項目(僅 UI;真正權限由 server 端 requireAdmin 強制)
   const groups = GROUPS.filter((g) => isAdmin || !g.adminOnly)
@@ -79,15 +103,21 @@ export function AdminNav({ role }: { role: "admin" | "staff" }) {
         if (g.items.length === 1) {
           const it = g.items[0];
           const active = isActive(pathname, it.href);
+          const showBadge = it.href === "/admin/chat" && unread > 0;
           return (
             <Link
               key={g.label}
               href={it.href}
-              className={`rounded-lg px-3 py-1.5 font-medium transition-colors ${
+              className={`relative rounded-lg px-3 py-1.5 font-medium transition-colors ${
                 active ? "bg-brand-50 text-brand-700" : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
               }`}
             >
               {it.label}
+              {showBadge && (
+                <span className="ml-1.5 inline-flex min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold leading-[18px] text-white">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
             </Link>
           );
         }
