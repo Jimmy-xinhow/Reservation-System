@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { SubmitButton } from "@/components/SubmitButton";
+import { DeletePatientButton } from "./DeletePatientButton";
 
 export const dynamic = "force-dynamic";
 
@@ -142,12 +143,15 @@ export default async function PatientsPage({
                     )}
                   </td>
                   <td>
-                    <Link
-                      href={`/admin/patients/${p.id}`}
-                      className="text-xs font-medium text-brand-600 hover:underline"
-                    >
-                      詳情
-                    </Link>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/admin/patients/${p.id}`}
+                        className="text-xs font-medium text-brand-600 hover:underline"
+                      >
+                        詳情
+                      </Link>
+                      {c.all === 0 && <DeletePatientButton id={p.id} name={p.name} />}
+                    </div>
                   </td>
                 </tr>
               );

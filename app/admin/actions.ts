@@ -739,6 +739,28 @@ export async function updatePatientBasicAction(fd: FormData) {
   revalidatePath("/admin/patients");
 }
 
+// 刪除病患:只允許刪「沒有任何約診紀錄」的病患(通常是重複或填錯的誤建檔)。
+// 有約診者一律擋下以保留歷史(appointments.patient_id 為 restrict FK);
+// patient_records 會隨病患一併刪除(cascade)。
+export async function deletePatientAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  if (!id) throw new Error("缺少病患");
+  const { count } = await supabase
+    .from("appointments")
+    .select("id", { count: "exact", head: true })
+    .eq("clinic_id", CLINIC_ID)
+    .eq("patient_id", id);
+  if ((count ?? 0) > 0) throw new Error("此病患已有約診紀錄,無法刪除。");
+  const { error } = await supabase
+    .from("patients")
+    .delete()
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error("刪除失敗:此病患可能已有關聯資料。");
+  revalidatePath("/admin/patients");
+}
+
 export async function updatePatientAction(fd: FormData) {
   const { supabase } = await requireMember();
   const id = str(fd, "id");
