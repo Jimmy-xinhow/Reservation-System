@@ -227,6 +227,66 @@ function hhmmss(t: string): string {
   return `${h}:${m}:${s}`;
 }
 
+/**
+ * 現在(台北時間)是否為看診時間:任一醫師落在其門診段(當日模板+加診),
+ * 且未被當日休診(整天或該時段)涵蓋,即視為看診中。
+ */
+export async function isClinicOpenNow(svc: SupabaseClient, clinicId: string): Promise<boolean> {
+  const date = taipeiToday();
+  const weekday = weekdayOf(date);
+  const now = taipeiTod(new Date().toISOString());
+
+  const [{ data: tpls }, { data: excs }] = await Promise.all([
+    svc
+      .from("schedule_templates")
+      .select("doctor_id, start_time, end_time")
+      .eq("clinic_id", clinicId)
+      .eq("weekday", weekday)
+      .eq("active", true),
+    svc
+      .from("schedule_exceptions")
+      .select("doctor_id, start_time, end_time, is_closed")
+      .eq("clinic_id", clinicId)
+      .eq("date", date),
+  ]);
+
+  type Seg = { start: string; end: string };
+  const openByDoctor = new Map<string, Seg[]>();
+  const add = (map: Map<string, Seg[]>, doctorId: string, seg: Seg) => {
+    const arr = map.get(doctorId) ?? [];
+    arr.push(seg);
+    map.set(doctorId, arr);
+  };
+
+  for (const t of tpls ?? [])
+    add(openByDoctor, t.doctor_id as string, { start: hhmmss(t.start_time as string), end: hhmmss(t.end_time as string) });
+
+  const closedWholeDay = new Set<string>();
+  const closedRanges = new Map<string, Seg[]>();
+  for (const e of excs ?? []) {
+    const doctorId = e.doctor_id as string;
+    if (e.is_closed === false) {
+      if (e.start_time)
+        add(openByDoctor, doctorId, { start: hhmmss(e.start_time as string), end: hhmmss(e.end_time as string) });
+    } else {
+      if (!e.start_time) closedWholeDay.add(doctorId);
+      else
+        add(closedRanges, doctorId, {
+          start: hhmmss(e.start_time as string),
+          end: hhmmss((e.end_time as string) || (e.start_time as string)),
+        });
+    }
+  }
+
+  for (const [doctorId, segs] of openByDoctor) {
+    if (closedWholeDay.has(doctorId)) continue;
+    if (!segs.some((s) => s.start <= now && now < s.end)) continue;
+    const inClosed = (closedRanges.get(doctorId) ?? []).some((s) => s.start <= now && now < s.end);
+    if (!inClosed) return true;
+  }
+  return false;
+}
+
 export interface PatientQueueItem {
   doctorName: string;
   label: string;
