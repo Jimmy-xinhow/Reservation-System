@@ -40,6 +40,7 @@ export default async function PatientsPage({
       .from("patients")
       .select(SELECT)
       .eq("clinic_id", CLINIC_ID)
+      .eq("active", true)
       .or(`name.ilike.%${keyword}%,phone.ilike.%${keyword}%`)
       .order("created_at", { ascending: false })
       .limit(100);
@@ -49,6 +50,7 @@ export default async function PatientsPage({
       .from("patients")
       .select(SELECT, { count: "exact" })
       .eq("clinic_id", CLINIC_ID)
+      .eq("active", true)
       .order("created_at", { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     patients = (data ?? []) as Patient[];
@@ -150,7 +152,7 @@ export default async function PatientsPage({
                       >
                         詳情
                       </Link>
-                      {c.all === 0 && <DeletePatientButton id={p.id} name={p.name} />}
+                      <DeletePatientButton id={p.id} name={p.name} />
                     </div>
                   </td>
                 </tr>

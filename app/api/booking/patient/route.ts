@@ -52,12 +52,12 @@ export async function POST(req: NextRequest) {
     if (qErr) return fail(qErr.message, 500);
     const rows = existing ?? [];
 
-    // 同電話同姓名 → 沿用該筆,更新 line_user_id 與生日
+    // 同電話同姓名 → 沿用該筆,更新 line_user_id 與生日(若曾被軟刪除則復活)
     const sameName = rows.find((r) => r.name === name);
     if (sameName) {
       await svc
         .from("patients")
-        .update({ line_user_id: lineUserId, birthday })
+        .update({ line_user_id: lineUserId, birthday, active: true })
         .eq("id", sameName.id);
       return ok({ patient_id: sameName.id, reused: true });
     }

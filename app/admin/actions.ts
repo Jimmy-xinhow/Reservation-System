@@ -434,12 +434,18 @@ async function getOrCreatePatient(name: string, phone: string): Promise<string> 
   const svc = createServiceClient();
   const { data: existing } = await svc
     .from("patients")
-    .select("id")
+    .select("id, active")
     .eq("clinic_id", CLINIC_ID)
     .eq("phone", phone)
     .eq("name", name)
     .maybeSingle();
-  if (existing) return existing.id;
+  if (existing) {
+    // 若之前被軟刪除,回訪重新建約時自動復活
+    if (existing.active === false) {
+      await svc.from("patients").update({ active: true }).eq("id", existing.id);
+    }
+    return existing.id;
+  }
   const { data: created, error } = await svc
     .from("patients")
     .insert({ clinic_id: CLINIC_ID, name, phone })
@@ -739,9 +745,9 @@ export async function updatePatientBasicAction(fd: FormData) {
   revalidatePath("/admin/patients");
 }
 
-// 刪除病患:只允許刪「沒有任何約診紀錄」的病患(通常是重複或填錯的誤建檔)。
-// 有約診者一律擋下以保留歷史(appointments.patient_id 為 restrict FK);
-// patient_records 會隨病患一併刪除(cascade)。
+// 刪除病患:
+//  - 無約診紀錄(誤建檔/重複)→ 真的刪掉,patient_records 隨之 cascade。
+//  - 有約診紀錄 → 軟刪除(active=false),僅從後台列表隱藏,約診與歷史全保留。
 export async function deletePatientAction(fd: FormData) {
   const { supabase } = await requireMember();
   const id = str(fd, "id");
@@ -751,13 +757,22 @@ export async function deletePatientAction(fd: FormData) {
     .select("id", { count: "exact", head: true })
     .eq("clinic_id", CLINIC_ID)
     .eq("patient_id", id);
-  if ((count ?? 0) > 0) throw new Error("此病患已有約診紀錄,無法刪除。");
-  const { error } = await supabase
-    .from("patients")
-    .delete()
-    .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
-  if (error) throw new Error("刪除失敗:此病患可能已有關聯資料。");
+
+  if ((count ?? 0) > 0) {
+    const { error } = await supabase
+      .from("patients")
+      .update({ active: false })
+      .eq("id", id)
+      .eq("clinic_id", CLINIC_ID);
+    if (error) throw new Error(error.message);
+  } else {
+    const { error } = await supabase
+      .from("patients")
+      .delete()
+      .eq("id", id)
+      .eq("clinic_id", CLINIC_ID);
+    if (error) throw new Error("刪除失敗:此病患可能已有關聯資料。");
+  }
   revalidatePath("/admin/patients");
 }
 

@@ -98,6 +98,7 @@ create table if not exists patients (
   email text,
   marketing_opt_in boolean not null default false,     -- 同意行銷
   blocked_until timestamptz,                            -- 黑名單:停權至此時間(null=正常)
+  active boolean not null default true,                 -- 軟刪除:false=已從後台列表移除(保留歷史)
   created_at timestamptz default now()
 );
 create index if not exists patients_clinic_phone_idx on patients (clinic_id, phone);
@@ -109,6 +110,7 @@ alter table patients add column if not exists gender text;
 alter table patients add column if not exists email text;
 alter table patients add column if not exists marketing_opt_in boolean not null default false;
 alter table patients add column if not exists blocked_until timestamptz;
+alter table patients add column if not exists active boolean not null default true;
 
 -- 病況紀錄(逐筆,櫃檯/醫師記錄)
 create table if not exists patient_records (
