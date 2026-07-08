@@ -1,13 +1,31 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  listChatThreads,
-  getChatMessages,
-  sendStaffChat,
-  type ChatThread,
-  type ChatMsg,
-} from "./actions";
+
+export interface ChatThread {
+  lineUserId: string;
+  name: string | null;
+  lastBody: string;
+  lastAt: string;
+  lastSender: "patient" | "staff";
+  unread: number;
+}
+interface ChatMsg {
+  id: string;
+  sender: "patient" | "staff";
+  body: string;
+  created_at: string;
+}
+
+async function getJSON<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  const json = (await res.json().catch(() => null)) as
+    | { ok: true; data: T }
+    | { ok: false; error: string }
+    | null;
+  if (!json || !json.ok) throw new Error(json && !json.ok ? json.error : "讀取失敗");
+  return json.data;
+}
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
@@ -32,7 +50,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
 
   const refreshThreads = useCallback(async () => {
     try {
-      setThreads(await listChatThreads());
+      setThreads((await getJSON<{ threads: ChatThread[] }>("/api/admin/chat?type=threads")).threads);
     } catch {
       /* 靜默:輪詢失敗不打斷操作 */
     }
@@ -40,19 +58,20 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
 
   const loadMessages = useCallback(async (uid: string) => {
     try {
-      setMessages(await getChatMessages(uid));
+      const data = await getJSON<{ messages: ChatMsg[] }>(
+        `/api/admin/chat?type=messages&u=${encodeURIComponent(uid)}`,
+      );
+      setMessages(data.messages);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "載入失敗");
     }
   }, []);
 
-  // 對話串列表每 5 秒輪詢
   useEffect(() => {
     const t = setInterval(refreshThreads, 5000);
     return () => clearInterval(t);
   }, [refreshThreads]);
 
-  // 選定對話串:立即載入 + 每 3 秒輪詢
   useEffect(() => {
     if (!active) return;
     loadMessages(active);
@@ -72,12 +91,29 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
     if (!body || !active || sending) return;
     setSending(true);
     setErr(null);
+    // 樂觀更新:先把訊息顯示出來,送出即時有反應
+    const optimistic: ChatMsg = {
+      id: `tmp-${messages.length}-${body.length}`,
+      sender: "staff",
+      body,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((m) => [...m, optimistic]);
+    setText("");
     try {
-      await sendStaffChat(active, body);
-      setText("");
-      await loadMessages(active);
+      const res = await fetch("/api/admin/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lineUserId: active, body }),
+      });
+      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string } | null;
+      if (!json?.ok) throw new Error(json?.error ?? "送出失敗");
+      await loadMessages(active); // 用真實資料取代樂觀訊息
       refreshThreads();
     } catch (e) {
+      // 失敗:移除樂觀訊息並還原輸入
+      setMessages((m) => m.filter((x) => x.id !== optimistic.id));
+      setText(body);
       setErr(e instanceof Error ? e.message : "送出失敗");
     } finally {
       setSending(false);
@@ -88,7 +124,6 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
     setActive(uid);
     setMessages([]);
     lastCount.current = 0;
-    // 樂觀清掉未讀
     setThreads((ts) => ts.map((t) => (t.lineUserId === uid ? { ...t, unread: 0 } : t)));
   }
 

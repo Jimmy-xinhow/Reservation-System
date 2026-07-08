@@ -1,10 +1,13 @@
-import { listChatThreads } from "./actions";
+import { createSupabaseServer } from "@/lib/supabase-server";
+import { CLINIC_ID } from "@/lib/supabase";
+import { buildThreads } from "@/lib/chatQueries";
 import ChatConsole from "./ChatConsole";
 
 export const dynamic = "force-dynamic";
 
 export default async function ChatPage() {
-  const threads = await listChatThreads();
+  const supabase = await createSupabaseServer();
+  const threads = await buildThreads(supabase, CLINIC_ID);
 
   return (
     <div className="space-y-4">

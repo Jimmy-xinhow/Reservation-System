@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getChatUnreadCount } from "@/app/admin/chat/actions";
 
 interface Item {
   href: string;
@@ -79,7 +78,15 @@ export function AdminNav({
   // 未讀客服訊息:每 5 秒輪詢,讓紅點在其他頁面也能即時亮起
   useEffect(() => {
     let alive = true;
-    const tick = () => getChatUnreadCount().then((n) => alive && setUnread(n)).catch(() => {});
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/admin/chat?type=unread");
+        const json = (await res.json()) as { ok: boolean; data?: { count: number } };
+        if (alive && json.ok && json.data) setUnread(json.data.count);
+      } catch {
+        /* 靜默 */
+      }
+    };
     const t = setInterval(tick, 5000);
     return () => {
       alive = false;

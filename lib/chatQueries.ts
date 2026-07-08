@@ -1,7 +1,5 @@
-"use server";
-
-import { requireMember } from "@/lib/admin";
-import { CLINIC_ID } from "@/lib/supabase";
+import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ChatThread {
   lineUserId: string;
@@ -18,29 +16,18 @@ export interface ChatMsg {
   created_at: string;
 }
 
-/** 尚未被櫃檯讀取的病患訊息數(給導覽列紅點用)。資料表未建時回 0,不讓後台整頁報錯。 */
-export async function getChatUnreadCount(): Promise<number> {
-  const { supabase } = await requireMember();
-  const { count, error } = await supabase
-    .from("chat_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("clinic_id", CLINIC_ID)
-    .eq("sender", "patient")
-    .eq("read_by_staff", false);
-  if (error) return 0;
-  return count ?? 0;
-}
-
 /** 對話串列表:依 line_user_id 聚合最近訊息、未讀數,並帶入病患姓名。 */
-export async function listChatThreads(): Promise<ChatThread[]> {
-  const { supabase } = await requireMember();
+export async function buildThreads(
+  supabase: SupabaseClient,
+  clinicId: string,
+): Promise<ChatThread[]> {
   const { data: rows, error } = await supabase
     .from("chat_messages")
     .select("line_user_id, sender, body, read_by_staff, created_at")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .order("created_at", { ascending: false })
     .limit(800);
-  if (error) return []; // 資料表未建(尚未跑 migration_chat.sql)時,顯示空頁而非報錯
+  if (error) return []; // 資料表未建(尚未跑 migration_chat.sql)時顯示空頁,不報錯
   const msgs = rows ?? [];
 
   const map = new Map<string, ChatThread>();
@@ -48,7 +35,6 @@ export async function listChatThreads(): Promise<ChatThread[]> {
     const uid = m.line_user_id as string;
     let t = map.get(uid);
     if (!t) {
-      // rows 由新到舊,第一次遇到即為最後一則
       t = {
         lineUserId: uid,
         name: null,
@@ -67,7 +53,7 @@ export async function listChatThreads(): Promise<ChatThread[]> {
     const { data: pats } = await supabase
       .from("patients")
       .select("line_user_id, name")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .in("line_user_id", uids);
     for (const p of pats ?? []) {
       const t = map.get(p.line_user_id as string);
@@ -79,13 +65,16 @@ export async function listChatThreads(): Promise<ChatThread[]> {
 }
 
 /** 讀取某對話串訊息(由舊到新),並把病患未讀訊息標記為櫃檯已讀。 */
-export async function getChatMessages(lineUserId: string): Promise<ChatMsg[]> {
-  const { supabase } = await requireMember();
+export async function getThreadMessages(
+  supabase: SupabaseClient,
+  clinicId: string,
+  lineUserId: string,
+): Promise<ChatMsg[]> {
   if (!lineUserId) return [];
   const { data } = await supabase
     .from("chat_messages")
     .select("id, sender, body, created_at")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("line_user_id", lineUserId)
     .order("created_at", { ascending: true })
     .limit(500);
@@ -93,7 +82,7 @@ export async function getChatMessages(lineUserId: string): Promise<ChatMsg[]> {
   await supabase
     .from("chat_messages")
     .update({ read_by_staff: true })
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("line_user_id", lineUserId)
     .eq("sender", "patient")
     .eq("read_by_staff", false);
@@ -101,15 +90,31 @@ export async function getChatMessages(lineUserId: string): Promise<ChatMsg[]> {
   return (data ?? []) as ChatMsg[];
 }
 
+/** 尚未被櫃檯讀取的病患訊息數。資料表未建時回 0。 */
+export async function unreadCount(supabase: SupabaseClient, clinicId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("chat_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("clinic_id", clinicId)
+    .eq("sender", "patient")
+    .eq("read_by_staff", false);
+  if (error) return 0;
+  return count ?? 0;
+}
+
 /** 櫃檯回覆一則。 */
-export async function sendStaffChat(lineUserId: string, body: string): Promise<void> {
-  const { supabase } = await requireMember();
+export async function insertStaffMessage(
+  supabase: SupabaseClient,
+  clinicId: string,
+  lineUserId: string,
+  body: string,
+): Promise<void> {
   const text = body.trim();
   if (!lineUserId) throw new Error("缺少對話對象");
   if (!text) throw new Error("請輸入訊息");
   if (text.length > 2000) throw new Error("訊息過長");
   const { error } = await supabase.from("chat_messages").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicId,
     line_user_id: lineUserId,
     sender: "staff",
     body: text,
