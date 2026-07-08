@@ -720,6 +720,25 @@ export async function toggleDoctorAction(fd: FormData) {
 }
 
 // ── 病患建檔/記錄 patients ───────────────────────────────
+// 修正病患自行填錯的基本資料(姓名 / 電話)。櫃檯即可操作。
+export async function updatePatientBasicAction(fd: FormData) {
+  const { supabase } = await requireMember();
+  const id = str(fd, "id");
+  const name = str(fd, "name");
+  const phone = str(fd, "phone");
+  if (!id) throw new Error("缺少病患");
+  if (!name) throw new Error("請填姓名");
+  if (!phone) throw new Error("請填電話");
+  const { error } = await supabase
+    .from("patients")
+    .update({ name, phone })
+    .eq("id", id)
+    .eq("clinic_id", CLINIC_ID);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/admin/patients/${id}`);
+  revalidatePath("/admin/patients");
+}
+
 export async function updatePatientAction(fd: FormData) {
   const { supabase } = await requireMember();
   const id = str(fd, "id");

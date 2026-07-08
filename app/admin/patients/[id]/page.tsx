@@ -4,6 +4,7 @@ import { CLINIC_ID } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/slots";
 import {
   updatePatientAction,
+  updatePatientBasicAction,
   setPatientBlockAction,
   addPatientRecordAction,
   deletePatientRecordAction,
@@ -106,6 +107,26 @@ export default async function PatientDetailPage({
         )}
         <span className="text-sm text-slate-400">未到 {noShow} 次</span>
       </div>
+
+      {/* 基本資料(修正病患自填錯誤) */}
+      <form action={updatePatientBasicAction} className="card space-y-4 p-5">
+        <div>
+          <h2 className="font-semibold text-slate-900">基本資料</h2>
+          <p className="text-xs text-slate-400">病患一開始填錯時可在此更正姓名或電話。</p>
+        </div>
+        <input type="hidden" name="id" value={p.id} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-slate-600">姓名</span>
+            <input name="name" defaultValue={p.name} required className="input" />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-slate-600">電話</span>
+            <input name="phone" defaultValue={p.phone} required inputMode="tel" className="input" />
+          </label>
+        </div>
+        <button className="btn btn-primary">儲存基本資料</button>
+      </form>
 
       {/* 黑名單 */}
       <section className="card flex flex-wrap items-center justify-between gap-3 p-4">
