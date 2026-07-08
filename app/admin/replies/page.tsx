@@ -9,6 +9,7 @@ import {
 } from "../actions";
 import { requireAdmin } from "@/lib/admin";
 import RepliesEditor, { type Reply } from "./RepliesEditor";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -102,7 +103,7 @@ export default async function RepliesPage() {
           </div>
         </div>
 
-        <button className="btn btn-primary">儲存</button>
+        <SubmitButton className="btn btn-primary">儲存</SubmitButton>
       </form>
 
       <RepliesEditor

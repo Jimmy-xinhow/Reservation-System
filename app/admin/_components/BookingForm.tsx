@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { SubmitButton } from "@/components/SubmitButton";
 
 interface Doctor {
   id: string;
@@ -252,9 +253,9 @@ export default function BookingForm({
         <span className="text-xs text-slate-400">
           {picked ? "已選擇時段" : "請先選擇日期與時段"}
         </span>
-        <button type="submit" disabled={!picked || !doctorId} className="btn btn-primary">
+        <SubmitButton disabled={!picked || !doctorId} className="btn btn-primary">
           {isReschedule ? "確認改期" : "建立預約"}
-        </button>
+        </SubmitButton>
       </div>
     </form>
   );

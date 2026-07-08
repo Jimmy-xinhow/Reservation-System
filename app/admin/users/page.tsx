@@ -5,6 +5,7 @@ import {
   resetStaffPasswordAction,
   setStaffRoleAction,
 } from "../actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function UsersPage() {
             <option value="admin">管理員</option>
           </select>
         </label>
-        <button className="btn btn-primary">新增帳號</button>
+        <SubmitButton className="btn btn-primary">新增帳號</SubmitButton>
       </form>
 
       {/* 帳號列表 */}
@@ -77,7 +78,7 @@ export default async function UsersPage() {
                       <option value="staff">櫃檯</option>
                       <option value="admin">管理員</option>
                     </select>
-                    <button className="text-xs font-medium text-brand-600 hover:underline">更新</button>
+                    <SubmitButton className="text-xs font-medium text-brand-600 hover:underline">更新</SubmitButton>
                   </form>
                 </td>
                 <td className="text-slate-400">{m.createdAt ? m.createdAt.slice(0, 10) : "—"}</td>
@@ -91,7 +92,7 @@ export default async function UsersPage() {
                       placeholder="新密碼"
                       className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-xs"
                     />
-                    <button className="text-xs font-medium text-brand-600 hover:underline">更新</button>
+                    <SubmitButton className="text-xs font-medium text-brand-600 hover:underline">更新</SubmitButton>
                   </form>
                 </td>
                 <td>
@@ -100,7 +101,7 @@ export default async function UsersPage() {
                   ) : (
                     <form action={removeStaffAction}>
                       <input type="hidden" name="user_id" value={m.userId} />
-                      <button className="text-xs font-medium text-red-600 hover:underline">移除權限</button>
+                      <SubmitButton className="text-xs font-medium text-red-600 hover:underline">移除權限</SubmitButton>
                     </form>
                   )}
                 </td>

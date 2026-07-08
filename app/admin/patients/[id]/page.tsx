@@ -9,6 +9,7 @@ import {
   addPatientRecordAction,
   deletePatientRecordAction,
 } from "../../actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +126,7 @@ export default async function PatientDetailPage({
             <input name="phone" defaultValue={p.phone} required inputMode="tel" className="input" />
           </label>
         </div>
-        <button className="btn btn-primary">儲存基本資料</button>
+        <SubmitButton className="btn btn-primary">儲存基本資料</SubmitButton>
       </form>
 
       {/* 黑名單 */}
@@ -137,9 +138,9 @@ export default async function PatientDetailPage({
           <input type="hidden" name="id" value={p.id} />
           <input type="hidden" name="block" value={blocked ? "0" : "1"} />
           {blocked ? (
-            <button className="btn btn-secondary">解除黑名單</button>
+            <SubmitButton className="btn btn-secondary">解除黑名單</SubmitButton>
           ) : (
-            <button className="btn btn-danger">加入黑名單(停權1個月)</button>
+            <SubmitButton className="btn btn-danger">加入黑名單(停權1個月)</SubmitButton>
           )}
         </form>
       </section>
@@ -180,7 +181,7 @@ export default async function PatientDetailPage({
           />
           同意接收行銷訊息
         </label>
-        <button className="btn btn-primary">儲存建檔</button>
+        <SubmitButton className="btn btn-primary">儲存建檔</SubmitButton>
       </form>
 
       {/* 新增病況紀錄(輸入欄放此,列表在右欄) */}
@@ -194,7 +195,7 @@ export default async function PatientDetailPage({
           placeholder="輸入病況、醫囑或處置,送出即新增一筆…"
           className="input"
         />
-        <button className="btn btn-primary">新增病況紀錄</button>
+        <SubmitButton className="btn btn-primary">新增病況紀錄</SubmitButton>
       </form>
 
       {/* 約診歷史(左)+ 病況紀錄(右)雙欄 */}
@@ -239,7 +240,7 @@ export default async function PatientDetailPage({
                     <form action={deletePatientRecordAction}>
                       <input type="hidden" name="id" value={rec.id} />
                       <input type="hidden" name="patient_id" value={p.id} />
-                      <button className="text-xs text-red-500 hover:underline">刪除</button>
+                      <SubmitButton className="text-xs text-red-500 hover:underline">刪除</SubmitButton>
                     </form>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-slate-700">{rec.content}</p>

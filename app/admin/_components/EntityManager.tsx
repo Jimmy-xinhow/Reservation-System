@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export interface ManagedItem {
   id: string;
@@ -75,7 +76,7 @@ export default function EntityManager({
             className="input mt-1"
           />
         </label>
-        <button className="btn btn-primary">{editingId ? "儲存修改" : "新增"}</button>
+        <SubmitButton className="btn btn-primary">{editingId ? "儲存修改" : "新增"}</SubmitButton>
         {editingId && (
           <button type="button" onClick={cancel} className="btn btn-secondary">
             取消
@@ -122,14 +123,14 @@ export default function EntityManager({
                     <form action={toggleAction}>
                       <input type="hidden" name="id" value={it.id} />
                       <input type="hidden" name="active" value={String(it.active)} />
-                      <button className="text-xs font-medium text-slate-600 hover:underline">
+                      <SubmitButton className="text-xs font-medium text-slate-600 hover:underline">
                         {it.active ? "停用" : "啟用"}
-                      </button>
+                      </SubmitButton>
                     </form>
                     {deleteAction && (
                       <form action={deleteAction}>
                         <input type="hidden" name="id" value={it.id} />
-                        <button className="text-xs font-medium text-red-600 hover:underline">刪除</button>
+                        <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
                       </form>
                     )}
                   </div>

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { BTN_ACTION_OPTIONS, type MsgKind, type MsgData, type MsgCard, type MsgButton } from "@/lib/lineMessage";
+import { SubmitButton } from "@/components/SubmitButton";
 
 type ServerAction = (fd: FormData) => Promise<void>;
 
@@ -87,7 +88,7 @@ export default function MessageComposer({
         </div>
       )}
 
-      <button className="btn btn-primary">儲存訊息</button>
+      <SubmitButton className="btn btn-primary">儲存訊息</SubmitButton>
     </form>
   );
 }

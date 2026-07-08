@@ -5,6 +5,7 @@ import { saveRichMenuAction, unpublishRichMenuAction } from "../actions";
 import RichMenuEditor from "./RichMenuEditor";
 import PublishForm from "./PublishForm";
 import { requireAdmin } from "@/lib/admin";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,7 @@ export default async function RichMenuPage({
       {publishedId && (
         <form action={unpublishRichMenuAction} className="card p-5">
           <p className="mb-3 text-sm text-slate-600">移除後,病患聊天室下方將不再顯示圖文選單。</p>
-          <button className="btn btn-danger">移除圖文選單</button>
+          <SubmitButton className="btn btn-danger">移除圖文選單</SubmitButton>
         </form>
       )}
     </div>

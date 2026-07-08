@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { LAYOUTS, ACTION_OPTIONS, type Layout, type Slot } from "@/lib/richmenu";
+import { SubmitButton } from "@/components/SubmitButton";
 
 type ServerAction = (fd: FormData) => Promise<void>;
 
@@ -141,7 +142,7 @@ export default function RichMenuEditor({
         ))}
       </section>
 
-      <button className="btn btn-primary">儲存選單設定</button>
+      <SubmitButton className="btn btn-primary">儲存選單設定</SubmitButton>
     </form>
   );
 }

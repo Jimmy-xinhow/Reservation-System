@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -80,7 +81,7 @@ export default async function PatientsPage({
 
       <form className="flex gap-2">
         <input name="q" defaultValue={keyword} placeholder="輸入姓名或電話" className="input max-w-xs" />
-        <button className="btn btn-primary">搜尋</button>
+        <SubmitButton className="btn btn-primary">搜尋</SubmitButton>
         {keyword && (
           <Link href="/admin/patients" className="btn btn-ghost">
             清除

@@ -4,6 +4,7 @@ import { CLINIC_ID } from "@/lib/supabase";
 import { getBotInfo, getQuota, type LineBotInfo } from "@/lib/line";
 import { requireAdmin } from "@/lib/admin";
 import { sendTestPushAction } from "../actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -156,9 +157,9 @@ export default async function LinePage({
               <p className="mt-1 text-xs text-slate-400">已帶入病患「{sample.name}」的 LINE ID 方便測試。</p>
             )}
           </div>
-          <button className="btn btn-primary" disabled={!env("LINE_CHANNEL_ACCESS_TOKEN")}>
+          <SubmitButton className="btn btn-primary" disabled={!env("LINE_CHANNEL_ACCESS_TOKEN")}>
             發送測試
-          </button>
+          </SubmitButton>
         </form>
         {!env("LINE_CHANNEL_ACCESS_TOKEN") && (
           <p className="mt-2 text-xs text-red-600">尚未設定 LINE_CHANNEL_ACCESS_TOKEN,無法推播。</p>

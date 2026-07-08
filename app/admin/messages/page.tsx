@@ -5,6 +5,7 @@ import { saveMessageAction, deleteMessageAction } from "../actions";
 import MessageComposer from "./MessageComposer";
 import type { MsgKind, MsgData } from "@/lib/lineMessage";
 import { requireAdmin } from "@/lib/admin";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -86,7 +87,7 @@ export default async function MessagesPage({
                     </Link>
                     <form action={deleteMessageAction}>
                       <input type="hidden" name="id" value={m.id} />
-                      <button className="text-xs font-medium text-red-600 hover:underline">刪除</button>
+                      <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
                     </form>
                   </div>
                 </td>

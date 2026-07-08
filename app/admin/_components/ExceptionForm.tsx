@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SubmitButton } from "@/components/SubmitButton";
 
 const WD = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -221,7 +222,7 @@ export default function ExceptionForm({
         </>
       )}
 
-      <button className="btn btn-primary">新增</button>
+      <SubmitButton className="btn btn-primary">新增</SubmitButton>
     </form>
   );
 }

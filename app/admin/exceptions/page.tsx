@@ -2,6 +2,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { createExceptionAction, deleteExceptionAction } from "../actions";
 import ExceptionForm from "../_components/ExceptionForm";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ export default async function ExceptionsPage() {
                 <td>
                   <form action={deleteExceptionAction}>
                     <input type="hidden" name="id" value={e.id} />
-                    <button className="text-xs font-medium text-red-600 hover:underline">刪除</button>
+                    <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
                   </form>
                 </td>
               </tr>

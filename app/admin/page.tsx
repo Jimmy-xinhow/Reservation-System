@@ -9,6 +9,7 @@ import {
   createAppointmentAction,
   rescheduleAppointmentAction,
 } from "./actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -188,7 +189,7 @@ export default async function TodayPage({
             ))}
           </select>
         </div>
-        <button className="btn btn-secondary">套用</button>
+        <SubmitButton className="btn btn-secondary">套用</SubmitButton>
         {(fDoctor || fStatus) && (
           <a href="/admin" className="btn btn-ghost">
             清除
@@ -264,7 +265,7 @@ export default async function TodayPage({
                         <option value="waived">免收</option>
                         <option value="refunded">已退</option>
                       </select>
-                      <button className="text-xs font-medium text-brand-600 hover:underline">更新</button>
+                      <SubmitButton className="text-xs font-medium text-brand-600 hover:underline">更新</SubmitButton>
                       <span className="text-xs text-slate-400">${r.deposit_amount}</span>
                     </form>
                   )}
@@ -276,9 +277,9 @@ export default async function TodayPage({
                       <StatusBtn id={r.id} status="no_show" label="未到" />
                       <form action={cancelAppointmentAction}>
                         <input type="hidden" name="id" value={r.id} />
-                        <button className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50">
+                        <SubmitButton className="rounded-lg border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50">
                           取消
-                        </button>
+                        </SubmitButton>
                       </form>
                     </div>
                   )}
@@ -297,9 +298,9 @@ function StatusBtn({ id, status, label }: { id: string; status: string; label: s
     <form action={setStatusAction}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="status" value={status} />
-      <button className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
+      <SubmitButton className="rounded-lg border border-slate-300 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50">
         {label}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

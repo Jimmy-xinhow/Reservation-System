@@ -2,6 +2,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { getQueueForDate, taipeiToday, type QueueAppt } from "@/lib/queue";
 import { advanceServingAction, setQueueAutoAction, setStatusAction } from "../actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,7 @@ export default async function QueuePage({
             </select>
           </div>
         )}
-        <button className="btn btn-secondary">套用</button>
+        <SubmitButton className="btn btn-secondary">套用</SubmitButton>
       </form>
 
       <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-xs leading-relaxed text-slate-500">
@@ -105,7 +106,7 @@ export default async function QueuePage({
                     className="input w-16 px-2 py-1"
                   />
                   <span className="text-slate-500">位線上插 1 位現場</span>
-                  <button className="btn btn-ghost px-2 py-1 text-xs">儲存</button>
+                  <SubmitButton className="btn btn-ghost px-2 py-1 text-xs">儲存</SubmitButton>
                 </form>
               </div>
 
@@ -114,7 +115,7 @@ export default async function QueuePage({
                 <form action={advanceServingAction} className="flex flex-wrap items-center gap-3">
                   {hidden}
                   <input type="hidden" name="op" value="auto" />
-                  <button className="btn btn-primary">自動下一位 →</button>
+                  <SubmitButton className="btn btn-primary">自動下一位 →</SubmitButton>
                   <span className="text-xs text-slate-400">
                     {s.autoEvery > 0 ? `自動:每 ${s.autoEvery} 位線上插 1 位現場` : "自動未開啟(等同叫線上)"}
                   </span>
@@ -150,7 +151,7 @@ export default async function QueuePage({
                 <form action={advanceServingAction}>
                   {hidden}
                   <input type="hidden" name="op" value="reset" />
-                  <button className="text-xs text-slate-400 hover:text-red-600">重設此診叫號</button>
+                  <SubmitButton className="text-xs text-slate-400 hover:text-red-600">重設此診叫號</SubmitButton>
                 </form>
               </div>
             </section>
@@ -202,12 +203,12 @@ function StreamPanel({
         <form action={advanceServingAction} className="flex-1">
           {hidden}
           <input type="hidden" name="op" value={opNext} />
-          <button className="btn btn-secondary w-full text-sm">叫下一位 →</button>
+          <SubmitButton className="btn btn-secondary w-full text-sm">叫下一位 →</SubmitButton>
         </form>
         <form action={advanceServingAction}>
           {hidden}
           <input type="hidden" name="op" value={opPrev} />
-          <button className="btn btn-ghost px-3 text-sm">上一號</button>
+          <SubmitButton className="btn btn-ghost px-3 text-sm">上一號</SubmitButton>
         </form>
       </div>
       <div className="space-y-1">
@@ -250,13 +251,13 @@ function StatusBtn({ id, status, label, light }: { id: string; status: string; l
     <form action={setStatusAction}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="status" value={status} />
-      <button
+      <SubmitButton
         className={`rounded border px-1.5 py-0.5 text-xs font-medium ${
           light ? "border-white/40 text-white hover:bg-white/10" : "border-slate-300 text-slate-600 hover:bg-slate-50"
         }`}
       >
         {label}
-      </button>
+      </SubmitButton>
     </form>
   );
 }

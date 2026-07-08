@@ -1,6 +1,7 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction } from "../actions";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -96,7 +97,7 @@ export default async function SettingsPage() {
             />
           </div>
         </div>
-        <button className="btn btn-primary">儲存公開資訊</button>
+        <SubmitButton className="btn btn-primary">儲存公開資訊</SubmitButton>
       </form>
 
       <form action={updateSettingsAction} className="space-y-6">
@@ -201,7 +202,7 @@ export default async function SettingsPage() {
           </label>
         </Section>
 
-        <button className="btn btn-primary">儲存設定</button>
+        <SubmitButton className="btn btn-primary">儲存設定</SubmitButton>
       </form>
 
       {/* Email 提醒(選用,需自備 Resend 金鑰)*/}
@@ -242,7 +243,7 @@ export default async function SettingsPage() {
           </label>
         </div>
         <div className="flex items-center gap-3">
-          <button className="btn btn-primary">儲存 Email 設定</button>
+          <SubmitButton className="btn btn-primary">儲存 Email 設定</SubmitButton>
           <span className={`text-xs ${s.resend_api_key ? "text-accent-600" : "text-slate-400"}`}>
             金鑰狀態:{s.resend_api_key ? "已設定 ✓" : "未設定"}
           </span>

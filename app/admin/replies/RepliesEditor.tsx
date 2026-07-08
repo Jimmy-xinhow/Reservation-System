@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export interface Reply {
   id: string;
@@ -132,7 +133,7 @@ export default function RepliesEditor({
               className="input w-20"
             />
           </label>
-          <button className="btn btn-primary">{editingId ? "儲存修改" : "新增"}</button>
+          <SubmitButton className="btn btn-primary">{editingId ? "儲存修改" : "新增"}</SubmitButton>
           {editingId && (
             <button type="button" onClick={cancel} className="btn btn-secondary">
               取消
@@ -187,13 +188,13 @@ export default function RepliesEditor({
                     <form action={toggleAction}>
                       <input type="hidden" name="id" value={r.id} />
                       <input type="hidden" name="active" value={String(r.active)} />
-                      <button className="text-xs font-medium text-slate-600 hover:underline">
+                      <SubmitButton className="text-xs font-medium text-slate-600 hover:underline">
                         {r.active ? "停用" : "啟用"}
-                      </button>
+                      </SubmitButton>
                     </form>
                     <form action={deleteAction}>
                       <input type="hidden" name="id" value={r.id} />
-                      <button className="text-xs font-medium text-red-600 hover:underline">刪除</button>
+                      <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
                     </form>
                   </div>
                 </td>

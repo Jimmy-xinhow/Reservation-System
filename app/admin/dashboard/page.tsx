@@ -5,6 +5,7 @@ import { taipeiDateString } from "@/lib/slots";
 import { getQueueForDate } from "@/lib/queue";
 import { advanceServingAction } from "../actions";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -160,7 +161,7 @@ export default async function DashboardPage({
                       <form action={advanceServingAction} className="mt-1">
                         {hidden}
                         <input type="hidden" name="op" value="next_online" />
-                        <button className="btn btn-primary w-full px-2 py-1 text-xs">叫下一位</button>
+                        <SubmitButton className="btn btn-primary w-full px-2 py-1 text-xs">叫下一位</SubmitButton>
                       </form>
                     </div>
                     <div className="rounded-lg bg-accent-500/10 p-2 text-center">
@@ -169,7 +170,7 @@ export default async function DashboardPage({
                       <form action={advanceServingAction} className="mt-1">
                         {hidden}
                         <input type="hidden" name="op" value="next_offline" />
-                        <button className="btn btn-secondary w-full px-2 py-1 text-xs">叫下一位</button>
+                        <SubmitButton className="btn btn-secondary w-full px-2 py-1 text-xs">叫下一位</SubmitButton>
                       </form>
                     </div>
                   </div>

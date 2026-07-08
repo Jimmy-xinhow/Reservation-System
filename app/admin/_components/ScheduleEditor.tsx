@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SubmitButton } from "@/components/SubmitButton";
 
 const WD = ["日", "一", "二", "三", "四", "五", "六"];
 
@@ -162,7 +163,7 @@ export default function ScheduleEditor({
             className="input mt-1 w-20"
           />
         </label>
-        <button className="btn btn-primary">{editingId ? "儲存修改" : "新增門診段"}</button>
+        <SubmitButton className="btn btn-primary">{editingId ? "儲存修改" : "新增門診段"}</SubmitButton>
         {editingId && (
           <button type="button" onClick={cancelEdit} className="btn btn-secondary">
             取消編輯
@@ -229,13 +230,13 @@ export default function ScheduleEditor({
                     <form action={toggleAction}>
                       <input type="hidden" name="id" value={t.id} />
                       <input type="hidden" name="active" value={String(t.active)} />
-                      <button className="text-xs font-medium text-slate-600 hover:underline">
+                      <SubmitButton className="text-xs font-medium text-slate-600 hover:underline">
                         {t.active ? "停用" : "啟用"}
-                      </button>
+                      </SubmitButton>
                     </form>
                     <form action={deleteAction}>
                       <input type="hidden" name="id" value={t.id} />
-                      <button className="text-xs font-medium text-red-600 hover:underline">刪除</button>
+                      <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
                     </form>
                   </div>
                 </td>

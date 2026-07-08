@@ -4,6 +4,7 @@ import type { Role } from "@/lib/admin";
 import { signOutAction } from "./actions";
 import { Brand } from "@/components/Brand";
 import { AdminNav } from "@/components/AdminNav";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createSupabaseServer();
@@ -29,7 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <div className="flex items-center gap-4 py-3">
             <Brand subtitle="櫃檯後台" />
             <form action={signOutAction} className="ml-auto">
-              <button className="btn btn-ghost px-3 py-1.5 text-sm">登出</button>
+              <SubmitButton className="btn btn-ghost px-3 py-1.5 text-sm">登出</SubmitButton>
             </form>
           </div>
           <div className="pb-2">
