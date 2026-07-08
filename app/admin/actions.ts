@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireMember } from "@/lib/admin";
+import { requireMember, requireAdmin, type Role } from "@/lib/admin";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
@@ -30,21 +30,33 @@ function intOr(fd: FormData, k: string, dflt: number): number {
   return Number.isFinite(n) ? n : dflt;
 }
 
-// ── 使用者(櫃檯帳號)管理 ─────────────────────────────────
+// ── 使用者(後台帳號)管理 ─────────────────────────────────
+// 角色:admin=管理員(可管理使用者與 LINE 設定)、staff=櫃檯(日常看診作業)。
 export interface StaffMember {
   userId: string;
   email: string;
+  role: Role;
   isSelf: boolean;
   createdAt: string | null;
 }
 
-/** 列出本診所的櫃檯帳號(需先 requireMember)。 */
+/** 本診所目前的管理員人數(用於防止把最後一位管理員降級/移除)。 */
+async function adminCount(svc: SupabaseClient): Promise<number> {
+  const { count } = await svc
+    .from("clinic_members")
+    .select("user_id", { count: "exact", head: true })
+    .eq("clinic_id", CLINIC_ID)
+    .eq("role", "admin");
+  return count ?? 0;
+}
+
+/** 列出本診所的後台帳號(僅管理員可用)。 */
 export async function listStaff(): Promise<StaffMember[]> {
-  const { user } = await requireMember();
+  const { user } = await requireAdmin();
   const svc = createServiceClient();
   const { data: members } = await svc
     .from("clinic_members")
-    .select("user_id, created_at")
+    .select("user_id, role, created_at")
     .eq("clinic_id", CLINIC_ID);
   const rows = members ?? [];
   if (rows.length === 0) return [];
@@ -54,15 +66,17 @@ export async function listStaff(): Promise<StaffMember[]> {
   return rows.map((m) => ({
     userId: m.user_id as string,
     email: emailMap.get(m.user_id as string) ?? "(未知)",
+    role: (m.role === "admin" ? "admin" : "staff") as Role,
     isSelf: m.user_id === user.id,
     createdAt: (m.created_at as string) ?? null,
   }));
 }
 
 export async function createStaffAction(fd: FormData) {
-  await requireMember();
+  await requireAdmin();
   const email = str(fd, "email").toLowerCase();
   const password = str(fd, "password");
+  const role: Role = str(fd, "role") === "admin" ? "admin" : "staff";
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("請填正確 Email");
   if (password.length < 8) throw new Error("密碼至少 8 碼");
 
@@ -87,17 +101,52 @@ export async function createStaffAction(fd: FormData) {
 
   const { error: mErr } = await svc
     .from("clinic_members")
-    .upsert({ clinic_id: CLINIC_ID, user_id: userId }, { onConflict: "clinic_id,user_id" });
+    .upsert({ clinic_id: CLINIC_ID, user_id: userId, role }, { onConflict: "clinic_id,user_id" });
   if (mErr) throw new Error(mErr.message);
   revalidatePath("/admin/users");
 }
 
+export async function setStaffRoleAction(fd: FormData) {
+  await requireAdmin();
+  const userId = str(fd, "user_id");
+  const role: Role = str(fd, "role") === "admin" ? "admin" : "staff";
+  if (!userId) throw new Error("缺少帳號");
+  const svc = createServiceClient();
+  // 防止把最後一位管理員降級(含自己)→ 診所將無人能管理
+  if (role === "staff") {
+    const { data: target } = await svc
+      .from("clinic_members")
+      .select("role")
+      .eq("clinic_id", CLINIC_ID)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (target?.role === "admin" && (await adminCount(svc)) <= 1)
+      throw new Error("至少要保留一位管理員");
+  }
+  const { error } = await svc
+    .from("clinic_members")
+    .update({ role })
+    .eq("clinic_id", CLINIC_ID)
+    .eq("user_id", userId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/users");
+}
+
 export async function removeStaffAction(fd: FormData) {
-  const { user } = await requireMember();
+  const { user } = await requireAdmin();
   const userId = str(fd, "user_id");
   if (!userId) throw new Error("缺少帳號");
   if (userId === user.id) throw new Error("無法移除自己");
   const svc = createServiceClient();
+  // 防止移除最後一位管理員
+  const { data: target } = await svc
+    .from("clinic_members")
+    .select("role")
+    .eq("clinic_id", CLINIC_ID)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (target?.role === "admin" && (await adminCount(svc)) <= 1)
+    throw new Error("至少要保留一位管理員");
   // 僅移除本診所權限(不刪除 auth 帳號)
   const { error } = await svc
     .from("clinic_members")
@@ -109,7 +158,7 @@ export async function removeStaffAction(fd: FormData) {
 }
 
 export async function resetStaffPasswordAction(fd: FormData) {
-  await requireMember();
+  await requireAdmin();
   const userId = str(fd, "user_id");
   const password = str(fd, "password");
   if (!userId) throw new Error("缺少帳號");
@@ -122,7 +171,7 @@ export async function resetStaffPasswordAction(fd: FormData) {
 
 // ── LINE 測試推播 ─────────────────────────────────────────
 export async function sendTestPushAction(fd: FormData) {
-  await requireMember();
+  await requireAdmin();
   const to = str(fd, "line_user_id");
   if (!to) redirect("/admin/line?test=err&reason=" + encodeURIComponent("請填 line_user_id"));
 
@@ -777,7 +826,7 @@ export async function deleteServiceAction(fd: FormData) {
 // ── LINE 自動回覆規則 ─────────────────────────────────────
 const REPLY_ACTIONS = ["text", "booking", "query", "progress", "message"] as const;
 export async function createReplyAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
   if (!keywords) throw new Error("請填關鍵字");
@@ -796,7 +845,7 @@ export async function createReplyAction(fd: FormData) {
 }
 
 export async function updateReplyAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const id = str(fd, "id");
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
@@ -818,7 +867,7 @@ export async function updateReplyAction(fd: FormData) {
 }
 
 export async function toggleReplyAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
@@ -831,7 +880,7 @@ export async function toggleReplyAction(fd: FormData) {
 }
 
 export async function deleteReplyAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_auto_replies")
@@ -843,7 +892,7 @@ export async function deleteReplyAction(fd: FormData) {
 }
 
 export async function updateLineTextsAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const { error } = await supabase
     .from("clinic_settings")
     .update({
@@ -864,7 +913,7 @@ export async function updateLineTextsAction(fd: FormData) {
 
 // ── LINE 訊息素材 line_messages ───────────────────────────
 export async function saveMessageAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const id = str(fd, "id");
   const name = str(fd, "name");
   const kind = str(fd, "kind");
@@ -894,7 +943,7 @@ export async function saveMessageAction(fd: FormData) {
 }
 
 export async function deleteMessageAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_messages")
@@ -952,7 +1001,7 @@ function reqBaseUrl(h: Headers): string {
 }
 
 export async function saveRichMenuAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const layout = str(fd, "layout") as Layout;
   if (!LAYOUTS[layout]) throw new Error("版型錯誤");
   const count = LAYOUTS[layout].slots;
@@ -1009,7 +1058,7 @@ export async function saveRichMenuAction(fd: FormData) {
 }
 
 export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   let errMsg: string | null = null;
   try {
     const { data: cfg } = await supabase
@@ -1051,7 +1100,7 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
 }
 
 export async function unpublishRichMenuAction() {
-  const { supabase } = await requireMember();
+  const { supabase } = await requireAdmin();
   const { data: cfg } = await supabase
     .from("line_richmenu")
     .select("published_id")

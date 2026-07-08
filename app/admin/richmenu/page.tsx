@@ -4,6 +4,7 @@ import { LAYOUTS, type Layout, type Slot } from "@/lib/richmenu";
 import { saveRichMenuAction, unpublishRichMenuAction } from "../actions";
 import RichMenuEditor from "./RichMenuEditor";
 import PublishForm from "./PublishForm";
+import { requireAdmin } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export default async function RichMenuPage({
 }: {
   searchParams: Promise<{ err?: string; ok?: string; saved?: string }>;
 }) {
+  await requireAdmin();
   const sp = await searchParams;
   const supabase = await createSupabaseServer();
   const [{ data }, { data: msgs }] = await Promise.all([

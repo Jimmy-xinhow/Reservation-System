@@ -7,11 +7,13 @@ import {
   deleteReplyAction,
   updateLineTextsAction,
 } from "../actions";
+import { requireAdmin } from "@/lib/admin";
 import RepliesEditor, { type Reply } from "./RepliesEditor";
 
 export const dynamic = "force-dynamic";
 
 export default async function RepliesPage() {
+  await requireAdmin();
   const supabase = await createSupabaseServer();
   const [{ data: replies }, { data: settings }, { data: msgs }] = await Promise.all([
     supabase

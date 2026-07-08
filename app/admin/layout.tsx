@@ -1,4 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { CLINIC_ID } from "@/lib/supabase";
+import type { Role } from "@/lib/admin";
 import { signOutAction } from "./actions";
 import { Brand } from "@/components/Brand";
 import { AdminNav } from "@/components/AdminNav";
@@ -12,6 +14,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // 未登入(例如登入頁)不顯示導覽列
   if (!user) return <>{children}</>;
 
+  const { data: member } = await supabase
+    .from("clinic_members")
+    .select("role")
+    .eq("clinic_id", CLINIC_ID)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const role: Role = member?.role === "admin" ? "admin" : "staff";
+
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/85 backdrop-blur">
@@ -23,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </form>
           </div>
           <div className="pb-2">
-            <AdminNav />
+            <AdminNav role={role} />
           </div>
         </div>
       </header>

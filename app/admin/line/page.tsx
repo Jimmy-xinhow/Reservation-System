@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { CLINIC_ID } from "@/lib/supabase";
 import { getBotInfo, getQuota, type LineBotInfo } from "@/lib/line";
+import { requireAdmin } from "@/lib/admin";
 import { sendTestPushAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ export default async function LinePage({
 }: {
   searchParams: Promise<{ test?: string; reason?: string }>;
 }) {
+  await requireAdmin();
   const { test, reason } = await searchParams;
 
   const h = await headers();

@@ -459,9 +459,16 @@ end; $$;
 create table if not exists clinic_members (
   clinic_id uuid not null references clinics(id) on delete cascade,
   user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'staff' check (role in ('admin','staff')),
   created_at timestamptz default now(),
   primary key (clinic_id, user_id)
 );
+-- 既有 DB 補欄位(create table if not exists 不會補新欄位)。
+-- 上線遷移時把既有成員設為 admin,避免所有人被降級鎖在門外(見 supabase/migration_roles.sql)。
+alter table clinic_members add column if not exists role text not null default 'staff';
+do $$ begin
+  alter table clinic_members add constraint clinic_members_role_check check (role in ('admin','staff'));
+exception when duplicate_object then null; end $$;
 -- 以 user_id 起頭的索引:policy 子查詢以 user_id 查 clinic_members 用(PK 為 (clinic_id,user_id))
 create index if not exists clinic_members_user_clinic_idx on clinic_members (user_id, clinic_id);
 

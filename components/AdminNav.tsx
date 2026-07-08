@@ -7,10 +7,12 @@ import { useState } from "react";
 interface Item {
   href: string;
   label: string;
+  adminOnly?: boolean;
 }
 interface Group {
   label: string;
   items: Item[];
+  adminOnly?: boolean;
 }
 
 const GROUPS: Group[] = [
@@ -36,6 +38,7 @@ const GROUPS: Group[] = [
   },
   {
     label: "LINE",
+    adminOnly: true,
     items: [
       { href: "/admin/line", label: "LINE 連線" },
       { href: "/admin/replies", label: "LINE 回覆" },
@@ -47,7 +50,7 @@ const GROUPS: Group[] = [
     label: "系統設定",
     items: [
       { href: "/admin/settings", label: "診所設定" },
-      { href: "/admin/users", label: "使用者管理" },
+      { href: "/admin/users", label: "使用者管理", adminOnly: true },
     ],
   },
 ];
@@ -56,13 +59,19 @@ function isActive(pathname: string, href: string): boolean {
   return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
 }
 
-export function AdminNav() {
+export function AdminNav({ role }: { role: "admin" | "staff" }) {
   const pathname = usePathname();
   const [open, setOpen] = useState<string | null>(null);
+  const isAdmin = role === "admin";
+
+  // 非管理員:隱藏 adminOnly 群組與項目(僅 UI;真正權限由 server 端 requireAdmin 強制)
+  const groups = GROUPS.filter((g) => isAdmin || !g.adminOnly)
+    .map((g) => ({ ...g, items: g.items.filter((it) => isAdmin || !it.adminOnly) }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <nav className="flex flex-wrap gap-1 text-sm">
-      {GROUPS.map((g) => {
+      {groups.map((g) => {
         // 單一項目 → 直接連結
         if (g.items.length === 1) {
           const it = g.items[0];

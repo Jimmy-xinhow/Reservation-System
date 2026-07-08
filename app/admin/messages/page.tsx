@@ -4,6 +4,7 @@ import { CLINIC_ID } from "@/lib/supabase";
 import { saveMessageAction, deleteMessageAction } from "../actions";
 import MessageComposer from "./MessageComposer";
 import type { MsgKind, MsgData } from "@/lib/lineMessage";
+import { requireAdmin } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ export default async function MessagesPage({
 }: {
   searchParams: Promise<{ edit?: string }>;
 }) {
+  await requireAdmin();
   const { edit } = await searchParams;
   const supabase = await createSupabaseServer();
   const { data } = await supabase
