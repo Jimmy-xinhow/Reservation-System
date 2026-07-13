@@ -26,6 +26,12 @@ interface Session {
   session_end: string;
   remaining: number;
 }
+interface PatientHit {
+  id: string;
+  name: string;
+  phone: string;
+  birthday: string | null;
+}
 
 type ServerAction = (fd: FormData) => Promise<void>;
 
@@ -67,6 +73,51 @@ export default function BookingForm({
   const [sessions, setSessions] = useState<Session[]>([]);
   const [picked, setPicked] = useState(""); // start_at 或 template_id
   const [msg, setMsg] = useState<string | null>(null);
+
+  // 就診者:可搜尋既有病患套入,或手動輸入新病患
+  const [patientId, setPatientId] = useState("");
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [birthday, setBirthday] = useState("");
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<PatientHit[]>([]);
+  const [showResults, setShowResults] = useState(false);
+
+  // 依姓名/電話/生日搜尋既有病患(debounce 250ms)
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) {
+      setResults([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/admin/patients/search?q=${encodeURIComponent(q)}`);
+        const json = await res.json();
+        if (json.ok) {
+          setResults(json.data.patients as PatientHit[]);
+          setShowResults(true);
+        }
+      } catch {
+        /* 搜尋失敗不打斷 */
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  function selectPatient(p: PatientHit) {
+    setPatientId(p.id);
+    setName(p.name);
+    setPhone(p.phone);
+    setBirthday(p.birthday ?? "");
+    setSearch("");
+    setResults([]);
+    setShowResults(false);
+  }
+  function clearSelection() {
+    // 一旦手動改欄位,視為新病患(不再綁定既有 id)
+    if (patientId) setPatientId("");
+  }
 
   const loadAvail = useCallback(async () => {
     setSlots([]);
@@ -130,14 +181,87 @@ export default function BookingForm({
         {!isReschedule && (
           <section>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">就診者</p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+            {/* 搜尋既有病患(姓名/電話/生日)→ 直接套入 */}
+            <div className="relative mb-3">
+              <input
+                className="input"
+                placeholder="🔍 搜尋既有病患(姓名 / 電話 / 生日)…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => results.length > 0 && setShowResults(true)}
+              />
+              {showResults && results.length > 0 && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowResults(false)} />
+                  <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                    {results.map((p) => (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectPatient(p)}
+                          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-brand-50"
+                        >
+                          <span className="font-medium text-slate-800">{p.name}</span>
+                          <span className="text-xs text-slate-400">
+                            {p.phone}
+                            {p.birthday ? ` · ${p.birthday}` : ""}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {patientId && (
+                <p className="mt-1 text-xs text-accent-600">已套入既有病患資料,可直接建立預約。</p>
+              )}
+            </div>
+
+            {!isReschedule && <input type="hidden" name="patient_id" value={patientId} />}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <label className="block text-sm font-medium text-slate-600">
                 姓名
-                <input name="name" className="input mt-1" placeholder="就診者姓名" required />
+                <input
+                  name="name"
+                  className="input mt-1"
+                  placeholder="就診者姓名"
+                  value={name}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    clearSelection();
+                  }}
+                  required
+                />
               </label>
               <label className="block text-sm font-medium text-slate-600">
                 電話
-                <input name="phone" className="input mt-1" inputMode="tel" placeholder="聯絡電話" required />
+                <input
+                  name="phone"
+                  className="input mt-1"
+                  inputMode="tel"
+                  placeholder="聯絡電話"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    clearSelection();
+                  }}
+                  required
+                />
+              </label>
+              <label className="block text-sm font-medium text-slate-600">
+                生日
+                <input
+                  type="date"
+                  name="birthday"
+                  className="input mt-1"
+                  max={todayStr()}
+                  value={birthday}
+                  onChange={(e) => {
+                    setBirthday(e.target.value);
+                    clearSelection();
+                  }}
+                />
               </label>
             </div>
           </section>

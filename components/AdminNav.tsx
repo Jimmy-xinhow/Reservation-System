@@ -75,7 +75,7 @@ export function AdminNav({
   const [unread, setUnread] = useState(chatUnread);
   const isAdmin = role === "admin";
 
-  // 未讀客服訊息:每 5 秒輪詢,讓紅點在其他頁面也能即時亮起
+  // 未讀客服訊息:掛載時先抓一次,之後每 5 秒輪詢(紅點在其他頁面也能亮起)
   useEffect(() => {
     let alive = true;
     const tick = async () => {
@@ -87,6 +87,7 @@ export function AdminNav({
         /* 靜默 */
       }
     };
+    tick();
     const t = setInterval(tick, 5000);
     return () => {
       alive = false;

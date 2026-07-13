@@ -430,25 +430,25 @@ export async function setDepositAction(fd: FormData) {
 }
 
 // ── 建立 / 改期(走 RPC,需 service client;先守門驗權限)──────
-async function getOrCreatePatient(name: string, phone: string): Promise<string> {
+async function getOrCreatePatient(name: string, phone: string, birthday?: string): Promise<string> {
   const svc = createServiceClient();
   const { data: existing } = await svc
     .from("patients")
-    .select("id, active")
+    .select("id, active, birthday")
     .eq("clinic_id", CLINIC_ID)
     .eq("phone", phone)
     .eq("name", name)
     .maybeSingle();
   if (existing) {
-    // 若之前被軟刪除,回訪重新建約時自動復活
-    if (existing.active === false) {
-      await svc.from("patients").update({ active: true }).eq("id", existing.id);
-    }
+    const patch: Record<string, unknown> = {};
+    if (existing.active === false) patch.active = true; // 軟刪除者回訪自動復活
+    if (birthday && !existing.birthday) patch.birthday = birthday; // 補上原本沒有的生日
+    if (Object.keys(patch).length > 0) await svc.from("patients").update(patch).eq("id", existing.id);
     return existing.id;
   }
   const { data: created, error } = await svc
     .from("patients")
-    .insert({ clinic_id: CLINIC_ID, name, phone })
+    .insert({ clinic_id: CLINIC_ID, name, phone, birthday: birthday || null })
     .select("id")
     .single();
   if (error) throw new Error(error.message);
@@ -509,11 +509,26 @@ export async function createAppointmentAction(fd: FormData) {
   const doctorId = str(fd, "doctor_id");
   const name = str(fd, "name");
   const phone = str(fd, "phone");
+  const birthday = str(fd, "birthday");
   if (!doctorId || !name || !phone) throw new Error("請填寫醫師、姓名、電話");
   const visitType = str(fd, "visit_type") === "first" ? "first" : "return";
   const isSelfPay = bool(fd, "is_self_pay");
 
-  const patientId = await getOrCreatePatient(name, phone);
+  // 已從搜尋套入既有病患 → 直接用其 id;否則以姓名+電話找或建
+  const selectedId = str(fd, "patient_id");
+  let patientId: string;
+  if (selectedId) {
+    const svc = createServiceClient();
+    const { data: p } = await svc
+      .from("patients")
+      .select("id")
+      .eq("id", selectedId)
+      .eq("clinic_id", CLINIC_ID)
+      .maybeSingle();
+    patientId = p?.id ?? (await getOrCreatePatient(name, phone, birthday || undefined));
+  } else {
+    patientId = await getOrCreatePatient(name, phone, birthday || undefined);
+  }
   await book({
     mode,
     doctorId,
