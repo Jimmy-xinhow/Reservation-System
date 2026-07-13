@@ -186,7 +186,7 @@ export default function BookingForm({
             <div className="relative mb-3">
               <input
                 className="input"
-                placeholder="🔍 搜尋既有病患(姓名 / 電話 / 生日)…"
+                placeholder="🔍 搜尋既有病患(姓名 / 電話 / 生日 MMDD)…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onFocus={() => results.length > 0 && setShowResults(true)}
