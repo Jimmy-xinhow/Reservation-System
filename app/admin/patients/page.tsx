@@ -33,18 +33,47 @@ export default async function PatientsPage({
 
   const supabase = await createSupabaseServer();
 
+  // 四碼數字 = 生日 MMDD;驗證月(01-12)日(01-31)才視為生日搜尋。
+  const mmdd = /^\d{4}$/.test(keyword) ? keyword : null;
+  const mm = mmdd ? Number(mmdd.slice(0, 2)) : 0;
+  const dd = mmdd ? Number(mmdd.slice(2, 4)) : 0;
+  const isMonthDay = !!mmdd && mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31;
+  const isFullDate = /^\d{4}-\d{2}-\d{2}$/.test(keyword);
+
   let patients: Patient[] = [];
   let total = 0;
   if (keyword) {
+    const orParts = [`name.ilike.%${keyword}%`, `phone.ilike.%${keyword}%`];
+    if (isFullDate) orParts.push(`birthday.eq.${keyword}`);
     const { data } = await supabase
       .from("patients")
       .select(SELECT)
       .eq("clinic_id", CLINIC_ID)
       .eq("active", true)
-      .or(`name.ilike.%${keyword}%,phone.ilike.%${keyword}%`)
+      .or(orParts.join(","))
       .order("created_at", { ascending: false })
       .limit(100);
     patients = (data ?? []) as Patient[];
+
+    // MMDD:PostgREST 無法對 date 抽月/日,改在此處掃描生日後合併。
+    if (isMonthDay) {
+      const suffix = `-${mmdd.slice(0, 2)}-${mmdd.slice(2, 4)}`; // -MM-DD
+      const { data: withBday } = await supabase
+        .from("patients")
+        .select(`${SELECT}, birthday`)
+        .eq("clinic_id", CLINIC_ID)
+        .eq("active", true)
+        .not("birthday", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      const seen = new Set(patients.map((p) => p.id));
+      for (const p of (withBday ?? []) as (Patient & { birthday: string | null })[]) {
+        if (p.birthday?.endsWith(suffix) && !seen.has(p.id)) {
+          seen.add(p.id);
+          patients.push(p);
+        }
+      }
+    }
   } else {
     const { data, count } = await supabase
       .from("patients")
@@ -83,7 +112,7 @@ export default async function PatientsPage({
       <h1 className="text-xl font-bold text-slate-900">病患查詢</h1>
 
       <form className="flex gap-2">
-        <input name="q" defaultValue={keyword} placeholder="輸入姓名或電話" className="input max-w-xs" />
+        <input name="q" defaultValue={keyword} placeholder="姓名 / 電話 / 生日 MMDD" className="input max-w-xs" />
         <SubmitButton className="btn btn-primary">搜尋</SubmitButton>
         {keyword && (
           <Link href="/admin/patients" className="btn btn-ghost">
