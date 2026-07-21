@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (pErr) return fail(pErr.message, 500);
     if (!patient || patient.clinic_id !== CLINIC_ID) return fail("查無病患", 404);
-    if (patient.line_user_id && patient.line_user_id !== lineUserId) {
+    if (!patient.line_user_id || patient.line_user_id !== lineUserId) {
       return fail("病患與目前 LINE 身分不符", 403);
     }
     // 黑名單:停權期間不可預約

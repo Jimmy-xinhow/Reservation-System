@@ -53,20 +53,24 @@ export async function POST(req: NextRequest) {
 
     const { data: existing, error: qErr } = await svc
       .from("patients")
-      .select("id, name")
+      .select("id, name, line_user_id, active")
       .eq("clinic_id", CLINIC_ID)
       .eq("phone", phone);
     if (qErr) return fail(qErr.message, 500);
     const rows = existing ?? [];
 
     // 同電話同姓名 → 沿用該筆,更新 line_user_id 與生日(若曾被軟刪除則復活)
-    const sameName = rows.find((r) => r.name === name);
+    const sameName = rows.find((r) => r.name === name && (!r.line_user_id || r.line_user_id === lineUserId));
     if (sameName) {
       await svc
         .from("patients")
         .update({ line_user_id: lineUserId, birthday, active: true })
         .eq("id", sameName.id);
       return ok({ patient_id: sameName.id, reused: true });
+    }
+
+    if (rows.some((r) => r.name === name && r.line_user_id && r.line_user_id !== lineUserId)) {
+      return fail("此病患資料已綁定其他 LINE 帳號，請確認姓名與電話", 409);
     }
 
     // 需新增:檢查上限

@@ -22,6 +22,8 @@ create index if not exists patients_clinic_birthday_mmdd_idx
   on patients (clinic_id, birthday_mmdd)
   where active = true;
 
+alter table appointments drop constraint if exists appointments_template_id_fkey;
+
 insert into clinic_settings (clinic_id)
 select id from clinics
 on conflict (clinic_id) do nothing;

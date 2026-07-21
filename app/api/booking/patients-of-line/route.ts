@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       .select("id, name, phone, blocked_until")
       .eq("clinic_id", CLINIC_ID)
       .eq("line_user_id", lineUserId)
+      .eq("active", true)
       .order("created_at");
     if (error) return fail(error.message, 500);
 

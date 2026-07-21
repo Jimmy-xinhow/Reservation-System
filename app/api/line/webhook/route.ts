@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
             .some((k) => text.includes(k)),
         );
         if (rule?.action === "progress") {
-          await replyProgress(ev.replyToken, ev.source?.userId, svc, baseUrl);
+          await replyProgress(ev.replyToken, ev.source?.userId, svc);
         } else if (rule?.action === "query") {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
         } else if (rule?.action === "booking") {
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
         if (action === "my") {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
         } else if (action === "progress") {
-          await replyProgress(ev.replyToken, ev.source?.userId, svc, baseUrl);
+          await replyProgress(ev.replyToken, ev.source?.userId, svc);
         } else if (action === "booking") {
           await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
         } else if (action === "msg") {
@@ -498,7 +498,6 @@ async function replyProgress(
   replyToken: string,
   lineUserId: string | undefined,
   svc: SupabaseClient,
-  baseUrl: string,
 ): Promise<void> {
   if (!lineUserId) {
     await safeReply(replyToken, "無法取得您的 LINE 身分,請稍後再試。");

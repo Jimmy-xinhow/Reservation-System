@@ -198,6 +198,8 @@ create index if not exists appt_template_start_idx on appointments (template_id,
 -- 既有資料庫補欄位(idempotent)
 alter table appointments add column if not exists service_id uuid references services(id);
 alter table appointments add column if not exists source text not null default 'online';
+-- 號次制的例外診次也使用 template_id 作為 session key；來源由 booking RPC 嚴格驗證。
+alter table appointments drop constraint if exists appointments_template_id_fkey;
 
 -- LINE 自動回覆規則(後台可編輯)。keywords 命中(包含)→ 依 action 回覆。
 -- action:text=自訂文字 / booking=開啟預約 / query=查詢預約 / progress=看診進度
@@ -489,7 +491,7 @@ begin
    and a.start_at = ((p_date + x.start_time) at time zone 'Asia/Taipei')
    and a.status in ('booked','confirmed','done')
   -- 只要診次「尚未結束」就顯示(含已額滿);已結束才隱藏
-  where ((p_date + x.end_time) at time zone 'Asia/Taipei') > now()
+  where ((p_date + x.start_time) at time zone 'Asia/Taipei') > now() + (v_lead||' minutes')::interval
   group by x.id, x.start_time, x.end_time, x.capacity;
 end; $$;
 
@@ -507,20 +509,32 @@ begin
     then raise exception '醫師不存在或已停用'; end if;
   if not exists (select 1 from public.patients where id=p_patient_id and clinic_id=p_clinic_id and active)
     then raise exception '病患不存在或已停用'; end if;
+  if not exists (
+    select 1 from public.schedule_templates
+    where id=p_template_id and clinic_id=p_clinic_id and doctor_id=p_doctor_id
+      and active and weekday=extract(dow from p_date)
+  ) and not exists (
+    select 1 from public.schedule_exceptions
+    where id=p_template_id and clinic_id=p_clinic_id and doctor_id=p_doctor_id
+      and date=p_date and not is_closed
+  ) then raise exception '門診段與日期不相符'; end if;
+
   select capacity,start_time,end_time into v_cap,v_start,v_end from (
     select id,capacity,start_time,end_time from public.schedule_templates
       where clinic_id=p_clinic_id and doctor_id=p_doctor_id and active
     union all
     select id,coalesce(capacity,40),start_time,end_time from public.schedule_exceptions
-      where clinic_id=p_clinic_id and doctor_id=p_doctor_id and not is_closed
+      where clinic_id=p_clinic_id and doctor_id=p_doctor_id and date=p_date and not is_closed
   ) q where id=p_template_id;
   if not found then raise exception '查無此門診段'; end if;
 
   v_start_at := (p_date + v_start) at time zone 'Asia/Taipei';
   v_end_at   := (p_date + v_end) at time zone 'Asia/Taipei';
+  if v_start_at < now() + (coalesce(st.min_lead_minutes,30)||' minutes')::interval
+    then raise exception '尚未到可預約時間'; end if;
   if p_date > ((now() at time zone 'Asia/Taipei')::date + coalesce(st.max_advance_days,30))
     then raise exception '超過最長可預約區間'; end if;
-  -- 號次制:只要診次尚未結束都可掛號(額滿另外擋);已結束才擋下
+  -- 號次制:診次開始前須符合最短前置時間，額滿或已結束則擋下
   if v_end_at <= now() then raise exception '本診已結束'; end if;
 
   -- 整天休診或只休此診則擋下
