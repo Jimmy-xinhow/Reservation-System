@@ -25,6 +25,9 @@ yarn-error.log*
 .env*.local
 .env.local
 
+# local Codex/Claude permissions can contain credentials
+.claude/settings.local.json
+
 # typescript
 *.tsbuildinfo
 

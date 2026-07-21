@@ -47,6 +47,24 @@ alter table clinic_settings add column if not exists email_enabled boolean not n
 alter table clinic_settings add column if not exists resend_api_key text;
 alter table clinic_settings add column if not exists email_from text;
 
+-- 新建診所時自動建立可用的預設設定
+insert into clinic_settings (clinic_id)
+select id from clinics
+on conflict (clinic_id) do nothing;
+
+create or replace function seed_clinic_settings()
+returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  insert into public.clinic_settings (clinic_id) values (new.id)
+  on conflict (clinic_id) do nothing;
+  return new;
+end; $$;
+
+drop trigger if exists trg_clinic_seed_settings on clinics;
+create trigger trg_clinic_seed_settings after insert on clinics
+  for each row execute function seed_clinic_settings();
+
 create table if not exists doctors (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references clinics(id) on delete cascade,
@@ -111,6 +129,26 @@ alter table patients add column if not exists email text;
 alter table patients add column if not exists marketing_opt_in boolean not null default false;
 alter table patients add column if not exists blocked_until timestamptz;
 alter table patients add column if not exists active boolean not null default true;
+alter table patients add column if not exists birthday_mmdd char(4);
+update patients
+set birthday_mmdd = to_char(birthday, 'MMDD')
+where birthday is not null and birthday_mmdd is distinct from to_char(birthday, 'MMDD');
+
+create or replace function sync_patient_birthday_mmdd()
+returns trigger
+language plpgsql as $$
+begin
+  new.birthday_mmdd := case when new.birthday is null then null else to_char(new.birthday, 'MMDD') end;
+  return new;
+end; $$;
+
+drop trigger if exists trg_patient_birthday_mmdd on patients;
+create trigger trg_patient_birthday_mmdd before insert or update of birthday on patients
+  for each row execute function sync_patient_birthday_mmdd();
+
+create index if not exists patients_clinic_birthday_mmdd_idx
+  on patients (clinic_id, birthday_mmdd)
+  where active = true;
 
 -- 病況紀錄(逐筆,櫃檯/醫師記錄)
 create table if not exists patient_records (
@@ -163,6 +201,16 @@ alter table appointments add column if not exists source text not null default '
 
 -- LINE 自動回覆規則(後台可編輯)。keywords 命中(包含)→ 依 action 回覆。
 -- action:text=自訂文字 / booking=開啟預約 / query=查詢預約 / progress=看診進度
+-- line_messages must exist before line_auto_replies because message_id references it
+create table if not exists line_messages (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  name text not null,
+  kind text not null default 'text' check (kind in ('text','card','carousel')),
+  data jsonb not null default '{}',
+  created_at timestamptz default now()
+);
+
 create table if not exists line_auto_replies (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references clinics(id) on delete cascade,
@@ -238,6 +286,32 @@ create table if not exists reminder_logs (
   result text,
   unique (appointment_id, channel)
 );
+
+create or replace function claim_reminder(
+  p_appointment_id uuid, p_channel text
+) returns uuid
+language plpgsql security definer set search_path = '' as $$
+declare
+  existing public.reminder_logs;
+  claimed_id uuid;
+begin
+  perform pg_advisory_xact_lock(hashtext('reminder:' || p_appointment_id::text || ':' || p_channel));
+  select * into existing from public.reminder_logs
+   where appointment_id=p_appointment_id and channel=p_channel;
+  if found then
+    if existing.result = 'sent' then return null; end if;
+    if existing.result = 'sending' and existing.sent_at > now() - interval '15 minutes' then return null; end if;
+    update public.reminder_logs set result='sending', sent_at=now() where id=existing.id returning id into claimed_id;
+    return claimed_id;
+  end if;
+  insert into public.reminder_logs(appointment_id, channel, result, sent_at)
+    values (p_appointment_id, p_channel, 'sending', now())
+    returning id into claimed_id;
+  return claimed_id;
+end; $$;
+
+revoke all on function claim_reminder(uuid, text) from public, anon, authenticated;
+grant execute on function claim_reminder(uuid, text) to service_role;
 
 -- updated_at 自動更新
 create or replace function touch_updated_at() returns trigger
@@ -320,6 +394,10 @@ declare
   v_dep boolean;
 begin
   select * into st from public.clinic_settings where clinic_id=p_clinic_id;
+  if not exists (select 1 from public.doctors where id=p_doctor_id and clinic_id=p_clinic_id and active)
+    then raise exception '醫師不存在或已停用'; end if;
+  if not exists (select 1 from public.patients where id=p_patient_id and clinic_id=p_clinic_id and active)
+    then raise exception '病患不存在或已停用'; end if;
 
   select start_time,end_time,slot_minutes,capacity into s from (
     select start_time,end_time,slot_minutes,capacity from public.schedule_templates
@@ -348,7 +426,17 @@ begin
   if p_start_at < now() + (coalesce(st.min_lead_minutes,30)||' minutes')::interval
     then raise exception '已超過可預約時間'; end if;
 
-  perform pg_advisory_xact_lock(hashtext(p_doctor_id::text || p_start_at::text));
+  if v_date > ((now() at time zone 'Asia/Taipei')::date + coalesce(st.max_advance_days,30))
+    then raise exception '超過最長可預約區間'; end if;
+
+  perform pg_advisory_xact_lock(hashtext('time:' || p_clinic_id::text || p_doctor_id::text || v_date::text));
+  perform pg_advisory_xact_lock(hashtext('patient:' || p_clinic_id::text || p_patient_id::text || v_date::text));
+  if exists (
+    select 1 from public.appointments
+    where clinic_id=p_clinic_id and patient_id=p_patient_id
+      and status in ('booked','confirmed','done')
+      and (start_at at time zone 'Asia/Taipei')::date = v_date
+  ) then raise exception '同一病患當日已有預約'; end if;
   select count(*) into v_used from public.appointments
    where clinic_id=p_clinic_id and doctor_id=p_doctor_id
      and status in ('booked','confirmed','done')
@@ -415,16 +503,23 @@ declare
   v_start_at timestamptz; v_end_at timestamptz; v_used int; v_no int; v_id uuid; v_dep boolean;
 begin
   select * into st from public.clinic_settings where clinic_id=p_clinic_id;
+  if not exists (select 1 from public.doctors where id=p_doctor_id and clinic_id=p_clinic_id and active)
+    then raise exception '醫師不存在或已停用'; end if;
+  if not exists (select 1 from public.patients where id=p_patient_id and clinic_id=p_clinic_id and active)
+    then raise exception '病患不存在或已停用'; end if;
   select capacity,start_time,end_time into v_cap,v_start,v_end from (
-    select id,capacity,start_time,end_time from public.schedule_templates where clinic_id=p_clinic_id
+    select id,capacity,start_time,end_time from public.schedule_templates
+      where clinic_id=p_clinic_id and doctor_id=p_doctor_id and active
     union all
     select id,coalesce(capacity,40),start_time,end_time from public.schedule_exceptions
-      where clinic_id=p_clinic_id and not is_closed
+      where clinic_id=p_clinic_id and doctor_id=p_doctor_id and not is_closed
   ) q where id=p_template_id;
   if not found then raise exception '查無此門診段'; end if;
 
   v_start_at := (p_date + v_start) at time zone 'Asia/Taipei';
   v_end_at   := (p_date + v_end) at time zone 'Asia/Taipei';
+  if p_date > ((now() at time zone 'Asia/Taipei')::date + coalesce(st.max_advance_days,30))
+    then raise exception '超過最長可預約區間'; end if;
   -- 號次制:只要診次尚未結束都可掛號(額滿另外擋);已結束才擋下
   if v_end_at <= now() then raise exception '本診已結束'; end if;
 
@@ -434,7 +529,14 @@ begin
                and ec.is_closed and (ec.start_time is null or ec.start_time = v_start))
     then raise exception '本診已休診'; end if;
 
-  perform pg_advisory_xact_lock(hashtext(p_template_id::text || p_date::text));
+  perform pg_advisory_xact_lock(hashtext('number:' || p_clinic_id::text || p_template_id::text || p_date::text));
+  perform pg_advisory_xact_lock(hashtext('patient:' || p_clinic_id::text || p_patient_id::text || p_date::text));
+  if exists (
+    select 1 from public.appointments
+    where clinic_id=p_clinic_id and patient_id=p_patient_id
+      and status in ('booked','confirmed','done')
+      and (start_at at time zone 'Asia/Taipei')::date = p_date
+  ) then raise exception '同一病患當日已有預約'; end if;
   select count(*) filter (where a.status in ('booked','confirmed','done')),
          coalesce(max(a.queue_number),0)
     into v_used, v_no
@@ -485,6 +587,14 @@ create index if not exists clinic_members_user_clinic_idx on clinic_members (use
 -- 不給 anon 任何 policy;病患端一律經 Next.js API route 用 service_role(繞過 RLS)。
 -- 後台 authenticated 只能存取自己診所。
 -- ──────────────────────────────────────────────────────────────────────────
+
+-- 預約寫入只能由本專案 service-role API 呼叫，避免 anon 直接執行 RPC
+revoke all on function book_time_slot(uuid, uuid, uuid, timestamptz, text, boolean) from public, anon, authenticated;
+grant execute on function book_time_slot(uuid, uuid, uuid, timestamptz, text, boolean) to service_role;
+revoke all on function book_number(uuid, uuid, uuid, uuid, date, text, boolean) from public, anon, authenticated;
+grant execute on function book_number(uuid, uuid, uuid, uuid, date, text, boolean) to service_role;
+revoke all on function claim_reminder(uuid, text) from public, anon, authenticated;
+grant execute on function claim_reminder(uuid, text) to service_role;
 
 alter table clinics enable row level security;
 alter table clinic_settings enable row level security;

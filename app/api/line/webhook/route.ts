@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
             );
           }
         } else if (action === "confirm" || action === "cancel") {
-          await handleStatusPostback(ev.replyToken, action, params.get("id"), svc);
+          await handleStatusPostback(ev.replyToken, action, params.get("id"), ev.source?.userId, svc);
         } else {
           await safeReply(ev.replyToken, "無法辨識的操作");
         }
@@ -632,6 +632,7 @@ async function handleStatusPostback(
   replyToken: string,
   action: "confirm" | "cancel",
   id: string | null,
+  lineUserId: string | undefined,
   svc: SupabaseClient,
 ): Promise<void> {
   if (!id) {
@@ -640,13 +641,22 @@ async function handleStatusPostback(
   }
   const { data: appt } = await svc
     .from("appointments")
-    .select("id, status, clinic_id")
+    .select("id, status, clinic_id, patients(line_user_id)")
     .eq("id", id)
     .eq("clinic_id", CLINIC_ID)
     .maybeSingle();
 
   if (!appt) {
     await safeReply(replyToken, "查無此預約");
+    return;
+  }
+  const patient = appt.patients as unknown as
+    | { line_user_id: string | null }
+    | { line_user_id: string | null }[]
+    | null;
+  const owner = Array.isArray(patient) ? patient[0]?.line_user_id : patient?.line_user_id;
+  if (!lineUserId || !owner || owner !== lineUserId) {
+    await safeReply(replyToken, "這筆預約不屬於目前 LINE 帳號");
     return;
   }
   if (appt.status === "cancelled" || appt.status === "done" || appt.status === "no_show") {

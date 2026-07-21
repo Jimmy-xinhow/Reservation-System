@@ -37,5 +37,28 @@ export async function getClinicSettings(
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return (data as ClinicSettings | null) ?? null;
+  if (!data) return null;
+  if (!isClinicSettings(data)) throw new Error("clinic_settings 設定格式錯誤");
+  return data;
+}
+
+function isClinicSettings(value: unknown): value is ClinicSettings {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.clinic_id === "string" &&
+    (row.booking_mode === "time" || row.booking_mode === "number") &&
+    typeof row.first_visit_extends === "boolean" &&
+    (row.first_visit_minutes === null || typeof row.first_visit_minutes === "number") &&
+    typeof row.allow_multi_patient_per_phone === "boolean" &&
+    typeof row.max_patients_per_phone === "number" &&
+    typeof row.deposit_enabled === "boolean" &&
+    typeof row.deposit_amount === "number" &&
+    (row.deposit_scope === "all" || row.deposit_scope === "self_pay" || row.deposit_scope === "none") &&
+    typeof row.min_lead_minutes === "number" &&
+    typeof row.max_advance_days === "number" &&
+    typeof row.email_enabled === "boolean" &&
+    (row.resend_api_key === null || typeof row.resend_api_key === "string") &&
+    (row.email_from === null || typeof row.email_from === "string")
+  );
 }

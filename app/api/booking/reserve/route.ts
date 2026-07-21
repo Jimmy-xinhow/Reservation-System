@@ -3,6 +3,7 @@ import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { formatDateTime, taipeiDateString } from "@/lib/slots";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,12 @@ interface ReserveBody {
  */
 export async function POST(req: NextRequest) {
   try {
+    const rate = checkRateLimit(req, "booking:reserve", 20);
+    if (!rate.allowed) {
+      const response = fail("請稍後再試", 429);
+      response.headers.set("Retry-After", String(rate.retryAfterSeconds));
+      return response;
+    }
     if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
     const body = (await req.json().catch(() => null)) as ReserveBody | null;
     if (!body) return fail("請求格式錯誤");

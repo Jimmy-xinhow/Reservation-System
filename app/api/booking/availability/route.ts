@@ -22,6 +22,22 @@ export async function GET(req: NextRequest) {
     const settings = await getClinicSettings(svc, CLINIC_ID);
     if (!settings) return fail("查無診所設定", 500);
 
+    const { data: doctor, error: doctorError } = await svc
+      .from("doctors")
+      .select("id")
+      .eq("id", doctorId)
+      .eq("clinic_id", CLINIC_ID)
+      .eq("active", true)
+      .maybeSingle();
+    if (doctorError) return fail(doctorError.message, 500);
+    if (!doctor) return fail("醫師不存在或已停用", 404);
+
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const maxDateValue = new Date(`${today}T00:00:00+08:00`);
+    maxDateValue.setUTCDate(maxDateValue.getUTCDate() + settings.max_advance_days);
+    const maxDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(maxDateValue);
+    if (date < today || date > maxDate) return fail("預約日期超出可預約範圍", 400);
+
     if (settings.booking_mode === "time") {
       const { data, error } = await svc.rpc("get_available_slots", {
         p_clinic_id: CLINIC_ID,

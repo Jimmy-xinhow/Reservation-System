@@ -57,22 +57,15 @@ export default async function PatientsPage({
 
     // MMDD:PostgREST 無法對 date 抽月/日,改在此處掃描生日後合併。
     if (isMonthDay) {
-      const suffix = `-${mmdd.slice(0, 2)}-${mmdd.slice(2, 4)}`; // -MM-DD
       const { data: withBday } = await supabase
         .from("patients")
-        .select(`${SELECT}, birthday`)
+        .select(SELECT)
         .eq("clinic_id", CLINIC_ID)
         .eq("active", true)
-        .not("birthday", "is", null)
+        .eq("birthday_mmdd", mmdd)
         .order("created_at", { ascending: false })
-        .limit(1000);
-      const seen = new Set(patients.map((p) => p.id));
-      for (const p of (withBday ?? []) as (Patient & { birthday: string | null })[]) {
-        if (p.birthday?.endsWith(suffix) && !seen.has(p.id)) {
-          seen.add(p.id);
-          patients.push(p);
-        }
-      }
+        .limit(100);
+      patients = (withBday ?? []) as Patient[];
     }
   } else {
     const { data, count } = await supabase

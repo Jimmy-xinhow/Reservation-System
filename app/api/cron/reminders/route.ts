@@ -4,6 +4,7 @@ import { getClinicSettings } from "@/lib/http";
 import { pushMessages, type LineMessage } from "@/lib/line";
 import { sendEmail } from "@/lib/email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +27,7 @@ export async function GET(req: NextRequest) {
   // CRON_SECRET 驗證(Vercel Cron 會帶 Authorization: Bearer <CRON_SECRET>)
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
-  const qSecret = req.nextUrl.searchParams.get("secret");
-  if (!secret || (auth !== `Bearer ${secret}` && qSecret !== secret)) {
+  if (!secret || auth !== `Bearer ${secret}`) {
     return new Response("unauthorized", { status: 401 });
   }
 
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       .from("appointments")
       .select("id, start_at, queue_number, doctors(name), patients(name, line_user_id, email)")
       .eq("clinic_id", CLINIC_ID)
-      .eq("status", "booked")
+      .in("status", ["booked", "confirmed"])
       .gt("start_at", now.toISOString())
       .lte("start_at", until.toISOString());
     if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
@@ -54,29 +54,20 @@ export async function GET(req: NextRequest) {
     if (rows.length === 0) return Response.json({ ok: true, line: 0, email: 0 });
 
     // 已發過的提醒紀錄(依管道)
-    const { data: logs } = await svc
-      .from("reminder_logs")
-      .select("appointment_id, channel")
-      .in(
-        "appointment_id",
-        rows.map((a) => a.id),
-      );
-    const done = new Set((logs ?? []).map((l) => `${l.appointment_id}|${l.channel}`));
-
     // ── LINE 推播(會計入額度)──
     let lineSent = 0;
     let lineFailed = 0;
     for (const a of rows) {
       if (!a.patients?.line_user_id) continue;
-      if (done.has(`${a.id}|line`)) continue;
+      const claim = await claimReminder(svc, a.id, "line");
+      if (!claim) continue;
       const flex = buildReminderFlex(a, settings.booking_mode);
       try {
         await pushMessages(a.patients.line_user_id, [flex]);
-        const { error: logErr } = await svc
-          .from("reminder_logs")
-          .insert({ appointment_id: a.id, channel: "line", result: "sent" });
-        if (!logErr) lineSent += 1;
+        await finishReminder(svc, claim, "sent");
+        lineSent += 1;
       } catch {
+        await finishReminder(svc, claim, "failed").catch(() => undefined);
         lineFailed += 1;
       }
     }
@@ -90,14 +81,14 @@ export async function GET(req: NextRequest) {
       for (const a of rows) {
         const to = a.patients?.email;
         if (!to) continue;
-        if (done.has(`${a.id}|email`)) continue;
+        const claim = await claimReminder(svc, a.id, "email");
+        if (!claim) continue;
         try {
           await sendEmail(cfg, to, "慈愛中醫診所 看診提醒", buildReminderHtml(a, settings.booking_mode));
-          const { error: logErr } = await svc
-            .from("reminder_logs")
-            .insert({ appointment_id: a.id, channel: "email", result: "sent" });
-          if (!logErr) emailSent += 1;
+          await finishReminder(svc, claim, "sent");
+          emailSent += 1;
         } catch {
+          await finishReminder(svc, claim, "failed").catch(() => undefined);
           emailFailed += 1;
         }
       }
@@ -117,6 +108,41 @@ export async function GET(req: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+async function claimReminder(
+  svc: SupabaseClient,
+  appointmentId: string,
+  channel: "line" | "email",
+): Promise<string | null> {
+  const { data, error } = await svc.rpc("claim_reminder", {
+    p_appointment_id: appointmentId,
+    p_channel: channel,
+  });
+  if (error) throw new Error(error.message);
+  return typeof data === "string" ? data : null;
+}
+
+async function finishReminder(
+  svc: SupabaseClient,
+  claimId: string,
+  result: "sent" | "failed",
+): Promise<void> {
+  const { error } = await svc.from("reminder_logs").update({ result }).eq("id", claimId);
+  if (error) throw new Error(error.message);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+    return entities[char] ?? char;
+  });
 }
 
 function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
@@ -161,6 +187,17 @@ function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
 }
 
 function buildReminderHtml(a: ApptRow, mode: "time" | "number"): string {
+  const safe: ApptRow = {
+    ...a,
+    doctors: a.doctors ? { name: escapeHtml(a.doctors.name) } : null,
+    patients: a.patients
+      ? { ...a.patients, name: escapeHtml(a.patients.name) }
+      : null,
+  };
+  return buildReminderHtmlUnsafe(safe, mode);
+}
+
+function buildReminderHtmlUnsafe(a: ApptRow, mode: "time" | "number"): string {
   const doctor = a.doctors?.name ?? "醫師";
   const patient = a.patients?.name ?? "";
   const when =

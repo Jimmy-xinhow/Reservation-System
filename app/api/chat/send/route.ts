@@ -3,6 +3,7 @@ import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { ok, fail } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { isClinicOpenNow } from "@/lib/queue";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,12 @@ const OFFHOURS_REPLY = "現在非看診時間,我們將在看診時間時盡快�
  */
 export async function POST(req: NextRequest) {
   try {
+    const rate = checkRateLimit(req, "chat:send", 20);
+    if (!rate.allowed) {
+      const response = fail("請稍後再試", 429);
+      response.headers.set("Retry-After", String(rate.retryAfterSeconds));
+      return response;
+    }
     if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
     const payload = (await req.json().catch(() => null)) as {
       idToken?: string;
