@@ -107,6 +107,15 @@
 3. 讓提醒／報名／行銷 cron 在中途失敗後重跑，確認去重鍵、`notification_processed_at` 游標、retry window 與結果一致；先製造超過單批上限的狀態事件，確認較早事件不會被餓死。
 4. 保存 Cron authorization、HTTP status、summary、錯誤 log 與資料庫前後差異。
 
+若環境沒有 Docker，可使用已安裝的 PostgreSQL client 直接做 logical dump；請把 Supabase Dashboard 的 connection string 只放在目前 PowerShell session 的環境變數，不要寫入檔案或提交 Git：
+
+```powershell
+$env:SUPABASE_DB_URL = "<dashboard connection string>"
+& "C:\Program Files\PostgreSQL\16\bin\pg_dump.exe" --format=custom --no-owner --file C:\tmp\reservation-system-staging.dump $env:SUPABASE_DB_URL
+```
+
+還原時必須使用獨立 staging／temporary database，並保存 dump checksum、還原前後 row count 與結構檢查結果；不可直接覆蓋正式資料庫。
+
 ## 10. 交付判定
 
 只有第 1–9 節均有 staging 證據，且無 P0／P1 缺陷，才可在 `docs/acceptance-matrix.md` 將「外部驗收」改為 PASS。若缺少 Supabase、第三方帳號、DNS 或備份證據，狀態必須維持「未完成／待外部驗收」，不得宣稱正式上線。

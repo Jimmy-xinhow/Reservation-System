@@ -42,7 +42,7 @@
 
 ## 尚未完成的外部驗收
 
-- 備份／還原演練：本機沒有 Docker Desktop 或 `pg_dump`，尚未取得可還原 backup 證據。
+- 備份／還原演練：本機沒有 Docker Desktop；已找到 PostgreSQL 16 `pg_dump.exe`，但尚未設定 Supabase DB connection string／password，仍未取得可還原 backup 證據。
 - LINE LIFF、Rich Menu、webhook signature、destination mapping：需要品牌 Channel 設定與 secret。
 - Email／行銷投遞：需要 Email provider、寄件網域與測試信箱。
 - ECPay／NewebPay：需要 test merchant、金流設定與可接收的 callback URL。
