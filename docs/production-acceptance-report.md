@@ -16,7 +16,7 @@
 - 預約顧客端（LINE／瀏覽器）已支援選填 Email；僅在身分驗證、租戶範圍與預約建立成功後寫入，更新失敗會取消該筆預約。
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
-- GitHub `main` 已同步至 `baa423b`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口與分眾篩選保留。
+- GitHub `main` 已同步至 `7c09478`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留與預約 Email（選填）。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
@@ -26,11 +26,12 @@
 - 已依既有資料庫順序套用 CRM Lite、報名／付款、v3 hardening、會員／優惠券與 v4 role matrix。
 - 目前 `public` 有 47 張資料表，全部啟用 RLS。
 - 系統目錄檢查沒有 anon／public policy；核心預約與報名 RPC 僅 service role 可執行。
-- anon REST 對 `clinics`、`patients`、`appointments`、`registrations` 的唯讀結果均為空集合。
+- 本輪 anon REST 探測回應為 404，未將其當作 RLS 正面證據；RLS 以正式庫系統目錄與政策檢查為準，仍需在可用的 staging／部署 REST 入口補做雙品牌 anon 攻擊驗收。
 - 已登入 Supabase CLI 並以 linked project 執行唯讀 `select 1`，正式資料庫回傳 `healthcheck: 1`。
 - 正式資料庫唯讀 schema 檢查確認 `patients.blocked_until` 存在，且 `patients` 已啟用 RLS。
 - 本輪 linked 唯讀安全稽核回傳 `public_tables=47`、`rls_tables=47`、anon/public policy `=0`、authenticated policy `=93`；legacy secret 欄位 `=0`，核心預約／報名／取消 RPC 對 anon 與 authenticated 的 execute 權限均為 `0`。
 - `supabase migration list --linked` 目前回傳空清單；正式 schema 的存在與交易行為已驗證，但 CLI migration history／獨立環境 replay 仍未建立，不能將其誤列為 migration replay 證據。
+- `supabase db push --linked --yes` 實際執行並回傳 remote database up to date（`migrations=[]`）；因目前沒有標準 timestamp migration 目錄，此結果僅表示 CLI 沒有可推送的 migration，不等同於獨立環境 replay。
 
 ### 正式資料庫交易驗收
 
