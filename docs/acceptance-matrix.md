@@ -32,7 +32,7 @@
 
 | 項目 | 必要環境或資料 | 未完成原因 |
 |---|---|---|
-| 全新資料庫 migration replay | Supabase project、SQL Editor 或 migration runner | 本機沒有 `psql`／Supabase CLI 與 Supabase URL |
+| 全新資料庫 migration replay | Supabase project、SQL Editor 或 migration runner | CLI 已安裝；目前缺 Supabase access token、project ref／URL 與可授權的 staging project |
 | 既有資料庫 migration、回填與回滾 | 一份可還原的 staging DB backup | 不可在沒有授權的資料庫上猜測或修改資料 |
 | anon RLS 攻擊測試 | Supabase anon key + 兩個品牌與成員測試資料 | RLS 必須由 PostgreSQL 實際執行結果證明 |
 | 預約／報名最後名額競爭 | staging DB、兩個平行請求 | 靜態 advisory lock 檢查不能取代實際併發測試 |

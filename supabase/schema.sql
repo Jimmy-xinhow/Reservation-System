@@ -1458,7 +1458,7 @@ begin
     v_ticket_capacity := null;
   end if;
 
-  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_event_id::text));
+  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text));
 
   select count(*)::int into v_taken from registrations r
    where r.clinic_id = p_clinic_id and r.session_id = p_session_id
@@ -2004,7 +2004,7 @@ begin
     v_original := ticket.price;
   end if;
   if v_code is not null and v_original = 0 then raise exception 'discount code requires a paid ticket'; end if;
-  perform pg_advisory_xact_lock(hashtext('registration-benefit:' || p_clinic_id::text || ':' || p_event_id::text));
+  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text));
   select count(*)::int into v_taken from registrations r where r.clinic_id=p_clinic_id and r.session_id=p_session_id and r.status in ('pending','confirmed','attended') and (r.status<>'pending' or r.expires_at is null or r.expires_at>now());
   if p_ticket_type_id is not null then
     select count(*)::int into v_ticket_taken from registrations r where r.clinic_id=p_clinic_id and r.ticket_type_id=p_ticket_type_id and r.status in ('pending','confirmed','attended') and (r.status<>'pending' or r.expires_at is null or r.expires_at>now());
@@ -2438,7 +2438,7 @@ begin
    for update;
   if not found then raise exception '找不到場次'; end if;
 
-  perform pg_advisory_xact_lock(hashtext('registration-session:' || p_clinic_id::text || p_session_id::text));
+  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_clinic_id::text || ':' || s.event_id::text));
 
   select count(*)::int into v_taken from registrations
    where clinic_id = p_clinic_id and session_id = p_session_id

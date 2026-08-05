@@ -332,7 +332,7 @@ begin
    for update;
   if not found then raise exception '找不到場次'; end if;
 
-  perform pg_advisory_xact_lock(hashtext('registration-session:' || p_clinic_id::text || p_session_id::text));
+  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_clinic_id::text || ':' || s.event_id::text));
 
   select count(*)::int into v_taken from registrations
    where clinic_id = p_clinic_id and session_id = p_session_id

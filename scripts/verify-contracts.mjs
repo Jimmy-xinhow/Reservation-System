@@ -565,11 +565,20 @@ invariant(
 );
 invariant(
   "benefits are transaction-safe and reversible",
-  migrationBenefits.includes("pg_advisory_xact_lock(hashtext('registration-benefit:'") &&
+  migrationBenefits.includes("pg_advisory_xact_lock(hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text))") &&
     migrationBenefits.includes("create or replace function consume_membership_credit") &&
     migrationBenefits.includes("create or replace function restore_membership_credit") &&
     migrationBenefits.includes("create or replace function release_registration_benefits") &&
     migrationBenefits.includes("create or replace function apply_registration_benefits"),
+);
+invariant(
+  "registration and waitlist capacity share one tenant event lock",
+  schema.includes("hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text))") &&
+    migrationRegistration.includes("hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text))") &&
+    migrationBenefits.includes("hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text))") &&
+    migrationHardening.includes("hashtext('registration-event:' || p_clinic_id::text || ':' || s.event_id::text))") &&
+    !migrationBenefits.includes("registration-benefit:") &&
+    !migrationHardening.includes("registration-session:"),
 );
 const registrationBenefitsFunction = between(schema, "create or replace function register_for_event_with_benefits", "create or replace function apply_registration_benefits");
 const registrationBenefitsMigrationFunction = between(migrationBenefits, "create or replace function register_for_event_with_benefits", "create or replace function apply_registration_benefits");

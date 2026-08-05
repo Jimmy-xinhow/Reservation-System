@@ -307,7 +307,7 @@ begin
     v_ticket_capacity := null;
   end if;
 
-  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_event_id::text));
+  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text));
 
   select count(*)::int into v_taken from registrations r
    where r.clinic_id = p_clinic_id and r.session_id = p_session_id

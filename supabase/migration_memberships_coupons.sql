@@ -360,7 +360,7 @@ begin
   end if;
   if v_code is not null and v_original_amount = 0 then raise exception 'discount code requires a paid ticket'; end if;
 
-  perform pg_advisory_xact_lock(hashtext('registration-benefit:' || p_clinic_id::text || ':' || p_event_id::text));
+  perform pg_advisory_xact_lock(hashtext('registration-event:' || p_clinic_id::text || ':' || p_event_id::text));
   select count(*)::int into v_taken from registrations r
    where r.clinic_id = p_clinic_id and r.session_id = p_session_id and r.status in ('pending','confirmed','attended')
      and (r.status <> 'pending' or r.expires_at is null or r.expires_at > now());
