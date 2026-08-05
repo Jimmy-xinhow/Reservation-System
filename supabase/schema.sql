@@ -1966,6 +1966,36 @@ $$;
 revoke all on function cancel_appointment(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function cancel_appointment(uuid, uuid, text) to service_role;
 
+create or replace function fail_appointment_payment(
+  p_clinic_id uuid,
+  p_appointment_id uuid,
+  p_note text default 'payment failed'
+) returns uuid
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  appt record;
+begin
+  select id, status, membership_id into appt
+    from appointments
+   where id = p_appointment_id and clinic_id = p_clinic_id
+   for update;
+  if not found then raise exception 'appointment not found'; end if;
+  if appt.status in ('booked', 'confirmed') then
+    if appt.membership_id is not null then
+      perform restore_membership_credit(p_clinic_id, appt.membership_id, 'appointment', appt.id, p_note);
+    end if;
+    update appointments
+       set deposit_status = 'failed', deposit_expires_at = null, status = 'cancelled'
+     where id = appt.id and clinic_id = p_clinic_id;
+  end if;
+  return appt.id;
+end;
+$$;
+
+revoke all on function fail_appointment_payment(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function fail_appointment_payment(uuid, uuid, text) to service_role;
+
 create or replace function cancel_appointment_by_operator(
   p_clinic_id uuid,
   p_appointment_id uuid,

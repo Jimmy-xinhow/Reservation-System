@@ -58,7 +58,7 @@
 
 1. 開啟 `deposit_enabled`，分別測試 `all`、`self_pay`、`none`。
 2. 預約建立後狀態應為待付款並保留 15 分鐘名額；付款成功才變成 `confirmed`。
-3. 待付款超時後執行 registration cron，預約應取消、訂金狀態變為失敗、pending payment order 變為 expired、名額釋放。
+3. 待付款超時後執行 registration cron，預約應取消、訂金狀態變為失敗、pending payment order 變為 expired、名額釋放；若預約使用套票，付款失敗 webhook 的 `fail_appointment_payment` 也須只回補一次堂數。
 
 ## 4. 報名、表單、候補與報到
 

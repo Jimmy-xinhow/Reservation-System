@@ -221,6 +221,14 @@ invariant(
     paymentNewebpayApi.includes("result.changed"),
 );
 invariant(
+  "appointment payment failure restores benefits atomically",
+  paymentWebhook.includes('rpc("fail_appointment_payment"') &&
+    schema.includes("create or replace function fail_appointment_payment") &&
+    migrationBenefits.includes("create or replace function fail_appointment_payment") &&
+    schema.includes("perform restore_membership_credit(p_clinic_id, appt.membership_id, 'appointment', appt.id, p_note)") &&
+    schema.includes("grant execute on function fail_appointment_payment(uuid, uuid, text) to service_role"),
+);
+invariant(
   "payment webhooks stay bound to the verified merchant brand",
   paymentWebhook.includes('.eq("clinic_id", event.clinicId)') &&
     paymentReturnApi.includes("clinicId: settings.clinic_id") &&

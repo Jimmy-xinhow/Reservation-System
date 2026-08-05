@@ -48,16 +48,22 @@ async function reconcilePaymentState(supabase: SupabaseClient, order: PaymentOrd
   }
 
   if (order.appointment_id) {
-    const patch = success
-      ? { deposit_status: "paid", status: "confirmed", deposit_expires_at: null }
-      : { deposit_status: "failed", status: "cancelled", deposit_expires_at: null };
-    const { error } = await supabase
-      .from("appointments")
-      .update(patch)
-      .eq("id", order.appointment_id)
-      .eq("clinic_id", order.clinic_id)
-      .in("status", ["booked", "confirmed"]);
-    if (error) throw new Error(error.message);
+    if (success) {
+      const { error } = await supabase
+        .from("appointments")
+        .update({ deposit_status: "paid", status: "confirmed", deposit_expires_at: null })
+        .eq("id", order.appointment_id)
+        .eq("clinic_id", order.clinic_id)
+        .in("status", ["booked", "confirmed"]);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabase.rpc("fail_appointment_payment", {
+        p_clinic_id: order.clinic_id,
+        p_appointment_id: order.appointment_id,
+        p_note: "payment failed",
+      });
+      if (error) throw new Error(error.message);
+    }
   }
 }
 
