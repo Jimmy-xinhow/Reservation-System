@@ -37,15 +37,22 @@ create table if not exists clinic_settings (
   deposit_scope text not null default 'self_pay' check (deposit_scope in ('all','self_pay','none')),
   min_lead_minutes smallint not null default 30,
   max_advance_days smallint not null default 30,
-  -- Email 提醒(後台可自行設定;金鑰僅 server 端讀取,anon 無 policy 讀不到)
+  -- Email 提醒(寄件人與 provider 僅由 server environment 管理)
   email_enabled boolean not null default false,
-  resend_api_key text,
-  email_from text,
   updated_at timestamptz default now()
 );
 alter table clinic_settings add column if not exists email_enabled boolean not null default false;
-alter table clinic_settings add column if not exists resend_api_key text;
-alter table clinic_settings add column if not exists email_from text;
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'clinic_settings' and column_name = 'resend_api_key') then
+    execute 'update public.clinic_settings set resend_api_key = null where resend_api_key is not null';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'clinic_settings' and column_name = 'email_from') then
+    execute 'update public.clinic_settings set email_from = null where email_from is not null';
+  end if;
+end $$;
+alter table clinic_settings drop column if exists resend_api_key;
+alter table clinic_settings drop column if exists email_from;
 
 -- 新建診所時自動建立可用的預設設定
 insert into clinic_settings (clinic_id)
@@ -2297,8 +2304,6 @@ create table if not exists clinic_payment_settings (
   clinic_id uuid not null unique references clinics(id) on delete cascade,
   provider text not null check (provider in ('ecpay','newebpay')),
   merchant_id text not null,
-  hash_key text,
-  hash_iv text,
   environment text not null default 'test' check (environment in ('test','production')),
   active boolean not null default false,
   created_at timestamptz not null default now(),
@@ -2308,8 +2313,17 @@ create unique index if not exists clinic_payment_provider_merchant_idx
   on clinic_payment_settings (provider, merchant_id);
 
 -- legacy secrets are no longer used; configure server environment before applying this schema.
-update clinic_settings set resend_api_key = null where resend_api_key is not null;
-update clinic_payment_settings set hash_key = null, hash_iv = null where hash_key is not null or hash_iv is not null;
+do $$
+begin
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'clinic_payment_settings' and column_name = 'hash_key') then
+    execute 'update public.clinic_payment_settings set hash_key = null where hash_key is not null';
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'clinic_payment_settings' and column_name = 'hash_iv') then
+    execute 'update public.clinic_payment_settings set hash_iv = null where hash_iv is not null';
+  end if;
+end $$;
+alter table clinic_payment_settings drop column if exists hash_key;
+alter table clinic_payment_settings drop column if exists hash_iv;
 
 create table if not exists registration_status_events (
   id uuid primary key default gen_random_uuid(),

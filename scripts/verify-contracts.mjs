@@ -72,6 +72,17 @@ function invariant(label, condition) {
   else failures.push(label);
 }
 
+invariant(
+  "payment and email secrets are not schema columns",
+  !schema.includes("resend_api_key text") &&
+    !schema.includes("hash_key text") &&
+    !schema.includes("hash_iv text") &&
+    schema.includes("drop column if exists resend_api_key") &&
+    schema.includes("drop column if exists hash_key") &&
+    migrationHardening.includes("drop column if exists resend_api_key") &&
+    migrationHardening.includes("drop column if exists hash_key"),
+);
+
 const tenantTables = [
   "chat_messages", "chat_blocks", "crm_segments", "crm_segment_members", "crm_interactions", "crm_automations", "crm_delivery_logs",
   "clinic_domains", "events", "event_sessions", "event_ticket_types", "registration_forms", "registration_form_fields", "registrations",

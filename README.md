@@ -24,7 +24,7 @@
 
 1. 建立 Supabase 專案。
 2. SQL Editor 貼上並執行 **`supabase/schema.sql`**(建表、RPC、RLS、權限)。
-   - 套用前先設定 `.env.local`／部署環境中的 Email 與金流 server secrets；schema 會清除舊版資料庫內的 legacy 密鑰欄位。
+   - 套用前先設定 `.env.local`／部署環境中的 Email 與金流 server secrets；schema 會清除並移除舊版資料庫內的 legacy 密鑰欄位。
 3. 建立一間診所與其預設設定,並建立後台帳號對應:
 
 ```sql
