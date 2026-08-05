@@ -23,9 +23,18 @@ function tokenHash(token: string): string {
 }
 
 function requestBaseUrl(req: NextRequest): string {
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  return host ? `${proto}://${host}` : req.nextUrl.origin;
+  const configuredUrl = process.env.APP_URL?.trim();
+  if (configuredUrl) {
+    try {
+      const parsed = new URL(configuredUrl);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("unsupported protocol");
+      return parsed.origin;
+    } catch {
+      throw new Error("APP_URL 設定格式不正確");
+    }
+  }
+  if (process.env.NODE_ENV === "production") throw new Error("正式環境必須設定 APP_URL");
+  return req.nextUrl.origin;
 }
 
 function safeReturnPath(value: string | undefined, fallback: string): string {

@@ -74,7 +74,7 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 | `NEXT_PUBLIC_LIFF_ID` | 病患端 LIFF ID |
 | `CRON_SECRET` | Vercel／Railway Cron 呼叫提醒、報名逾時與行銷 endpoint 的密鑰(長亂數) |
 | `REMINDER_HOURS_BEFORE` | 看診前幾小時發提醒(預設 24) |
-| `APP_URL` | Railway Cron 服務呼叫 web 服務的公開網址 |
+| `APP_URL` | 公開 canonical URL；付款回呼／回跳與 Railway Cron 都使用此 server-side 網址 |
 | `CRON_TARGET_URL` | 可選，覆寫提醒 endpoint 的完整 URL |
 | `CRON_MARKETING_TARGET_URL` | 可選，覆寫 CRM Lite 行銷 endpoint 的完整 URL |
 | `CRON_REGISTRATION_TARGET_URL` | 可選，覆寫報名／付款逾時 endpoint 的完整 URL |

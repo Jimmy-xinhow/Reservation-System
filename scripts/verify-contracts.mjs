@@ -271,6 +271,8 @@ invariant(
   "public payment return paths stay on the branded flow",
   paymentCreateApi.includes("safeReturnPath") &&
     paymentCreateApi.includes("return_path") &&
+    paymentCreateApi.includes("process.env.APP_URL") &&
+    !paymentCreateApi.includes("x-forwarded-host") &&
     read("app/book/page.tsx").includes("window.location.pathname + window.location.search") &&
     read("app/book/browser/page.tsx").includes("window.location.pathname + window.location.search") &&
     read("app/register/page.tsx").includes("window.location.pathname + window.location.search"),
