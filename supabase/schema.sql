@@ -1294,6 +1294,7 @@ create table if not exists registrations (
   marketing_opt_in boolean not null default false,
   answers jsonb not null default '{}'::jsonb,
   checkin_token_hash text not null unique,
+  checkin_token_encrypted text,
   expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -2775,6 +2776,7 @@ end $$;
 
 alter table registrations add column if not exists form_id uuid references registration_forms(id) on delete set null;
 alter table registrations add column if not exists form_version integer;
+alter table registrations add column if not exists checkin_token_encrypted text;
 create index if not exists registrations_form_idx on registrations (clinic_id, form_id, form_version);
 
 -- SaaS 品牌建立：由已授權的品牌管理員在 server action 透過 service_role 呼叫。

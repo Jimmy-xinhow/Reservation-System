@@ -8,7 +8,7 @@
 - 先完成可還原備份，並確認操作者有 SQL Editor、Auth、Cron、LINE、Email、金流與 DNS 的必要權限。
 - 建立兩個品牌 `Brand-A`、`Brand-B`，兩個不同後台帳號，各只加入對應品牌；另建立一個同時加入兩品牌的管理員帳號。
 - 測試資料使用假姓名、假電話、假 Email 與測試 LINE 帳號，不使用真實病患個資。
-- 產生並保存部署環境的 `CRON_SECRET`、`BROWSER_BOOKING_SECRET`、`PAYMENT_SECRETS_JSON`；金鑰不寫入本文件、不提交 Git。
+- 產生並保存部署環境的 `CRON_SECRET`、`BROWSER_BOOKING_SECRET`、`REGISTRATION_TOKEN_ENCRYPTION_KEY`、`PAYMENT_SECRETS_JSON`；金鑰不寫入本文件、不提交 Git。
 
 ## 1. 建置與 migration
 
@@ -19,7 +19,7 @@
 
 既有資料庫：
 
-1. 先備份，再依序執行 `migration_crm_lite.sql`、`migration_registration_payments.sql`、`migration_v3_hardening.sql`、`migration_memberships_coupons.sql`、`migration_role_matrix_v4.sql`、`migration_security_advisor_hardening.sql`。
+1. 先備份，再依序執行 `migration_crm_lite.sql`、`migration_registration_payments.sql`、`migration_v3_hardening.sql`、`migration_memberships_coupons.sql`、`migration_role_matrix_v4.sql`、`migration_security_advisor_hardening.sql`、`migration_registration_credentials.sql`。
 2. 每支 migration 執行一次後重跑同一支，確認可重跑且沒有重複 constraint／policy 錯誤。
 3. 檢查 `reminder_logs.clinic_id`、付款欄位、表單版本、會員 ledger 與所有新表的 row count／NULL。
 4. 重新執行三個本機命令並保存輸出。

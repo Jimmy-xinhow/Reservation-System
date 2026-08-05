@@ -5,6 +5,7 @@ import { fail, ok } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/registration-notifications";
+import { encryptRegistrationToken } from "@/lib/registration-credentials";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 
@@ -156,6 +157,15 @@ export async function POST(req: NextRequest) {
         body: `報名已建立：${String(row.registration_no)}`,
         registrationId: String(row.registration_id),
       }).catch((interactionError: unknown) => console.error("CRM registration interaction failed", interactionError));
+    }
+    const encryptedToken = encryptRegistrationToken(String(row.checkin_token ?? ""));
+    if (encryptedToken) {
+      const { error: credentialError } = await svc
+        .from("registrations")
+        .update({ checkin_token_encrypted: encryptedToken })
+        .eq("id", String(row.registration_id))
+        .eq("clinic_id", event.clinic_id);
+      if (credentialError) console.error("Registration credential persistence failed", credentialError.message);
     }
     const notificationKind = notificationKindForStatus(String(row.registration_status));
     if (notificationKind) {

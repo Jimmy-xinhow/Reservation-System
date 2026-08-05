@@ -143,6 +143,7 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
    - `RESEND_API_KEYS_JSON` / `RESEND_EMAIL_FROM_JSON`
    - `PAYMENT_SECRETS_JSON`
    - `BROWSER_BOOKING_SECRET`
+   - `REGISTRATION_TOKEN_ENCRYPTION_KEY`
    - `CRON_SECRET`(長亂數)
    - `REMINDER_HOURS_BEFORE`(選填,預設 24)
 
@@ -238,5 +239,6 @@ vercel.json               (僅 Vercel 用;Railway 不讀)
 4. `supabase/migration_memberships_coupons.sql`
 5. `supabase/migration_role_matrix_v4.sql`
 6. `supabase/migration_security_advisor_hardening.sql`
+7. `supabase/migration_registration_credentials.sql`
 
 每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `npm test`、`npm run typecheck` 與 `npm run build`。

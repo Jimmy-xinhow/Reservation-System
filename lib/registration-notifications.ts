@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { formatAmount, formatEventDate } from "@/lib/registration";
+import { decryptRegistrationToken } from "@/lib/registration-credentials";
 
 export const REGISTRATION_NOTIFICATION_KINDS = ["pending", "confirmed", "waitlisted", "cancelled"] as const;
 export type RegistrationNotificationKind = (typeof REGISTRATION_NOTIFICATION_KINDS)[number];
@@ -20,6 +21,7 @@ interface RegistrationRecord {
   name: string;
   email: string | null;
   line_user_id: string | null;
+  checkin_token_encrypted: string | null;
 }
 
 interface NotificationResult {
@@ -42,7 +44,7 @@ export async function notifyRegistrationStatus(
 ): Promise<NotificationResult> {
   const { data: registration, error: registrationError } = await svc
     .from("registrations")
-    .select("id, clinic_id, event_id, session_id, registration_no, status, payment_status, amount, name, email, line_user_id")
+    .select("id, clinic_id, event_id, session_id, registration_no, status, payment_status, amount, name, email, line_user_id, checkin_token_encrypted")
     .eq("id", registrationId)
     .maybeSingle();
   if (registrationError) throw new Error(registrationError.message);
@@ -61,7 +63,7 @@ export async function notifyRegistrationStatus(
 
   const result: NotificationResult = { sent: 0, failed: 0, skipped: 0 };
   const paymentUrl = kind === "pending" ? publicRegistrationPaymentUrl(row, clinic?.slug as string | null | undefined) : null;
-  const message = buildMessage({ row, clinicName: clinic?.name ?? "", eventTitle: event?.title ?? "活動", sessionName: session?.name ?? "", startAt: session?.start_at ?? null, venue: session?.venue ?? null, kind, checkinToken: checkinToken ?? null, paymentUrl });
+  const message = buildMessage({ row, clinicName: clinic?.name ?? "", eventTitle: event?.title ?? "活動", sessionName: session?.name ?? "", startAt: session?.start_at ?? null, venue: session?.venue ?? null, kind, checkinToken: checkinToken ?? decryptRegistrationToken(row.checkin_token_encrypted), paymentUrl });
 
   if (row.line_user_id) {
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "line");

@@ -136,6 +136,7 @@ const paymentNewebpayApi = read("app/api/payment/newebpay/notify/route.ts");
 const paymentWebhook = read("lib/payment-webhook.ts");
 const appointmentNotifications = read("lib/appointment-notifications.ts");
 const registrationNotifications = read("lib/registration-notifications.ts");
+const registrationCredentials = read("lib/registration-credentials.ts");
 const adminActions = read("app/admin/actions.ts");
 const settingsPage = read("app/admin/settings/page.tsx");
 const browserStartApi = read("app/api/booking/browser/start/route.ts");
@@ -814,6 +815,17 @@ invariant(
     read("lib/registration-notifications.ts").includes("/register/pay") &&
     read("app/register/pay/page.tsx").includes("/api/payment/create") &&
     read("app/register/pay/page.tsx").includes("checkin_token"),
+);
+
+invariant(
+  "registration notification retries can recover a credential without plaintext storage",
+  schema.includes("checkin_token_encrypted text") &&
+    exists("supabase/migration_registration_credentials.sql") &&
+    registrationApi.includes("encryptRegistrationToken") &&
+    registrationNotifications.includes("decryptRegistrationToken") &&
+    registrationNotifications.includes("checkin_token_encrypted") &&
+    registrationCredentials.includes("aes-256-gcm") &&
+    registrationCredentials.includes("REGISTRATION_TOKEN_ENCRYPTION_KEY"),
 );
 invariant(
   "registration custom form answers are validated server-side by field type",
