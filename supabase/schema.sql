@@ -1436,7 +1436,7 @@ declare
   v_status text;
   v_payment_status text;
   v_amount integer := 0;
-  v_no integer;
+  v_no bigint;
   v_registration_no text;
   v_token text := encode(gen_random_bytes(24), 'hex');
   v_id uuid;
@@ -1502,8 +1502,8 @@ begin
     v_payment_status := 'pending';
   end if;
 
-  select coalesce(max(nullif(regexp_replace(registration_no, '[^0-9]', '', 'g'), '')::int), 0) + 1
-    into v_no from registrations where event_id = p_event_id;
+  select coalesce(max(nullif(regexp_replace(r.registration_no, '[^0-9]', '', 'g'), '')::bigint), 0) + 1
+    into v_no from registrations r where r.event_id = p_event_id;
   v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, 4, '0');
 
   insert into registrations (
@@ -1547,7 +1547,7 @@ begin
   select * into r from registrations where clinic_id = p_clinic_id and checkin_token_hash = v_hash for update;
   if not found then raise exception '報到憑證無效'; end if;
   if r.status in ('cancelled','waitlisted','pending') then raise exception '此報名目前不可報到'; end if;
-  if exists (select 1 from checkins where registration_id = r.id and result = 'accepted') then
+  if exists (select 1 from checkins c where c.registration_id = r.id and c.result = 'accepted') then
     return query select r.id, r.status, (select c.checked_in_at from checkins c where c.registration_id = r.id and c.result = 'accepted'), 'duplicate';
     return;
   end if;
@@ -2075,9 +2075,9 @@ as $$
 declare
   e record; s record; ticket record; m record; d record;
   v_taken integer; v_ticket_taken integer; v_status text; v_payment_status text;
-  v_original integer := 0; v_amount integer := 0; v_discount integer := 0;
-  v_no integer; v_registration_no text; v_token text := encode(gen_random_bytes(24), 'hex');
-  v_id uuid; v_position integer; v_membership_applied boolean := false;
+  v_original integer := 0; v_amount integer := 0; v_discount integer := 0; v_discount_code_id uuid;
+  v_no bigint; v_registration_no text; v_token text := encode(gen_random_bytes(24), 'hex');
+  v_id uuid; v_position integer; v_membership_id uuid; v_membership_applied boolean := false;
   v_code text := lower(nullif(trim(p_discount_code), '')); v_membership_code text := upper(nullif(trim(p_membership_code), ''));
 begin
   if nullif(trim(p_name),'') is null or nullif(trim(p_phone),'') is null then raise exception 'name and phone are required'; end if;
@@ -2122,6 +2122,7 @@ begin
       if m.expires_at is not null and m.expires_at<=now() then raise exception 'membership expired'; end if;
       if m.usage_scope not in ('registration','both') then raise exception 'membership cannot be used for registration'; end if;
       if p_ticket_type_id is not null and ticket.membership_plan_id is not null and ticket.membership_plan_id is distinct from m.plan_id then raise exception 'membership does not match ticket'; end if;
+      v_membership_id := m.id;
       v_amount := 0; v_membership_applied := true;
     else
       v_amount := v_original;
@@ -2132,6 +2133,7 @@ begin
         if d.ends_at is not null and now()>=d.ends_at then raise exception 'discount code is expired'; end if;
         if v_amount<d.min_amount then raise exception 'order does not meet discount minimum'; end if;
         if d.max_uses is not null and d.used_count>=d.max_uses then raise exception 'discount code usage limit reached'; end if;
+        v_discount_code_id := d.id;
         v_discount := case when d.kind='percent' then floor(v_amount*d.value/100.0)::int else least(v_amount,d.value) end;
         v_amount := greatest(0,v_amount-v_discount);
       end if;
@@ -2139,13 +2141,13 @@ begin
     v_status := case when v_amount=0 then 'confirmed' else 'pending' end;
     v_payment_status := case when v_amount=0 then 'not_required' else 'pending' end;
   end if;
-  select coalesce(max(nullif(regexp_replace(registration_no,'[^0-9]','','g'),'')::int),0)+1 into v_no from registrations where clinic_id=p_clinic_id and event_id=p_event_id;
+  select coalesce(max(nullif(regexp_replace(r.registration_no,'[^0-9]','','g'),'')::bigint),0)+1 into v_no from registrations r where r.clinic_id=p_clinic_id and r.event_id=p_event_id;
   v_registration_no := 'REG-' || to_char(current_date,'YYYYMMDD') || '-' || lpad(v_no::text,4,'0');
   insert into registrations (clinic_id,event_id,session_id,ticket_type_id,registration_no,status,payment_status,amount,discount_code_id,discount_amount,membership_id,name,phone,email,line_user_id,marketing_opt_in,answers,checkin_token_hash,expires_at,form_id,form_version)
-    values (p_clinic_id,p_event_id,p_session_id,p_ticket_type_id,v_registration_no,v_status,v_payment_status,v_amount,case when v_code is null then null else d.id end,v_discount,case when v_membership_applied then m.id else null end,trim(p_name),trim(p_phone),nullif(trim(p_email),''),nullif(trim(p_line_user_id),''),coalesce(p_marketing_opt_in,false),coalesce(p_answers,'{}'::jsonb),encode(digest(v_token,'sha256'),'hex'),case when v_status='pending' then now()+interval '15 minutes' else null end,p_form_id,p_form_version) returning id into v_id;
+    values (p_clinic_id,p_event_id,p_session_id,p_ticket_type_id,v_registration_no,v_status,v_payment_status,v_amount,v_discount_code_id,v_discount,v_membership_id,trim(p_name),trim(p_phone),nullif(trim(p_email),''),nullif(trim(p_line_user_id),''),coalesce(p_marketing_opt_in,false),coalesce(p_answers,'{}'::jsonb),encode(digest(v_token,'sha256'),'hex'),case when v_status='pending' then now()+interval '15 minutes' else null end,p_form_id,p_form_version) returning id into v_id;
   insert into registration_answers (clinic_id,registration_id,answers) values (p_clinic_id,v_id,p_answers);
   if v_membership_applied then
-    perform consume_membership_credit(p_clinic_id,m.id,'registration','registration',v_id,null,null,'registration membership redemption');
+    perform consume_membership_credit(p_clinic_id,m.id,'registration','registration',v_id,m.plan_service_id,null,'registration membership redemption');
   elsif v_code is not null then
     update discount_codes set used_count=used_count+1,updated_at=now() where id=d.id;
     insert into discount_redemptions (clinic_id,discount_code_id,patient_id,registration_id,original_amount,discount_amount,final_amount,status)

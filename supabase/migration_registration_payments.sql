@@ -269,7 +269,7 @@ declare
   v_status text;
   v_payment_status text;
   v_amount integer := 0;
-  v_no integer;
+  v_no bigint;
   v_registration_no text;
   v_token text := encode(gen_random_bytes(24), 'hex');
   v_id uuid;
@@ -335,8 +335,8 @@ begin
     v_payment_status := 'pending';
   end if;
 
-  select coalesce(max(nullif(regexp_replace(registration_no, '[^0-9]', '', 'g'), '')::int), 0) + 1
-    into v_no from registrations where event_id = p_event_id;
+  select coalesce(max(nullif(regexp_replace(r.registration_no, '[^0-9]', '', 'g'), '')::bigint), 0) + 1
+    into v_no from registrations r where r.event_id = p_event_id;
   v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, 4, '0');
 
   insert into registrations (
@@ -380,7 +380,7 @@ begin
   select * into r from registrations where clinic_id = p_clinic_id and checkin_token_hash = v_hash for update;
   if not found then raise exception '報到憑證無效'; end if;
   if r.status in ('cancelled','waitlisted','pending') then raise exception '此報名目前不可報到'; end if;
-  if exists (select 1 from checkins where registration_id = r.id and result = 'accepted') then
+  if exists (select 1 from checkins c where c.registration_id = r.id and c.result = 'accepted') then
     return query select r.id, r.status, (select c.checked_in_at from checkins c where c.registration_id = r.id and c.result = 'accepted'), 'duplicate';
     return;
   end if;
