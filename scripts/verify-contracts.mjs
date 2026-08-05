@@ -372,6 +372,13 @@ invariant(
     read("app/api/admin/reports/route.ts").includes("fetchAllSupabasePages"),
 );
 invariant(
+  "reports calculate no-show rates from effective records",
+  read("app/admin/reports/page.tsx").includes("validAppointmentRows") &&
+    read("app/admin/reports/page.tsx").includes("validRegistrationRows") &&
+    read("app/admin/reports/page.tsx").includes('status === "no_show"') &&
+    read("app/admin/reports/page.tsx").includes("報名未到（分母：有效報名）"),
+);
+invariant(
   "inactive marketing automation scans its configured trigger window",
   marketingCron.includes("const inactivityDays = Math.max(1, automation.trigger_days)") &&
     marketingCron.includes("inactivityDays * 24 * 60 * 60 * 1000") &&

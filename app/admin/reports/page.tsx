@@ -109,7 +109,10 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
   const registrationRows = registrations as RegistrationRow[];
   const paymentRows = payments as PaymentRow[];
   const deliveryRows = deliveries as DeliveryRow[];
-  const appointmentNoShow = appointmentRows.filter((row) => row.status === "no_show").length;
+  const validAppointmentRows = appointmentRows.filter((row) => ["booked", "confirmed", "done", "no_show"].includes(row.status));
+  const validRegistrationRows = registrationRows.filter((row) => ["confirmed", "attended", "no_show"].includes(row.status));
+  const appointmentNoShow = validAppointmentRows.filter((row) => row.status === "no_show").length;
+  const registrationNoShow = validRegistrationRows.filter((row) => row.status === "no_show").length;
   const registrationAttended = registrationRows.filter((row) => row.status === "attended").length;
   const paidPayments = paymentRows.filter((row) => row.status === "paid");
   const deliverySent = deliveryRows.filter((row) => row.status === "sent").length;
@@ -143,12 +146,12 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Metric label="預約紀錄" value={appointmentRows.length} />
         <Metric label="報名紀錄" value={registrationRows.length} />
-        <Metric label="預約未到率" value={percent(appointmentNoShow, appointmentRows.length)} />
-        <Metric label="報名報到完成" value={registrationAttended} />
+        <Metric label="預約未到率" value={percent(appointmentNoShow, validAppointmentRows.length)} />
+        <Metric label="報名未到率" value={percent(registrationNoShow, validRegistrationRows.length)} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">預約與報名摘要</h2><Line label="預約未到（分母：全部預約紀錄）" value={`${appointmentNoShow} / ${appointmentRows.length}`} /><Line label="候補筆數" value={waitlistResult.count ?? 0} /><Line label="候補填補率" value={percent(promotedResult.count ?? 0, waitlistResult.count ?? 0)} /><Line label="報名取消" value={registrationRows.filter((row) => row.status === "cancelled").length} /><Line label="套票扣抵" value={`${membershipUses} 次`} /></section>
+        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">預約與報名摘要</h2><Line label="預約未到（分母：有效預約）" value={`${appointmentNoShow} / ${validAppointmentRows.length}`} /><Line label="報名未到（分母：有效報名）" value={`${registrationNoShow} / ${validRegistrationRows.length}`} /><Line label="報名報到完成" value={registrationAttended} /><Line label="候補筆數" value={waitlistResult.count ?? 0} /><Line label="候補填補率" value={percent(promotedResult.count ?? 0, waitlistResult.count ?? 0)} /><Line label="報名取消" value={registrationRows.filter((row) => row.status === "cancelled").length} /><Line label="套票扣抵" value={`${membershipUses} 次`} /></section>
         <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="付款成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="付款失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
       </div>
 
