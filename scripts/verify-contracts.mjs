@@ -17,6 +17,7 @@ const migrationRegistration = read("supabase/migration_registration_payments.sql
 const migrationHardening = read("supabase/migration_v3_hardening.sql");
 const migrationBenefits = read("supabase/migration_memberships_coupons.sql");
 const migrationRoleMatrix = read("supabase/migration_role_matrix_v4.sql");
+const migrationMarketingOptIn = read("supabase/migration_marketing_opt_in_sync.sql");
 
 const checks = [
   ["registration payment migration has core tables", ["create table if not exists events", "create table if not exists registrations", "create table if not exists payment_orders"]],
@@ -449,6 +450,15 @@ invariant(
     read("app/api/booking/reserve/route.ts").includes('kind: "booking"') &&
     read("app/api/registration/register/route.ts").includes('kind: "registration"') &&
     read("app/api/cron/marketing/route.ts").includes('kind: "campaign"'),
+);
+invariant(
+  "registration marketing consent synchronizes to the tenant CRM patient",
+  schema.includes("create or replace function create_or_get_public_patient_with_marketing_opt_in") &&
+    migrationMarketingOptIn.includes("marketing_opt_in = true") &&
+    registrationApi.includes("create_or_get_public_patient_with_marketing_opt_in") &&
+    registrationApi.includes("p_marketing_opt_in: body.marketing_opt_in === true") &&
+    schema.includes("grant execute on function create_or_get_public_patient_with_marketing_opt_in") &&
+    migrationMarketingOptIn.includes("grant execute on function create_or_get_public_patient_with_marketing_opt_in"),
 );
 invariant(
   "public read APIs are rate limited",

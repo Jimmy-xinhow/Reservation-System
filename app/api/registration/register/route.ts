@@ -138,12 +138,13 @@ export async function POST(req: NextRequest) {
     if (error) return fail(translateRegistrationError(error.message), 409);
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) return fail("報名失敗", 500);
-    const { data: patientData, error: patientError } = await svc.rpc("create_or_get_public_patient", {
+    const { data: patientData, error: patientError } = await svc.rpc("create_or_get_public_patient_with_marketing_opt_in", {
       p_clinic_id: event.clinic_id,
       p_name: name,
       p_phone: phone,
       p_birthday: null,
       p_line_user_id: lineUserId,
+      p_marketing_opt_in: body.marketing_opt_in === true,
     });
     const patientRow = Array.isArray(patientData) ? patientData[0] : patientData;
     if (patientError) {
