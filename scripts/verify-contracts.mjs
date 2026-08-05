@@ -619,6 +619,12 @@ invariant(
   paymentCreateApi.includes("public_registration_enabled") && paymentCreateApi.includes("目前暫停公開報名付款"),
 );
 invariant(
+  "registration payment creation verifies branded tenant scope",
+  paymentCreateApi.includes("const publicClinicId = await resolvePublicClinicId(req, svc)") &&
+    paymentCreateApi.includes('.eq("clinic_id", publicClinicId)') &&
+    registrationPage.includes("/api/payment/create${paymentScope}"),
+);
+invariant(
   "registration export is protected from provider-wide access",
   registrationAdminApi.includes("requireNonProvider") && registrationAdminApi.includes("canViewSensitiveCustomerData"),
 );

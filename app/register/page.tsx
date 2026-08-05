@@ -196,7 +196,12 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken }: { result: Re
     setPaying(true);
     setError(null);
     try {
-      const data = await readApi<{ form: { action: string; fields: Record<string, string> } }>("/api/payment/create", {
+      const paymentScope = clinicSlug
+        ? "?clinic_slug=" + encodeURIComponent(clinicSlug)
+        : clinicId
+          ? "?clinic_id=" + encodeURIComponent(clinicId)
+          : "";
+      const data = await readApi<{ form: { action: string; fields: Record<string, string> } }>(`/api/payment/create${paymentScope}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ registration_id: result.registration_id, checkin_token: result.checkin_token, return_path: window.location.pathname + window.location.search }),
