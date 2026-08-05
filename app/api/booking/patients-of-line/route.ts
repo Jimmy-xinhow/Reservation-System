@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
-import { ok, fail } from "@/lib/http";
+import { createServiceClient } from "@/lib/supabase";
+import { ok, fail, rateLimitResponse } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
+import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,8 +12,9 @@ export const dynamic = "force-dynamic";
  * 回傳此 LINE 身分已綁定的病患(用來判斷是否已綁定、預約時可選為誰看診)。
  */
 export async function POST(req: NextRequest) {
+  const limited = rateLimitResponse(req, "booking:patients-of-line", 12);
+  if (limited) return limited;
   try {
-    if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
     const body = (await req.json().catch(() => null)) as { idToken?: string } | null;
     if (!body?.idToken) return fail("缺少 LINE 身分驗證");
 
@@ -24,10 +26,12 @@ export async function POST(req: NextRequest) {
     }
 
     const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
     const { data, error } = await svc
       .from("patients")
       .select("id, name, phone, blocked_until")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("line_user_id", lineUserId)
       .eq("active", true)
       .order("created_at");

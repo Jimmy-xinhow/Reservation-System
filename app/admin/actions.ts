@@ -2,11 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireMember, requireAdmin, type Role } from "@/lib/admin";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import { ACTIVE_CLINIC_COOKIE, requireMember, requireAdmin, requireOperator, requireStatusOperator, type Role } from "@/lib/admin";
+import { createServiceClient } from "@/lib/supabase";
+import { randomBytes } from "node:crypto";
+import { resolveTxt } from "node:dns/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   pushMessages,
+  lineAccessTokenForDestination,
   createRichMenu,
   uploadRichMenuImage,
   setDefaultRichMenu,
@@ -16,7 +19,9 @@ import {
 } from "@/lib/line";
 import { LAYOUTS, slotBounds, slotAction, type Layout, type Slot } from "@/lib/richmenu";
 import { getQueueForDate } from "@/lib/queue";
-import { headers } from "next/headers";
+import { recordCrmInteraction } from "@/lib/crm-interactions";
+import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
+import { headers, cookies } from "next/headers";
 
 function str(fd: FormData, k: string): string {
   return (fd.get(k) ?? "").toString().trim();
@@ -29,6 +34,60 @@ function intOr(fd: FormData, k: string, dflt: number): number {
   const n = Number(str(fd, k));
   return Number.isFinite(n) ? n : dflt;
 }
+export async function setActiveClinicAction(fd: FormData): Promise<void> {
+  const context = await requireMember();
+  const clinicId = str(fd, "clinic_id");
+  if (!context.clinics.some((clinic) => clinic.id === clinicId)) throw new Error("無權限切換此品牌");
+  const store = await cookies();
+  store.set(ACTIVE_CLINIC_COOKIE, clinicId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
+  redirect("/admin");
+}
+
+/** 建立新品牌並將目前登入帳號設為該品牌 owner；實際交易由 DB function 原子完成。 */
+export async function createBrandAction(fd: FormData): Promise<void> {
+  const member = await requireAdmin();
+  const name = str(fd, "name");
+  const slug = str(fd, "slug").toLowerCase();
+  const phone = str(fd, "phone");
+  const address = str(fd, "address");
+  if (!name || name.length > 120) throw new Error("品牌名稱必須為 1–120 字");
+  if (!/^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$/.test(slug)) throw new Error("品牌短網址只能使用英數字與連字號");
+  if (phone.length > 80 || address.length > 240) throw new Error("品牌公開資訊過長");
+
+  const svc = createServiceClient();
+  const { data, error } = await svc.rpc("create_brand_with_owner", {
+    p_actor_user_id: member.user.id,
+    p_source_clinic_id: member.clinicId,
+    p_name: name,
+    p_slug: slug,
+    p_phone: phone || null,
+    p_address: address || null,
+  });
+  if (error) {
+    if (error.code === "23505") throw new Error("品牌短網址已存在");
+    throw new Error(error.message);
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as { clinic_id?: unknown } | null;
+  if (!row || typeof row.clinic_id !== "string") throw new Error("品牌建立失敗");
+
+  const store = await cookies();
+  store.set(ACTIVE_CLINIC_COOKIE, row.clinic_id, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30,
+  });
+  revalidatePath("/admin");
+  revalidatePath("/admin/settings");
+  redirect("/admin/settings?brand_created=1");
+}
 
 // ── 使用者(後台帳號)管理 ─────────────────────────────────
 // 角色:admin=管理員(可管理使用者與 LINE 設定)、staff=櫃檯(日常看診作業)。
@@ -38,45 +97,70 @@ export interface StaffMember {
   role: Role;
   isSelf: boolean;
   createdAt: string | null;
+  assignedDoctors: Array<{ id: string; name: string }>;
 }
 
 /** 本診所目前的管理員人數(用於防止把最後一位管理員降級/移除)。 */
-async function adminCount(svc: SupabaseClient): Promise<number> {
+async function adminCount(svc: SupabaseClient, clinicId: string): Promise<number> {
   const { count } = await svc
     .from("clinic_members")
     .select("user_id", { count: "exact", head: true })
-    .eq("clinic_id", CLINIC_ID)
-    .eq("role", "admin");
+    .eq("clinic_id", clinicId)
+    .in("role", ["owner", "admin"]);
   return count ?? 0;
 }
 
 /** 列出本診所的後台帳號(僅管理員可用)。 */
 export async function listStaff(): Promise<StaffMember[]> {
-  const { user } = await requireAdmin();
+  const { user, clinicId } = await requireAdmin();
   const svc = createServiceClient();
   const { data: members } = await svc
     .from("clinic_members")
     .select("user_id, role, created_at")
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   const rows = members ?? [];
   if (rows.length === 0) return [];
 
   const { data: list } = await svc.auth.admin.listUsers({ page: 1, perPage: 1000 });
   const emailMap = new Map((list?.users ?? []).map((u) => [u.id, u.email ?? ""]));
+  const [{ data: doctors }, { data: assignments }] = await Promise.all([
+    svc.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
+    svc.from("doctor_assignments").select("user_id, doctor_id").eq("clinic_id", clinicId).eq("active", true),
+  ]);
+  const doctorNames = new Map((doctors ?? []).map((doctor) => [doctor.id as string, doctor.name as string]));
+  const assignedByUser = new Map<string, Array<{ id: string; name: string }>>();
+  for (const assignment of assignments ?? []) {
+    const doctorId = assignment.doctor_id as string;
+    const name = doctorNames.get(doctorId);
+    if (!name) continue;
+    const current = assignedByUser.get(assignment.user_id as string) ?? [];
+    current.push({ id: doctorId, name });
+    assignedByUser.set(assignment.user_id as string, current);
+  }
   return rows.map((m) => ({
     userId: m.user_id as string,
     email: emailMap.get(m.user_id as string) ?? "(未知)",
-    role: (m.role === "admin" ? "admin" : "staff") as Role,
+    role: (m.role === "owner" || m.role === "admin" || m.role === "frontdesk" || m.role === "provider" || m.role === "staff" ? m.role : "staff") as Role,
     isSelf: m.user_id === user.id,
     createdAt: (m.created_at as string) ?? null,
+    assignedDoctors: assignedByUser.get(m.user_id as string) ?? [],
   }));
 }
 
+export async function listClinicDoctors(): Promise<Array<{ id: string; name: string }>> {
+  const { clinicId } = await requireAdmin();
+  const svc = createServiceClient();
+  const { data, error } = await svc.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Array<{ id: string; name: string }>;
+}
+
 export async function createStaffAction(fd: FormData) {
-  await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const email = str(fd, "email").toLowerCase();
   const password = str(fd, "password");
-  const role: Role = str(fd, "role") === "admin" ? "admin" : "staff";
+  const submittedRole = str(fd, "role");
+  const role: Role = ["admin", "frontdesk", "provider", "staff"].includes(submittedRole) ? submittedRole as Role : "staff";
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("請填正確 Email");
   if (password.length < 8) throw new Error("密碼至少 8 碼");
 
@@ -101,39 +185,88 @@ export async function createStaffAction(fd: FormData) {
 
   const { error: mErr } = await svc
     .from("clinic_members")
-    .upsert({ clinic_id: CLINIC_ID, user_id: userId, role }, { onConflict: "clinic_id,user_id" });
+    .upsert({ clinic_id: clinicId, user_id: userId, role }, { onConflict: "clinic_id,user_id" });
   if (mErr) throw new Error(mErr.message);
   revalidatePath("/admin/users");
 }
 
 export async function setStaffRoleAction(fd: FormData) {
-  await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const userId = str(fd, "user_id");
-  const role: Role = str(fd, "role") === "admin" ? "admin" : "staff";
+  const submittedRole = str(fd, "role");
+  const role: Role = ["admin", "frontdesk", "provider", "staff"].includes(submittedRole) ? submittedRole as Role : "staff";
   if (!userId) throw new Error("缺少帳號");
   const svc = createServiceClient();
   // 防止把最後一位管理員降級(含自己)→ 診所將無人能管理
-  if (role === "staff") {
+  const { data: currentTarget } = await svc
+    .from("clinic_members")
+    .select("role")
+    .eq("clinic_id", clinicId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (currentTarget?.role === "owner") throw new Error("品牌擁有者角色不可變更");
+  if (role !== "admin" && role !== "owner") {
     const { data: target } = await svc
       .from("clinic_members")
       .select("role")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("user_id", userId)
       .maybeSingle();
-    if (target?.role === "admin" && (await adminCount(svc)) <= 1)
+    if (target?.role === "admin" && (await adminCount(svc, clinicId)) <= 1)
       throw new Error("至少要保留一位管理員");
   }
   const { error } = await svc
     .from("clinic_members")
     .update({ role })
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/users");
 }
 
+export async function setDoctorAssignmentsAction(fd: FormData) {
+  const { clinicId } = await requireAdmin();
+  const userId = str(fd, "user_id");
+  if (!userId) throw new Error("缺少帳號");
+  const selectedDoctorIds = [...new Set(fd.getAll("doctor_ids").map((value) => value.toString()).filter(Boolean))];
+  const svc = createServiceClient();
+  const { data: target } = await svc
+    .from("clinic_members")
+    .select("role")
+    .eq("clinic_id", clinicId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (target?.role !== "provider") throw new Error("只有服務提供者可設定醫師指派");
+  const { data: doctors, error: doctorError } = await svc
+    .from("doctors")
+    .select("id")
+    .eq("clinic_id", clinicId)
+    .in("id", selectedDoctorIds.length > 0 ? selectedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
+  if (doctorError) throw new Error(doctorError.message);
+  const allowedIds = new Set((doctors ?? []).map((doctor) => doctor.id as string));
+  const validIds = selectedDoctorIds.filter((id) => allowedIds.has(id));
+  const { error: clearError } = await svc
+    .from("doctor_assignments")
+    .update({ active: false })
+    .eq("clinic_id", clinicId)
+    .eq("user_id", userId)
+    .eq("active", true);
+  if (clearError) throw new Error(clearError.message);
+  if (validIds.length > 0) {
+    const { error: upsertError } = await svc.from("doctor_assignments").upsert(
+      validIds.map((doctorId) => ({ clinic_id: clinicId, doctor_id: doctorId, user_id: userId, active: true })),
+      { onConflict: "clinic_id,doctor_id,user_id" },
+    );
+    if (upsertError) throw new Error(upsertError.message);
+  }
+  revalidatePath("/admin/users");
+  revalidatePath("/admin");
+  revalidatePath("/admin/dashboard");
+  revalidatePath("/admin/queue");
+}
+
 export async function removeStaffAction(fd: FormData) {
-  const { user } = await requireAdmin();
+  const { user, clinicId } = await requireAdmin();
   const userId = str(fd, "user_id");
   if (!userId) throw new Error("缺少帳號");
   if (userId === user.id) throw new Error("無法移除自己");
@@ -142,16 +275,17 @@ export async function removeStaffAction(fd: FormData) {
   const { data: target } = await svc
     .from("clinic_members")
     .select("role")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (target?.role === "admin" && (await adminCount(svc)) <= 1)
+  if (target?.role === "owner") throw new Error("品牌擁有者不可移除");
+  if (target?.role === "admin" && (await adminCount(svc, clinicId)) <= 1)
     throw new Error("至少要保留一位管理員");
   // 僅移除本診所權限(不刪除 auth 帳號)
   const { error } = await svc
     .from("clinic_members")
     .delete()
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/users");
@@ -171,13 +305,20 @@ export async function resetStaffPasswordAction(fd: FormData) {
 
 // ── LINE 測試推播 ─────────────────────────────────────────
 export async function sendTestPushAction(fd: FormData) {
-  await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const to = str(fd, "line_user_id");
   if (!to) redirect("/admin/line?test=err&reason=" + encodeURIComponent("請填 line_user_id"));
 
   let reason: string | null = null;
   try {
-    await pushMessages(to, [{ type: "text", text: "【慈愛中醫診所】測試推播 ✅ 連線正常。" }]);
+    const { data: clinic, error } = await supabase
+      .from("clinics")
+      .select("line_destination")
+      .eq("id", clinicId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const token = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+    await pushMessages(to, [{ type: "text", text: "【品牌】測試推播 ✅ 連線正常。" }], token);
   } catch (e) {
     reason = e instanceof Error ? e.message : "推播失敗";
   }
@@ -195,30 +336,36 @@ export async function signOutAction() {
 // ── 今日約診:狀態 / 取消 / 訂金 ───────────────────────────
 const STATUSES = ["booked", "confirmed", "cancelled", "done", "no_show"] as const;
 export async function setStatusAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId, role } = await requireStatusOperator();
   const id = str(fd, "id");
   const status = str(fd, "status");
   if (!id || !STATUSES.includes(status as (typeof STATUSES)[number])) throw new Error("參數錯誤");
-  const { error } = await supabase
+  if (role === "provider" && status !== "done" && status !== "no_show") {
+    throw new Error("服務提供者只能標記完成或未到");
+  }
+  const { data: changed, error } = await supabase
     .from("appointments")
     .update({ status })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId)
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!changed) throw new Error("查無預約或沒有此預約的操作權限");
 
   // 未到自動停權:每累計滿 3 次未到 → 停權 1 個月
-  if (status === "no_show") {
+  if (status === "no_show" && role !== "provider") {
     const { data: appt } = await supabase
       .from("appointments")
       .select("patient_id")
       .eq("id", id)
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
     if (appt?.patient_id) {
       const { count } = await supabase
         .from("appointments")
         .select("id", { count: "exact", head: true })
-        .eq("clinic_id", CLINIC_ID)
+        .eq("clinic_id", clinicId)
         .eq("patient_id", appt.patient_id)
         .eq("status", "no_show");
       const n = count ?? 0;
@@ -229,7 +376,7 @@ export async function setStatusAction(fd: FormData) {
           .from("patients")
           .update({ blocked_until: until.toISOString() })
           .eq("id", appt.patient_id)
-          .eq("clinic_id", CLINIC_ID);
+          .eq("clinic_id", clinicId);
       }
     }
     revalidatePath("/admin/patients");
@@ -241,7 +388,7 @@ export async function setStatusAction(fd: FormData) {
 // ── 叫號:線上/現場兩條序列,支援手動與自動穿插 ──────────────
 // op: next_online / next_offline / auto / prev_online / prev_offline / reset
 export async function advanceServingAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const doctorId = str(fd, "doctor_id");
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
@@ -254,7 +401,7 @@ export async function advanceServingAction(fd: FormData) {
   const { data: cur } = await supabase
     .from("serving_numbers")
     .select("online_current, offline_current, auto_every, online_run")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("doctor_id", doctorId)
     .eq("date", date)
     .eq("session_key", sessionKey)
@@ -300,7 +447,7 @@ export async function advanceServingAction(fd: FormData) {
 
   const { error } = await supabase.from("serving_numbers").upsert(
     {
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicId,
       doctor_id: doctorId,
       date,
       session_key: sessionKey,
@@ -316,9 +463,9 @@ export async function advanceServingAction(fd: FormData) {
 
   // 叫下一位時,把「剛才那位」(前一個目前號)自動標記為完成
   if (lastKind === "online" && online > prevOnline && prevOnline > 0) {
-    await completeServed(supabase, date, sessionKey, "online", prevOnline);
+    await completeServed(supabase, clinicId, date, sessionKey, "online", prevOnline);
   } else if (lastKind === "offline" && offline > prevOffline && prevOffline > 0) {
-    await completeServed(supabase, date, sessionKey, "offline", prevOffline);
+    await completeServed(supabase, clinicId, date, sessionKey, "offline", prevOffline);
   }
 
   revalidatePath("/admin/queue");
@@ -328,6 +475,7 @@ export async function advanceServingAction(fd: FormData) {
 /** 把某門診段某序列 seq 號的病患標為完成(若仍在候診)。 */
 async function completeServed(
   supabase: SupabaseClient,
+  clinicId: string,
   date: string,
   sessionKey: string,
   stream: "online" | "offline",
@@ -336,10 +484,10 @@ async function completeServed(
   const { data: cs } = await supabase
     .from("clinic_settings")
     .select("booking_mode")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .maybeSingle();
   const mode = (cs?.booking_mode as "time" | "number") ?? "time";
-  const sessions = await getQueueForDate(supabase, CLINIC_ID, date, mode);
+  const sessions = await getQueueForDate(supabase, clinicId, date, mode);
   const sess = sessions.find((s) => s.key === sessionKey);
   if (!sess) return;
   const list = stream === "online" ? sess.online : sess.offline;
@@ -350,13 +498,13 @@ async function completeServed(
       .from("appointments")
       .update({ status: "done" })
       .eq("id", appt.id)
-      .eq("clinic_id", CLINIC_ID);
+      .eq("clinic_id", clinicId);
   }
 }
 
 // 設定自動穿插:每 N 個線上插 1 個現場(0=關閉自動)
 export async function setQueueAutoAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const doctorId = str(fd, "doctor_id");
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
@@ -365,7 +513,7 @@ export async function setQueueAutoAction(fd: FormData) {
 
   const { error } = await supabase.from("serving_numbers").upsert(
     {
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicId,
       doctor_id: doctorId,
       date,
       session_key: sessionKey,
@@ -380,7 +528,7 @@ export async function setQueueAutoAction(fd: FormData) {
 
 // 手動加入/解除黑名單(停權 1 個月 / 清除)
 export async function setPatientBlockAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   if (!id) throw new Error("缺少病患");
   const block = str(fd, "block") === "1";
@@ -394,28 +542,38 @@ export async function setPatientBlockAction(fd: FormData) {
     .from("patients")
     .update({ blocked_until: blockedUntil })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/patients");
 }
 
 export async function cancelAppointmentAction(fd: FormData) {
   // 取消 = 改 status,不 DELETE
-  const { supabase } = await requireMember();
+  const { supabase, clinicId, user } = await requireOperator();
   const id = str(fd, "id");
   if (!id) throw new Error("缺少 id");
-  const { error } = await supabase
-    .from("appointments")
-    .update({ status: "cancelled" })
-    .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+  const { data: current } = await supabase.from("appointments").select("patient_id").eq("id", id).eq("clinic_id", clinicId).maybeSingle();
+  const { error } = await createServiceClient().rpc("cancel_appointment", { p_clinic_id: clinicId, p_appointment_id: id, p_note: "cancelled appointment" });
   if (error) throw new Error(error.message);
+  await notifyAppointmentStatus(createServiceClient(), id, "cancelled").catch((notificationError: unknown) => console.error("Appointment cancellation notification failed", notificationError));
+  if (current?.patient_id) {
+    await recordCrmInteraction(supabase, {
+      clinicId,
+      patientId: current.patient_id,
+      kind: "booking",
+      channel: "staff",
+      title: "後台取消預約",
+      body: "櫃檯取消預約",
+      appointmentId: id,
+      createdBy: user.id,
+    });
+  }
   revalidatePath("/admin");
 }
 
 const DEPOSIT_STATUSES = ["none", "pending", "paid", "waived", "refunded"] as const;
 export async function setDepositAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const deposit_status = str(fd, "deposit_status");
   if (!id || !DEPOSIT_STATUSES.includes(deposit_status as (typeof DEPOSIT_STATUSES)[number]))
@@ -424,38 +582,29 @@ export async function setDepositAction(fd: FormData) {
     .from("appointments")
     .update({ deposit_status })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin");
 }
 
 // ── 建立 / 改期(走 RPC,需 service client;先守門驗權限)──────
-async function getOrCreatePatient(name: string, phone: string, birthday?: string): Promise<string> {
+async function getOrCreatePatient(clinicId: string, name: string, phone: string, birthday?: string): Promise<string> {
   const svc = createServiceClient();
-  const { data: existing } = await svc
-    .from("patients")
-    .select("id, active, birthday")
-    .eq("clinic_id", CLINIC_ID)
-    .eq("phone", phone)
-    .eq("name", name)
-    .maybeSingle();
-  if (existing) {
-    const patch: Record<string, unknown> = {};
-    if (existing.active === false) patch.active = true; // 軟刪除者回訪自動復活
-    if (birthday && !existing.birthday) patch.birthday = birthday; // 補上原本沒有的生日
-    if (Object.keys(patch).length > 0) await svc.from("patients").update(patch).eq("id", existing.id);
-    return existing.id;
-  }
-  const { data: created, error } = await svc
-    .from("patients")
-    .insert({ clinic_id: CLINIC_ID, name, phone, birthday: birthday || null })
-    .select("id")
-    .single();
+  const { data, error } = await svc.rpc("create_or_get_public_patient", {
+    p_clinic_id: clinicId,
+    p_name: name,
+    p_phone: phone,
+    p_birthday: birthday || null,
+    p_line_user_id: null,
+  });
   if (error) throw new Error(error.message);
-  return created.id;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.patient_id) throw new Error("建立病患失敗");
+  return row.patient_id as string;
 }
 
 async function book(opts: {
+  clinicId: string;
   mode: "time" | "number";
   doctorId: string;
   patientId: string;
@@ -465,46 +614,73 @@ async function book(opts: {
   templateId?: string;
   date?: string;
   serviceId?: string;
-}): Promise<void> {
+}): Promise<string> {
   const svc = createServiceClient();
+  let selectedServiceId: string | null = null;
+  if (opts.serviceId) {
+    const { data: service, error: serviceError } = await svc
+      .from("services")
+      .select("id")
+      .eq("id", opts.serviceId)
+      .eq("clinic_id", opts.clinicId)
+      .eq("active", true)
+      .maybeSingle();
+    if (serviceError) throw new Error(serviceError.message);
+    if (!service) throw new Error("服務不存在或已停用");
+    selectedServiceId = String(service.id);
+  }
   let apptId: string | null = null;
   if (opts.mode === "time") {
     if (!opts.startAt) throw new Error("缺少時間");
     const { data, error } = await svc.rpc("book_time_slot", {
-      p_clinic_id: CLINIC_ID,
+      p_clinic_id: opts.clinicId,
       p_doctor_id: opts.doctorId,
       p_patient_id: opts.patientId,
       p_start_at: opts.startAt,
       p_visit_type: opts.visitType,
       p_is_self_pay: opts.isSelfPay,
+      p_service_id: selectedServiceId,
     });
     if (error) throw new Error(error.message);
     apptId = data as string;
   } else {
     if (!opts.templateId || !opts.date) throw new Error("缺少診次或日期");
     const { data, error } = await svc.rpc("book_number", {
-      p_clinic_id: CLINIC_ID,
+      p_clinic_id: opts.clinicId,
       p_doctor_id: opts.doctorId,
       p_patient_id: opts.patientId,
       p_template_id: opts.templateId,
       p_date: opts.date,
       p_visit_type: opts.visitType,
       p_is_self_pay: opts.isSelfPay,
+      p_service_id: selectedServiceId,
     });
     if (error) throw new Error(error.message);
     const row = Array.isArray(data) ? data[0] : data;
     apptId = (row?.appointment_id as string) ?? null;
   }
-  // 後台建立 = 現場(offline);順帶記錄服務
+  // 後台建立 = 現場(offline);服務先驗證，再一次寫入 metadata。
   if (apptId) {
-    const patch: Record<string, unknown> = { source: "offline" };
-    if (opts.serviceId) patch.service_id = opts.serviceId;
-    await svc.from("appointments").update(patch).eq("id", apptId);
+    const { error: bindingError } = await svc
+      .from("appointments")
+      .update({ source: "offline", service_id: selectedServiceId })
+      .eq("id", apptId)
+      .eq("clinic_id", opts.clinicId);
+    if (bindingError) {
+      await svc.rpc("cancel_appointment", {
+        p_clinic_id: opts.clinicId,
+        p_appointment_id: apptId,
+        p_note: "admin booking metadata binding failed",
+      });
+      throw new Error(bindingError.message);
+    }
   }
+  if (!apptId) throw new Error("建立預約失敗");
+  return apptId;
 }
 
 export async function createAppointmentAction(fd: FormData) {
-  await requireMember(); // 守門
+  const { clinicId } = await requireOperator();
   const mode = str(fd, "mode") === "number" ? "number" : "time";
   const doctorId = str(fd, "doctor_id");
   const name = str(fd, "name");
@@ -523,13 +699,14 @@ export async function createAppointmentAction(fd: FormData) {
       .from("patients")
       .select("id")
       .eq("id", selectedId)
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
-    patientId = p?.id ?? (await getOrCreatePatient(name, phone, birthday || undefined));
+    patientId = p?.id ?? (await getOrCreatePatient(clinicId, name, phone, birthday || undefined));
   } else {
-    patientId = await getOrCreatePatient(name, phone, birthday || undefined);
+    patientId = await getOrCreatePatient(clinicId, name, phone, birthday || undefined);
   }
   await book({
+    clinicId,
     mode,
     doctorId,
     patientId,
@@ -544,7 +721,7 @@ export async function createAppointmentAction(fd: FormData) {
 }
 
 export async function rescheduleAppointmentAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId, user } = await requireOperator();
   const oldId = str(fd, "old_id");
   const mode = str(fd, "mode") === "number" ? "number" : "time";
   const doctorId = str(fd, "doctor_id");
@@ -553,38 +730,44 @@ export async function rescheduleAppointmentAction(fd: FormData) {
   // 先取得原約診的病患
   const { data: old, error: oErr } = await supabase
     .from("appointments")
-    .select("patient_id, visit_type, is_self_pay")
+    .select("patient_id, visit_type, is_self_pay, membership_id, service_id")
     .eq("id", oldId)
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .single();
   if (oErr || !old) throw new Error("查無原約診");
 
-  // 先訂新的(若失敗不動原約診)
-  await book({
-    mode,
-    doctorId,
-    patientId: old.patient_id,
-    visitType: old.visit_type as "first" | "return",
-    isSelfPay: old.is_self_pay as boolean,
-    startAt: str(fd, "start_at") || undefined,
-    templateId: str(fd, "template_id") || undefined,
-    date: str(fd, "date") || undefined,
+  const { data: newAppointmentId, error: rescheduleError } = await createServiceClient().rpc("reschedule_appointment", {
+    p_clinic_id: clinicId,
+    p_old_appointment_id: oldId,
+    p_mode: mode,
+    p_doctor_id: doctorId,
+    p_start_at: str(fd, "start_at") || null,
+    p_template_id: str(fd, "template_id") || null,
+    p_date: str(fd, "date") || null,
+    p_service_id: (old.service_id as string | null) ?? null,
   });
-  // 新的成功後取消舊的
-  const { error: cErr } = await supabase
-    .from("appointments")
-    .update({ status: "cancelled" })
-    .eq("id", oldId)
-    .eq("clinic_id", CLINIC_ID);
-  if (cErr) throw new Error(cErr.message);
+  if (rescheduleError || typeof newAppointmentId !== "string") {
+    throw new Error(rescheduleError?.message ?? "改期失敗");
+  }
+  await notifyAppointmentStatus(createServiceClient(), newAppointmentId, "rescheduled").catch((notificationError: unknown) => console.error("Appointment reschedule notification failed", notificationError));
+  await recordCrmInteraction(supabase, {
+    clinicId,
+    patientId: old.patient_id,
+    kind: "booking",
+    channel: "staff",
+    title: "改期預約",
+    body: "櫃檯完成改期，原預約已保留為取消狀態",
+    appointmentId: newAppointmentId,
+    createdBy: user.id,
+  });
   revalidatePath("/admin");
 }
 
 // ── 門診表 schedule_templates ──────────────────────────────
 export async function createTemplateAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const { error } = await supabase.from("schedule_templates").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicId,
     doctor_id: str(fd, "doctor_id"),
     weekday: intOr(fd, "weekday", 1),
     start_time: str(fd, "start_time"),
@@ -598,7 +781,7 @@ export async function createTemplateAction(fd: FormData) {
 }
 
 export async function updateTemplateAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   if (!id) throw new Error("缺少 id");
   const { error } = await supabase
@@ -612,39 +795,39 @@ export async function updateTemplateAction(fd: FormData) {
       capacity: intOr(fd, "capacity", 1),
     })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/schedules");
 }
 
 export async function toggleTemplateAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
     .from("schedule_templates")
     .update({ active: !active })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/schedules");
 }
 
 export async function deleteTemplateAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("schedule_templates")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error("此門診段已有約診,無法刪除,請改為停用。");
   revalidatePath("/admin/schedules");
 }
 
 // ── 休診 / 加診 schedule_exceptions ───────────────────────
 export async function createExceptionAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const isClosed = str(fd, "kind") !== "extra"; // kind=closed(休診) / extra(加診)
   const start = str(fd, "start_time");
   const end = str(fd, "end_time");
@@ -657,7 +840,7 @@ export async function createExceptionAction(fd: FormData) {
       .from("schedule_templates")
       .update({ active: false })
       .eq("id", tplId)
-      .eq("clinic_id", CLINIC_ID);
+      .eq("clinic_id", clinicId);
     if (error) throw new Error(error.message);
     revalidatePath("/admin/exceptions");
     revalidatePath("/admin/schedules");
@@ -666,7 +849,7 @@ export async function createExceptionAction(fd: FormData) {
   if (!date) throw new Error("請選擇日期");
 
   const row: Record<string, unknown> = {
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicId,
     doctor_id: str(fd, "doctor_id"),
     date,
     is_closed: isClosed,
@@ -689,22 +872,22 @@ export async function createExceptionAction(fd: FormData) {
 }
 
 export async function deleteExceptionAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("schedule_exceptions")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/exceptions");
 }
 
 // ── 醫師(門診表需要)────────────────────────────────────
 export async function createDoctorAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const { error } = await supabase.from("doctors").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicId,
     name: str(fd, "name"),
     specialty: str(fd, "specialty") || null,
     active: true,
@@ -714,7 +897,7 @@ export async function createDoctorAction(fd: FormData) {
 }
 
 export async function updateDoctorAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const name = str(fd, "name");
   if (!id || !name) throw new Error("缺少醫師或姓名");
@@ -722,20 +905,20 @@ export async function updateDoctorAction(fd: FormData) {
     .from("doctors")
     .update({ name, specialty: str(fd, "specialty") || null })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/schedules");
 }
 
 export async function toggleDoctorAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
     .from("doctors")
     .update({ active: !active })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/schedules");
 }
@@ -743,7 +926,7 @@ export async function toggleDoctorAction(fd: FormData) {
 // ── 病患建檔/記錄 patients ───────────────────────────────
 // 修正病患自行填錯的基本資料(姓名 / 電話)。櫃檯即可操作。
 export async function updatePatientBasicAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const name = str(fd, "name");
   const phone = str(fd, "phone");
@@ -754,7 +937,7 @@ export async function updatePatientBasicAction(fd: FormData) {
     .from("patients")
     .update({ name, phone })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/patients/${id}`);
   revalidatePath("/admin/patients");
@@ -764,35 +947,39 @@ export async function updatePatientBasicAction(fd: FormData) {
 //  - 無約診紀錄(誤建檔/重複)→ 真的刪掉,patient_records 隨之 cascade。
 //  - 有約診紀錄 → 軟刪除(active=false),僅從後台列表隱藏,約診與歷史全保留。
 export async function deletePatientAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   if (!id) throw new Error("缺少病患");
-  const { count } = await supabase
-    .from("appointments")
-    .select("id", { count: "exact", head: true })
-    .eq("clinic_id", CLINIC_ID)
-    .eq("patient_id", id);
+  const [{ count: appointmentCount }, { count: recordCount }, { count: interactionCount }, { count: membershipCount }, { count: segmentCount }, { count: discountCount }] = await Promise.all([
+    supabase.from("appointments").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
+    supabase.from("patient_records").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
+    supabase.from("crm_interactions").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
+    supabase.from("patient_memberships").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
+    supabase.from("crm_segment_members").select("patient_id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
+    supabase.from("discount_redemptions").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
+  ]);
+  const hasHistory = [appointmentCount, recordCount, interactionCount, membershipCount, segmentCount, discountCount].some((count) => (count ?? 0) > 0);
 
-  if ((count ?? 0) > 0) {
+  if (hasHistory) {
     const { error } = await supabase
       .from("patients")
       .update({ active: false })
       .eq("id", id)
-      .eq("clinic_id", CLINIC_ID);
+      .eq("clinic_id", clinicId);
     if (error) throw new Error(error.message);
   } else {
     const { error } = await supabase
       .from("patients")
       .delete()
       .eq("id", id)
-      .eq("clinic_id", CLINIC_ID);
+      .eq("clinic_id", clinicId);
     if (error) throw new Error("刪除失敗:此病患可能已有關聯資料。");
   }
   revalidatePath("/admin/patients");
 }
 
 export async function updatePatientAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   if (!id) throw new Error("缺少病患");
   const { error } = await supabase
@@ -805,29 +992,38 @@ export async function updatePatientAction(fd: FormData) {
       marketing_opt_in: bool(fd, "marketing_opt_in"),
     })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/patients/${id}`);
 }
 
 // ── 病況紀錄 patient_records(逐筆)──────────────────────────
 export async function addPatientRecordAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId, user } = await requireOperator();
   const patientId = str(fd, "patient_id");
   const content = str(fd, "content");
   if (!patientId) throw new Error("缺少病患");
   if (!content) throw new Error("請填寫病況內容");
   const { error } = await supabase.from("patient_records").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicId,
     patient_id: patientId,
     content,
   });
   if (error) throw new Error(error.message);
+  await recordCrmInteraction(supabase, {
+    clinicId,
+    patientId,
+    kind: "note",
+    channel: "staff",
+    title: "新增顧客備註",
+    body: content,
+    createdBy: user.id,
+  });
   revalidatePath(`/admin/patients/${patientId}`);
 }
 
 export async function deletePatientRecordAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const patientId = str(fd, "patient_id");
   if (!id) throw new Error("缺少紀錄");
@@ -835,18 +1031,18 @@ export async function deletePatientRecordAction(fd: FormData) {
     .from("patient_records")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/patients/${patientId}`);
 }
 
 // ── 看診服務 services ─────────────────────────────────────
 export async function createServiceAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const name = str(fd, "name");
   if (!name) throw new Error("請填服務名稱");
   const { error } = await supabase.from("services").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicId,
     name,
     description: str(fd, "description") || null,
     active: true,
@@ -856,7 +1052,7 @@ export async function createServiceAction(fd: FormData) {
 }
 
 export async function updateServiceAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const name = str(fd, "name");
   if (!id || !name) throw new Error("缺少服務或名稱");
@@ -864,32 +1060,32 @@ export async function updateServiceAction(fd: FormData) {
     .from("services")
     .update({ name, description: str(fd, "description") || null })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/services");
 }
 
 export async function toggleServiceAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
     .from("services")
     .update({ active: !active })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/services");
 }
 
 export async function deleteServiceAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("services")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error("此服務已被約診使用,無法刪除,請改為停用。");
   revalidatePath("/admin/services");
 }
@@ -897,13 +1093,13 @@ export async function deleteServiceAction(fd: FormData) {
 // ── LINE 自動回覆規則 ─────────────────────────────────────
 const REPLY_ACTIONS = ["text", "booking", "query", "progress", "message"] as const;
 export async function createReplyAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
   if (!keywords) throw new Error("請填關鍵字");
   if (!REPLY_ACTIONS.includes(action as (typeof REPLY_ACTIONS)[number])) throw new Error("動作錯誤");
   const { error } = await supabase.from("line_auto_replies").insert({
-    clinic_id: CLINIC_ID,
+    clinic_id: clinicId,
     keywords,
     action,
     reply_text: str(fd, "reply_text") || null,
@@ -916,7 +1112,7 @@ export async function createReplyAction(fd: FormData) {
 }
 
 export async function updateReplyAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
@@ -932,38 +1128,38 @@ export async function updateReplyAction(fd: FormData) {
       sort: intOr(fd, "sort", 0),
     })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/replies");
 }
 
 export async function toggleReplyAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
     .from("line_auto_replies")
     .update({ active: !active })
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/replies");
 }
 
 export async function deleteReplyAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_auto_replies")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/replies");
 }
 
 export async function updateLineTextsAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const { error } = await supabase
     .from("clinic_settings")
     .update({
@@ -977,14 +1173,14 @@ export async function updateLineTextsAction(fd: FormData) {
       line_menu_link_label: str(fd, "line_menu_link_label") || null,
       line_menu_link_url: str(fd, "line_menu_link_url") || null,
     })
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/replies");
 }
 
 // ── LINE 訊息素材 line_messages ───────────────────────────
 export async function saveMessageAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const name = str(fd, "name");
   const kind = str(fd, "kind");
@@ -1002,25 +1198,25 @@ export async function saveMessageAction(fd: FormData) {
       .from("line_messages")
       .update({ name, kind, data })
       .eq("id", id)
-      .eq("clinic_id", CLINIC_ID);
+      .eq("clinic_id", clinicId);
     if (error) throw new Error(error.message);
   } else {
     const { error } = await supabase
       .from("line_messages")
-      .insert({ clinic_id: CLINIC_ID, name, kind, data });
+      .insert({ clinic_id: clinicId, name, kind, data });
     if (error) throw new Error(error.message);
   }
   revalidatePath("/admin/messages");
 }
 
 export async function deleteMessageAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_messages")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/messages");
 }
@@ -1035,10 +1231,14 @@ async function buildAndPublishRichMenu(opts: {
   contentType: string;
   oldId: string | null;
   baseUrl: string;
+  accessToken: string;
+  clinicSlug: string | null;
 }): Promise<string> {
   const spec = LAYOUTS[opts.layout];
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null;
+  const liffUrl = liffId
+    ? `https://liff.line.me/${liffId}${opts.clinicSlug ? `?clinic_slug=${encodeURIComponent(opts.clinicSlug)}` : ""}`
+    : null;
   const bounds = slotBounds(opts.layout);
   const areas = bounds
     .map((b, i) => {
@@ -1053,16 +1253,29 @@ async function buildAndPublishRichMenu(opts: {
     name: `clinic-menu-${Date.now() % 100000}`,
     chatBarText: opts.chatBarText || "選單",
     areas,
-  });
+  }, opts.accessToken);
   try {
-    await uploadRichMenuImage(newId, opts.imageBytes, opts.contentType);
-    await setDefaultRichMenu(newId);
+    await uploadRichMenuImage(newId, opts.imageBytes, opts.contentType, opts.accessToken);
+    await setDefaultRichMenu(newId, opts.accessToken);
   } catch (e) {
-    await deleteRichMenu(newId);
+    await deleteRichMenu(newId, opts.accessToken);
     throw e;
   }
-  if (opts.oldId && opts.oldId !== newId) await deleteRichMenu(opts.oldId);
+  if (opts.oldId && opts.oldId !== newId) await deleteRichMenu(opts.oldId, opts.accessToken);
   return newId;
+}
+
+async function getClinicLineContext(supabase: SupabaseClient, clinicId: string): Promise<{ accessToken: string; clinicSlug: string | null }> {
+  const { data: clinic, error } = await supabase
+    .from("clinics")
+    .select("line_destination, slug")
+    .eq("id", clinicId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return {
+    accessToken: lineAccessTokenForDestination(clinic?.line_destination as string | undefined),
+    clinicSlug: (clinic?.slug as string | null) ?? null,
+  };
 }
 
 function reqBaseUrl(h: Headers): string {
@@ -1072,7 +1285,7 @@ function reqBaseUrl(h: Headers): string {
 }
 
 export async function saveRichMenuAction(fd: FormData) {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const layout = str(fd, "layout") as Layout;
   if (!LAYOUTS[layout]) throw new Error("版型錯誤");
   const count = LAYOUTS[layout].slots;
@@ -1086,7 +1299,7 @@ export async function saveRichMenuAction(fd: FormData) {
   }
   const chatBarText = str(fd, "chat_bar_text") || "選單";
   const { error } = await supabase.from("line_richmenu").upsert(
-    { clinic_id: CLINIC_ID, layout, chat_bar_text: chatBarText, slots, updated_at: new Date().toISOString() },
+    { clinic_id: clinicId, layout, chat_bar_text: chatBarText, slots, updated_at: new Date().toISOString() },
     { onConflict: "clinic_id" },
   );
   if (error) redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
@@ -1097,11 +1310,12 @@ export async function saveRichMenuAction(fd: FormData) {
     const { data: cfg } = await supabase
       .from("line_richmenu")
       .select("published_id")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
     const oldId = (cfg?.published_id as string | null) ?? null;
     if (oldId) {
-      const img = await getRichMenuImage(oldId);
+      const context = await getClinicLineContext(supabase, clinicId);
+      const img = await getRichMenuImage(oldId, context.accessToken);
       if (img) {
         const newId = await buildAndPublishRichMenu({
           layout,
@@ -1111,11 +1325,13 @@ export async function saveRichMenuAction(fd: FormData) {
           contentType: img.contentType,
           oldId,
           baseUrl: reqBaseUrl(await headers()),
+          accessToken: context.accessToken,
+          clinicSlug: context.clinicSlug,
         });
         await supabase
           .from("line_richmenu")
           .update({ published_id: newId, updated_at: new Date().toISOString() })
-          .eq("clinic_id", CLINIC_ID);
+          .eq("clinic_id", clinicId);
       }
     }
   } catch (e) {
@@ -1129,13 +1345,13 @@ export async function saveRichMenuAction(fd: FormData) {
 }
 
 export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   let errMsg: string | null = null;
   try {
     const { data: cfg } = await supabase
       .from("line_richmenu")
       .select("layout, chat_bar_text, slots, published_id")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
     if (!cfg) throw new Error("請先按「儲存選單設定」再發布");
 
@@ -1148,6 +1364,7 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
     if (file.size > 1024 * 1024) throw new Error("圖片需小於 1MB");
     const contentType = file.type === "image/png" ? "image/png" : "image/jpeg";
 
+    const context = await getClinicLineContext(supabase, clinicId);
     const newId = await buildAndPublishRichMenu({
       layout,
       slots: (cfg.slots as Slot[]) ?? [],
@@ -1156,12 +1373,14 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
       contentType,
       oldId: (cfg.published_id as string | null) ?? null,
       baseUrl: reqBaseUrl(await headers()),
+      accessToken: context.accessToken,
+      clinicSlug: context.clinicSlug,
     });
 
     await supabase
       .from("line_richmenu")
       .update({ published_id: newId, updated_at: new Date().toISOString() })
-      .eq("clinic_id", CLINIC_ID);
+      .eq("clinic_id", clinicId);
   } catch (e) {
     errMsg = e instanceof Error ? e.message : "發布失敗";
   }
@@ -1171,53 +1390,102 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
 }
 
 export async function unpublishRichMenuAction() {
-  const { supabase } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const { data: cfg } = await supabase
     .from("line_richmenu")
     .select("published_id")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .maybeSingle();
-  await clearDefaultRichMenu();
+  const context = await getClinicLineContext(supabase, clinicId);
+  await clearDefaultRichMenu(context.accessToken);
   const id = cfg?.published_id as string | null;
-  if (id) await deleteRichMenu(id);
-  await supabase.from("line_richmenu").update({ published_id: null }).eq("clinic_id", CLINIC_ID);
+  if (id) await deleteRichMenu(id, context.accessToken);
+  await supabase.from("line_richmenu").update({ published_id: null }).eq("clinic_id", clinicId);
   revalidatePath("/admin/richmenu");
 }
 
 // ── Email 提醒設定(存於 clinic_settings;金鑰留空則沿用舊值)──────
 export async function updateEmailSettingsAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireAdmin();
   const patch: Record<string, unknown> = {
     email_enabled: bool(fd, "email_enabled"),
     email_from: str(fd, "email_from") || null,
   };
   // 只有輸入新金鑰才更新(避免用遮罩值覆蓋);輸入 "-" 代表清除
-  const key = str(fd, "resend_api_key");
-  if (key === "-") patch.resend_api_key = null;
-  else if (key) patch.resend_api_key = key;
+  const { error } = await supabase.from("clinic_settings").update(patch).eq("clinic_id", clinicId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/settings");
+}
 
-  const { error } = await supabase.from("clinic_settings").update(patch).eq("clinic_id", CLINIC_ID);
+// ── 標準金流設定(僅管理員;密鑰不回填到前端)────────────────
+export async function updatePaymentSettingsAction(fd: FormData) {
+  const { supabase, clinicId } = await requireAdmin();
+  const provider = str(fd, "provider");
+  if (provider !== "ecpay" && provider !== "newebpay") throw new Error("金流商錯誤");
+  const environment = str(fd, "environment") === "production" ? "production" : "test";
+  const merchantId = str(fd, "merchant_id");
+  if (!merchantId) throw new Error("請填寫 Merchant ID");
+
+  const { error } = await supabase.from("clinic_payment_settings").upsert(
+    {
+      clinic_id: clinicId,
+      provider,
+      merchant_id: merchantId,
+      environment,
+      active: bool(fd, "active"),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "clinic_id" },
+  );
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/settings");
+}
+
+export async function addClinicDomainAction(fd: FormData) {
+  const { supabase, clinicId } = await requireAdmin();
+  const hostname = str(fd, "hostname").toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
+  if (!hostname || !/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname)) throw new Error("請填寫正確網域名稱");
+  const verificationToken = `booking-domain-${randomBytes(12).toString("hex")}`;
+  const { error } = await supabase.from("clinic_domains").insert({ clinic_id: clinicId, hostname, kind: "custom", verification_token: verificationToken, active: false });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/settings");
+}
+
+export async function verifyClinicDomainAction(fd: FormData) {
+  const { supabase, clinicId } = await requireAdmin();
+  const id = str(fd, "id");
+  const { data: domain } = await supabase.from("clinic_domains").select("id, hostname, verification_token").eq("id", id).eq("clinic_id", clinicId).maybeSingle();
+  if (!domain?.verification_token) throw new Error("找不到待驗證網域");
+  let records: string[][] = [];
+  try { records = await resolveTxt(`_booking-verification.${domain.hostname}`); } catch { throw new Error("尚未查到 DNS TXT 驗證紀錄"); }
+  if (!records.flat().includes(domain.verification_token)) throw new Error("DNS TXT 驗證值不一致");
+  const { error } = await supabase.from("clinic_domains").update({ verified_at: new Date().toISOString(), active: true }).eq("id", id).eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/settings");
 }
 
 // ── 診所公開資訊 clinics(名稱、LINE ID、電話、地址、簡介)──────
 export async function updateClinicProfileAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireAdmin();
   const name = str(fd, "name");
   if (!name) throw new Error("請填診所名稱");
   let lineId = str(fd, "line_basic_id");
   if (lineId && !lineId.startsWith("@")) lineId = "@" + lineId; // 自動補 @
+  const lineDestination = str(fd, "line_destination");
+  const slug = str(fd, "slug").toLowerCase();
+  if (slug && !/^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/.test(slug)) throw new Error("品牌短網址只能使用英數字與連字號");
   const { error } = await supabase
     .from("clinics")
     .update({
       name,
+      slug: slug || null,
       line_basic_id: lineId || null,
+      line_destination: lineDestination || null,
       phone: str(fd, "phone") || null,
       address: str(fd, "address") || null,
       intro: str(fd, "intro") || null,
     })
-    .eq("id", CLINIC_ID);
+    .eq("id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/settings");
   revalidatePath("/");
@@ -1225,7 +1493,7 @@ export async function updateClinicProfileAction(fd: FormData) {
 
 // ── 診所設定 clinic_settings ──────────────────────────────
 export async function updateSettingsAction(fd: FormData) {
-  const { supabase } = await requireMember();
+  const { supabase, clinicId } = await requireAdmin();
   const booking_mode = str(fd, "booking_mode") === "number" ? "number" : "time";
   const deposit_scope = (["all", "self_pay", "none"] as const).includes(
     str(fd, "deposit_scope") as "all" | "self_pay" | "none",
@@ -1248,8 +1516,10 @@ export async function updateSettingsAction(fd: FormData) {
       deposit_scope,
       min_lead_minutes: Math.max(0, intOr(fd, "min_lead_minutes", 30)),
       max_advance_days: Math.max(1, intOr(fd, "max_advance_days", 30)),
+      public_booking_enabled: bool(fd, "public_booking_enabled"),
+      public_registration_enabled: bool(fd, "public_registration_enabled"),
     })
-    .eq("clinic_id", CLINIC_ID);
+    .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/settings");
 }

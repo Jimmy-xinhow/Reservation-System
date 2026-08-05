@@ -1,9 +1,11 @@
 import { NextRequest } from "next/server";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import { createServiceClient } from "@/lib/supabase";
 import { ok, fail } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { isClinicOpenNow } from "@/lib/queue";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { resolvePublicClinicId } from "@/lib/public-brand";
+import { recordCrmInteraction } from "@/lib/crm-interactions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +26,6 @@ export async function POST(req: NextRequest) {
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
       return response;
     }
-    if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
     const payload = (await req.json().catch(() => null)) as {
       idToken?: string;
       body?: string;
@@ -45,24 +46,26 @@ export async function POST(req: NextRequest) {
     }
 
     const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
 
     // 黑名單:被封鎖者訊息一律靜默丟棄(不存、不回,對方無從得知被封,避免激怒)
     const { data: blk } = await svc
       .from("chat_blocks")
       .select("line_user_id")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("line_user_id", lineUserId)
       .maybeSingle();
     if (blk) return ok({ sent: true });
 
     // 非看診時間:先看最後一則,避免連續訊息重複貼同一句自動回覆
-    const open = await isClinicOpenNow(svc, CLINIC_ID);
+    const open = await isClinicOpenNow(svc, clinicId);
     let lastBody: string | null = null;
     if (!open) {
       const { data: last } = await svc
         .from("chat_messages")
         .select("body")
-        .eq("clinic_id", CLINIC_ID)
+        .eq("clinic_id", clinicId)
         .eq("line_user_id", lineUserId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -71,17 +74,36 @@ export async function POST(req: NextRequest) {
     }
 
     const { error } = await svc.from("chat_messages").insert({
-      clinic_id: CLINIC_ID,
+      clinic_id: clinicId,
       line_user_id: lineUserId,
       sender: "patient",
       body,
     });
     if (error) return fail(error.message, 500);
+    const { data: patient } = await svc
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("line_user_id", lineUserId)
+      .eq("active", true)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    if (patient?.id) {
+      await recordCrmInteraction(svc, {
+        clinicId,
+        patientId: patient.id as string,
+        kind: "message",
+        channel: "line",
+        title: "顧客客服訊息",
+        body,
+      }).catch((interactionError: unknown) => console.error("CRM chat interaction failed", interactionError));
+    }
 
     // 非看診時間且上一則不是同一句自動回覆 → 自動回覆一次(以 staff 身分,病患看得到)
     if (!open && lastBody !== OFFHOURS_REPLY) {
       await svc.from("chat_messages").insert({
-        clinic_id: CLINIC_ID,
+        clinic_id: clinicId,
         line_user_id: lineUserId,
         sender: "staff",
         body: OFFHOURS_REPLY,

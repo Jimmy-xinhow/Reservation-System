@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
 import { saveMessageAction, deleteMessageAction } from "../actions";
 import MessageComposer from "./MessageComposer";
 import type { MsgKind, MsgData } from "@/lib/lineMessage";
@@ -27,13 +26,13 @@ export default async function MessagesPage({
 }: {
   searchParams: Promise<{ edit?: string }>;
 }) {
-  await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const { edit } = await searchParams;
   const supabase = await createSupabaseServer();
   const { data } = await supabase
     .from("line_messages")
     .select("id, name, kind, data")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .order("created_at", { ascending: false });
   const messages = (data ?? []) as Msg[];
   const editing = edit ? messages.find((m) => m.id === edit) ?? null : null;

@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireMember } from "@/lib/admin";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireMember, canViewSensitiveCustomerData } from "@/lib/admin";
 import { ok, fail } from "@/lib/http";
 
 export const runtime = "nodejs";
@@ -13,14 +12,19 @@ type Hit = { id: string; name: string; phone: string; birthday: string | null };
 // 生日可輸入完整 YYYY-MM-DD,或四碼 MMDD(如 0315 = 3/15,不分年份)。
 export async function GET(req: NextRequest) {
   let supabase;
+  let clinicId: string;
+  let canViewSensitive = false;
   try {
-    ({ supabase } = await requireMember());
+    const member = await requireMember();
+    ({ supabase, clinicId } = member);
+    canViewSensitive = canViewSensitiveCustomerData(member.role);
   } catch {
     return fail("未授權", 401);
   }
 
   const q = (req.nextUrl.searchParams.get("q") ?? "").trim().replace(/[,%()*]/g, "");
   if (!q) return ok({ patients: [] });
+  if (!canViewSensitive) return ok({ patients: [] });
 
   const isFullDate = /^\d{4}-\d{2}-\d{2}$/.test(q);
   // 四碼數字 = MMDD;驗證月(01-12)日(01-31)才視為生日搜尋。
@@ -35,7 +39,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("patients")
     .select("id, name, phone, birthday")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("active", true)
     .or(orParts.join(","))
     .order("name")
@@ -50,7 +54,7 @@ export async function GET(req: NextRequest) {
     const { data: withBday, error: bErr } = await supabase
       .from("patients")
       .select("id, name, phone, birthday")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("active", true)
       .not("birthday", "is", null)
       .order("name")

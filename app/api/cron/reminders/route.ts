@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import { createServiceClient } from "@/lib/supabase";
 import { getClinicSettings } from "@/lib/http";
-import { pushMessages, type LineMessage } from "@/lib/line";
-import { sendEmail } from "@/lib/email";
+import { lineAccessTokenForDestination, pushMessages, type LineMessage } from "@/lib/line";
+import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -32,82 +32,100 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    if (!CLINIC_ID) return Response.json({ ok: false, error: "未設定 NEXT_PUBLIC_CLINIC_ID" }, { status: 500 });
     const svc = createServiceClient();
-    const settings = await getClinicSettings(svc, CLINIC_ID);
-    if (!settings) return Response.json({ ok: false, error: "查無診所設定" }, { status: 500 });
-
-    const hours = Number(process.env.REMINDER_HOURS_BEFORE ?? 24) || 24;
-    const now = new Date();
-    const until = new Date(now.getTime() + hours * 3600 * 1000);
-
-    const { data: appts, error } = await svc
-      .from("appointments")
-      .select("id, start_at, queue_number, doctors(name), patients(name, line_user_id, email)")
-      .eq("clinic_id", CLINIC_ID)
-      .in("status", ["booked", "confirmed"])
-      .gt("start_at", now.toISOString())
-      .lte("start_at", until.toISOString());
-    if (error) return Response.json({ ok: false, error: error.message }, { status: 500 });
-
-    const rows = (appts ?? []) as unknown as ApptRow[];
-    if (rows.length === 0) return Response.json({ ok: true, line: 0, email: 0 });
-
-    // 已發過的提醒紀錄(依管道)
-    // ── LINE 推播(會計入額度)──
-    let lineSent = 0;
-    let lineFailed = 0;
-    for (const a of rows) {
-      if (!a.patients?.line_user_id) continue;
-      const claim = await claimReminder(svc, a.id, "line");
-      if (!claim) continue;
-      const flex = buildReminderFlex(a, settings.booking_mode);
+    const { data: clinics, error: clinicError } = await svc.from("clinics").select("id").eq("active", true);
+    if (clinicError) throw new Error(clinicError.message);
+    const summary = { line: 0, lineFailed: 0, email: 0, emailFailed: 0, scanned: 0 };
+    const errors: string[] = [];
+    for (const clinic of clinics ?? []) {
       try {
-        await pushMessages(a.patients.line_user_id, [flex]);
-        await finishReminder(svc, claim, "sent");
-        lineSent += 1;
-      } catch {
-        await finishReminder(svc, claim, "failed").catch(() => undefined);
-        lineFailed += 1;
+        const result = await runReminderClinic(svc, clinic.id as string);
+        summary.line += result.line;
+        summary.lineFailed += result.lineFailed;
+        summary.email += result.email;
+        summary.emailFailed += result.emailFailed;
+        summary.scanned += result.scanned;
+      } catch (error) {
+        errors.push(`${clinic.id}: ${error instanceof Error ? error.message : "執行失敗"}`);
       }
     }
-
-    // ── Email 提醒(後台自行設定;clinic_settings.email_enabled + resend_api_key + email_from)──
-    let emailSent = 0;
-    let emailFailed = 0;
-    const emailOn = settings.email_enabled && !!settings.resend_api_key && !!settings.email_from;
-    if (emailOn) {
-      const cfg = { apiKey: settings.resend_api_key!, from: settings.email_from! };
-      for (const a of rows) {
-        const to = a.patients?.email;
-        if (!to) continue;
-        const claim = await claimReminder(svc, a.id, "email");
-        if (!claim) continue;
-        try {
-          await sendEmail(cfg, to, "慈愛中醫診所 看診提醒", buildReminderHtml(a, settings.booking_mode));
-          await finishReminder(svc, claim, "sent");
-          emailSent += 1;
-        } catch {
-          await finishReminder(svc, claim, "failed").catch(() => undefined);
-          emailFailed += 1;
-        }
-      }
-    }
-
-    return Response.json({
-      ok: true,
-      line: lineSent,
-      lineFailed,
-      email: emailSent,
-      emailFailed,
-      scanned: rows.length,
-    });
+    return Response.json({ ok: errors.length === 0, ...summary, errors });
   } catch (e) {
     return Response.json(
       { ok: false, error: e instanceof Error ? e.message : "提醒排程失敗" },
       { status: 500 },
     );
   }
+}
+
+async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise<{ line: number; lineFailed: number; email: number; emailFailed: number; scanned: number }> {
+  const settings = await getClinicSettings(svc, clinicId);
+  if (!settings) throw new Error("查無診所設定");
+  const { data: clinic, error: clinicError } = await svc
+    .from("clinics")
+    .select("name, line_destination")
+    .eq("id", clinicId)
+    .maybeSingle();
+  if (clinicError) throw new Error(clinicError.message);
+  const hours = Number(process.env.REMINDER_HOURS_BEFORE ?? 24) || 24;
+  const now = new Date();
+  const until = new Date(now.getTime() + hours * 3600 * 1000);
+  const { data: appts, error } = await svc.from("appointments").select("id, start_at, queue_number, doctors(name), patients(name, line_user_id, email)").eq("clinic_id", clinicId).in("status", ["booked", "confirmed"]).gt("start_at", now.toISOString()).lte("start_at", until.toISOString());
+  if (error) throw new Error(error.message);
+  const rows = (appts ?? []) as unknown as ApptRow[];
+  let lineAccessToken: string | null = null;
+  let lineAccessError: string | null = null;
+  if (rows.some((appointment) => Boolean(appointment.patients?.line_user_id))) {
+    try {
+      lineAccessToken = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+    } catch (error) {
+      lineAccessError = error instanceof Error ? error.message : "LINE access token unavailable";
+    }
+  }
+  let line = 0;
+  let lineFailed = 0;
+  for (const appointment of rows) {
+    if (!appointment.patients?.line_user_id) continue;
+    const claim = await claimReminder(svc, appointment.id, "line");
+    if (!claim) continue;
+    if (!lineAccessToken) {
+      await finishReminder(svc, claim, "failed", lineAccessError ?? "LINE access token unavailable").catch(() => undefined);
+      lineFailed += 1;
+      continue;
+    }
+    try {
+      await pushMessages(appointment.patients.line_user_id, [buildReminderFlex(appointment, settings.booking_mode)], lineAccessToken);
+      await finishReminder(svc, claim, "sent");
+      line += 1;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "LINE reminder failed";
+      console.error("Reminder LINE delivery failed", { clinicId, appointmentId: appointment.id, error: message });
+      await finishReminder(svc, claim, "failed", message).catch(() => undefined);
+      lineFailed += 1;
+    }
+  }
+  let email = 0;
+  let emailFailed = 0;
+  const emailConfig = emailConfigForClinic(clinicId, settings.email_from);
+  if (settings.email_enabled && emailConfig) {
+    for (const appointment of rows) {
+      const to = appointment.patients?.email;
+      if (!to) continue;
+      const claim = await claimReminder(svc, appointment.id, "email");
+      if (!claim) continue;
+      try {
+        await sendEmail(emailConfig, to, "看診提醒", buildReminderHtml(appointment, settings.booking_mode, clinic?.name as string | null));
+        await finishReminder(svc, claim, "sent");
+        email += 1;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Email reminder failed";
+        console.error("Reminder Email delivery failed", { clinicId, appointmentId: appointment.id, error: message });
+        await finishReminder(svc, claim, "failed", message).catch(() => undefined);
+        emailFailed += 1;
+      }
+    }
+  }
+  return { line, lineFailed, email, emailFailed, scanned: rows.length };
 }
 
 async function claimReminder(
@@ -127,8 +145,9 @@ async function finishReminder(
   svc: SupabaseClient,
   claimId: string,
   result: "sent" | "failed",
+  errorMessage: string | null = null,
 ): Promise<void> {
-  const { error } = await svc.from("reminder_logs").update({ result }).eq("id", claimId);
+  const { error } = await svc.from("reminder_logs").update({ result, error: errorMessage }).eq("id", claimId);
   if (error) throw new Error(error.message);
 }
 
@@ -186,7 +205,7 @@ function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
   };
 }
 
-function buildReminderHtml(a: ApptRow, mode: "time" | "number"): string {
+function buildReminderHtml(a: ApptRow, mode: "time" | "number", clinicName: string | null): string {
   const safe: ApptRow = {
     ...a,
     doctors: a.doctors ? { name: escapeHtml(a.doctors.name) } : null,
@@ -194,16 +213,17 @@ function buildReminderHtml(a: ApptRow, mode: "time" | "number"): string {
       ? { ...a.patients, name: escapeHtml(a.patients.name) }
       : null,
   };
-  return buildReminderHtmlUnsafe(safe, mode);
+  return buildReminderHtmlUnsafe(safe, mode, clinicName);
 }
 
-function buildReminderHtmlUnsafe(a: ApptRow, mode: "time" | "number"): string {
+function buildReminderHtmlUnsafe(a: ApptRow, mode: "time" | "number", clinicName: string | null): string {
   const doctor = a.doctors?.name ?? "醫師";
   const patient = a.patients?.name ?? "";
   const when =
     mode === "time"
       ? formatDateTime(a.start_at)
       : `${formatDateSession(a.start_at)} 第 ${a.queue_number ?? "?"} 號`;
+  const displayName = escapeHtml(clinicName?.trim() || "預約與報名平台");
   return `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px">
       <h2 style="color:#1d4ed8;margin:0 0 12px">看診提醒</h2>
@@ -213,6 +233,6 @@ function buildReminderHtmlUnsafe(a: ApptRow, mode: "time" | "number"): string {
       <p style="color:#888;margin:12px 0 0;font-size:14px">
         無法前來請務必提前取消。累計三次未提前取消而未到,將暫停一個月線上預約資格。
       </p>
-      <p style="color:#aaa;margin:16px 0 0;font-size:12px">慈愛中醫診所</p>
+      <p style="color:#aaa;margin:16px 0 0;font-size:12px">${displayName}</p>
     </div>`;
 }

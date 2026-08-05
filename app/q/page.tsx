@@ -1,23 +1,33 @@
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import { createServiceClient } from "@/lib/supabase";
 import { getQueueForDate, taipeiToday } from "@/lib/queue";
+import { headers } from "next/headers";
+import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { Brand } from "@/components/Brand";
 import { AutoRefresh } from "@/components/AutoRefresh";
 
 export const dynamic = "force-dynamic";
 
 // 公開叫號頁(候診區螢幕 / 病患手機)。只顯示醫師、時段、目前看診號,不顯示病患姓名。
-export default async function QueueBoard() {
+export default async function QueueBoard({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const today = taipeiToday();
   let sessions: Awaited<ReturnType<typeof getQueueForDate>> = [];
   try {
     const svc = createServiceClient();
+    const requestHeaders = await headers();
+    const params = (await searchParams) ?? {};
+    const clinicId = await resolvePublicClinicIdFromScope(svc, {
+      clinicSlug: typeof params.clinic_slug === "string" ? params.clinic_slug : null,
+      clinicId: typeof params.clinic_id === "string" ? params.clinic_id : null,
+      host: requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"),
+    });
+    if (!clinicId) return <Centered message="尚未設定公開品牌" />;
     const { data: settings } = await svc
       .from("clinic_settings")
       .select("booking_mode")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
     const mode = (settings?.booking_mode as "time" | "number") ?? "time";
-    sessions = await getQueueForDate(svc, CLINIC_ID, today, mode);
+    sessions = await getQueueForDate(svc, clinicId, today, mode);
   } catch {
     sessions = [];
   }
@@ -58,4 +68,8 @@ export default async function QueueBoard() {
       <p className="mt-5 text-center text-xs text-slate-400">畫面每 20 秒自動更新</p>
     </main>
   );
+}
+
+function Centered({ message }: { message: string }) {
+  return <main className="flex min-h-screen items-center justify-center p-6 text-center text-slate-500">{message}</main>;
 }

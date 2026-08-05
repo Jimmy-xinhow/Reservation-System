@@ -1,10 +1,12 @@
 import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { getClinicSettings } from "@/lib/http";
-import { verifyLineSignature, replyMessages, type LineMessage } from "@/lib/line";
+import { verifyLineSignature, replyMessages, lineAccessTokenForDestination, lineSecretForDestination, type LineMessage } from "@/lib/line";
 import { formatDateSession, formatTime } from "@/lib/slots";
 import { getPatientQueueToday, getQueueForDate, taipeiToday } from "@/lib/queue";
 import { buildLineMessage, type MsgKind, type MsgData } from "@/lib/lineMessage";
+import { recordCrmInteraction } from "@/lib/crm-interactions";
+import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
@@ -18,6 +20,11 @@ interface LineEvent {
   postback?: { data?: string };
 }
 
+interface LineWebhookBody {
+  destination?: string;
+  events?: LineEvent[];
+}
+
 /**
  * POST /api/line/webhook
  * 驗 x-line-signature 後處理:
@@ -28,29 +35,41 @@ interface LineEvent {
 export async function POST(req: NextRequest) {
   const raw = await req.text();
   const signature = req.headers.get("x-line-signature");
-  if (!verifyLineSignature(raw, signature)) {
-    return new Response("invalid signature", { status: 401 });
-  }
-
-  let events: LineEvent[] = [];
+  let payload: LineWebhookBody;
   try {
-    events = (JSON.parse(raw) as { events?: LineEvent[] }).events ?? [];
+    payload = JSON.parse(raw) as LineWebhookBody;
   } catch {
     return new Response("bad request", { status: 400 });
   }
+  const destination = payload.destination?.trim() || undefined;
+  if (!verifyLineSignature(raw, signature, lineSecretForDestination(destination))) {
+    return new Response("invalid signature", { status: 401 });
+  }
+  const events = payload.events ?? [];
 
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
   const proto = req.headers.get("x-forwarded-proto") ?? "https";
   const baseUrl = host ? `${proto}://${host}` : "";
 
   const svc = createServiceClient();
+  const { data: destinationClinic } = destination
+     ? await svc.from("clinics").select("id, slug, name").eq("line_destination", destination).eq("active", true).maybeSingle()
+    : CLINIC_ID
+       ? await svc.from("clinics").select("id, slug, name").eq("id", CLINIC_ID).eq("active", true).maybeSingle()
+      : { data: null };
+  if (destination && !destinationClinic?.id) return new Response("brand destination not configured", { status: 404 });
+  const clinicId = (destinationClinic?.id as string | undefined) || CLINIC_ID;
+  if (!clinicId) return new Response("brand not configured", { status: 500 });
+  const clinicSlug = (destinationClinic?.slug as string | null) ?? null;
+  const clinicName = (destinationClinic?.name as string | null)?.trim() || "預約與報名平台";
+  const lineAccessToken = lineAccessTokenForDestination(destination);
 
   // 讀取後台自訂的回覆規則與歡迎/預設文字
   const [{ data: rules }, { data: cs }] = await Promise.all([
     svc
       .from("line_auto_replies")
       .select("keywords, action, reply_text, message_id")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("active", true)
       .order("sort"),
     svc
@@ -58,7 +77,7 @@ export async function POST(req: NextRequest) {
       .select(
         "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url",
       )
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle(),
   ]);
   const replyRules = (rules ?? []) as {
@@ -83,7 +102,7 @@ export async function POST(req: NextRequest) {
     if (!ev.replyToken) continue;
     try {
       if (ev.type === "follow") {
-        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg)]);
+         await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, clinicSlug, clinicName)], lineAccessToken);
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim();
         // 依後台規則(排序)找第一個命中的關鍵字
@@ -95,52 +114,54 @@ export async function POST(req: NextRequest) {
             .some((k) => text.includes(k)),
         );
         if (rule?.action === "progress") {
-          await replyProgress(ev.replyToken, ev.source?.userId, svc);
+          await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (rule?.action === "query") {
-          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (rule?.action === "booking") {
-          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
+          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, clinicSlug, clinicName)], lineAccessToken);
         } else if (rule?.action === "message" && rule.message_id) {
-          const msg = await buildMessageById(svc, rule.message_id, baseUrl);
-          if (msg) await replyMessages(ev.replyToken, [msg]);
-          else await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg)]);
+          const msg = await buildMessageById(svc, rule.message_id, baseUrl, clinicId, clinicSlug);
+          if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
+          else await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, clinicSlug, clinicName)], lineAccessToken);
         } else if (rule?.action === "text" && rule.reply_text) {
-          await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }]);
+          await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }], lineAccessToken);
         } else {
-          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg)]);
+          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, clinicSlug, clinicName)], lineAccessToken);
         }
       } else if (ev.type === "postback" && ev.postback?.data) {
         const params = new URLSearchParams(ev.postback.data);
         const action = params.get("action");
         if (action === "my") {
-          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc);
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (action === "progress") {
-          await replyProgress(ev.replyToken, ev.source?.userId, svc);
+          await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (action === "booking") {
-          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl)]);
+          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, clinicSlug, clinicName)], lineAccessToken);
         } else if (action === "msg") {
           try {
-            const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl);
-            if (msg) await replyMessages(ev.replyToken, [msg]);
+            const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl, clinicId, clinicSlug);
+            if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
             else
               await safeReply(
                 ev.replyToken,
                 "找不到此訊息素材或內容為空(請確認素材有填圖片、標題或文字)。",
+                lineAccessToken,
               );
           } catch (e) {
             await safeReply(
               ev.replyToken,
               "訊息回覆失敗:" + (e instanceof Error ? e.message.slice(0, 300) : ""),
+              lineAccessToken,
             );
           }
         } else if (action === "confirm" || action === "cancel") {
-          await handleStatusPostback(ev.replyToken, action, params.get("id"), ev.source?.userId, svc);
+          await handleStatusPostback(ev.replyToken, action, params.get("id"), ev.source?.userId, svc, clinicId, lineAccessToken);
         } else {
-          await safeReply(ev.replyToken, "無法辨識的操作");
+          await safeReply(ev.replyToken, "無法辨識的操作", lineAccessToken);
         }
       }
     } catch {
-      await safeReply(ev.replyToken, "處理失敗,請稍後再試。");
+      await safeReply(ev.replyToken, "處理失敗,請稍後再試。", lineAccessToken);
     }
   }
 
@@ -148,9 +169,12 @@ export async function POST(req: NextRequest) {
 }
 
 // ── 訊息樣板 ────────────────────────────────────────────────
-function liffUrl(): string | null {
+function liffUrl(clinicSlug?: string | null): string | null {
   const id = process.env.NEXT_PUBLIC_LIFF_ID;
-  return id ? `https://liff.line.me/${id}` : null;
+  if (!id) return null;
+  const url = new URL(`https://liff.line.me/${id}`);
+  if (clinicSlug) url.searchParams.set("clinic_slug", clinicSlug);
+  return url.toString();
 }
 
 
@@ -165,8 +189,8 @@ interface MenuConfig {
 }
 
 // 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
-function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig): LineMessage {
-  const liff = liffUrl();
+function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig, clinicSlug?: string | null): LineMessage {
+  const liff = liffUrl(clinicSlug);
   const c = cfg ?? { title: null, booking: true, query: true, progress: true, info: true, linkLabel: null, linkUrl: null };
   const buttons: LineMessage[] = [];
   if (c.booking) {
@@ -231,21 +255,22 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
   };
 }
 
-function welcomeMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig): LineMessage {
+function welcomeMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
   return menuBubble(
-    cfg?.title || "歡迎加入慈愛中醫診所 🌿",
+    cfg?.title || `歡迎加入${clinicName} 🌿`,
     custom || "您可以在這裡線上預約、查詢或取消看診。請點下方按鈕開始。",
     baseUrl,
     cfg,
+    clinicSlug,
   );
 }
 
-function menuMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig): LineMessage {
-  return menuBubble(cfg?.title || "慈愛中醫診所", custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg);
+function menuMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+  return menuBubble(cfg?.title || clinicName, custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg, clinicSlug);
 }
 
-function bookingPrompt(baseUrl: string): LineMessage {
-  const liff = liffUrl();
+function bookingPrompt(baseUrl: string, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+  const liff = liffUrl(clinicSlug);
   if (liff) {
     const rule = (text: string): LineMessage => ({
       type: "box",
@@ -313,7 +338,7 @@ function bookingPrompt(baseUrl: string): LineMessage {
       },
     };
   }
-  return menuBubble("慈愛中醫診所", "預約功能即將開放,請稍後或洽櫃檯。", baseUrl);
+  return menuBubble(clinicName, "預約功能即將開放,請稍後或洽櫃檯。", baseUrl, undefined, clinicSlug);
 }
 
 // ── 查詢我的預約 ────────────────────────────────────────────
@@ -332,22 +357,24 @@ async function replyMyAppointments(
   replyToken: string,
   lineUserId: string | undefined,
   svc: SupabaseClient,
+  clinicId: string,
+  lineAccessToken: string,
 ): Promise<void> {
   if (!lineUserId) {
-    await safeReply(replyToken, "無法取得您的 LINE 身分,請稍後再試。");
+    await safeReply(replyToken, "無法取得您的 LINE 身分,請稍後再試。", lineAccessToken);
     return;
   }
-  const settings = await getClinicSettings(svc, CLINIC_ID);
+  const settings = await getClinicSettings(svc, clinicId);
   const mode = settings?.booking_mode ?? "time";
 
   const { data: patients } = await svc
     .from("patients")
     .select("id")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .eq("line_user_id", lineUserId);
   const ids = (patients ?? []).map((p) => p.id);
   if (ids.length === 0) {
-    await safeReply(replyToken, "查無您名下的預約。若已是初次使用,請先完成預約。");
+    await safeReply(replyToken, "查無您名下的預約。若已是初次使用,請先完成預約。", lineAccessToken);
     return;
   }
 
@@ -356,7 +383,7 @@ async function replyMyAppointments(
   const { data } = await svc
     .from("appointments")
     .select("id, start_at, queue_number, status, visit_type, doctors(name), patients(name), services(name)")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .in("patient_id", ids)
     .in("status", ["booked", "confirmed"])
     .gte("start_at", todayStartIso)
@@ -365,7 +392,7 @@ async function replyMyAppointments(
 
   const rows = (data ?? []) as unknown as ApptRow[];
   if (rows.length === 0) {
-    await safeReply(replyToken, "您目前沒有未來的預約。");
+    await safeReply(replyToken, "您目前沒有未來的預約。", lineAccessToken);
     return;
   }
 
@@ -462,7 +489,7 @@ async function replyMyAppointments(
 
   await replyMessages(replyToken, [
     { type: "flex", altText: "您的預約", contents: { type: "carousel", contents: bubbles } },
-  ]);
+  ], lineAccessToken);
 }
 
 // 依訊息素材 id 建構 LINE 訊息
@@ -470,15 +497,17 @@ async function buildMessageById(
   svc: SupabaseClient,
   messageId: string,
   baseUrl: string,
+  clinicId: string,
+  clinicSlug: string | null,
 ): Promise<LineMessage | null> {
   const { data } = await svc
     .from("line_messages")
     .select("kind, data")
     .eq("id", messageId)
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .maybeSingle();
   if (!data) return null;
-  return buildLineMessage(data.kind as MsgKind, data.data as MsgData, { liffUrl: liffUrl(), baseUrl }) as LineMessage | null;
+  return buildLineMessage(data.kind as MsgKind, data.data as MsgData, { liffUrl: liffUrl(clinicSlug), baseUrl }) as LineMessage | null;
 }
 
 // 分類資訊列:左標籤(圖示)+ 右內容
@@ -498,15 +527,17 @@ async function replyProgress(
   replyToken: string,
   lineUserId: string | undefined,
   svc: SupabaseClient,
+  clinicId: string,
+  lineAccessToken: string,
 ): Promise<void> {
   if (!lineUserId) {
-    await safeReply(replyToken, "無法取得您的 LINE 身分,請稍後再試。");
+    await safeReply(replyToken, "無法取得您的 LINE 身分,請稍後再試。", lineAccessToken);
     return;
   }
-  const settings = await getClinicSettings(svc, CLINIC_ID);
+  const settings = await getClinicSettings(svc, clinicId);
   const mode = settings?.booking_mode ?? "time";
-  const allSessions = await getQueueForDate(svc, CLINIC_ID, taipeiToday(), mode);
-  const mine = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
+  const allSessions = await getQueueForDate(svc, clinicId, taipeiToday(), mode);
+  const mine = await getPatientQueueToday(svc, clinicId, lineUserId, mode);
 
   // 只保留:病患有號碼、且診次尚未結束的診次(過診次後不再顯示)
   const nowMs = Date.now();
@@ -519,7 +550,7 @@ async function replyProgress(
   if (sessions.length === 0) {
     await replyMessages(replyToken, [
       { type: "text", text: "您目前沒有進行中的看診。若已看診完成或診次已結束,恕不再顯示進度。" },
-    ]);
+    ], lineAccessToken);
     return;
   }
 
@@ -606,7 +637,7 @@ async function replyProgress(
 
   await replyMessages(replyToken, [
     { type: "flex", altText: "今日看診進度", contents: { type: "carousel", contents: bubbles } },
-  ]);
+  ], lineAccessToken);
 }
 
 // 目前叫號色塊(置中)
@@ -633,20 +664,22 @@ async function handleStatusPostback(
   id: string | null,
   lineUserId: string | undefined,
   svc: SupabaseClient,
+  clinicId: string,
+  lineAccessToken: string,
 ): Promise<void> {
   if (!id) {
-    await safeReply(replyToken, "無法辨識的操作");
+    await safeReply(replyToken, "無法辨識的操作", lineAccessToken);
     return;
   }
   const { data: appt } = await svc
     .from("appointments")
-    .select("id, status, clinic_id, patients(line_user_id)")
+    .select("id, status, clinic_id, patient_id, membership_id, patients(line_user_id)")
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .maybeSingle();
 
   if (!appt) {
-    await safeReply(replyToken, "查無此預約");
+    await safeReply(replyToken, "查無此預約", lineAccessToken);
     return;
   }
   const patient = appt.patients as unknown as
@@ -655,34 +688,52 @@ async function handleStatusPostback(
     | null;
   const owner = Array.isArray(patient) ? patient[0]?.line_user_id : patient?.line_user_id;
   if (!lineUserId || !owner || owner !== lineUserId) {
-    await safeReply(replyToken, "這筆預約不屬於目前 LINE 帳號");
+    await safeReply(replyToken, "這筆預約不屬於目前 LINE 帳號", lineAccessToken);
     return;
   }
   if (appt.status === "cancelled" || appt.status === "done" || appt.status === "no_show") {
-    await safeReply(replyToken, "此預約已無法變更,請洽櫃檯。");
+    await safeReply(replyToken, "此預約已無法變更,請洽櫃檯。", lineAccessToken);
     return;
   }
 
   const newStatus = action === "confirm" ? "confirmed" : "cancelled";
-  const { error } = await svc
-    .from("appointments")
-    .update({ status: newStatus })
-    .eq("id", id)
-    .eq("clinic_id", CLINIC_ID);
+  const { error } = action === "cancel"
+    ? await svc.rpc("cancel_appointment", {
+        p_clinic_id: clinicId,
+        p_appointment_id: id,
+        p_note: "cancelled from LINE",
+      })
+    : await svc
+        .from("appointments")
+        .update({ status: newStatus })
+        .eq("id", id)
+        .eq("clinic_id", clinicId);
   if (error) {
-    await safeReply(replyToken, "處理失敗,請稍後再試或洽櫃檯。");
+    await safeReply(replyToken, "處理失敗,請稍後再試或洽櫃檯。", lineAccessToken);
     return;
   }
+  await notifyAppointmentStatus(svc, appt.id as string, action === "cancel" ? "cancelled" : "confirmed")
+    .catch((notificationError: unknown) => console.error("LINE appointment notification failed", notificationError));
+  await recordCrmInteraction(svc, {
+    clinicId,
+    patientId: appt.patient_id as string,
+    kind: "booking",
+    channel: "line",
+    title: action === "confirm" ? "確認預約" : "取消預約",
+    body: action === "confirm" ? "顧客透過 LINE 確認預約" : "顧客透過 LINE 取消預約",
+    appointmentId: appt.id as string,
+  }).catch((interactionError: unknown) => console.error("CRM LINE interaction failed", interactionError));
   await safeReply(
     replyToken,
     action === "confirm" ? "已收到您的確認,期待為您服務。" : "已為您取消此預約。",
+    lineAccessToken,
   );
 }
 
-async function safeReply(replyToken: string, text: string): Promise<void> {
+async function safeReply(replyToken: string, text: string, lineAccessToken?: string): Promise<void> {
   const msg: LineMessage = { type: "text", text };
   try {
-    await replyMessages(replyToken, [msg]);
+    await replyMessages(replyToken, [msg], lineAccessToken);
   } catch {
     // 回覆失敗不影響 webhook 回 200
   }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireMember, canViewSensitiveCustomerData } from "@/lib/admin";
 import { formatDateTime } from "@/lib/slots";
 import {
   updatePatientAction,
@@ -45,6 +45,14 @@ interface PatientRecord {
   content: string;
   created_at: string;
 }
+interface CrmInteraction {
+  id: string;
+  kind: "note" | "booking" | "message" | "campaign";
+  channel: string | null;
+  title: string | null;
+  body: string;
+  created_at: string;
+}
 
 export default async function PatientDetailPage({
   params,
@@ -52,13 +60,17 @@ export default async function PatientDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const { clinicId, role } = await requireMember();
+  if (!canViewSensitiveCustomerData(role)) {
+    return <p className="card p-6 text-sm text-slate-500">目前角色沒有查看完整顧客資料的權限。</p>;
+  }
   const supabase = await createSupabaseServer();
 
   const { data } = await supabase
     .from("patients")
     .select("id, name, phone, tags, birthday, gender, email, marketing_opt_in, blocked_until")
     .eq("id", id)
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .maybeSingle();
   const p = data as Patient | null;
 
@@ -73,22 +85,30 @@ export default async function PatientDetailPage({
     );
   }
 
-  const [{ data: apptData }, { data: recData }] = await Promise.all([
+  const [{ data: apptData }, { data: recData }, { data: interactionData }] = await Promise.all([
     supabase
       .from("appointments")
       .select("id, start_at, status, queue_number, doctors(name), services(name)")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("patient_id", id)
       .order("start_at", { ascending: false }),
     supabase
       .from("patient_records")
       .select("id, content, created_at")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("patient_id", id)
       .order("created_at", { ascending: false }),
+    supabase
+      .from("crm_interactions")
+      .select("id, kind, channel, title, body, created_at")
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
   const history = (apptData ?? []) as unknown as Appt[];
   const records = (recData ?? []) as PatientRecord[];
+  const interactions = (interactionData ?? []) as CrmInteraction[];
   const noShow = history.filter((a) => a.status === "no_show").length;
   const blocked = !!p.blocked_until && new Date(p.blocked_until) > new Date();
 
@@ -199,7 +219,7 @@ export default async function PatientDetailPage({
       </form>
 
       {/* 約診歷史(左)+ 病況紀錄(右)雙欄 */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* 約診歷史 */}
         <section className="card p-5">
           <h2 className="mb-3 font-semibold text-slate-900">約診歷史</h2>
@@ -244,6 +264,26 @@ export default async function PatientDetailPage({
                     </form>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-slate-700">{rec.content}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="card p-5">
+          <h2 className="mb-3 font-semibold text-slate-900">互動時間軸</h2>
+          {interactions.length === 0 ? (
+            <p className="text-sm text-slate-400">尚無行銷或客服互動紀錄。</p>
+          ) : (
+            <ul className="space-y-3">
+              {interactions.map((interaction) => (
+                <li key={interaction.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-slate-600">{interaction.title ?? interaction.kind}</span>
+                    <span className="text-xs text-slate-400">{formatDateTime(interaction.created_at)}</span>
+                  </div>
+                  <p className="mb-1 text-xs text-slate-400">{interaction.channel ?? "system"}</p>
+                  <p className="whitespace-pre-wrap text-sm text-slate-700">{interaction.body}</p>
                 </li>
               ))}
             </ul>

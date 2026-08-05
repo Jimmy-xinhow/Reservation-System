@@ -1,7 +1,6 @@
 import { headers } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
-import { getBotInfo, getQuota, type LineBotInfo } from "@/lib/line";
+import { getBotInfo, getQuota, lineAccessTokenForDestination, type LineBotInfo } from "@/lib/line";
 import { requireAdmin } from "@/lib/admin";
 import { sendTestPushAction } from "../actions";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -15,16 +14,30 @@ export default async function LinePage({
 }: {
   searchParams: Promise<{ test?: string; reason?: string }>;
 }) {
-  await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const { test, reason } = await searchParams;
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-app.up.railway.app";
   const proto = h.get("x-forwarded-proto") ?? "https";
   const base = `${proto}://${host}`;
+  const supabase = await createSupabaseServer();
+  const { data: clinic } = await supabase
+    .from("clinics")
+    .select("line_destination")
+    .eq("id", clinicId)
+    .maybeSingle();
+  let clinicToken: string | null = null;
+  try {
+    clinicToken = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+  } catch {
+    clinicToken = null;
+  }
 
   const env = (k: string) => Boolean(process.env[k] && process.env[k]!.length > 0);
   const vars = [
+    { key: "LINE_CHANNEL_ACCESS_TOKENS_JSON", label: "多品牌 destination → access token 對照表" },
+    { key: "LINE_CHANNEL_SECRETS_JSON", label: "多品牌 destination → channel secret 對照表" },
     { key: "LINE_CHANNEL_ACCESS_TOKEN", label: "Messaging API access token(推播/回覆)" },
     { key: "LINE_CHANNEL_SECRET", label: "Channel secret(驗 webhook 簽章)" },
     { key: "LINE_LOGIN_CHANNEL_ID", label: "LIFF channel id(驗 ID token)" },
@@ -36,20 +49,19 @@ export default async function LinePage({
   let bot: LineBotInfo | null = null;
   let quota: { type: string; value?: number } | null = null;
   let connErr: string | null = null;
-  if (env("LINE_CHANNEL_ACCESS_TOKEN")) {
+  if (clinicToken) {
     try {
-      [bot, quota] = await Promise.all([getBotInfo(), getQuota()]);
+      [bot, quota] = await Promise.all([getBotInfo(clinicToken), getQuota(clinicToken)]);
     } catch (e) {
       connErr = e instanceof Error ? e.message : "連線失敗";
     }
   }
 
   // 取一個有 line_user_id 的病患,方便快速測試
-  const supabase = await createSupabaseServer();
   const { data: sample } = await supabase
     .from("patients")
     .select("name, line_user_id")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .not("line_user_id", "is", null)
     .limit(1)
     .maybeSingle();
@@ -73,8 +85,8 @@ export default async function LinePage({
       {/* 即時連線狀態 */}
       <section className="card p-5">
         <h2 className="mb-3 font-semibold text-slate-900">連線狀態</h2>
-        {!env("LINE_CHANNEL_ACCESS_TOKEN") ? (
-          <p className="text-sm text-slate-500">尚未設定 LINE_CHANNEL_ACCESS_TOKEN,無法檢查連線。</p>
+        {!clinicToken ? (
+          <p className="text-sm text-slate-500">目前品牌尚未設定對應的 LINE access token,無法檢查連線。</p>
         ) : connErr ? (
           <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">連線失敗:{connErr}</p>
         ) : bot ? (
@@ -157,12 +169,12 @@ export default async function LinePage({
               <p className="mt-1 text-xs text-slate-400">已帶入病患「{sample.name}」的 LINE ID 方便測試。</p>
             )}
           </div>
-          <SubmitButton className="btn btn-primary" disabled={!env("LINE_CHANNEL_ACCESS_TOKEN")}>
+          <SubmitButton className="btn btn-primary" disabled={!clinicToken}>
             發送測試
           </SubmitButton>
         </form>
-        {!env("LINE_CHANNEL_ACCESS_TOKEN") && (
-          <p className="mt-2 text-xs text-red-600">尚未設定 LINE_CHANNEL_ACCESS_TOKEN,無法推播。</p>
+        {!clinicToken && (
+          <p className="mt-2 text-xs text-red-600">目前品牌尚未設定 LINE access token,無法推播。</p>
         )}
       </section>
     </div>

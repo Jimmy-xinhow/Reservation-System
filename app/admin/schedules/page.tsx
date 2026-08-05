@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireNonProvider } from "@/lib/admin"
 import {
   createTemplateAction,
   updateTemplateAction,
@@ -32,13 +32,14 @@ interface Template {
 }
 
 export default async function SchedulesPage() {
+const { clinicId } = await requireNonProvider();
   const supabase = await createSupabaseServer();
   const [{ data: doctors }, { data: templates }] = await Promise.all([
-    supabase.from("doctors").select("id, name, specialty, active").eq("clinic_id", CLINIC_ID).order("name"),
+    supabase.from("doctors").select("id, name, specialty, active").eq("clinic_id", clinicId).order("name"),
     supabase
       .from("schedule_templates")
       .select("id, doctor_id, weekday, start_time, end_time, slot_minutes, capacity, active")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .order("weekday")
       .order("start_time"),
   ]);

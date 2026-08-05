@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
-import { ok, fail, getClinicSettings } from "@/lib/http";
+import { createServiceClient } from "@/lib/supabase";
+import { ok, fail, getClinicSettings, rateLimitResponse } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { getPatientQueueToday, taipeiToday } from "@/lib/queue";
+import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,8 +13,9 @@ export const dynamic = "force-dynamic";
  * 回傳此 LINE 身分名下、未來且未取消的約診。
  */
 export async function POST(req: NextRequest) {
+  const limited = rateLimitResponse(req, "booking:my", 12);
+  if (limited) return limited;
   try {
-    if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
     const body = (await req.json().catch(() => null)) as { idToken?: string } | null;
     if (!body?.idToken) return fail("缺少 LINE 身分驗證");
 
@@ -25,25 +27,27 @@ export async function POST(req: NextRequest) {
     }
 
     const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
     const { data: patients, error: pErr } = await svc
       .from("patients")
       .select("id")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("line_user_id", lineUserId);
     if (pErr) return fail(pErr.message, 500);
     const ids = (patients ?? []).map((p) => p.id);
     if (ids.length === 0) return ok({ appointments: [], progress: [] });
 
-    const settings = await getClinicSettings(svc, CLINIC_ID);
+    const settings = await getClinicSettings(svc, clinicId);
     const mode = settings?.booking_mode ?? "time";
-    const progress = await getPatientQueueToday(svc, CLINIC_ID, lineUserId, mode);
+    const progress = await getPatientQueueToday(svc, clinicId, lineUserId, mode);
 
     // 以「今天開始」為界(而非現在),避免號次制當天已到時段但仍候診的預約被漏掉
     const todayStartIso = new Date(`${taipeiToday()}T00:00:00+08:00`).toISOString();
     const { data, error } = await svc
       .from("appointments")
-      .select("id, start_at, queue_number, status, doctors(name), patients(name)")
-      .eq("clinic_id", CLINIC_ID)
+      .select("id, start_at, end_at, queue_number, status, doctor_id, service_id, visit_type, doctors(name), patients(name)")
+      .eq("clinic_id", clinicId)
       .in("patient_id", ids)
       .in("status", ["booked", "confirmed"])
       .gte("start_at", todayStartIso)

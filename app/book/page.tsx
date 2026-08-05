@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { Brand } from "@/components/Brand";
@@ -18,6 +19,7 @@ interface Service {
   description: string | null;
 }
 interface Config {
+  clinic_name: string | null;
   booking_mode: "time" | "number";
   deposit_enabled: boolean;
   max_advance_days: number;
@@ -57,7 +59,7 @@ interface ReserveResult {
 }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init);
+  const res = await fetch(withBookingBrandScope(url), init);
   const json = (await res.json().catch(() => null)) as
     | { ok: true; data: T }
     | { ok: false; error: string }
@@ -67,10 +69,22 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return json.data;
 }
 
+function withBookingBrandScope(url: string): string {
+  if (typeof window === "undefined" || (!url.startsWith("/api/booking") && !url.startsWith("/api/payment/create"))) return url;
+  const source = new URLSearchParams(window.location.search);
+  const scope = new URLSearchParams();
+  const clinicSlug = source.get("clinic_slug")?.trim();
+  const clinicId = source.get("clinic_id")?.trim();
+  if (clinicSlug) scope.set("clinic_slug", clinicSlug);
+  else if (clinicId) scope.set("clinic_id", clinicId);
+  if (!scope.toString()) return url;
+  const target = new URL(url, window.location.origin);
+  scope.forEach((value, key) => target.searchParams.set(key, value));
+  return `${target.pathname}${target.search}`;
+}
+
 function todayStr(offset = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(Date.now() + offset * 24 * 60 * 60 * 1000));
 }
 
 export default function BookPage() {
@@ -93,6 +107,7 @@ export default function BookPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [birthday, setBirthday] = useState("");
+  const [membershipCode, setMembershipCode] = useState("");
   const [visitType, setVisitType] = useState<"first" | "return">("return");
 
   // 綁定:此 LINE 身分已綁定的病患(null = 載入中)
@@ -103,6 +118,8 @@ export default function BookPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [result, setResult] = useState<ReserveResult | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const [tab, setTab] = useState<"book" | "my" | "chat">("book");
 
@@ -161,7 +178,7 @@ export default function BookPage() {
     try {
       if (config.booking_mode === "time") {
         const data = await api<{ slots: Slot[] }>(
-          `/api/booking/availability?doctor_id=${doctorId}&date=${date}`,
+          `/api/booking/availability?doctor_id=${doctorId}&date=${date}&visit_type=${visitType}`,
         );
         setSlots(data.slots);
         if (data.slots.length === 0) setAvailMsg("這天沒有可預約的時段(休診或已額滿)");
@@ -177,7 +194,7 @@ export default function BookPage() {
     } finally {
       setAvailLoading(false);
     }
-  }, [config, doctorId, date]);
+  }, [config, doctorId, date, visitType]);
 
   useEffect(() => {
     if (doctorId && date) loadAvailability();
@@ -217,6 +234,7 @@ export default function BookPage() {
         service_id: serviceId || undefined,
         visit_type: visitType,
         is_self_pay: false,
+        membership_code: membershipCode.trim().toUpperCase() || undefined,
       };
       if (config.booking_mode === "time") {
         payload.start_at = pickedStart;
@@ -238,6 +256,35 @@ export default function BookPage() {
     }
   }
 
+  async function payDeposit() {
+    if (!result?.appointment_id || !idToken) return;
+    setPaying(true);
+    setPaymentError(null);
+    try {
+      const data = await api<{ form: { action: string; fields: Record<string, string> } }>("/api/payment/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointment_id: result.appointment_id, idToken, return_path: window.location.pathname + window.location.search }),
+      });
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = data.form.action;
+      form.style.display = "none";
+      for (const [name, value] of Object.entries(data.form.fields)) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      }
+      document.body.appendChild(form);
+      form.submit();
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : "付款頁開啟失敗");
+      setPaying(false);
+    }
+  }
+
   // 再預約一筆:回到最初「為自己/為他人」選擇,並清空選擇
   function bookAnother() {
     setResult(null);
@@ -246,6 +293,7 @@ export default function BookPage() {
     setName("");
     setPhone("");
     setBirthday("");
+    setMembershipCode("");
     setServiceId("");
     setDate("");
     setPickedStart(null);
@@ -255,13 +303,13 @@ export default function BookPage() {
   }
 
   // ── 畫面 ──
-  if (liffError) return <Centered tone="error">{liffError}</Centered>;
+  if (liffError) return <Centered tone="error"><span className="space-y-3"><span className="block">{liffError}</span><Link href={browserFallbackUrl()} className="btn btn-secondary inline-flex">改用瀏覽器預約</Link></span></Centered>;
   if (loadErr) return <Centered tone="error">{loadErr}</Centered>;
   if (!config) return <Centered>載入中…</Centered>;
 
   if (result) {
     return (
-      <Shell>
+              <Shell clinicName={config.clinic_name}>
         <div className="card overflow-hidden">
           <div className="bg-gradient-to-br from-brand-500 to-accent-600 p-6 text-center text-white">
             <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
@@ -275,7 +323,7 @@ export default function BookPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-xl font-bold">預約成功</h1>
+            <h1 className="text-xl font-bold">{result.deposit_status === "pending" ? "預約已建立，待付款" : "預約成功"}</h1>
             <p className="mt-1 text-sm text-white/80">看診前會以 LINE 提醒您</p>
           </div>
 
@@ -297,16 +345,19 @@ export default function BookPage() {
               </div>
             )}
             {result.deposit_status === "pending" && (
-              <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
-                需繳訂金 NT${result.deposit_amount},完成後即保留名額。詳情請洽櫃檯。
-              </p>
+              <div className="space-y-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                <p>需繳訂金 NT${result.deposit_amount}；完成標準金流付款後才確認名額。</p>
+                <button type="button" onClick={() => void payDeposit()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（NT$${result.deposit_amount}）`}</button>
+                {paymentError && <p className="rounded-lg bg-red-50 p-2 text-left text-xs text-red-700">{paymentError}</p>}
+              </div>
             )}
-            {result.start_at && (
+            {result.start_at && result.deposit_status !== "pending" && (
               <CalendarButtons
                 start={result.start_at}
                 end={result.end_at ?? result.start_at}
                 doctor={result.doctor_name}
                 service={result.service_name}
+                clinicName={config.clinic_name}
               />
             )}
             <p className="rounded-xl bg-red-50 p-3 text-left text-xs leading-relaxed text-red-700">
@@ -324,7 +375,7 @@ export default function BookPage() {
   const stepDone = { doctor: !!doctorId, date: !!date, slot: slotPicked };
 
   return (
-    <Shell>
+    <Shell clinicName={config.clinic_name}>
       {/* 分頁:預約 / 我的預約 / 線上客服 */}
       <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
         <TabButton active={tab === "book"} onClick={() => setTab("book")}>
@@ -450,6 +501,11 @@ export default function BookPage() {
               </>
             )}
           </div>
+        </section>
+
+        <section className="card p-5">
+          <div className="mb-2"><label className="label">套票序號（選填）</label><input className="input uppercase" value={membershipCode} onChange={(e) => setMembershipCode(e.target.value.toUpperCase())} autoComplete="off" placeholder="使用套票時輸入序號" /></div>
+          <p className="text-xs leading-5 text-slate-500">符合方案時會在成功預約後扣除一堂額度；套票限本人電話綁定的會員使用。</p>
         </section>
 
         {/* 步驟 2:看診服務與類型 */}
@@ -629,8 +685,12 @@ function TabButton({
 interface MyAppt {
   id: string;
   start_at: string;
+  end_at: string | null;
   queue_number: number | null;
   status: string;
+  doctor_id: string;
+  service_id: string | null;
+  visit_type: "first" | "return";
   doctors: { name: string } | null;
   patients: { name: string } | null;
 }
@@ -687,6 +747,16 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
     }
   }
 
+  function openReschedule(id: string) {
+    const source = new URLSearchParams(window.location.search);
+    const params = new URLSearchParams({ appointment_id: id });
+    const clinicSlug = source.get("clinic_slug")?.trim();
+    const clinicId = source.get("clinic_id")?.trim();
+    if (clinicSlug) params.set("clinic_slug", clinicSlug);
+    else if (clinicId) params.set("clinic_id", clinicId);
+    window.location.assign(`/book/reschedule?${params.toString()}`);
+  }
+
   if (err) return <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>;
   if (list === null) return <p className="px-1 text-sm text-slate-400">載入中…</p>;
 
@@ -736,7 +806,7 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
       ) : (
         <div className="space-y-3">
           {list.map((a) => (
-        <div key={a.id} className="card flex items-center justify-between p-4">
+        <div key={a.id} className="card flex items-center justify-between gap-3 p-4">
           <div>
             <div className="font-medium text-slate-900">
               {mode === "time"
@@ -748,6 +818,10 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
               {a.patients?.name ? ` · ${a.patients.name}` : ""} · 預約成功
             </div>
           </div>
+          <div className="flex shrink-0 gap-2">
+          <button type="button" onClick={() => openReschedule(a.id)} className="btn btn-secondary px-3 py-1.5 text-xs">
+            改期
+          </button>
           <button
             type="button"
             disabled={cancelling === a.id}
@@ -756,6 +830,7 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
           >
             {cancelling === a.id ? "取消中…" : "取消"}
           </button>
+          </div>
         </div>
           ))}
         </div>
@@ -764,11 +839,11 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children, clinicName }: { children: React.ReactNode; clinicName?: string | null }) {
   return (
     <main className="mx-auto min-h-screen max-w-md px-4 pb-4">
       <header className="flex items-center justify-between py-4">
-        <Brand subtitle="線上預約" />
+        <Brand name={clinicName} subtitle="線上預約" />
       </header>
       {children}
     </main>
@@ -811,17 +886,20 @@ function CalendarButtons({
   end,
   doctor,
   service,
+  clinicName,
 }: {
   start: string;
   end: string;
   doctor: string | null;
   service: string | null;
+  clinicName: string | null;
 }) {
   const endIso = end && end !== start ? end : new Date(new Date(start).getTime() + 30 * 60000).toISOString();
   const details = [doctor ? `醫師:${doctor}` : "", service ? `服務:${service}` : "", "看診前請提前抵達;無法前來請提前取消。"]
     .filter(Boolean)
     .join("\n");
-  const ev: CalEvent = { title: "慈愛中醫診所 看診", startIso: start, endIso, details, location: "慈愛中醫診所" };
+  const displayName = clinicName?.trim() || "預約與報名平台";
+  const ev: CalEvent = { title: `${displayName} 看診`, startIso: start, endIso, details, location: displayName };
 
   // 在 LINE 內建瀏覽器,直接開連結(blob 下載常失效);有 LIFF 就用外部瀏覽器開
   function openUrl(url: string) {
@@ -835,7 +913,7 @@ function CalendarButtons({
 
   const icsUrl =
     `/api/booking/ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(endIso)}` +
-    `&title=${encodeURIComponent(ev.title)}&details=${encodeURIComponent(details)}&location=${encodeURIComponent("慈愛中醫診所")}`;
+    `&title=${encodeURIComponent(ev.title)}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(displayName)}`;
   const absIcsUrl = typeof window !== "undefined" ? new URL(icsUrl, window.location.origin).toString() : icsUrl;
 
   return (
@@ -865,4 +943,10 @@ function Centered({
       <p className={tone === "error" ? "text-red-600" : "text-slate-500"}>{children}</p>
     </main>
   );
+}
+
+function browserFallbackUrl(): string {
+  if (typeof window === "undefined") return "/book/browser";
+  const slug = new URLSearchParams(window.location.search).get("clinic_slug")?.trim();
+  return slug ? `/book/browser?clinic_slug=${encodeURIComponent(slug)}` : "/book/browser";
 }

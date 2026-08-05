@@ -1,0 +1,8 @@
+flowchart LR
+  Customer[顧客\nLINE LIFF／瀏覽器／嵌入] --> Next[Next.js App Router]
+  Staff[品牌成員\n後台] --> Next
+  Next --> Supabase[(Supabase\nPostgres + Auth + RLS)]
+  Next --> LINE[LINE API]
+  Next --> Payment[綠界／藍新]
+  Next --> Email[Email Provider]
+  Cron[Cron] --> Next

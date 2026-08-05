@@ -1,23 +1,25 @@
 import {
   listStaff,
   createStaffAction,
+  listClinicDoctors,
   removeStaffAction,
   resetStaffPasswordAction,
   setStaffRoleAction,
+  setDoctorAssignmentsAction,
 } from "../actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function UsersPage() {
-  const staff = await listStaff();
+  const [staff, doctors] = await Promise.all([listStaff(), listClinicDoctors()]);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">使用者管理</h1>
-        <p className="text-sm text-slate-400">
-          管理可登入後台的帳號與角色。<b>管理員</b>可管理使用者與 LINE 設定;<b>櫃檯</b>只能做日常看診作業。
+          <p className="text-sm text-slate-400">
+          管理可登入後台的帳號與角色。管理員可管理設定；櫃檯／營運處理日常流程；服務提供者只查看必要工作資料。
         </p>
       </div>
 
@@ -35,6 +37,8 @@ export default async function UsersPage() {
           <span className="mb-1 block font-medium text-slate-600">角色</span>
           <select name="role" defaultValue="staff" className="input">
             <option value="staff">櫃檯</option>
+            <option value="frontdesk">營運</option>
+            <option value="provider">服務提供者</option>
             <option value="admin">管理員</option>
           </select>
         </label>
@@ -76,10 +80,36 @@ export default async function UsersPage() {
                       className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
                     >
                       <option value="staff">櫃檯</option>
+                      <option value="frontdesk">營運</option>
+                      <option value="provider">服務提供者</option>
                       <option value="admin">管理員</option>
                     </select>
                     <SubmitButton className="text-xs font-medium text-brand-600 hover:underline">更新</SubmitButton>
                   </form>
+                  {m.role === "provider" && (
+                    <form action={setDoctorAssignmentsAction} className="mt-2 space-y-1.5 rounded-lg bg-slate-50 p-2">
+                      <input type="hidden" name="user_id" value={m.userId} />
+                      <div className="text-[11px] font-medium text-slate-500">可查看的醫師</div>
+                      {doctors.length === 0 ? (
+                        <div className="text-[11px] text-slate-400">尚未建立醫師</div>
+                      ) : (
+                        <div className="grid gap-1 sm:grid-cols-2">
+                          {doctors.map((doctor) => (
+                            <label key={doctor.id} className="flex items-center gap-1 text-[11px] text-slate-600">
+                              <input
+                                type="checkbox"
+                                name="doctor_ids"
+                                value={doctor.id}
+                                defaultChecked={m.assignedDoctors.some((assigned) => assigned.id === doctor.id)}
+                              />
+                              {doctor.name}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                      <SubmitButton className="text-[11px] font-medium text-brand-600 hover:underline">儲存指派</SubmitButton>
+                    </form>
+                  )}
                 </td>
                 <td className="text-slate-400">{m.createdAt ? m.createdAt.slice(0, 10) : "—"}</td>
                 <td>

@@ -11,7 +11,7 @@ interface ChatMsg {
 }
 
 async function post<T>(url: string, payload: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(withPublicBrandScope(url), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -23,6 +23,17 @@ async function post<T>(url: string, payload: unknown): Promise<T> {
   if (!json) throw new Error("伺服器回應異常");
   if (!json.ok) throw new Error(json.error);
   return json.data;
+}
+
+function withPublicBrandScope(url: string): string {
+  if (typeof window === "undefined" || !url.startsWith("/api/chat")) return url;
+  const source = new URLSearchParams(window.location.search);
+  const target = new URL(url, window.location.origin);
+  const clinicSlug = source.get("clinic_slug")?.trim();
+  const clinicId = source.get("clinic_id")?.trim();
+  if (clinicSlug) target.searchParams.set("clinic_slug", clinicSlug);
+  else if (clinicId) target.searchParams.set("clinic_id", clinicId);
+  return `${target.pathname}${target.search}`;
 }
 
 function fmtTime(iso: string): string {

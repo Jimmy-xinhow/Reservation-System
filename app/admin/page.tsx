@@ -1,5 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { createServiceClient } from "@/lib/supabase";
+import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { formatTime } from "@/lib/slots";
 import BookingForm from "./_components/BookingForm";
 import {
@@ -52,6 +53,11 @@ function shiftDate(base: string, days: number): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(d);
 }
 
+function maskPhone(phone: string | undefined): string {
+  if (!phone) return "";
+  return phone.length <= 4 ? "••••" : `${"•".repeat(Math.max(0, phone.length - 4))}${phone.slice(-4)}`;
+}
+
 export default async function TodayPage({
   searchParams,
 }: {
@@ -61,7 +67,12 @@ export default async function TodayPage({
   const fDoctor = sp.doctor ?? "";
   const fStatus = sp.status ?? "";
 
+  const member = await requireMember();
+  const { clinicId, role } = member;
   const supabase = await createSupabaseServer();
+  const assignedDoctorIds = await getAssignedDoctorIds(member);
+  const providerOnly = role === "provider";
+  const settingsClient = providerOnly ? createServiceClient() : supabase;
   const today = taipeiToday();
   const viewDate = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : today;
   const dayStart = new Date(`${viewDate}T00:00:00+08:00`).toISOString();
@@ -72,17 +83,27 @@ export default async function TodayPage({
     .select(
       "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, doctors(name), patients(name, phone), services(name)",
     )
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .gte("start_at", dayStart)
     .lte("start_at", dayEnd);
   if (fDoctor) apptQuery = apptQuery.eq("doctor_id", fDoctor);
   if (fStatus) apptQuery = apptQuery.eq("status", fStatus);
+  if (providerOnly) {
+    apptQuery = apptQuery.in(
+      "doctor_id",
+      assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"],
+    );
+  }
 
   const [{ data: settings }, { data: doctors }, { data: appts }, { data: services }] = await Promise.all([
-    supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", CLINIC_ID).maybeSingle(),
-    supabase.from("doctors").select("id, name").eq("clinic_id", CLINIC_ID).eq("active", true).order("name"),
+    settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
+    (() => {
+      let query = supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true);
+      if (providerOnly) query = query.in("id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
+      return query.order("name");
+    })(),
     apptQuery.order("start_at").order("queue_number", { nullsFirst: true }),
-    supabase.from("services").select("id, name").eq("clinic_id", CLINIC_ID).eq("active", true).order("created_at"),
+    supabase.from("services").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("created_at"),
   ]);
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
@@ -140,7 +161,14 @@ export default async function TodayPage({
         </p>
       )}
 
-      {(doctors ?? []).length === 0 ? (
+      {!canOperate(role) ? (
+        <div className="card space-y-2 p-5">
+          <p className="text-sm font-medium text-slate-700">服務提供者僅能查看已指派醫師的工作資料。</p>
+          <p className="text-xs text-slate-500">
+            {assignedDoctorIds.length > 0 ? "目前已套用醫師指派範圍；顧客電話已遮罩。" : "目前尚未指派醫師，請由品牌管理員在帳號管理中設定。"}
+          </p>
+        </div>
+      ) : (doctors ?? []).length === 0 ? (
         <div className="card flex flex-col items-start gap-2 p-5">
           <p className="text-sm text-slate-600">尚未建立任何醫師,病患無法預約。</p>
           <a href="/admin/schedules" className="btn btn-primary">
@@ -228,7 +256,9 @@ export default async function TodayPage({
                 <td>{r.doctors?.name}</td>
                 <td>
                   <div className="font-medium text-slate-800">{r.patients?.name}</div>
-                  <div className="text-xs text-slate-400">{r.patients?.phone}</div>
+                  <div className="text-xs text-slate-400">
+                    {canViewSensitiveCustomerData(role) ? r.patients?.phone : maskPhone(r.patients?.phone)}
+                  </div>
                 </td>
                 <td>
                   {r.services?.name ? (

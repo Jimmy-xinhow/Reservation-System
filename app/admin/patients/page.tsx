@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireMember, canViewSensitiveCustomerData } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { DeletePatientButton } from "./DeletePatientButton";
 
@@ -31,6 +31,10 @@ export default async function PatientsPage({
   const keyword = (q ?? "").trim().replace(/[,%()*]/g, "");
   const page = Math.max(1, Number(pageStr) || 1);
 
+  const { clinicId, role } = await requireMember();
+  if (!canViewSensitiveCustomerData(role)) {
+    return <p className="card p-6 text-sm text-slate-500">目前角色只能查看被分配的工作，不開放完整顧客名單。</p>;
+  }
   const supabase = await createSupabaseServer();
 
   // 四碼數字 = 生日 MMDD;驗證月(01-12)日(01-31)才視為生日搜尋。
@@ -48,7 +52,7 @@ export default async function PatientsPage({
     const { data } = await supabase
       .from("patients")
       .select(SELECT)
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("active", true)
       .or(orParts.join(","))
       .order("created_at", { ascending: false })
@@ -60,7 +64,7 @@ export default async function PatientsPage({
       const { data: withBday } = await supabase
         .from("patients")
         .select(SELECT)
-        .eq("clinic_id", CLINIC_ID)
+        .eq("clinic_id", clinicId)
         .eq("active", true)
         .eq("birthday_mmdd", mmdd)
         .order("created_at", { ascending: false })
@@ -71,7 +75,7 @@ export default async function PatientsPage({
     const { data, count } = await supabase
       .from("patients")
       .select(SELECT, { count: "exact" })
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("active", true)
       .order("created_at", { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
@@ -85,7 +89,7 @@ export default async function PatientsPage({
     const { data: appts } = await supabase
       .from("appointments")
       .select("patient_id, status")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .in(
         "patient_id",
         patients.map((p) => p.id),

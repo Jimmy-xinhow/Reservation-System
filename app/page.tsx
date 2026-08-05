@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Brand } from "@/components/Brand";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import { createServiceClient } from "@/lib/supabase";
+import { headers } from "next/headers";
+import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 
 export const dynamic = "force-dynamic";
 
@@ -12,14 +14,14 @@ interface ClinicInfo {
   intro: string | null;
 }
 
-async function getClinic(): Promise<ClinicInfo | null> {
-  if (!CLINIC_ID) return null;
+async function getClinic(clinicId: string | null): Promise<ClinicInfo | null> {
+  if (!clinicId) return null;
   try {
     const svc = createServiceClient();
     const { data } = await svc
       .from("clinics")
       .select("name, line_basic_id, phone, address, intro")
-      .eq("id", CLINIC_ID)
+      .eq("id", clinicId)
       .maybeSingle();
     return (data as ClinicInfo | null) ?? null;
   } catch {
@@ -27,20 +29,44 @@ async function getClinic(): Promise<ClinicInfo | null> {
   }
 }
 
-export default async function HomePage() {
-  const clinic = await getClinic();
+export default async function HomePage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = (await searchParams) ?? {};
+  let clinicId: string | null = null;
+  try {
+    const requestHeaders = await headers();
+    const svc = createServiceClient();
+    clinicId = await resolvePublicClinicIdFromScope(svc, {
+      clinicSlug: typeof params.clinic_slug === "string" ? params.clinic_slug : null,
+      clinicId: typeof params.clinic_id === "string" ? params.clinic_id : null,
+      host: requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"),
+    });
+  } catch {
+    clinicId = null;
+  }
+  const clinic = await getClinic(clinicId);
   const basicId = clinic?.line_basic_id?.trim() || null;
   const lineAddUrl = basicId ? `https://line.me/R/ti/p/${encodeURIComponent(basicId)}` : null;
+  const clinicSlug = typeof params.clinic_slug === "string" ? params.clinic_slug : null;
+  const clinicIdParam = typeof params.clinic_id === "string" ? params.clinic_id : null;
+  const clinicScopeSuffix = clinicSlug
+    ? `?clinic_slug=${encodeURIComponent(clinicSlug)}`
+    : clinicIdParam
+      ? `?clinic_id=${encodeURIComponent(clinicIdParam)}`
+      : "";
   const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const liffUrl = liffId ? `https://liff.line.me/${liffId}` : null;
+  const liffUrl = liffId
+    ? `https://liff.line.me/${liffId}${clinicScopeSuffix}`
+    : null;
+  const browserBookingUrl = `/book/browser${clinicScopeSuffix}`;
+  const registrationUrl = `/register${clinicScopeSuffix}`;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6">
-      <Brand align="center" size="lg" subtitle="線上預約" />
+      <Brand name={clinic?.name} align="center" size="lg" subtitle="線上預約" />
 
       <div className="card w-full overflow-hidden">
         <div className="bg-gradient-to-br from-brand-500 to-accent-600 p-6 text-center text-white">
-          <h1 className="text-xl font-bold">{clinic?.name ?? "慈愛中醫診所"}</h1>
+          <h1 className="text-xl font-bold">{clinic?.name ?? "預約與報名平台"}</h1>
           {clinic?.intro && <p className="mt-2 text-sm text-white/85">{clinic.intro}</p>}
         </div>
 
@@ -85,6 +111,16 @@ export default async function HomePage() {
               已加好友?直接預約
             </a>
           )}
+
+          <Link href={browserBookingUrl} className="btn btn-secondary w-full">
+            瀏覽器備援預約
+          </Link>
+          <Link href={registrationUrl} className="btn btn-secondary w-full">
+            查看課程與活動報名
+          </Link>
+          <Link href="/register/cancel" className="text-center text-sm text-slate-400 hover:text-brand-600">
+            取消既有活動報名
+          </Link>
 
           {basicId && (
             <p className="text-center text-xs text-slate-400">LINE ID:{basicId}</p>

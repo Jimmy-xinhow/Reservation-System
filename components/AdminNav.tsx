@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import type { Role } from "@/lib/admin";
 
 interface Item {
   href: string;
@@ -37,8 +38,28 @@ const GROUPS: Group[] = [
     items: [{ href: "/admin/patients", label: "病患查詢" }],
   },
   {
+    label: "活動報名",
+    items: [
+      { href: "/admin/events", label: "課程與活動" },
+      { href: "/admin/registrations", label: "報名名單" },
+      { href: "/admin/checkin", label: "活動報到" },
+    ],
+  },
+  {
     label: "線上客服",
     items: [{ href: "/admin/chat", label: "線上客服" }],
+  },
+  {
+    label: "CRM",
+    items: [{ href: "/admin/crm", label: "CRM Lite" }],
+  },
+  {
+    label: "會員",
+    items: [{ href: "/admin/memberships", label: "會員與優惠" }],
+  },
+  {
+    label: "報表",
+    items: [{ href: "/admin/reports", label: "營運報表" }],
   },
   {
     label: "LINE",
@@ -67,13 +88,14 @@ export function AdminNav({
   role,
   chatUnread = 0,
 }: {
-  role: "admin" | "staff";
+  role: Role;
   chatUnread?: number;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState<string | null>(null);
   const [unread, setUnread] = useState(chatUnread);
-  const isAdmin = role === "admin";
+  const isAdmin = role === "owner" || role === "admin";
+  const providerAllowed = new Set(["/admin/dashboard", "/admin", "/admin/queue"]);
 
   // 未讀客服訊息:掛載時先抓一次,之後每 5 秒輪詢(紅點在其他頁面也能亮起)
   useEffect(() => {
@@ -101,7 +123,10 @@ export function AdminNav({
 
   // 非管理員:隱藏 adminOnly 群組與項目(僅 UI;真正權限由 server 端 requireAdmin 強制)
   const groups = GROUPS.filter((g) => isAdmin || !g.adminOnly)
-    .map((g) => ({ ...g, items: g.items.filter((it) => isAdmin || !it.adminOnly) }))
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((it) => isAdmin || (!it.adminOnly && (role !== "provider" || providerAllowed.has(it.href)))),
+    }))
     .filter((g) => g.items.length > 0);
 
   return (

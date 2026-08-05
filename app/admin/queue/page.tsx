@@ -1,5 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { createServiceClient } from "@/lib/supabase";
+import { getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { getQueueForDate, taipeiToday, type QueueAppt } from "@/lib/queue";
 import { advanceServingAction, setQueueAutoAction, setStatusAction } from "../actions";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -21,15 +22,29 @@ export default async function QueuePage({
   const sp = await searchParams;
   const today = taipeiToday();
   const date = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : today;
-  const doctorId = sp.doctor || undefined;
+  const requestedDoctorId = sp.doctor || undefined;
 
+  const member = await requireMember();
+  const { clinicId, role } = member;
+  const assignedDoctorIds = await getAssignedDoctorIds(member);
+  const doctorId = role === "provider" && requestedDoctorId && assignedDoctorIds.includes(requestedDoctorId)
+    ? requestedDoctorId
+    : role === "provider" ? undefined : requestedDoctorId;
   const supabase = await createSupabaseServer();
+  const settingsClient = role === "provider" ? createServiceClient() : supabase;
   const [{ data: settings }, { data: doctors }] = await Promise.all([
-    supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", CLINIC_ID).maybeSingle(),
-    supabase.from("doctors").select("id, name").eq("clinic_id", CLINIC_ID).eq("active", true).order("name"),
+    settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
+    (() => {
+      let query = supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true);
+      if (role === "provider") query = query.in("id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
+      return query.order("name");
+    })(),
   ]);
   const mode = (settings?.booking_mode as "time" | "number") ?? "time";
-  const sessions = await getQueueForDate(supabase, CLINIC_ID, date, mode, doctorId);
+  const canManageQueue = role !== "provider";
+  const sessions = role === "provider"
+    ? (await Promise.all((doctorId ? [doctorId] : assignedDoctorIds).map((id) => getQueueForDate(supabase, clinicId, date, mode, id)))).flat()
+    : await getQueueForDate(supabase, clinicId, date, mode, doctorId);
 
   return (
     <div className="space-y-5">
@@ -95,32 +110,19 @@ export default async function QueuePage({
                   <span className="ml-2 text-sm text-slate-400">{s.label}</span>
                 </div>
                 {/* 自動穿插設定 */}
-                <form action={setQueueAutoAction} className="flex flex-wrap items-center gap-2 text-sm">
-                  {hidden}
-                  <span className="text-slate-500">每</span>
-                  <input
-                    name="auto_every"
-                    type="number"
-                    min={0}
-                    defaultValue={s.autoEvery}
-                    className="input w-16 px-2 py-1"
-                  />
-                  <span className="text-slate-500">位線上插 1 位現場</span>
-                  <SubmitButton className="btn btn-ghost px-2 py-1 text-xs">儲存</SubmitButton>
-                </form>
+                {canManageQueue && <form action={setQueueAutoAction} className="flex flex-wrap items-center gap-2 text-sm">
+                  {hidden}<span className="text-slate-500">每</span><input name="auto_every" type="number" min={0} defaultValue={s.autoEvery} className="input w-16 px-2 py-1" />
+                  <span className="text-slate-500">位線上插 1 位現場</span><SubmitButton className="btn btn-ghost px-2 py-1 text-xs">儲存</SubmitButton>
+                </form>}
               </div>
 
               {/* 自動下一位(依規則) */}
-              <div className="border-b border-slate-100 px-5 py-3">
+              {canManageQueue && <div className="border-b border-slate-100 px-5 py-3">
                 <form action={advanceServingAction} className="flex flex-wrap items-center gap-3">
-                  {hidden}
-                  <input type="hidden" name="op" value="auto" />
-                  <SubmitButton className="btn btn-primary">自動下一位 →</SubmitButton>
-                  <span className="text-xs text-slate-400">
-                    {s.autoEvery > 0 ? `自動:每 ${s.autoEvery} 位線上插 1 位現場` : "自動未開啟(等同叫線上)"}
-                  </span>
+                  {hidden}<input type="hidden" name="op" value="auto" /><SubmitButton className="btn btn-primary">自動下一位 →</SubmitButton>
+                  <span className="text-xs text-slate-400">{s.autoEvery > 0 ? `自動:每 ${s.autoEvery} 位線上插 1 位現場` : "自動未開啟(等同叫線上)"}</span>
                 </form>
-              </div>
+              </div>}
 
               {/* 兩條序列 */}
               <div className="grid gap-0 sm:grid-cols-2">
@@ -133,6 +135,7 @@ export default async function QueuePage({
                   opNext="next_online"
                   opPrev="prev_online"
                   hidden={hidden}
+                  readOnly={!canManageQueue}
                 />
                 <StreamPanel
                   title="現場(後台建立)"
@@ -143,17 +146,18 @@ export default async function QueuePage({
                   opNext="next_offline"
                   opPrev="prev_offline"
                   hidden={hidden}
+                  readOnly={!canManageQueue}
                   bordered
                 />
               </div>
 
-              <div className="border-t border-slate-100 px-5 py-2">
+              {canManageQueue && <div className="border-t border-slate-100 px-5 py-2">
                 <form action={advanceServingAction}>
                   {hidden}
                   <input type="hidden" name="op" value="reset" />
                   <SubmitButton className="text-xs text-slate-400 hover:text-red-600">重設此診叫號</SubmitButton>
                 </form>
-              </div>
+              </div>}
             </section>
           );
         })}
@@ -171,6 +175,7 @@ function StreamPanel({
   opNext,
   opPrev,
   hidden,
+  readOnly,
   bordered,
 }: {
   title: string;
@@ -181,6 +186,7 @@ function StreamPanel({
   opNext: string;
   opPrev: string;
   hidden: React.ReactNode;
+  readOnly: boolean;
   bordered?: boolean;
 }) {
   const curAppt = appts.find((a) => a.seq === current);
@@ -199,18 +205,15 @@ function StreamPanel({
           下一位:{next ? `${next.seq} ${next.name}` : "已無候診"}
         </div>
       </div>
-      <div className="mb-3 flex gap-2">
+      {!readOnly && <div className="mb-3 flex gap-2">
         <form action={advanceServingAction} className="flex-1">
-          {hidden}
-          <input type="hidden" name="op" value={opNext} />
-          <SubmitButton className="btn btn-secondary w-full text-sm">叫下一位 →</SubmitButton>
+          {hidden}<input type="hidden" name="op" value={opNext} /><SubmitButton className="btn btn-secondary w-full text-sm">叫下一位 →</SubmitButton>
         </form>
         <form action={advanceServingAction}>
-          {hidden}
-          <input type="hidden" name="op" value={opPrev} />
-          <SubmitButton className="btn btn-ghost px-3 text-sm">上一號</SubmitButton>
+          {hidden}<input type="hidden" name="op" value={opPrev} /><SubmitButton className="btn btn-ghost px-3 text-sm">上一號</SubmitButton>
         </form>
-      </div>
+      </div>}
+      {readOnly && <p className="mb-3 text-xs text-slate-400">服務提供者可標記完成／未到，叫號由櫃檯處理。</p>}
       <div className="space-y-1">
         {appts.length === 0 && <p className="text-xs text-slate-400">尚無</p>}
         {appts.map((a) => (

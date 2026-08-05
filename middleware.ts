@@ -7,7 +7,8 @@ export async function middleware(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
-    return new NextResponse("Server configuration error", { status: 500 });
+    // 讓登入頁在尚未設定環境時仍可顯示；實際資料頁仍由 requireMember() 以 server-side 設定守門。
+    return res;
   }
 
   const supabase = createServerClient(

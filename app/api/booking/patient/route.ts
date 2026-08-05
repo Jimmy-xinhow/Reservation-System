@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
+import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,6 @@ export async function POST(req: NextRequest) {
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
       return response;
     }
-    if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
     const body = (await req.json().catch(() => null)) as {
       idToken?: string;
       name?: string;
@@ -48,51 +48,32 @@ export async function POST(req: NextRequest) {
     }
 
     const svc = createServiceClient();
-    const settings = await getClinicSettings(svc, CLINIC_ID);
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
+    const settings = await getClinicSettings(svc, clinicId);
+    if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);
     if (!settings) return fail("查無診所設定", 500);
 
-    const { data: existing, error: qErr } = await svc
-      .from("patients")
-      .select("id, name, line_user_id, active")
-      .eq("clinic_id", CLINIC_ID)
-      .eq("phone", phone);
-    if (qErr) return fail(qErr.message, 500);
-    const rows = existing ?? [];
-
-    // 同電話同姓名 → 沿用該筆,更新 line_user_id 與生日(若曾被軟刪除則復活)
-    const sameName = rows.find((r) => r.name === name && (!r.line_user_id || r.line_user_id === lineUserId));
-    if (sameName) {
-      await svc
-        .from("patients")
-        .update({ line_user_id: lineUserId, birthday, active: true })
-        .eq("id", sameName.id);
-      return ok({ patient_id: sameName.id, reused: true });
-    }
-
-    if (rows.some((r) => r.name === name && r.line_user_id && r.line_user_id !== lineUserId)) {
-      return fail("此病患資料已綁定其他 LINE 帳號，請確認姓名與電話", 409);
-    }
-
-    // 需新增:檢查上限
-    if (!settings.allow_multi_patient_per_phone) {
-      if (rows.length >= 1) {
-        return fail("此電話已登記其他病患,無法再新增。請洽櫃檯。");
-      }
-    } else {
-      const limit = Math.max(1, settings.max_patients_per_phone);
-      if (rows.length >= limit) {
-        return fail(`此電話可登記人數已達上限(${limit} 人)`);
-      }
-    }
-
-    const { data: created, error: cErr } = await svc
-      .from("patients")
-      .insert({ clinic_id: CLINIC_ID, name, phone, birthday, line_user_id: lineUserId })
-      .select("id")
-      .single();
-    if (cErr) return fail(cErr.message, 500);
-    return ok({ patient_id: created.id, reused: false });
+    const { data, error } = await svc.rpc("create_or_get_public_patient", {
+      p_clinic_id: clinicId,
+      p_name: name,
+      p_phone: phone,
+      p_birthday: birthday,
+      p_line_user_id: lineUserId,
+    });
+    if (error) return fail(translatePatientError(error.message), 409);
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row?.patient_id) return fail("建立病患失敗", 500);
+    return ok({ patient_id: row.patient_id, reused: row.reused === true });
   } catch (e) {
     return fail(e instanceof Error ? e.message : "建立病患失敗", 500);
   }
+}
+
+function translatePatientError(message: string): string {
+  if (message.includes("bound to another LINE")) return "此病患資料已綁定其他 LINE 帳號，請確認姓名、電話與生日";
+  if (message.includes("patient limit")) return "此電話可登記人數已達上限";
+  if (message.includes("phone already")) return "此電話已登記其他病患，請洽櫃檯";
+  if (message.includes("public booking")) return "目前暫停線上預約";
+  return "建立病患失敗，請稍後再試";
 }

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
-import { ok, fail, getClinicSettings } from "@/lib/http";
+import { createServiceClient } from "@/lib/supabase";
+import { ok, fail, getClinicSettings, rateLimitResponse } from "@/lib/http";
+import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,23 +11,28 @@ export const dynamic = "force-dynamic";
  * 依 clinic_settings.booking_mode 回傳可約時段(time)或可掛診次(number)。
  */
 export async function GET(req: NextRequest) {
+  const limited = rateLimitResponse(req, "booking:availability", 30);
+  if (limited) return limited;
   try {
-    if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
+    const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
     const sp = req.nextUrl.searchParams;
     const doctorId = sp.get("doctor_id");
     const date = sp.get("date");
+    const visitType = sp.get("visit_type") === "first" ? "first" : "return";
     if (!doctorId) return fail("缺少 doctor_id");
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("date 格式須為 YYYY-MM-DD");
 
-    const svc = createServiceClient();
-    const settings = await getClinicSettings(svc, CLINIC_ID);
+    const settings = await getClinicSettings(svc, clinicId);
+    if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);
     if (!settings) return fail("查無診所設定", 500);
 
     const { data: doctor, error: doctorError } = await svc
       .from("doctors")
       .select("id")
       .eq("id", doctorId)
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("active", true)
       .maybeSingle();
     if (doctorError) return fail(doctorError.message, 500);
@@ -40,15 +46,16 @@ export async function GET(req: NextRequest) {
 
     if (settings.booking_mode === "time") {
       const { data, error } = await svc.rpc("get_available_slots", {
-        p_clinic_id: CLINIC_ID,
+        p_clinic_id: clinicId,
         p_doctor_id: doctorId,
         p_date: date,
+        p_visit_type: visitType,
       });
       if (error) return fail(error.message, 500);
       return ok({ mode: "time", slots: data ?? [] });
     } else {
       const { data, error } = await svc.rpc("get_available_sessions", {
-        p_clinic_id: CLINIC_ID,
+        p_clinic_id: clinicId,
         p_doctor_id: doctorId,
         p_date: date,
       });

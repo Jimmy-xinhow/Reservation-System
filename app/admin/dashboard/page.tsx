@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { createServiceClient } from "@/lib/supabase";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { taipeiDateString } from "@/lib/slots";
 import { getQueueForDate } from "@/lib/queue";
 import { advanceServingAction } from "../actions";
@@ -46,7 +47,11 @@ export default async function DashboardPage({
 }) {
   await searchParams;
 
+  const member = await requireMember();
+  const { clinicId, role } = member;
   const supabase = await createSupabaseServer();
+  const settingsClient = role === "provider" ? createServiceClient() : supabase;
+  const assignedDoctorIds = await getAssignedDoctorIds(member);
   const today = taipeiToday();
   const winStart = shiftDate(today, -6); // 近兩週視窗:前 6 天 ~ 後 7 天
   const winEnd = shiftDate(today, 7);
@@ -54,22 +59,32 @@ export default async function DashboardPage({
   const winEndIso = new Date(`${winEnd}T23:59:59.999+08:00`).toISOString();
 
   const [{ data: apptData }, { count: patientCount }, { data: cs }] = await Promise.all([
-    supabase
-      .from("appointments")
-      .select("start_at, status, doctors(name)")
-      .eq("clinic_id", CLINIC_ID)
-      .gte("start_at", winStartIso)
-      .lte("start_at", winEndIso),
-    supabase
-      .from("patients")
-      .select("id", { count: "exact", head: true })
-      .eq("clinic_id", CLINIC_ID),
-    supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", CLINIC_ID).maybeSingle(),
+    (() => {
+      let query = supabase
+        .from("appointments")
+        .select("start_at, status, doctors(name)")
+        .eq("clinic_id", clinicId)
+        .gte("start_at", winStartIso)
+        .lte("start_at", winEndIso);
+      if (role === "provider") {
+        query = query.in("doctor_id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
+      }
+      return query;
+    })(),
+    role === "provider"
+      ? Promise.resolve({ count: null as number | null })
+      : supabase
+          .from("patients")
+          .select("id", { count: "exact", head: true })
+          .eq("clinic_id", clinicId),
+    settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
   ]);
 
   // 今日叫號狀態:只顯示「目前正在進行」的診次(現在落在該診次時間內)
   const mode = (cs?.booking_mode as "time" | "number") ?? "time";
-  const allQueue = await getQueueForDate(supabase, CLINIC_ID, today, mode);
+  const allQueue = role === "provider"
+    ? (await Promise.all(assignedDoctorIds.map((doctorId) => getQueueForDate(supabase, clinicId, today, mode, doctorId)))).flat()
+    : await getQueueForDate(supabase, clinicId, today, mode);
   const nowMs = Date.now();
   const queue = allQueue.filter(
     (s) =>
@@ -117,7 +132,7 @@ export default async function DashboardPage({
         <Stat label="今日預約" value={todayCount} accent />
         <Stat label="今日已確認" value={todayConfirmed} />
         <Stat label="未來 7 日預約" value={weekCount} />
-        <Stat label="病患總數" value={patientCount ?? 0} />
+        <Stat label="病患總數" value={role === "provider" ? "—" : patientCount ?? 0} />
       </div>
 
       {/* 目前診次叫號(左)+ 近14日每日預約(右)雙欄 */}
@@ -251,7 +266,7 @@ export default async function DashboardPage({
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+function Stat({ label, value, accent }: { label: string; value: number | string; accent?: boolean }) {
   return (
     <div className={`card py-4 pl-4 pr-6 text-right ${accent ? "bg-gradient-to-br from-brand-500 to-accent-600 text-white" : ""}`}>
       <div className={`text-xs ${accent ? "text-white/80" : "text-slate-400"}`}>{label}</div>

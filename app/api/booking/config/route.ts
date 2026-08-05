@@ -1,5 +1,7 @@
-import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
-import { ok, fail, getClinicSettings } from "@/lib/http";
+import { NextRequest } from "next/server";
+import { createServiceClient } from "@/lib/supabase";
+import { ok, fail, getClinicSettings, rateLimitResponse } from "@/lib/http";
+import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,30 +10,38 @@ export const dynamic = "force-dynamic";
  * GET /api/booking/config
  * 預約頁初始化:回傳 booking_mode、訂金/前置設定、可預約醫師清單(無 PII)。
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const limited = rateLimitResponse(req, "booking:config", 20);
+  if (limited) return limited;
   try {
-    if (!CLINIC_ID) return fail("伺服器未設定 NEXT_PUBLIC_CLINIC_ID", 500);
     const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
 
-    const settings = await getClinicSettings(svc, CLINIC_ID);
+    const settings = await getClinicSettings(svc, clinicId);
+    if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);
     if (!settings) return fail("查無診所設定", 500);
 
-    const { data: doctors, error } = await svc
-      .from("doctors")
-      .select("id, name, specialty")
-      .eq("clinic_id", CLINIC_ID)
-      .eq("active", true)
-      .order("name");
-    if (error) return fail(error.message, 500);
+    const [{ data: clinic, error: clinicError }, { data: doctors, error }] = await Promise.all([
+      svc.from("clinics").select("name").eq("id", clinicId).maybeSingle(),
+      svc
+        .from("doctors")
+        .select("id, name, specialty")
+        .eq("clinic_id", clinicId)
+        .eq("active", true)
+        .order("name"),
+    ]);
+    if (clinicError || error) return fail(clinicError?.message ?? error?.message ?? "無法載入公開品牌", 500);
 
     const { data: services } = await svc
       .from("services")
       .select("id, name, description")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .eq("active", true)
       .order("created_at");
 
     return ok({
+      clinic_name: clinic?.name ?? null,
       booking_mode: settings.booking_mode,
       first_visit_extends: settings.first_visit_extends,
       deposit_enabled: settings.deposit_enabled,

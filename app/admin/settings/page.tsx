@@ -1,13 +1,17 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
-import { updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction } from "../actions";
+import { requireAdmin } from "@/lib/admin";
+import { addClinicDomainAction, createBrandAction, updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction, updatePaymentSettingsAction, verifyClinicDomainAction } from "../actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { emailConfigForClinic } from "@/lib/email";
+import { paymentSecretsForClinic } from "@/lib/payment";
 
 export const dynamic = "force-dynamic";
 
 interface Clinic {
   name: string;
+  slug: string | null;
   line_basic_id: string | null;
+  line_destination: string | null;
   phone: string | null;
   address: string | null;
   intro: string | null;
@@ -24,23 +28,47 @@ interface Settings {
   deposit_scope: "all" | "self_pay" | "none";
   min_lead_minutes: number;
   max_advance_days: number;
+  public_booking_enabled: boolean;
+  public_registration_enabled: boolean;
   email_enabled: boolean;
-  resend_api_key: string | null;
   email_from: string | null;
 }
 
+interface PaymentSettings {
+  provider: "ecpay" | "newebpay";
+  merchant_id: string;
+  environment: "test" | "production";
+  active: boolean;
+}
+interface ClinicDomain { id: string; hostname: string; verification_token: string | null; verified_at: string | null; active: boolean; }
+
 export default async function SettingsPage() {
+  const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
-  const [{ data }, { data: clinicData }] = await Promise.all([
-    supabase.from("clinic_settings").select("*").eq("clinic_id", CLINIC_ID).maybeSingle(),
+  const [{ data }, { data: clinicData }, { data: paymentData }, { data: domainData }] = await Promise.all([
+    supabase
+      .from("clinic_settings")
+      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, public_booking_enabled, public_registration_enabled, email_enabled, email_from")
+      .eq("clinic_id", clinicId)
+      .maybeSingle(),
     supabase
       .from("clinics")
-      .select("name, line_basic_id, phone, address, intro")
-      .eq("id", CLINIC_ID)
+      .select("name, slug, line_basic_id, line_destination, phone, address, intro")
+      .eq("id", clinicId)
       .maybeSingle(),
+    supabase
+      .from("clinic_payment_settings")
+      .select("provider, merchant_id, environment, active")
+      .eq("clinic_id", clinicId)
+      .maybeSingle(),
+    supabase.from("clinic_domains").select("id, hostname, verification_token, verified_at, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
   ]);
   const s = data as Settings | null;
   const clinic = clinicData as Clinic | null;
+  const payment = paymentData as PaymentSettings | null;
+  const domains = (domainData ?? []) as ClinicDomain[];
+  const emailConfigured = Boolean(emailConfigForClinic(clinicId, s?.email_from));
+  const paymentSecretConfigured = Boolean(paymentSecretsForClinic(clinicId));
 
   if (!s) {
     return (
@@ -59,6 +87,32 @@ export default async function SettingsPage() {
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-900">診所設定</h1>
 
+      <form action={createBrandAction} className="card space-y-4 border-brand-100 bg-brand-50/40 p-5">
+        <div>
+          <h2 className="font-semibold text-slate-900">建立新品牌</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">建立後會自動建立預設設定，並將目前帳號加入新品牌為擁有者；品牌資料與目前品牌分開管理。</p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label">品牌名稱</label>
+            <input name="name" className="input" required maxLength={120} placeholder="例如：安心物理治療" />
+          </div>
+          <div>
+            <label className="label">品牌短網址</label>
+            <input name="slug" className="input" required maxLength={80} pattern="[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?" placeholder="安心物理治療 → anshin" />
+          </div>
+          <div>
+            <label className="label">公開電話（可選）</label>
+            <input name="phone" className="input" maxLength={80} />
+          </div>
+          <div>
+            <label className="label">公開地址（可選）</label>
+            <input name="address" className="input" maxLength={240} />
+          </div>
+        </div>
+        <div><SubmitButton className="btn btn-primary">建立品牌並切換</SubmitButton></div>
+      </form>
+
       {/* 公開診所資訊(顯示於公開資訊頁) */}
       <form action={updateClinicProfileAction} className="card space-y-4 p-5">
         <h2 className="font-semibold text-slate-900">公開診所資訊</h2>
@@ -69,6 +123,11 @@ export default async function SettingsPage() {
             <input name="name" className="input" defaultValue={clinic?.name ?? ""} required />
           </div>
           <div>
+            <label className="label">品牌短網址</label>
+            <input name="slug" className="input" defaultValue={clinic?.slug ?? ""} placeholder="my-brand" pattern="[a-z0-9][a-z0-9-]{0,78}[a-z0-9]?" />
+            <p className="mt-1 text-xs text-slate-400">可用 `/register/品牌短網址` 開啟此品牌的活動報名。</p>
+          </div>
+          <div>
             <label className="label">LINE 官方帳號 ID</label>
             <input
               name="line_basic_id"
@@ -77,6 +136,11 @@ export default async function SettingsPage() {
               placeholder="@738xusfj"
             />
             <p className="mt-1 text-xs text-slate-400">用於公開頁的「加入好友/線上預約」按鈕。</p>
+          </div>
+          <div>
+            <label className="label">LINE Webhook destination</label>
+            <input name="line_destination" className="input" defaultValue={clinic?.line_destination ?? ""} placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+            <p className="mt-1 text-xs text-slate-400">填 LINE webhook payload 的 destination，用於多品牌路由。</p>
           </div>
           <div>
             <label className="label">電話</label>
@@ -202,15 +266,45 @@ export default async function SettingsPage() {
           </label>
         </Section>
 
+        <Section title="公開入口">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4 accent-brand-600" name="public_booking_enabled" defaultChecked={s.public_booking_enabled} />
+            開放線上預約
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4 accent-brand-600" name="public_registration_enabled" defaultChecked={s.public_registration_enabled} />
+            開放線上報名
+          </label>
+        </Section>
+
         <SubmitButton className="btn btn-primary">儲存設定</SubmitButton>
       </form>
+
+      <form action={updatePaymentSettingsAction} className="card space-y-4 p-5">
+        <div>
+          <h2 className="font-semibold text-slate-900">標準金流</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-400">支援綠界與藍新標準付款。HashKey／HashIV 只從 server environment 讀取，不寫入資料庫或回傳前端；退款、對帳與其他金流另行報價。</p>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <label className="text-sm"><span className="label">金流商</span><select name="provider" defaultValue={payment?.provider ?? "ecpay"} className="input"><option value="ecpay">綠界 ECPay</option><option value="newebpay">藍新 NewebPay</option></select></label>
+          <label className="text-sm"><span className="label">環境</span><select name="environment" defaultValue={payment?.environment ?? "test"} className="input"><option value="test">測試</option><option value="production">正式</option></select></label>
+          <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" name="active" defaultChecked={payment?.active ?? false} />啟用付款</label>
+        </div>
+        <label className="block text-sm"><span className="label">Merchant ID</span><input name="merchant_id" className="input" defaultValue={payment?.merchant_id ?? ""} required /></label>
+        <p className={`text-sm ${paymentSecretConfigured ? "text-emerald-700" : "text-amber-700"}`}>
+          金流密鑰狀態：{paymentSecretConfigured ? "已由 server environment 設定 ✓" : "尚未設定"}
+        </p>
+        <SubmitButton className="btn btn-primary">儲存金流設定</SubmitButton>
+      </form>
+
+      <section className="card space-y-4 p-5"><div><h2 className="font-semibold text-slate-900">自訂網址／網域</h2><p className="mt-1 text-xs leading-5 text-slate-400">新增網域後，請在 DNS 建立 TXT：<code>_booking-verification.你的網域</code>，再按驗證。驗證成功後才會作為品牌公開入口。</p></div><form action={addClinicDomainAction} className="flex flex-col gap-2 sm:flex-row"><input name="hostname" className="input flex-1" placeholder="booking.example.com" required /><SubmitButton className="btn btn-secondary">新增網域</SubmitButton></form>{domains.length > 0 && <div className="space-y-2">{domains.map((domain) => <div key={domain.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium text-slate-800">{domain.hostname}</span>{domain.active ? <span className="badge bg-emerald-50 text-emerald-700">已啟用</span> : <form action={verifyClinicDomainAction}><input type="hidden" name="id" value={domain.id} /><SubmitButton className="btn btn-secondary px-3 py-1 text-xs">驗證 DNS</SubmitButton></form>}</div>{!domain.active && <code className="mt-2 block break-all text-xs text-slate-500">TXT 值：{domain.verification_token}</code>}</div>)}</div>}</section>
 
       {/* Email 提醒(選用,需自備 Resend 金鑰)*/}
       <form action={updateEmailSettingsAction} className="card space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">Email 看診提醒(選用)</h2>
           <p className="mt-1 text-xs text-slate-400">
-            自行到 resend.com 申請 API 金鑰(免費約 3,000 封/月)填入即可啟用。留空不影響 LINE 提醒。
+            Resend 金鑰由部署環境管理，請設定該品牌的 server-side 環境變數；此頁只保存寄件人與啟用狀態。
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -228,25 +322,16 @@ export default async function SettingsPage() {
             <input
               name="email_from"
               defaultValue={s.email_from ?? ""}
-              placeholder="慈愛中醫 <noreply@yourdomain.com>"
+              placeholder="品牌名稱 <noreply@yourdomain.com>"
               className="input"
             />
           </label>
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-600">Resend API 金鑰</span>
-            <input
-              name="resend_api_key"
-              type="password"
-              placeholder={s.resend_api_key ? "已設定(留空不變,輸入 - 清除)" : "re_..."}
-              className="input"
-            />
-          </label>
+          <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+            Resend 金鑰狀態：{emailConfigured ? "已由 server environment 設定 ✓" : "尚未設定"}
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <SubmitButton className="btn btn-primary">儲存 Email 設定</SubmitButton>
-          <span className={`text-xs ${s.resend_api_key ? "text-accent-600" : "text-slate-400"}`}>
-            金鑰狀態:{s.resend_api_key ? "已設定 ✓" : "未設定"}
-          </span>
         </div>
         <p className="text-xs text-slate-400">
           寄件人網域需先在 Resend 完成驗證;病患需在「病患查詢」建檔留有 Email 才會收到。

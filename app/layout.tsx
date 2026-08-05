@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "慈愛中醫診所 · 線上預約",
-  description: "慈愛中醫診所線上預約系統 · 預約 · 提醒 · 後台管理",
+  title: "預約與報名平台",
+  description: "多品牌預約、活動報名、通知與後台管理平台",
 };
 
 export default function RootLayout({

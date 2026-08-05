@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireMember } from "@/lib/admin";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireMember, requireOperator } from "@/lib/admin";
 import { ok, fail } from "@/lib/http";
 import {
   buildThreads,
@@ -9,6 +8,7 @@ import {
   insertStaffMessage,
   setChatBlock,
 } from "@/lib/chatQueries";
+import { recordCrmInteraction } from "@/lib/crm-interactions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,20 +18,26 @@ export const dynamic = "force-dynamic";
 // POST { lineUserId, body }
 
 export async function GET(req: NextRequest) {
-  let supabase;
+  let member;
   try {
-    ({ supabase } = await requireMember());
+    member = await requireMember();
   } catch {
     return fail("未授權", 401);
   }
+  const { supabase, clinicId } = member;
   const type = req.nextUrl.searchParams.get("type");
   try {
-    if (type === "unread") return ok({ count: await unreadCount(supabase, CLINIC_ID) });
+    if (member.role === "provider") {
+      if (type === "unread") return ok({ count: 0 });
+      if (type === "messages") return ok({ messages: [] });
+      return ok({ threads: [] });
+    }
+    if (type === "unread") return ok({ count: await unreadCount(supabase, clinicId) });
     if (type === "messages") {
       const u = req.nextUrl.searchParams.get("u") ?? "";
-      return ok({ messages: await getThreadMessages(supabase, CLINIC_ID, u) });
+      return ok({ messages: await getThreadMessages(supabase, clinicId, u) });
     }
-    return ok({ threads: await buildThreads(supabase, CLINIC_ID) });
+    return ok({ threads: await buildThreads(supabase, clinicId) });
   } catch (e) {
     return fail(e instanceof Error ? e.message : "讀取失敗", 500);
   }
@@ -39,8 +45,13 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   let supabase;
+  let clinicId: string;
+  let userId: string;
   try {
-    ({ supabase } = await requireMember());
+    const member = await requireOperator();
+    supabase = member.supabase;
+    clinicId = member.clinicId;
+    userId = member.user.id;
   } catch {
     return fail("未授權", 401);
   }
@@ -52,14 +63,35 @@ export async function POST(req: NextRequest) {
   if (!payload?.lineUserId) return fail("缺少對話對象");
   try {
     if (payload.action === "block") {
-      await setChatBlock(supabase, CLINIC_ID, payload.lineUserId, true);
+      await setChatBlock(supabase, clinicId, payload.lineUserId, true);
       return ok({ blocked: true });
     }
     if (payload.action === "unblock") {
-      await setChatBlock(supabase, CLINIC_ID, payload.lineUserId, false);
+      await setChatBlock(supabase, clinicId, payload.lineUserId, false);
       return ok({ blocked: false });
     }
-    await insertStaffMessage(supabase, CLINIC_ID, payload.lineUserId, payload.body ?? "");
+    const body = payload.body ?? "";
+    await insertStaffMessage(supabase, clinicId, payload.lineUserId, body);
+    const { data: patient } = await supabase
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("line_user_id", payload.lineUserId)
+      .eq("active", true)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    if (patient?.id) {
+      await recordCrmInteraction(supabase, {
+        clinicId,
+        patientId: patient.id as string,
+        kind: "message",
+        channel: "staff",
+        title: "櫃檯客服回覆",
+        body,
+        createdBy: userId,
+      });
+    }
     return ok({ sent: true });
   } catch (e) {
     return fail(e instanceof Error ? e.message : "操作失敗", 500);

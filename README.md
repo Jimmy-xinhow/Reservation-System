@@ -1,10 +1,12 @@
-# 診所預約系統
+# 預約與報名 SaaS 平台
 
-單一診所線上預約系統:**預約 · 提醒 · 後台管理**。病患由 LINE 官方帳號 → LIFF 進入預約;櫃檯用後台管理約診與門診表;看診前自動 LINE 推播提醒(可確認/取消)。
+多品牌預約與報名 SaaS:**預約 · 報名 · 標準金流 · 提醒 · CRM Lite · 報表 · 後台管理**。顧客主要由 LINE Rich Menu → LIFF 進入，也支援瀏覽器備援、自訂網址、嵌入元件與自訂網域。
 
-多租戶就緒(所有表帶 `clinic_id`),本版以 `NEXT_PUBLIC_CLINIC_ID` 鎖定單一診所。行為差異全部由 `clinic_settings` 設定驅動(預約模式、初診延長、一電話多病患、訂金、預約區間)。
+多租戶以 `clinic_id` 作為相容租戶鍵，品牌資料完全隔離；同一登入帳號可依授權管理多個品牌。行為差異由 `clinic_settings` 與品牌設定驅動。
 
-> 規範見 `CLAUDE.md`(最高規則)與 `clinic-booking-spec-v2.md`(功能規格)。
+> 規範見 `AGENTS.md`／`CLAUDE.md`(最高規則)與 `clinic-booking-spec-v3.md`(功能、開發與驗收規格)。v2 與 SaaS v1 僅為歷史文件。
+>
+> 驗收證據與外部環境待辦見 `docs/acceptance-matrix.md`。
 
 ## 技術棧
 
@@ -22,6 +24,7 @@
 
 1. 建立 Supabase 專案。
 2. SQL Editor 貼上並執行 **`supabase/schema.sql`**(建表、RPC、RLS、權限)。
+   - 套用前先設定 `.env.local`／部署環境中的 Email 與金流 server secrets；schema 會清除舊版資料庫內的 legacy 密鑰欄位。
 3. 建立一間診所與其預設設定,並建立後台帳號對應:
 
 ```sql
@@ -40,7 +43,9 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 -- 4)(選用)新增醫師、門診段,亦可改由後台「門診表」頁建立
 ```
 
-4. 把 clinic id 填進環境變數 `NEXT_PUBLIC_CLINIC_ID`。
+4. 相容單品牌部署時，把預設品牌 id 填進 `NEXT_PUBLIC_CLINIC_ID`；SaaS 模式不可只依賴此變數，必須使用登入後的品牌 context。
+
+5. 第一個品牌與後台 owner 建立後，可在後台「診所設定 → 建立新品牌」建立其他品牌。建立流程會在資料庫內原子建立品牌、預設 `clinic_settings` 與目前帳號的 owner 成員資格，完成後自動切換到新品牌。
 
 > `clinic_members` 是本系統為實作「後台只能存取自己診所」所需的最小新增(規格未定義 auth↔clinic 對應)。一筆代表某 auth 使用者可管理某診所。
 
@@ -55,9 +60,16 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase 專案 URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key(公開,僅後台 Auth 用) |
 | `SUPABASE_SERVICE_ROLE_KEY` | service role key,**只在 server 端**,絕不可進 `NEXT_PUBLIC_*` |
-| `NEXT_PUBLIC_CLINIC_ID` | 本版鎖定的診所 id |
+| `NEXT_PUBLIC_CLINIC_ID` | 相容單品牌部署的預設品牌 id；SaaS 模式不可作為隔離邊界 |
+| `PUBLIC_SHARED_HOSTS` | 允許使用 `NEXT_PUBLIC_CLINIC_ID` fallback 的共享公開 host，逗號分隔；未設定時未知自訂 host 會拒絕 |
 | `LINE_CHANNEL_ACCESS_TOKEN` | Messaging API channel access token(推播/回覆) |
 | `LINE_CHANNEL_SECRET` | Messaging API channel secret(驗 webhook 簽章) |
+| `LINE_CHANNEL_ACCESS_TOKENS_JSON` | 多品牌 webhook destination → access token JSON；僅 server environment |
+| `LINE_CHANNEL_SECRETS_JSON` | 多品牌 webhook destination → channel secret JSON；僅 server environment |
+| `RESEND_API_KEYS_JSON` | 多品牌 `clinic_id` → Resend API key JSON；僅 server environment，不寫入資料庫 |
+| `RESEND_EMAIL_FROM_JSON` | 多品牌 `clinic_id` → 寄件人 JSON；僅 server environment，可由品牌設定的寄件人覆寫 |
+| `RESEND_API_KEY` / `RESEND_EMAIL_FROM` | 單品牌相容 fallback；僅 server environment |
+| `PAYMENT_SECRETS_JSON` | 多品牌 `clinic_id` → `{hashKey,hashIv}` JSON；僅 server environment，不寫入資料庫 |
 | `LINE_LOGIN_CHANNEL_ID` | LIFF 所屬 channel id(驗 ID token 用) |
 | `NEXT_PUBLIC_LIFF_ID` | 病患端 LIFF ID |
 | `CRON_SECRET` | Vercel Cron 呼叫提醒 endpoint 的密鑰(長亂數) |
@@ -73,6 +85,9 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
    - 提醒訊息的「確認赴診/取消」按鈕以 postback 回寫約診狀態。
 3. **LIFF**:在對應 channel 新增一個 LIFF app,Endpoint URL 設為 `https://<你的網域>/book`,取得 LIFF ID 填入 `NEXT_PUBLIC_LIFF_ID`;其所屬 channel id 填入 `LINE_LOGIN_CHANNEL_ID`。
 4. Rich Menu 連到該 LIFF。
+5. 多品牌 webhook：在各品牌公開設定填入 LINE webhook payload 的 `destination`；若各品牌使用不同 LINE channel，將 destination 對應的 secret／access token 放入 `LINE_CHANNEL_SECRETS_JSON`／`LINE_CHANNEL_ACCESS_TOKENS_JSON`，不可放到前端或資料庫。
+
+> 多品牌必須同時維護 `clinics.line_destination` 與兩張 credential map；只要任一 map 已啟用，未對應的 destination 會 fail-closed，不會回退到預設品牌 token。Rich Menu 與 webhook 回覆中的 LIFF 連結也會帶入目前品牌的 `clinic_slug`。
 
 > 病患端永不直接連 Supabase:LIFF 頁只呼叫本專案 API route,server 端以 service role 操作。前端送來的 `line_user_id` 一律先用 LIFF ID token 向 LINE 驗證後才採用。
 
@@ -85,6 +100,7 @@ npm install
 npm run dev        # http://localhost:3000
 npm run build      # 生產建置
 npm run typecheck  # tsc --noEmit
+npm run verify:contracts  # 規格、路由、RLS 與秘密邊界靜態檢查
 ```
 
 - 病患預約頁:`/book`(需在 LINE/LIFF 環境;或設好 `NEXT_PUBLIC_LIFF_ID` 後於 LINE 內開啟)。
@@ -106,6 +122,10 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
    - `LINE_CHANNEL_ACCESS_TOKEN`
    - `LINE_CHANNEL_SECRET`
    - `LINE_LOGIN_CHANNEL_ID`
+   - `LINE_CHANNEL_ACCESS_TOKENS_JSON` / `LINE_CHANNEL_SECRETS_JSON`
+   - `RESEND_API_KEYS_JSON` / `RESEND_EMAIL_FROM_JSON`
+   - `PAYMENT_SECRETS_JSON`
+   - `BROWSER_BOOKING_SECRET`
    - `CRON_SECRET`(長亂數)
    - `REMINDER_HOURS_BEFORE`(選填,預設 24)
 
@@ -181,3 +201,14 @@ scripts/trigger-reminders.mjs  Railway cron 服務用:打 /api/cron/reminders �
 railway.json              Railway web 服務 build/start 設定
 vercel.json               (僅 Vercel 用;Railway 不讀)
 ```
+## 既有資料庫 migration 順序
+
+全新資料庫使用 `supabase/schema.sql`。既有預約系統請依序在 Supabase SQL Editor 執行，且每一步完成備份與檢查：
+
+1. `supabase/migration_crm_lite.sql`
+2. `supabase/migration_registration_payments.sql`
+3. `supabase/migration_v3_hardening.sql`
+4. `supabase/migration_memberships_coupons.sql`
+5. `supabase/migration_role_matrix_v4.sql`
+
+每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `npm test`、`npm run typecheck` 與 `npm run build`。

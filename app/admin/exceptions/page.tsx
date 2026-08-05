@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireNonProvider } from "@/lib/admin";
 import { createExceptionAction, deleteExceptionAction } from "../actions";
 import ExceptionForm from "../_components/ExceptionForm";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -31,18 +31,19 @@ interface Exception {
 }
 
 export default async function ExceptionsPage() {
+const { clinicId } = await requireNonProvider();
   const supabase = await createSupabaseServer();
   const [{ data: doctors }, { data: templates }, { data: exceptions }] = await Promise.all([
-    supabase.from("doctors").select("id, name").eq("clinic_id", CLINIC_ID).eq("active", true).order("name"),
+    supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
     supabase
       .from("schedule_templates")
       .select("id, doctor_id, weekday, start_time, end_time, slot_minutes, capacity, active")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .order("weekday"),
     supabase
       .from("schedule_exceptions")
       .select("id, doctor_id, date, is_closed, start_time, end_time, capacity")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .order("date", { ascending: false }),
   ]);
 

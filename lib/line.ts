@@ -3,13 +3,46 @@ import crypto from "node:crypto";
 const LINE_API = "https://api.line.me/v2/bot";
 const LINE_VERIFY = "https://api.line.me/oauth2/v2.1/verify";
 
-function accessToken(): string {
-  const t = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+function accessToken(override?: string): string {
+  const t = override || process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!t) throw new Error("缺少 LINE_CHANNEL_ACCESS_TOKEN");
   return t;
 }
 
 /** LINE 任意 message 物件(Flex / text 等),不細究內部結構。 */
+function credentialMap(name: "LINE_CHANNEL_ACCESS_TOKENS_JSON" | "LINE_CHANNEL_SECRETS_JSON"): Record<string, string> {
+  const raw = process.env[name];
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  } catch {
+    return {};
+  }
+}
+
+function credentialMapsConfigured(): boolean {
+  return Boolean(process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON?.trim() || process.env.LINE_CHANNEL_SECRETS_JSON?.trim());
+}
+
+export function lineAccessTokenForDestination(destination?: string): string {
+  const map = credentialMap("LINE_CHANNEL_ACCESS_TOKENS_JSON");
+  if (credentialMapsConfigured()) {
+    if (!destination) throw new Error("LINE destination 必須對應品牌 access token");
+    const mapped = map[destination];
+    if (!mapped) throw new Error("此 LINE destination 尚未設定對應 access token");
+    return accessToken(mapped);
+  }
+  return accessToken();
+}
+
+export function lineSecretForDestination(destination?: string): string | undefined {
+  const map = credentialMap("LINE_CHANNEL_SECRETS_JSON");
+  if (credentialMapsConfigured()) return destination ? map[destination] ?? "" : "";
+  return process.env.LINE_CHANNEL_SECRET;
+}
+
 export type LineMessage = Record<string, unknown>;
 
 export interface VerifiedLineProfile {
@@ -51,8 +84,8 @@ export async function verifyLiffIdToken(idToken: string): Promise<VerifiedLinePr
  * 驗 webhook 的 x-line-signature(HMAC-SHA256 / LINE_CHANNEL_SECRET,Base64)。
  * @param rawBody 必須是「未經 parse」的原始 request body 字串。
  */
-export function verifyLineSignature(rawBody: string, signature: string | null): boolean {
-  const secret = process.env.LINE_CHANNEL_SECRET;
+export function verifyLineSignature(rawBody: string, signature: string | null, secretOverride?: string): boolean {
+  const secret = secretOverride === undefined ? process.env.LINE_CHANNEL_SECRET : secretOverride;
   if (!secret || !signature) return false;
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("base64");
   const a = Buffer.from(expected);
@@ -70,18 +103,18 @@ export interface LineBotInfo {
 }
 
 /** 取得官方帳號資訊(可用來驗證 access token 是否有效)。 */
-export async function getBotInfo(): Promise<LineBotInfo> {
+export async function getBotInfo(accessTokenOverride?: string): Promise<LineBotInfo> {
   const res = await fetch(`${LINE_API}/info`, {
-    headers: { Authorization: `Bearer ${accessToken()}` },
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) throw new Error(`LINE 連線失敗 (${res.status})`);
   return (await res.json()) as LineBotInfo;
 }
 
 /** 取得推播額度。 */
-export async function getQuota(): Promise<{ type: string; value?: number }> {
+export async function getQuota(accessTokenOverride?: string): Promise<{ type: string; value?: number }> {
   const res = await fetch(`${LINE_API}/message/quota`, {
-    headers: { Authorization: `Bearer ${accessToken()}` },
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) throw new Error(`LINE 額度查詢失敗 (${res.status})`);
   return (await res.json()) as { type: string; value?: number };
@@ -102,10 +135,10 @@ export async function createRichMenu(body: {
   name: string;
   chatBarText: string;
   areas: RichMenuArea[];
-}): Promise<string> {
+}, accessTokenOverride?: string): Promise<string> {
   const res = await fetch(`${LINE_API}/richmenu`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken()}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`建立圖文選單失敗 (${res.status}): ${await res.text().catch(() => "")}`);
@@ -118,10 +151,11 @@ export async function uploadRichMenuImage(
   richMenuId: string,
   bytes: ArrayBuffer,
   contentType: string,
+  accessTokenOverride?: string,
 ): Promise<void> {
   const res = await fetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
     method: "POST",
-    headers: { "Content-Type": contentType, Authorization: `Bearer ${accessToken()}` },
+    headers: { "Content-Type": contentType, Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     body: bytes,
   });
   if (!res.ok) throw new Error(`上傳圖片失敗 (${res.status}): ${await res.text().catch(() => "")}`);
@@ -130,9 +164,10 @@ export async function uploadRichMenuImage(
 /** 取得已上傳的 rich menu 圖片內容(供後台預覽)。 */
 export async function getRichMenuImage(
   richMenuId: string,
+  accessTokenOverride?: string,
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   const res = await fetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
-    headers: { Authorization: `Bearer ${accessToken()}` },
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) return null;
   const contentType = res.headers.get("content-type") || "image/jpeg";
@@ -140,37 +175,37 @@ export async function getRichMenuImage(
 }
 
 /** 設為所有使用者的預設 rich menu。 */
-export async function setDefaultRichMenu(richMenuId: string): Promise<void> {
+export async function setDefaultRichMenu(richMenuId: string, accessTokenOverride?: string): Promise<void> {
   const res = await fetch(`${LINE_API}/user/all/richmenu/${richMenuId}`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${accessToken()}` },
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) throw new Error(`設定預設選單失敗 (${res.status}): ${await res.text().catch(() => "")}`);
 }
 
 /** 刪除 rich menu。 */
-export async function deleteRichMenu(richMenuId: string): Promise<void> {
+export async function deleteRichMenu(richMenuId: string, accessTokenOverride?: string): Promise<void> {
   await fetch(`${LINE_API}/richmenu/${richMenuId}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${accessToken()}` },
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   }).catch(() => {});
 }
 
 /** 取消所有使用者的預設 rich menu。 */
-export async function clearDefaultRichMenu(): Promise<void> {
+export async function clearDefaultRichMenu(accessTokenOverride?: string): Promise<void> {
   await fetch(`${LINE_API}/user/all/richmenu`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${accessToken()}` },
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   }).catch(() => {});
 }
 
 /** 主動推播一則或多則訊息給某 line_user_id。 */
-export async function pushMessages(to: string, messages: LineMessage[]): Promise<void> {
+export async function pushMessages(to: string, messages: LineMessage[], accessTokenOverride?: string): Promise<void> {
   const res = await fetch(`${LINE_API}/message/push`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken()}`,
+      Authorization: `Bearer ${accessToken(accessTokenOverride)}`,
     },
     body: JSON.stringify({ to, messages }),
   });
@@ -181,12 +216,12 @@ export async function pushMessages(to: string, messages: LineMessage[]): Promise
 }
 
 /** 以 replyToken 回覆訊息(webhook 用)。 */
-export async function replyMessages(replyToken: string, messages: LineMessage[]): Promise<void> {
+export async function replyMessages(replyToken: string, messages: LineMessage[], accessTokenOverride?: string): Promise<void> {
   const res = await fetch(`${LINE_API}/message/reply`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken()}`,
+      Authorization: `Bearer ${accessToken(accessTokenOverride)}`,
     },
     body: JSON.stringify({ replyToken, messages }),
   });

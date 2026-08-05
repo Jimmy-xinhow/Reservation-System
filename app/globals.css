@@ -5,20 +5,20 @@
   --font-sans: "Noto Sans TC", ui-sans-serif, system-ui, "PingFang TC",
     "Microsoft JhengHei", sans-serif;
 
-  /* 主色:沉穩醫療藍 */
-  --color-brand-50: #eff6ff;
-  --color-brand-100: #dbeafe;
-  --color-brand-200: #bfdbfe;
-  --color-brand-300: #93c5fd;
-  --color-brand-400: #60a5fa;
-  --color-brand-500: #3b82f6;
-  --color-brand-600: #2563eb;
-  --color-brand-700: #1d4ed8;
-  --color-brand-800: #1e40af;
+  /* 簡報視覺基準:深青、天藍、金色 */
+  --color-brand-50: #f2f8fd;
+  --color-brand-100: #e8f2fb;
+  --color-brand-200: #dce7f1;
+  --color-brand-300: #bcd6ec;
+  --color-brand-400: #5b9bd9;
+  --color-brand-500: #1b6fc4;
+  --color-brand-600: #1b6fc4;
+  --color-brand-700: #12558f;
+  --color-brand-800: #0b2733;
 
-  /* 輔色:中醫意象的青玉綠(僅點綴) */
-  --color-accent-500: #14b8a6;
-  --color-accent-600: #0d9488;
+  /* 簡報金色只作重點與狀態，不取代主要操作色 */
+  --color-accent-500: #b8862b;
+  --color-accent-600: #9c6d1d;
 }
 
 :root {
@@ -31,17 +31,17 @@ body {
   font-family: var(--font-sans);
   background:
     radial-gradient(1200px 500px at 50% -10%, var(--color-brand-50), transparent 60%),
-    #f8fafc;
+    #f7fafd;
 }
 
 /* ── 可重用元件樣式 ─────────────────────────────────────── */
 @layer components {
   .card {
-    @apply rounded-2xl border border-slate-200/80 bg-white shadow-sm;
+    @apply rounded-[14px] border border-slate-200/80 bg-white shadow-sm;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors;
   }
   .btn:disabled {
     @apply cursor-not-allowed opacity-50;
@@ -72,7 +72,7 @@ body {
   }
 
   .input {
-    @apply w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition;
+    @apply min-h-11 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition;
     -webkit-appearance: none;
     appearance: none;
   }
@@ -93,6 +93,10 @@ body {
   }
   .label {
     @apply mb-1.5 block text-sm font-medium text-slate-600;
+  }
+
+  .eyebrow {
+    @apply mb-2 font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-600;
   }
 
   .badge {

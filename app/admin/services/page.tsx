@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireNonProvider } from "@/lib/admin"
 import {
   createServiceAction,
   updateServiceAction,
@@ -18,11 +18,12 @@ interface Service {
 }
 
 export default async function ServicesPage() {
+const { clinicId } = await requireNonProvider();
   const supabase = await createSupabaseServer();
   const { data } = await supabase
     .from("services")
     .select("id, name, description, active")
-    .eq("clinic_id", CLINIC_ID)
+    .eq("clinic_id", clinicId)
     .order("created_at");
   const services = (data ?? []) as Service[];
 

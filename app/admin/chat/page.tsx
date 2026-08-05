@@ -1,13 +1,17 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
+import { requireNonProvider } from "@/lib/admin";
 import { buildThreads } from "@/lib/chatQueries";
 import ChatConsole from "./ChatConsole";
 
 export const dynamic = "force-dynamic";
 
 export default async function ChatPage() {
+const { clinicId, role } = await requireNonProvider();
+  if (role === "provider") {
+    return <p className="card p-6 text-sm text-slate-500">目前角色無法查看顧客訊息。</p>;
+  }
   const supabase = await createSupabaseServer();
-  const threads = await buildThreads(supabase, CLINIC_ID);
+  const threads = await buildThreads(supabase, clinicId);
 
   return (
     <div className="space-y-4">

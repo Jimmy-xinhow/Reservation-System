@@ -1,11 +1,11 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
 import { LAYOUTS, type Layout, type Slot } from "@/lib/richmenu";
 import { saveRichMenuAction, unpublishRichMenuAction } from "../actions";
 import RichMenuEditor from "./RichMenuEditor";
 import PublishForm from "./PublishForm";
 import { requireAdmin } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
+import { lineAccessTokenForDestination } from "@/lib/line";
 
 export const dynamic = "force-dynamic";
 
@@ -14,16 +14,17 @@ export default async function RichMenuPage({
 }: {
   searchParams: Promise<{ err?: string; ok?: string; saved?: string }>;
 }) {
-  await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const sp = await searchParams;
   const supabase = await createSupabaseServer();
-  const [{ data }, { data: msgs }] = await Promise.all([
+  const [{ data }, { data: msgs }, { data: clinic }] = await Promise.all([
     supabase
       .from("line_richmenu")
       .select("layout, chat_bar_text, slots, published_id")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle(),
-    supabase.from("line_messages").select("id, name").eq("clinic_id", CLINIC_ID).order("created_at"),
+    supabase.from("line_messages").select("id, name").eq("clinic_id", clinicId).order("created_at"),
+    supabase.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
   ]);
   const messages = (msgs ?? []) as { id: string; name: string }[];
 
@@ -32,7 +33,13 @@ export default async function RichMenuPage({
   const slots = (data?.slots as Slot[]) ?? [];
   const publishedId = (data?.published_id as string | null) ?? null;
   const spec = LAYOUTS[layout] ?? LAYOUTS["full-3"];
-  const lineReady = !!process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  let lineReady = false;
+  try {
+    lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+    lineReady = true;
+  } catch {
+    lineReady = false;
+  }
 
   return (
     <div className="space-y-6">

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { icsContent } from "@/lib/calendar";
+import { rateLimitResponse } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,8 @@ export const dynamic = "force-dynamic";
  * 回傳 .ics 檔(含看診前 2 小時提醒),供病患加入手機行事曆。
  */
 export async function GET(req: NextRequest) {
+  const limited = rateLimitResponse(req, "booking:ics", 30);
+  if (limited) return limited;
   const sp = req.nextUrl.searchParams;
   const startIso = sp.get("start") ?? "";
   const endIso = sp.get("end") ?? startIso;

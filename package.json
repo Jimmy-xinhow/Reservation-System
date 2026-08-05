@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "npm run verify:contracts",
+    "test:contracts": "node scripts/verify-contracts.mjs",
+    "verify:contracts": "node scripts/verify-contracts.mjs",
     "reminders": "node scripts/trigger-reminders.mjs"
   },
   "engines": {

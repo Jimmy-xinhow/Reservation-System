@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireMember } from "@/lib/admin";
+import { requireOperator } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -12,8 +12,10 @@ const BUCKET = "line-media";
  * 後台上傳圖片到 Supabase Storage,回傳公開 URL。需登入且屬本診所。
  */
 export async function POST(req: NextRequest) {
+  let clinicId = "";
   try {
-    await requireMember(); // 守門
+    // 上傳路徑帶品牌鍵，避免不同品牌共用不可追蹤的平面檔名。
+    ({ clinicId } = await requireOperator());
   } catch {
     return Response.json({ ok: false, error: "未授權" }, { status: 401 });
   }
@@ -32,7 +34,8 @@ export async function POST(req: NextRequest) {
   }
 
   const ext = type.split("/")[1].replace("jpeg", "jpg");
-  const name = `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}.${ext}`;
+  if (!clinicId) return Response.json({ ok: false, error: "未授權" }, { status: 401 });
+  const name = `${clinicId}/${Math.random().toString(36).slice(2)}${Date.now().toString(36)}.${ext}`;
 
   const svc = createServiceClient();
   const { error } = await svc.storage

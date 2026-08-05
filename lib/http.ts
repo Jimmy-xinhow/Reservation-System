@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { NextRequest } from "next/server";
+import { checkRateLimit } from "./rate-limit";
 
 export function ok<T>(data: T) {
   return NextResponse.json({ ok: true, data });
@@ -7,6 +9,14 @@ export function ok<T>(data: T) {
 
 export function fail(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
+}
+
+export function rateLimitResponse(req: NextRequest, key: string, limit = 30) {
+  const rate = checkRateLimit(req, key, limit);
+  if (rate.allowed) return null;
+  const response = fail("請稍後再試", 429);
+  response.headers.set("Retry-After", String(rate.retryAfterSeconds));
+  return response;
 }
 
 export interface ClinicSettings {
@@ -21,8 +31,9 @@ export interface ClinicSettings {
   deposit_scope: "all" | "self_pay" | "none";
   min_lead_minutes: number;
   max_advance_days: number;
+  public_booking_enabled: boolean;
+  public_registration_enabled: boolean;
   email_enabled: boolean;
-  resend_api_key: string | null;
   email_from: string | null;
 }
 
@@ -33,7 +44,7 @@ export async function getClinicSettings(
 ): Promise<ClinicSettings | null> {
   const { data, error } = await svc
     .from("clinic_settings")
-    .select("*")
+    .select("clinic_id, booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, public_booking_enabled, public_registration_enabled, email_enabled, email_from")
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -57,8 +68,9 @@ function isClinicSettings(value: unknown): value is ClinicSettings {
     (row.deposit_scope === "all" || row.deposit_scope === "self_pay" || row.deposit_scope === "none") &&
     typeof row.min_lead_minutes === "number" &&
     typeof row.max_advance_days === "number" &&
+    typeof row.public_booking_enabled === "boolean" &&
+    typeof row.public_registration_enabled === "boolean" &&
     typeof row.email_enabled === "boolean" &&
-    (row.resend_api_key === null || typeof row.resend_api_key === "string") &&
     (row.email_from === null || typeof row.email_from === "string")
   );
 }

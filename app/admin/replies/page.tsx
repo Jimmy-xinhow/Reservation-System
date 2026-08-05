@@ -1,5 +1,4 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { CLINIC_ID } from "@/lib/supabase";
 import {
   createReplyAction,
   updateReplyAction,
@@ -14,22 +13,22 @@ import { SubmitButton } from "@/components/SubmitButton";
 export const dynamic = "force-dynamic";
 
 export default async function RepliesPage() {
-  await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
   const [{ data: replies }, { data: settings }, { data: msgs }] = await Promise.all([
     supabase
       .from("line_auto_replies")
       .select("id, keywords, action, reply_text, message_id, sort, active")
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .order("sort"),
     supabase
       .from("clinic_settings")
       .select(
         "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url",
       )
-      .eq("clinic_id", CLINIC_ID)
+      .eq("clinic_id", clinicId)
       .maybeSingle(),
-    supabase.from("line_messages").select("id, name").eq("clinic_id", CLINIC_ID).order("created_at"),
+    supabase.from("line_messages").select("id, name").eq("clinic_id", clinicId).order("created_at"),
   ]);
   const s = settings as Record<string, unknown> | null;
   const messages = (msgs ?? []) as { id: string; name: string }[];
