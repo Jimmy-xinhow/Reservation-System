@@ -1567,6 +1567,9 @@ declare
   tbl text;
 begin
   foreach tbl in array array['clinic_domains','events','event_sessions','event_ticket_types','registration_forms','registration_form_fields','registrations','registration_answers','waitlist_entries','checkins','payment_orders','payment_transactions','payment_webhook_events','appointment_notification_logs'] loop
+    if to_regclass(format('public.%I', tbl)) is null then
+      continue;
+    end if;
     execute format('alter table public.%I enable row level security', tbl);
     execute format('drop policy if exists %I on public.%I', tbl || '_member', tbl);
     execute format($policy$

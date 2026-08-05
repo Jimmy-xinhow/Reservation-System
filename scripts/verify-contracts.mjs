@@ -99,6 +99,16 @@ invariant(
   schema.includes("alter table public.%I enable row level security") &&
     tenantTables.every((table) => dynamicRlsTableText.includes(`'${table}'`)),
 );
+const registrationRlsBlock = between(
+  schema,
+  "foreach tbl in array array['clinic_domains'",
+  "end $$;",
+);
+invariant(
+  "consolidated RLS replay skips tables created later",
+  registrationRlsBlock.includes("if to_regclass(format('public.%I', tbl)) is null then") &&
+    registrationRlsBlock.includes("continue;")
+);
 const tableDefinitions = [...schema.matchAll(/create\s+table(?:\s+if\s+not\s+exists)?\s+([a-z0-9_]+)\s*\((.*?)\);/gis)];
 invariant(
   "all business tables carry clinic_id",
