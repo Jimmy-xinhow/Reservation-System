@@ -515,6 +515,14 @@ invariant(
     migrationRoleMatrix.includes('d.id = schedule_exceptions.doctor_id'),
 );
 invariant(
+  "doctor assignments bind both doctor and provider to the same clinic",
+  schema.includes("target.role = 'provider'") &&
+    schema.includes("d.id = doctor_assignments.doctor_id") &&
+    schema.includes("d.clinic_id = doctor_assignments.clinic_id") &&
+    migrationHardening.includes("target.role = 'provider'") &&
+    migrationHardening.includes("d.id = doctor_assignments.doctor_id"),
+);
+invariant(
   "CRM timeline failures do not retry delivered marketing messages",
   marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
     marketingCron.includes('await recordCrmInteraction(svc, {') &&

@@ -109,6 +109,16 @@ create policy doctor_assignments_admin on doctor_assignments for all to authenti
      where cm.clinic_id = doctor_assignments.clinic_id
        and cm.user_id = auth.uid()
        and cm.role in ('owner', 'admin')
+  ) and exists (
+    select 1 from doctors d
+     where d.id = doctor_assignments.doctor_id
+       and d.clinic_id = doctor_assignments.clinic_id
+       and d.active
+  ) and exists (
+    select 1 from clinic_members target
+     where target.clinic_id = doctor_assignments.clinic_id
+       and target.user_id = doctor_assignments.user_id
+       and target.role = 'provider'
   ));
 drop trigger if exists trg_doctor_assignments_touch on doctor_assignments;
 create trigger trg_doctor_assignments_touch before update on doctor_assignments
