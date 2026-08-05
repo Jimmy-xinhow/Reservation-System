@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
       .eq("clinic_id", clinicId)
       .maybeSingle();
     if (settingsError) return fail(settingsError.message, 500);
-    if (settings?.public_registration_enabled === false) return ok({ events: [] });
+    if (!settings) return fail("公開報名設定尚未完成", 503);
+    if (settings.public_registration_enabled === false) return ok({ events: [] });
 
     const { data, error } = await svc
       .from("events")

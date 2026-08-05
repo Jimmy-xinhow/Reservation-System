@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
     if (!clinicId) return fail("尚未設定公開品牌", 500);
     const { data: settings, error: settingsError } = await svc.from("clinic_settings").select("public_registration_enabled").eq("clinic_id", clinicId).maybeSingle();
     if (settingsError) return fail(settingsError.message, 500);
-    if (settings?.public_registration_enabled === false) return fail("目前暫停線上報名", 403);
+    if (!settings) return fail("公開報名設定尚未完成", 503);
+    if (settings.public_registration_enabled === false) return fail("目前暫停線上報名", 403);
     const accessToken = body.access_token?.trim() ?? "";
     const accessTokenHash = accessToken ? createHash("sha256").update(accessToken).digest("hex") : "";
     const { data: publicEvent, error: publicEventError } = await svc

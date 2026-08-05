@@ -131,7 +131,8 @@ export async function POST(req: NextRequest) {
         .eq("clinic_id", clinicId)
         .maybeSingle();
       if (publicSettingsError) throw new Error(publicSettingsError.message);
-      if (publicSettings?.public_registration_enabled === false) return fail("目前暫停公開報名付款", 403);
+      if (!publicSettings) return fail("公開報名設定尚未完成", 503);
+      if (publicSettings.public_registration_enabled === false) return fail("目前暫停公開報名付款", 403);
       registrationId = registration.id;
       amount = Number(registration.amount);
       const { data: found, error: foundError } = await svc

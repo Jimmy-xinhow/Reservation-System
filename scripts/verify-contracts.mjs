@@ -620,13 +620,17 @@ invariant(
 invariant(
   "public registration APIs enforce tenant and publish switches",
   registrationApi.includes("public_registration_enabled") &&
+    registrationApi.includes("if (!settings)") &&
     registrationApi.includes('.eq("clinic_id", clinicId)') &&
     registrationApi.includes('.eq("clinic_id", event.clinic_id)') &&
     registrationDetailApi.includes('.eq("clinic_id", clinicId)') &&
     registrationDetailApi.includes('eq("clinic_id", event.clinic_id)') &&
+    registrationDetailApi.includes("if (!settings)") &&
     registrationEventsApi.includes("const now = Date.now()") &&
     registrationEventsApi.includes("registration_open_at") &&
-    registrationEventsApi.includes("registration_close_at"),
+    registrationEventsApi.includes("registration_close_at") &&
+    registrationEventsApi.includes("if (!settings)") &&
+    paymentCreateApi.includes("if (!publicSettings)"),
 );
 invariant(
   "public registration cancellation preserves and verifies tenant scope",
