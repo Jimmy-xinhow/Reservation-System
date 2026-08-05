@@ -4,6 +4,7 @@
 @theme {
   --font-sans: "Noto Sans TC", ui-sans-serif, system-ui, "PingFang TC",
     "Microsoft JhengHei", sans-serif;
+  --font-mono: "Inter", "Noto Sans TC", ui-monospace, system-ui, sans-serif;
 
   /* 簡報視覺基準:深青、天藍、金色 */
   --color-brand-50: #f2f8fd;
