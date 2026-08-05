@@ -11,6 +11,8 @@
 - `npm test`：PASS，契約測試包含租戶隔離、RLS、預約／報名／付款／CRM Lite 與 SQL 回歸檢查。
 - `npm run typecheck`：PASS。
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
+- `npm run smoke:public`：PASS；本機 production server 的四個公開頁回 200，三支 Cron 未授權回 401。
+- 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - GitHub `main` 已同步，並包含管理員成員密碼重設流程的錯誤訊息亂碼修正與本報告更新。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
