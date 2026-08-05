@@ -18,6 +18,7 @@ const migrationHardening = read("supabase/migration_v3_hardening.sql");
 const migrationBenefits = read("supabase/migration_memberships_coupons.sql");
 const migrationRoleMatrix = read("supabase/migration_role_matrix_v4.sql");
 const migrationMarketingOptIn = read("supabase/migration_marketing_opt_in_sync.sql");
+const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 
 const checks = [
   ["registration payment migration has core tables", ["create table if not exists events", "create table if not exists registrations", "create table if not exists payment_orders"]],
@@ -458,7 +459,8 @@ invariant(
     registrationApi.includes("create_or_get_public_patient_with_marketing_opt_in") &&
     registrationApi.includes("p_marketing_opt_in: body.marketing_opt_in === true") &&
     schema.includes("grant execute on function create_or_get_public_patient_with_marketing_opt_in") &&
-    migrationMarketingOptIn.includes("grant execute on function create_or_get_public_patient_with_marketing_opt_in"),
+    migrationMarketingOptIn.includes("grant execute on function create_or_get_public_patient_with_marketing_opt_in") &&
+    stagingRunbook.includes("migration_marketing_opt_in_sync.sql"),
 );
 invariant(
   "public read APIs are rate limited",
