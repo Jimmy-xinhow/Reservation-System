@@ -19,6 +19,7 @@
   /* 簡報金色只作重點與狀態，不取代主要操作色 */
   --color-accent-500: #b8862b;
   --color-accent-600: #9c6d1d;
+  --color-accent-700: #7b5315;
 }
 
 :root {
