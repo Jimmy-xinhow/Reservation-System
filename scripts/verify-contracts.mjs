@@ -450,6 +450,23 @@ invariant(
     lineWebhook.includes('.in("status", ["booked", "confirmed"])'),
 );
 invariant(
+  "admin status updates cannot resurrect terminal appointments",
+  adminActions.includes('.update({ status })') &&
+    adminActions.includes('.in("status", ["booked", "confirmed"])'),
+);
+invariant(
+  "admin cancellation uses the atomic benefit-restoring RPC",
+  schema.includes("create or replace function cancel_appointment_by_operator") &&
+    migrationBenefits.includes("create or replace function cancel_appointment_by_operator") &&
+    schema.includes("cm.clinic_id = p_clinic_id") &&
+    schema.includes("and cm.user_id = p_actor_user_id") &&
+    schema.includes("and cm.role <> 'provider'") &&
+    schema.includes("set_config('request.jwt.claim.sub', p_actor_user_id::text, true)") &&
+    schema.includes("grant execute on function cancel_appointment_by_operator(uuid, uuid, uuid, text) to service_role") &&
+    adminActions.includes('rpc("cancel_appointment_by_operator"') &&
+    adminActions.includes('p_actor_user_id: user.id'),
+);
+invariant(
   "CRM timeline failures do not retry delivered marketing messages",
   marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
     marketingCron.includes('await recordCrmInteraction(svc, {') &&

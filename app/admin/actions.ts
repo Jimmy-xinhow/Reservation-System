@@ -336,18 +336,32 @@ export async function signOutAction() {
 // ── 今日約診:狀態 / 取消 / 訂金 ───────────────────────────
 const STATUSES = ["booked", "confirmed", "cancelled", "done", "no_show"] as const;
 export async function setStatusAction(fd: FormData) {
-  const { supabase, clinicId, role } = await requireStatusOperator();
+  const { supabase, clinicId, role, user } = await requireStatusOperator();
   const id = str(fd, "id");
   const status = str(fd, "status");
   if (!id || !STATUSES.includes(status as (typeof STATUSES)[number])) throw new Error("參數錯誤");
   if (role === "provider" && status !== "done" && status !== "no_show") {
     throw new Error("服務提供者只能標記完成或未到");
   }
+  if (status === "cancelled") {
+    const { data: cancelled, error: cancelError } = await createServiceClient().rpc("cancel_appointment_by_operator", {
+      p_clinic_id: clinicId,
+      p_appointment_id: id,
+      p_actor_user_id: user.id,
+      p_note: "cancelled by operator",
+    });
+    if (cancelError) throw new Error(cancelError.message);
+    if (typeof cancelled !== "string") throw new Error("預約取消失敗");
+    revalidatePath("/admin");
+    revalidatePath("/admin/queue");
+    return;
+  }
   const { data: changed, error } = await supabase
     .from("appointments")
     .update({ status })
     .eq("id", id)
     .eq("clinic_id", clinicId)
+    .in("status", ["booked", "confirmed"])
     .select("id")
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -498,7 +512,8 @@ async function completeServed(
       .from("appointments")
       .update({ status: "done" })
       .eq("id", appt.id)
-      .eq("clinic_id", clinicId);
+      .eq("clinic_id", clinicId)
+      .in("status", ["booked", "confirmed"]);
   }
 }
 

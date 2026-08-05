@@ -1966,6 +1966,34 @@ $$;
 revoke all on function cancel_appointment(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function cancel_appointment(uuid, uuid, text) to service_role;
 
+create or replace function cancel_appointment_by_operator(
+  p_clinic_id uuid,
+  p_appointment_id uuid,
+  p_actor_user_id uuid,
+  p_note text default 'cancelled by operator'
+) returns uuid
+language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if p_actor_user_id is null or not exists (
+    select 1 from clinic_members cm
+     where cm.clinic_id = p_clinic_id
+       and cm.user_id = p_actor_user_id
+       and cm.role <> 'provider'
+  ) then
+    raise exception 'operator is not authorized';
+  end if;
+
+  -- The service-role call still records the authenticated operator in the
+  -- status-event trigger for an auditable cancellation history.
+  perform set_config('request.jwt.claim.sub', p_actor_user_id::text, true);
+  return cancel_appointment(p_clinic_id, p_appointment_id, p_note);
+end;
+$$;
+
+revoke all on function cancel_appointment_by_operator(uuid, uuid, uuid, text) from public, anon, authenticated;
+grant execute on function cancel_appointment_by_operator(uuid, uuid, uuid, text) to service_role;
+
 create or replace function register_for_event_with_benefits(
   p_clinic_id uuid, p_event_id uuid, p_session_id uuid, p_ticket_type_id uuid, p_name text, p_phone text,
   p_email text default null, p_line_user_id text default null, p_marketing_opt_in boolean default false,
