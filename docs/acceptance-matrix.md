@@ -5,7 +5,7 @@
 
 本文件把「程式碼與本機可證明的結果」和「必須連接實際外部環境的結果」分開。沒有 Supabase 或第三方服務證據的項目，不視為已完成正式上線驗收。
 
-## 本機已通過
+## 已取得程式與正式 Supabase 證據
 
 | 項目 | 證據 | 結果 |
 |---|---|---|
@@ -15,8 +15,8 @@
 | 公開頁渲染 | `/`、`/register`、`/book/browser`、`/embed/register` | HTTP 200，無 Application error |
 | 登入／受保護邊界 | `/admin/login` 為 200；後台資料與四支 Cron API 未登入為 401 | PASS |
 | 多品牌入口邊界 | slug／hostname resolver、URL `clinic_id` 不作為租戶依據 | 靜態契約 PASS |
-| 預約併發設計 | time／number RPC advisory lock、容量條件、無 schedule template `limit 1` | 靜態契約 PASS |
-| 報名併發設計 | registration RPC advisory lock、答案快照、候補資料域 | 靜態契約 PASS |
+| 預約併發設計 | time／number RPC advisory lock、容量條件、無 schedule template `limit 1`；正式 Supabase 兩連線測試 | PASS；time／number 均已實測 |
+| 報名併發設計 | registration RPC advisory lock、答案快照、候補資料域；正式 Supabase 兩連線測試 | PASS；confirmed／waitlisted 已實測 |
 | 付款建立／回跳 | ECPay／NewebPay server-only、TWD 幣別、付款期限、公開預約／報名回跳保留品牌路徑 | 靜態契約 PASS |
 | 付款回呼 | ECPay／NewebPay server-only、簽章、event key、終態保護、重送後仍會 reconcile 下游狀態 | 靜態契約 PASS |
 | CRM Lite | 分眾、三種規則式自動化、opt-in、冷卻、投遞去重 | 靜態契約 PASS |
@@ -26,16 +26,16 @@
 | Provider 列級權限 | 指派醫師範圍 RLS、完成／未到限定寫入、叫號唯讀 | 靜態契約 PASS；需 staging PostgreSQL 實測 |
 | 套票取消一致性 | 後台、顧客自助與 LINE 取消共用原子取消 RPC 並恢復堂數 | 靜態契約 PASS；需 staging ledger 實測 |
 | 新品牌建立 | owner/admin 授權、DB function 原子建立品牌／預設設定／owner | 靜態契約 PASS |
-| 會員／套票／優惠碼 | migration、租戶 RLS、原子扣抵、付款失敗釋放、後台管理與預約／報名入口 | 靜態契約 PASS |
+| 會員／套票／優惠碼 | migration、租戶 RLS、原子扣抵、付款失敗釋放、後台管理與預約／報名入口；正式 Supabase 報名／預約扣點與折扣碼交易測試 | PASS；核心交易已實測 |
 
 ## 連接實際環境後必須執行
 
 | 項目 | 必要環境或資料 | 未完成原因 |
 |---|---|---|
-| 全新資料庫 migration replay | Supabase project、SQL Editor 或 migration runner | CLI 已安裝；目前缺 Supabase access token、project ref／URL 與可授權的 staging project |
+| 全新資料庫 migration replay | 獨立 staging Supabase project、SQL Editor 或 migration runner | 正式目標 project 已套用並驗證；獨立 staging replay 仍需另行建立，避免直接覆蓋正式資料 |
 | 既有資料庫 migration、回填與回滾 | 一份可還原的 staging DB backup | 不可在沒有授權的資料庫上猜測或修改資料 |
 | anon RLS 攻擊測試 | Supabase anon key + 兩個品牌與成員測試資料 | RLS 必須由 PostgreSQL 實際執行結果證明 |
-| 預約／報名最後名額競爭 | staging DB、兩個平行請求 | 靜態 advisory lock 檢查不能取代實際併發測試 |
+| 預約／報名最後名額競爭 | 正式 Supabase 兩連線平行請求已完成；仍可在獨立 staging 重跑 | 正式目標已通過；staging 重跑證據待建立 |
 | 金流回呼與重送 | ECPay／NewebPay test merchant、回呼 URL | 需要第三方商店設定與測試回呼 |
 | 訂金／報名付款逾時釋放 | staging DB、Cron、待付款預約／報名資料 | 本機無 PostgreSQL／Cron，尚未證明實際名額釋放 |
 | LINE LIFF／Webhook | Channel、LIFF、destination mapping、secret | 需要品牌提供 LINE 設定 |
