@@ -13,7 +13,7 @@
 | TypeScript strict 型別檢查 | `npm run typecheck` | PASS |
 | Next.js production build | `npm run build` | PASS；僅有 custom font、`img` 的非阻塞 lint warning |
 | 公開頁渲染 | `/`、`/register`、`/book/browser`、`/embed/register` | HTTP 200，無 Application error |
-| 登入／受保護邊界 | `/admin/login` 為 200；後台資料與四支 Cron API 未登入為 401 | PASS |
+| 登入／受保護邊界 | `/admin/login` 為 200；後台資料與三支 Cron API 未登入為 401 | PASS |
 | 多品牌入口邊界 | slug／hostname resolver、URL `clinic_id` 不作為租戶依據 | 靜態契約 PASS |
 | 預約併發設計 | time／number RPC advisory lock、容量條件、無 schedule template `limit 1`；正式 Supabase 兩連線測試 | PASS；time／number 均已實測 |
 | 報名併發設計 | registration RPC advisory lock、答案快照、候補資料域；正式 Supabase 兩連線測試 | PASS；confirmed／waitlisted 已實測 |
