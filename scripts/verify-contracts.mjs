@@ -145,6 +145,8 @@ const bookingPageSource = read("app/book/page.tsx");
 const publicBrand = read("lib/public-brand.ts");
 const homePage = read("app/page.tsx");
 const registrationPage = read("app/register/page.tsx");
+const registrationCancelApi = read("app/api/registration/cancel/route.ts");
+const registrationCancelPage = read("app/register/cancel/page.tsx");
 const publicPatientFunction = between(schema, "create or replace function create_or_get_public_patient", "revoke all on function create_or_get_public_patient");
 
 invariant(
@@ -584,6 +586,15 @@ invariant(
     registrationEventsApi.includes("const now = Date.now()") &&
     registrationEventsApi.includes("registration_open_at") &&
     registrationEventsApi.includes("registration_close_at"),
+);
+invariant(
+  "public registration cancellation preserves and verifies tenant scope",
+  homePage.includes("/register/cancel${clinicScopeSuffix}") &&
+    registrationCancelPage.includes("scopeSuffix") &&
+    registrationCancelPage.includes("/api/registration/cancel${scopeSuffix}") &&
+    registrationCancelApi.includes("resolvePublicClinicId") &&
+    registrationCancelApi.includes('.eq("clinic_id", clinicId)') &&
+    registrationCancelApi.includes("p_clinic_id: clinicId"),
 );
 invariant(
   "private event links are hash-backed and excluded from public listings",

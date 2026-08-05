@@ -118,7 +118,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
           <Link href={registrationUrl} className="btn btn-secondary w-full">
             查看課程與活動報名
           </Link>
-          <Link href="/register/cancel" className="text-center text-sm text-slate-400 hover:text-brand-600">
+          <Link href={`/register/cancel${clinicScopeSuffix}`} className="text-center text-sm text-slate-400 hover:text-brand-600">
             取消既有活動報名
           </Link>
 

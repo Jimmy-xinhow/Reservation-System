@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Brand } from "@/components/Brand";
 
-async function cancel(token: string): Promise<string> {
-  const response = await fetch("/api/registration/cancel", {
+async function cancel(token: string, scopeSuffix: string): Promise<string> {
+  const response = await fetch(`/api/registration/cancel${scopeSuffix}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token }),
@@ -17,9 +17,21 @@ async function cancel(token: string): Promise<string> {
 
 export default function RegistrationCancelPage() {
   const [token, setToken] = useState("");
+  const [scopeSuffix, setScopeSuffix] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const scope = new URLSearchParams();
+    const clinicSlug = query.get("clinic_slug");
+    const clinicId = query.get("clinic_id");
+    if (clinicSlug) scope.set("clinic_slug", clinicSlug);
+    if (clinicId) scope.set("clinic_id", clinicId);
+    const encoded = scope.toString();
+    setScopeSuffix(encoded ? `?${encoded}` : "");
+  }, []);
 
   async function submit() {
     if (!token.trim()) return;
@@ -27,7 +39,7 @@ export default function RegistrationCancelPage() {
     setMessage(null);
     setError(null);
     try {
-      setMessage(await cancel(token.trim()));
+      setMessage(await cancel(token.trim(), scopeSuffix));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "取消報名失敗");
     } finally {
@@ -43,7 +55,7 @@ export default function RegistrationCancelPage() {
         <label className="block text-sm"><span className="label">報到憑證</span><input className="input font-mono" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" /></label>
         {message && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">{message}</p>}
         {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={() => void submit()} disabled={submitting || !token.trim()} className="btn btn-primary flex-1">{submitting ? "處理中…" : "確認取消"}</button><Link href="/register" className="btn btn-secondary flex-1">返回活動列表</Link></div>
+        <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={() => void submit()} disabled={submitting || !token.trim()} className="btn btn-primary flex-1">{submitting ? "處理中…" : "確認取消"}</button><Link href={`/register${scopeSuffix}`} className="btn btn-secondary flex-1">返回活動列表</Link></div>
       </section>
     </main>
   );

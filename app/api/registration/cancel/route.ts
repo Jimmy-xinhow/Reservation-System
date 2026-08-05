@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { fail, ok } from "@/lib/http";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/registration-notifications";
+import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,17 +24,20 @@ export async function POST(req: NextRequest) {
     if (token.length > 128) return fail("取消憑證格式錯誤", 400);
 
     const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
     const tokenHash = createHash("sha256").update(token).digest("hex");
     const { data: registration, error: lookupError } = await svc
       .from("registrations")
       .select("clinic_id")
+      .eq("clinic_id", clinicId)
       .eq("checkin_token_hash", tokenHash)
       .maybeSingle();
     if (lookupError) return fail(lookupError.message, 500);
     if (!registration?.clinic_id) return fail("取消憑證無效", 404);
 
     const { data, error } = await svc.rpc("cancel_registration", {
-      p_clinic_id: registration.clinic_id,
+      p_clinic_id: clinicId,
       p_token: token,
     });
     if (error) return fail(error.message, 409);
