@@ -490,6 +490,18 @@ invariant(
     adminActions.includes('target.role === "owner"'),
 );
 invariant(
+  "serving numbers bind to an active doctor in the same clinic",
+  adminActions.includes('export async function advanceServingAction') &&
+    adminActions.includes('export async function setQueueAutoAction') &&
+    adminActions.includes('.eq("id", doctorId)') &&
+    adminActions.includes('.eq("clinic_id", clinicId)') &&
+    adminActions.includes('.eq("active", true)') &&
+    schema.includes('d.id = serving_numbers.doctor_id') &&
+    schema.includes('d.clinic_id = serving_numbers.clinic_id') &&
+    migrationRoleMatrix.includes('d.id = serving_numbers.doctor_id') &&
+    migrationRoleMatrix.includes('d.clinic_id = serving_numbers.clinic_id'),
+);
+invariant(
   "CRM timeline failures do not retry delivered marketing messages",
   marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
     marketingCron.includes('await recordCrmInteraction(svc, {') &&

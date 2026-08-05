@@ -148,7 +148,10 @@ create policy serving_numbers_provider_read on serving_numbers for select to aut
   );
 create policy serving_numbers_nonprovider_manage on serving_numbers for all to authenticated
   using (exists (select 1 from clinic_members cm where cm.clinic_id = serving_numbers.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')))
-  with check (exists (select 1 from clinic_members cm where cm.clinic_id = serving_numbers.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')));
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = serving_numbers.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff'))
+    and exists (select 1 from doctors d where d.id = serving_numbers.doctor_id and d.clinic_id = serving_numbers.clinic_id and d.active)
+  );
 
 create policy patient_records_provider_read on patient_records for select to authenticated
   using (

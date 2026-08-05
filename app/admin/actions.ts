@@ -419,6 +419,15 @@ export async function advanceServingAction(fd: FormData) {
   // 各序列現有最大號(自動模式判斷是否還有現場可插)
   const maxOnline = intOr(fd, "max_online", 0);
   const maxOffline = intOr(fd, "max_offline", 0);
+  const { data: doctor, error: doctorError } = await supabase
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .eq("active", true)
+    .maybeSingle();
+  if (doctorError) throw new Error(doctorError.message);
+  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
   if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
 
   const { data: cur } = await supabase
@@ -532,6 +541,15 @@ export async function setQueueAutoAction(fd: FormData) {
   const doctorId = str(fd, "doctor_id");
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
+  const { data: doctor, error: doctorError } = await supabase
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .eq("active", true)
+    .maybeSingle();
+  if (doctorError) throw new Error(doctorError.message);
+  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
   if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
   const autoEvery = Math.max(0, intOr(fd, "auto_every", 0));
 
