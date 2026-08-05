@@ -662,6 +662,11 @@ invariant(
     read("app/api/line/webhook/route.ts").includes("brand destination not configured"),
 );
 invariant(
+  "public tenant resolution does not trust spoofable forwarded host headers",
+  !read("lib/public-brand.ts").includes("x-forwarded-host") &&
+    read("lib/public-brand.ts").includes('req.headers.get("host")'),
+);
+invariant(
   "public payment creation respects the registration publish switch",
   paymentCreateApi.includes("public_registration_enabled") && paymentCreateApi.includes("目前暫停公開報名付款"),
 );

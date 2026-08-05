@@ -74,6 +74,9 @@ export async function resolvePublicClinicId(req: NextRequest, supabase: Supabase
   return resolvePublicClinicIdFromScope(supabase, {
     clinicSlug: req.nextUrl.searchParams.get("clinic_slug"),
     clinicId: req.nextUrl.searchParams.get("clinic_id"),
-    host: req.headers.get("x-forwarded-host") ?? req.headers.get("host"),
+    // Host is the request's actual authority. Do not trust a client-supplied
+    // forwarded host as a tenant selector unless a trusted edge has already
+    // normalized it before the request reaches the app.
+    host: req.headers.get("host"),
   });
 }
