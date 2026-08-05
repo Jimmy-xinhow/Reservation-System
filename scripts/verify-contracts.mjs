@@ -650,6 +650,8 @@ invariant(
 invariant(
   "public and LINE tenant resolvers reject inactive or unknown brands",
   read("lib/public-brand.ts").includes('.eq("active", true).maybeSingle()') &&
+    read("lib/public-brand.ts").includes('.eq("id", configuredClinicId)') &&
+    read("lib/public-brand.ts").includes("configuredClinic?.id") &&
     read("lib/public-brand.ts").includes("isSharedHost") &&
     read("lib/public-brand.ts").includes("if (!isSharedHost(host)) return null") &&
     read("app/api/line/webhook/route.ts").includes("brand destination not configured"),

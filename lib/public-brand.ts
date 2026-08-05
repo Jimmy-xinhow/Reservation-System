@@ -59,7 +59,15 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
   if (clinicId) return (idClinic?.id as string | undefined) ?? null;
 
   // URL clinic_id 只可作為相容輸入，不能用來任意選擇租戶；正式 SaaS 必須使用 slug 或已驗證網域。
-  return configuredClinicId || null;
+  if (!configuredClinicId) return null;
+  const { data: configuredClinic, error: configuredClinicError } = await supabase
+    .from("clinics")
+    .select("id")
+    .eq("id", configuredClinicId)
+    .eq("active", true)
+    .maybeSingle();
+  if (configuredClinicError) return null;
+  return (configuredClinic?.id as string | undefined) ?? null;
 }
 
 export async function resolvePublicClinicId(req: NextRequest, supabase: SupabaseClient): Promise<string | null> {
