@@ -523,6 +523,23 @@ invariant(
     migrationHardening.includes("d.id = doctor_assignments.doctor_id"),
 );
 invariant(
+  "authenticated child writes bind referenced records to the same clinic",
+  schema.includes("d.clinic_id = appointments.clinic_id") &&
+    schema.includes("p.clinic_id = appointments.clinic_id") &&
+    schema.includes("s.clinic_id = appointments.clinic_id") &&
+    schema.includes("p.clinic_id = patient_records.clinic_id") &&
+    schema.includes("p.clinic_id = crm_interactions.clinic_id") &&
+    schema.includes("e.clinic_id = event_sessions.clinic_id") &&
+    schema.includes("e.clinic_id = event_ticket_types.clinic_id") &&
+    schema.includes("f.clinic_id = registration_form_fields.clinic_id") &&
+    schema.includes("s.clinic_id = membership_plans.clinic_id") &&
+    schema.includes("s.clinic_id = crm_segment_members.clinic_id") &&
+    migrationRoleMatrix.includes("d.clinic_id = appointments.clinic_id") &&
+    migrationRoleMatrix.includes("p.clinic_id = appointments.clinic_id") &&
+    migrationRoleMatrix.includes("e.clinic_id = event_sessions.clinic_id") &&
+    migrationRoleMatrix.includes("f.clinic_id = registration_form_fields.clinic_id"),
+);
+invariant(
   "CRM timeline failures do not retry delivered marketing messages",
   marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
     marketingCron.includes('await recordCrmInteraction(svc, {') &&

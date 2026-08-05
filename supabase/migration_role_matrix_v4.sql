@@ -130,7 +130,19 @@ create policy appointments_provider_read on appointments for select to authentic
   );
 create policy appointments_nonprovider_manage on appointments for all to authenticated
   using (exists (select 1 from clinic_members cm where cm.clinic_id = appointments.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')))
-  with check (exists (select 1 from clinic_members cm where cm.clinic_id = appointments.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')));
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = appointments.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff'))
+    and exists (select 1 from doctors d where d.id = appointments.doctor_id and d.clinic_id = appointments.clinic_id and d.active)
+    and exists (select 1 from patients p where p.id = appointments.patient_id and p.clinic_id = appointments.clinic_id)
+    and (appointments.service_id is null or exists (select 1 from services s where s.id = appointments.service_id and s.clinic_id = appointments.clinic_id and s.active))
+    and (appointments.template_id is null or exists (
+      select 1 from schedule_templates t
+       where t.id = appointments.template_id and t.clinic_id = appointments.clinic_id and t.doctor_id = appointments.doctor_id
+      union all
+      select 1 from schedule_exceptions e
+       where e.id = appointments.template_id and e.clinic_id = appointments.clinic_id and e.doctor_id = appointments.doctor_id
+    ))
+  );
 create policy appointments_provider_status_update on appointments for update to authenticated
   using (exists (select 1 from doctor_assignments da where da.clinic_id = appointments.clinic_id and da.doctor_id = appointments.doctor_id and da.user_id = auth.uid() and da.active))
   with check (
@@ -173,7 +185,10 @@ create policy patient_records_provider_read on patient_records for select to aut
   );
 create policy patient_records_nonprovider_manage on patient_records for all to authenticated
   using (exists (select 1 from clinic_members cm where cm.clinic_id = patient_records.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')))
-  with check (exists (select 1 from clinic_members cm where cm.clinic_id = patient_records.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')));
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = patient_records.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff'))
+    and exists (select 1 from patients p where p.id = patient_records.patient_id and p.clinic_id = patient_records.clinic_id)
+  );
 
 -- Admin-only configuration and integration data.
 do $$
@@ -240,6 +255,74 @@ begin
   end loop;
 end $$;
 
+-- Child-record tenant integrity: authenticated writes may not attach a record
+-- to a parent object from another brand, even when the supplied clinic_id is valid.
+drop policy if exists line_auto_replies_manage on line_auto_replies;
+create policy line_auto_replies_manage on line_auto_replies for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = line_auto_replies.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = line_auto_replies.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and (line_auto_replies.message_id is null or exists (select 1 from line_messages m where m.id = line_auto_replies.message_id and m.clinic_id = line_auto_replies.clinic_id))
+  );
+
+drop policy if exists event_sessions_manage on event_sessions;
+create policy event_sessions_manage on event_sessions for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = event_sessions.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = event_sessions.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and exists (select 1 from events e where e.id = event_sessions.event_id and e.clinic_id = event_sessions.clinic_id)
+  );
+
+drop policy if exists event_ticket_types_manage on event_ticket_types;
+create policy event_ticket_types_manage on event_ticket_types for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = event_ticket_types.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = event_ticket_types.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and exists (select 1 from events e where e.id = event_ticket_types.event_id and e.clinic_id = event_ticket_types.clinic_id)
+    and (event_ticket_types.membership_plan_id is null or exists (select 1 from membership_plans mp where mp.id = event_ticket_types.membership_plan_id and mp.clinic_id = event_ticket_types.clinic_id))
+  );
+
+drop policy if exists registration_forms_manage on registration_forms;
+create policy registration_forms_manage on registration_forms for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = registration_forms.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = registration_forms.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and exists (select 1 from events e where e.id = registration_forms.event_id and e.clinic_id = registration_forms.clinic_id)
+  );
+
+drop policy if exists registration_form_fields_manage on registration_form_fields;
+create policy registration_form_fields_manage on registration_form_fields for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = registration_form_fields.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = registration_form_fields.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and exists (select 1 from registration_forms f where f.id = registration_form_fields.form_id and f.clinic_id = registration_form_fields.clinic_id)
+  );
+
+drop policy if exists membership_plans_manage on membership_plans;
+create policy membership_plans_manage on membership_plans for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = membership_plans.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = membership_plans.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and (membership_plans.service_id is null or exists (select 1 from services s where s.id = membership_plans.service_id and s.clinic_id = membership_plans.clinic_id))
+  );
+
+drop policy if exists crm_segment_members_manage on crm_segment_members;
+create policy crm_segment_members_manage on crm_segment_members for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = crm_segment_members.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = crm_segment_members.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and exists (select 1 from crm_segments s where s.id = crm_segment_members.segment_id and s.clinic_id = crm_segment_members.clinic_id)
+    and exists (select 1 from patients p where p.id = crm_segment_members.patient_id and p.clinic_id = crm_segment_members.clinic_id)
+  );
+
+drop policy if exists crm_automations_manage on crm_automations;
+create policy crm_automations_manage on crm_automations for all to authenticated
+  using (exists (select 1 from clinic_members cm where cm.clinic_id = crm_automations.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin')))
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = crm_automations.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin'))
+    and (crm_automations.segment_id is null or exists (select 1 from crm_segments s where s.id = crm_automations.segment_id and s.clinic_id = crm_automations.clinic_id))
+  );
+
 -- CRM timeline notes can be appended by operational staff; no authenticated
 -- role may rewrite or delete the timeline or delivery audit.
 create policy crm_interactions_read on crm_interactions for select to authenticated
@@ -251,6 +334,8 @@ create policy crm_interactions_insert on crm_interactions for insert to authenti
   with check (
     clinic_id in (select cm0.clinic_id from clinic_members cm0 where cm0.user_id = auth.uid())
     and exists (select 1 from clinic_members cm where cm.clinic_id = crm_interactions.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff'))
+    and exists (select 1 from public.patients p where p.id = crm_interactions.patient_id and p.clinic_id = crm_interactions.clinic_id)
+    and (crm_interactions.appointment_id is null or exists (select 1 from public.appointments a where a.id = crm_interactions.appointment_id and a.clinic_id = crm_interactions.clinic_id and a.patient_id = crm_interactions.patient_id))
   );
 
 -- Customer-service chat is operational data and is unavailable to providers.
