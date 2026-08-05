@@ -349,9 +349,22 @@ invariant(
     read("app/api/admin/reports/route.ts").includes("event_ticket_types(name)"),
 );
 invariant(
+  "reports paginate large tenant datasets",
+  read("lib/supabase-pagination.ts").includes("const PAGE_SIZE = 1000") &&
+    read("app/admin/reports/page.tsx").includes("fetchAllSupabasePages") &&
+    read("app/api/admin/reports/route.ts").includes("fetchAllSupabasePages"),
+);
+invariant(
   "inactive marketing automation scans its configured trigger window",
-  marketingCron.includes("Math.max(14, automation.trigger_days + 1)") &&
-    marketingCron.includes("new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000)"),
+  marketingCron.includes("const inactivityDays = Math.max(1, automation.trigger_days)") &&
+    marketingCron.includes("inactivityDays * 24 * 60 * 60 * 1000") &&
+    marketingCron.includes("const nowMs = Date.now()"),
+);
+invariant(
+  "marketing automation paginates large tenant datasets",
+  marketingCron.includes("const ID_BATCH_SIZE = 200") &&
+    marketingCron.includes("const QUERY_PAGE_SIZE = 1000") &&
+    marketingCron.includes(".range(offset, offset + QUERY_PAGE_SIZE - 1)"),
 );
 invariant(
   "LINE failures do not block Email marketing or reminders",

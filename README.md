@@ -72,8 +72,12 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 | `PAYMENT_SECRETS_JSON` | 多品牌 `clinic_id` → `{hashKey,hashIv}` JSON；僅 server environment，不寫入資料庫 |
 | `LINE_LOGIN_CHANNEL_ID` | LIFF 所屬 channel id(驗 ID token 用) |
 | `NEXT_PUBLIC_LIFF_ID` | 病患端 LIFF ID |
-| `CRON_SECRET` | Vercel Cron 呼叫提醒 endpoint 的密鑰(長亂數) |
+| `CRON_SECRET` | Vercel／Railway Cron 呼叫提醒、報名逾時與行銷 endpoint 的密鑰(長亂數) |
 | `REMINDER_HOURS_BEFORE` | 看診前幾小時發提醒(預設 24) |
+| `APP_URL` | Railway Cron 服務呼叫 web 服務的公開網址 |
+| `CRON_TARGET_URL` | 可選，覆寫提醒 endpoint 的完整 URL |
+| `CRON_MARKETING_TARGET_URL` | 可選，覆寫 CRM Lite 行銷 endpoint 的完整 URL |
+| `CRON_REGISTRATION_TARGET_URL` | 可選，覆寫報名／付款逾時 endpoint 的完整 URL |
 
 ---
 
@@ -139,9 +143,9 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
 
 > `NEXT_PUBLIC_*` 在 build 階段就會被內嵌進前端,改值後需 **重新部署** 才生效。
 
-### (b) Cron 服務(提醒排程)
+### (b) Cron 服務(提醒、報名與行銷排程)
 
-Railway **不會** 讀 `vercel.json`,所以排程另外做。提醒邏輯仍在 `/api/cron/reminders`,由一支獨立腳本定時去打它:
+Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders` 會由同一支腳本依序呼叫提醒、報名付款逾時／通知與 CRM Lite 行銷三個 endpoint:
 
 1. 由同一個 repo **再建一個服務**(或用 Railway 的 Cron 功能),設定:
    - **Custom Start Command**:`npm run reminders`(即 `node scripts/trigger-reminders.mjs`,跑完即退出)
@@ -149,15 +153,25 @@ Railway **不會** 讀 `vercel.json`,所以排程另外做。提醒邏輯仍在 
    - **Variables**:
      - `CRON_SECRET`(與 web 服務相同)
      - `APP_URL`(web 服務的公開網址,例如 `https://your-app.up.railway.app`)
-       — 或改設 `CRON_TARGET_URL` 指定完整 endpoint。
+      — 或分別改設 `CRON_TARGET_URL`、`CRON_MARKETING_TARGET_URL`、`CRON_REGISTRATION_TARGET_URL` 指定完整 endpoint。
 
-2. 腳本會帶 `Authorization: Bearer <CRON_SECRET>` 打 `${APP_URL}/api/cron/reminders`,成功回 0、失敗回 1。
+2. 腳本會帶 `Authorization: Bearer <CRON_SECRET>` 依序打:
+   - `${APP_URL}/api/cron/reminders`
+   - `${APP_URL}/api/cron/marketing`
+   - `${APP_URL}/api/cron/registration`
+
+   三個 endpoint 全部成功才回 0；任一失敗會保留錯誤輸出並回 1。
 
 ### Cron 時間(重要:Railway Cron 為 UTC)
 
 - `0 * * * *` = **每小時整點(UTC)**。台北時間 = **UTC + 8**(整點偏移),故台北亦為每小時整點觸發。
 - 採「看診前 N 小時」邏輯(`REMINDER_HOURS_BEFORE`,預設 24):每次掃描「未來 N 小時內、`status=booked`、尚無 LINE 提醒紀錄」的約診並推播。**因每小時整窗掃描,當天才新增的預約也會被涵蓋。**
 - `reminder_logs (appointment_id, channel)` unique 約束保證同一約診同管道只發一次。
+- Railway 的每小時腳本會同時執行報名／付款逾時釋放與 CRM Lite 規則式行銷；各 endpoint 內部仍以冪等鍵與投遞紀錄防止重複。
+
+### Vercel Cron 排程
+
+`vercel.json` 使用 UTC：`/api/cron/reminders` 為 `0 * * * *`（台北每小時整點）、`/api/cron/marketing` 為 `30 * * * *`（台北每小時 30 分）、`/api/cron/registration` 為 `*/15 * * * *`（台北每 15 分鐘）。
 
 ### (c) 部署後回填 LINE 設定
 
@@ -197,7 +211,7 @@ lib/line.ts               LIFF ID token 驗證 / 簽章驗證 / push / reply
 lib/slots.ts              台北時區時間格式化
 supabase/schema.sql       表 / RPC / RLS / 權限
 middleware.ts             後台未登入攔截
-scripts/trigger-reminders.mjs  Railway cron 服務用:打 /api/cron/reminders 後退出
+scripts/trigger-reminders.mjs  Railway cron 服務用:依序打提醒、報名與行銷 endpoint 後退出
 railway.json              Railway web 服務 build/start 設定
 vercel.json               (僅 Vercel 用;Railway 不讀)
 ```

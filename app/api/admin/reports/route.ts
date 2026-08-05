@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { requireNonProvider, canViewSensitiveCustomerData } from "@/lib/admin";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,11 +16,10 @@ export async function GET(req: NextRequest) {
     const start = validDate(req.nextUrl.searchParams.get("from"), end);
     const startIso = new Date(`${start}T00:00:00+08:00`).toISOString();
     const endIso = new Date(`${end}T23:59:59.999+08:00`).toISOString();
-    const [{ data: appointments, error: appointmentError }, { data: registrations, error: registrationError }] = await Promise.all([
-      member.supabase.from("appointments").select("id, start_at, status, source, membership_id, patients(name, phone), doctors(name), services(name)").eq("clinic_id", member.clinicId).gte("start_at", startIso).lte("start_at", endIso).order("start_at"),
-      member.supabase.from("registrations").select("id, created_at, registration_no, status, payment_status, amount, discount_amount, membership_id, name, phone, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", member.clinicId).gte("created_at", startIso).lte("created_at", endIso).order("created_at"),
+    const [appointments, registrations] = await Promise.all([
+      fetchAllSupabasePages((from, to) => member.supabase.from("appointments").select("id, start_at, status, source, membership_id, patients(name, phone), doctors(name), services(name)").eq("clinic_id", member.clinicId).gte("start_at", startIso).lte("start_at", endIso).order("start_at").order("id").range(from, to)),
+      fetchAllSupabasePages((from, to) => member.supabase.from("registrations").select("id, created_at, registration_no, status, payment_status, amount, discount_amount, membership_id, name, phone, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", member.clinicId).gte("created_at", startIso).lte("created_at", endIso).order("created_at").order("id").range(from, to)),
     ]);
-    if (appointmentError || registrationError) throw new Error(appointmentError?.message ?? registrationError?.message ?? "報表匯出失敗");
     const includePii = canViewSensitiveCustomerData(member.role);
     const appointmentRows = (appointments ?? []) as unknown as Array<{ id: string; start_at: string; status: string; source: string | null; membership_id: string | null; patients: { name: string; phone: string } | { name: string; phone: string }[] | null; doctors: { name: string } | { name: string }[] | null; services: { name: string } | { name: string }[] | null }>;
     const registrationRows = (registrations ?? []) as unknown as Array<{ registration_no: string; created_at: string; status: string; payment_status: string; amount: number; discount_amount: number; membership_id: string | null; name: string; phone: string; events: { title: string } | { title: string }[] | null; event_sessions: { name: string } | { name: string }[] | null; event_ticket_types: { name: string } | { name: string }[] | null }>;

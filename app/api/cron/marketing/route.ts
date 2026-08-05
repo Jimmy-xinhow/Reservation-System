@@ -47,6 +47,15 @@ interface Candidate {
   triggerKey: string;
 }
 
+const ID_BATCH_SIZE = 200;
+const QUERY_PAGE_SIZE = 1000;
+
+function chunked<T>(values: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < values.length; index += size) chunks.push(values.slice(index, index + size));
+  return chunks;
+}
+
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -211,29 +220,52 @@ async function resolveTargetIds(svc: SupabaseClient, segmentId: string | null, c
   if (segmentId) {
     const { error: refreshError } = await svc.rpc("refresh_crm_segment", { p_clinic_id: clinicId, p_segment_id: segmentId });
     if (refreshError) throw new Error(refreshError.message);
-    const { data, error } = await svc
-      .from("crm_segment_members")
-      .select("patient_id")
-      .eq("clinic_id", clinicId)
-      .eq("segment_id", segmentId);
-    if (error) throw new Error(error.message);
-    return (data ?? []).map((row) => row.patient_id as string);
+    const targetIds: string[] = [];
+    for (let offset = 0; ; offset += QUERY_PAGE_SIZE) {
+      const { data, error } = await svc
+        .from("crm_segment_members")
+        .select("patient_id")
+        .eq("clinic_id", clinicId)
+        .eq("segment_id", segmentId)
+        .order("patient_id")
+        .range(offset, offset + QUERY_PAGE_SIZE - 1);
+      if (error) throw new Error(error.message);
+      const page = data ?? [];
+      targetIds.push(...page.map((row) => row.patient_id as string));
+      if (page.length < QUERY_PAGE_SIZE) break;
+    }
+    return targetIds;
   }
 
-  const { data, error } = await svc.from("patients").select("id").eq("clinic_id", clinicId).eq("active", true).limit(5000);
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => row.id as string);
+  const targetIds: string[] = [];
+  for (let offset = 0; ; offset += QUERY_PAGE_SIZE) {
+    const { data, error } = await svc
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("active", true)
+      .order("id")
+      .range(offset, offset + QUERY_PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    targetIds.push(...page.map((row) => row.id as string));
+    if (page.length < QUERY_PAGE_SIZE) break;
+  }
+  return targetIds;
 }
 
 async function getCandidates(svc: SupabaseClient, automation: AutomationRow, targetIds: string[], clinicId: string): Promise<Candidate[]> {
-  const { data: patients, error: patientError } = await svc
-    .from("patients")
-    .select("id, name, line_user_id, email, marketing_opt_in, birthday")
-    .eq("clinic_id", clinicId)
-    .eq("active", true)
-    .in("id", targetIds);
-  if (patientError) throw new Error(patientError.message);
-  const patientRows = (patients ?? []) as unknown as PatientRow[];
+  const patientRows: PatientRow[] = [];
+  for (const patientIds of chunked(targetIds, ID_BATCH_SIZE)) {
+    const { data: patients, error: patientError } = await svc
+      .from("patients")
+      .select("id, name, line_user_id, email, marketing_opt_in, birthday")
+      .eq("clinic_id", clinicId)
+      .eq("active", true)
+      .in("id", patientIds);
+    if (patientError) throw new Error(patientError.message);
+    patientRows.push(...((patients ?? []) as unknown as PatientRow[]));
+  }
   const today = taipeiDate(new Date());
 
   if (automation.trigger_type === "birthday") {
@@ -243,21 +275,34 @@ async function getCandidates(svc: SupabaseClient, automation: AutomationRow, tar
   }
 
   if (automation.trigger_type === "inactive") {
-    const lookbackDays = Math.max(14, automation.trigger_days + 1);
-    const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-    const { data: appointments, error } = await svc
-      .from("appointments")
-      .select("patient_id, start_at, status")
-      .eq("clinic_id", clinicId)
-      .in("patient_id", targetIds)
-      .in("status", ["booked", "confirmed", "done"])
-      .gte("start_at", since);
-    if (error) throw new Error(error.message);
+    const inactivityDays = Math.max(1, automation.trigger_days);
+    const nowMs = Date.now();
+    const since = new Date(nowMs - inactivityDays * 24 * 60 * 60 * 1000).toISOString();
+    const appointments: Array<{ id: string; patient_id: string; start_at: string; status: string }> = [];
+    for (const patientIds of chunked(targetIds, ID_BATCH_SIZE)) {
+      for (let offset = 0; ; offset += QUERY_PAGE_SIZE) {
+        const { data, error } = await svc
+          .from("appointments")
+          .select("id, patient_id, start_at, status")
+          .eq("clinic_id", clinicId)
+          .in("patient_id", patientIds)
+          .in("status", ["booked", "confirmed", "done"])
+          .gte("start_at", since)
+          .order("start_at")
+          .order("id")
+          .range(offset, offset + QUERY_PAGE_SIZE - 1);
+        if (error) throw new Error(error.message);
+        const page = (data ?? []) as unknown as Array<{ id: string; patient_id: string; start_at: string; status: string }>;
+        appointments.push(...page);
+        if (page.length < QUERY_PAGE_SIZE) break;
+      }
+    }
     const recent = new Set<string>();
     const future = new Set<string>();
-    for (const row of appointments ?? []) {
+    for (const row of appointments) {
       const patientId = row.patient_id as string;
-      if ((row.status === "booked" || row.status === "confirmed") && new Date(row.start_at as string).getTime() >= Date.now()) {
+      const startAtMs = new Date(row.start_at as string).getTime();
+      if ((row.status === "booked" || row.status === "confirmed") && startAtMs >= nowMs) {
         future.add(patientId);
       } else if (row.status === "done") {
         recent.add(patientId);
@@ -270,16 +315,25 @@ async function getCandidates(svc: SupabaseClient, automation: AutomationRow, tar
 
   const lookbackDays = Math.max(14, Math.ceil(automation.delay_minutes / (24 * 60)) + 2);
   const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
-  const { data: appointments, error: appointmentError } = await svc
-    .from("appointments")
-    .select("id, patient_id, start_at, updated_at, doctors(name)")
-    .eq("clinic_id", clinicId)
-    .eq("status", "done")
-    .gte("updated_at", since)
-    .in("patient_id", targetIds)
-    .order("updated_at", { ascending: false })
-    .limit(1000);
-  if (appointmentError) throw new Error(appointmentError.message);
+  const appointments: AppointmentRow[] = [];
+  for (const patientIds of chunked(targetIds, ID_BATCH_SIZE)) {
+    for (let offset = 0; ; offset += QUERY_PAGE_SIZE) {
+      const { data, error: appointmentError } = await svc
+        .from("appointments")
+        .select("id, patient_id, start_at, updated_at, doctors(name)")
+        .eq("clinic_id", clinicId)
+        .eq("status", "done")
+        .gte("updated_at", since)
+        .in("patient_id", patientIds)
+        .order("updated_at", { ascending: false })
+        .order("id")
+        .range(offset, offset + QUERY_PAGE_SIZE - 1);
+      if (appointmentError) throw new Error(appointmentError.message);
+      const page = (data ?? []) as unknown as AppointmentRow[];
+      appointments.push(...page);
+      if (page.length < QUERY_PAGE_SIZE) break;
+    }
+  }
   const patientMap = new Map(patientRows.map((patient) => [patient.id, patient]));
   const now = Date.now();
   const candidates: Candidate[] = [];

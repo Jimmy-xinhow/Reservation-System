@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireNonProvider } from "@/lib/admin";
 import { formatDateTime } from "@/lib/slots";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -93,21 +94,21 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
   const normalizedFrom = from <= to ? from : to;
   const normalizedTo = from <= to ? to : from;
   const range = rangeIso(normalizedFrom, normalizedTo);
-  const [appointmentResult, registrationResult, paymentResult, deliveryResult, waitlistResult, promotedResult] = await Promise.all([
-    supabase.from("appointments").select("start_at, status, membership_id, source, doctors(name), services(name)").eq("clinic_id", clinicId).gte("start_at", range.start).lte("start_at", range.end),
-    supabase.from("registrations").select("created_at, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
-    supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
-    supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
+  const [appointments, registrations, payments, deliveries, waitlistResult, promotedResult] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("appointments").select("start_at, status, membership_id, source, doctors(name), services(name)").eq("clinic_id", clinicId).gte("start_at", range.start).lte("start_at", range.end).order("start_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("registrations").select("created_at, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("status", "promoted").gte("updated_at", range.start).lte("updated_at", range.end),
   ]);
-  const error = appointmentResult.error ?? registrationResult.error ?? paymentResult.error ?? deliveryResult.error ?? waitlistResult.error ?? promotedResult.error;
+  const error = waitlistResult.error ?? promotedResult.error;
   if (error) throw new Error(error.message);
 
-  const appointmentRows = (appointmentResult.data ?? []) as unknown as AppointmentRow[];
-  const registrationRows = (registrationResult.data ?? []) as unknown as RegistrationRow[];
-  const paymentRows = (paymentResult.data ?? []) as unknown as PaymentRow[];
-  const deliveryRows = (deliveryResult.data ?? []) as unknown as DeliveryRow[];
+  const appointmentRows = appointments as AppointmentRow[];
+  const registrationRows = registrations as RegistrationRow[];
+  const paymentRows = payments as PaymentRow[];
+  const deliveryRows = deliveries as DeliveryRow[];
   const appointmentNoShow = appointmentRows.filter((row) => row.status === "no_show").length;
   const registrationAttended = registrationRows.filter((row) => row.status === "attended").length;
   const paidPayments = paymentRows.filter((row) => row.status === "paid");
