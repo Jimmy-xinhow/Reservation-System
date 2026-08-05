@@ -11,7 +11,8 @@
 - `npm test`：PASS，契約測試包含租戶隔離、RLS、預約／報名／付款／CRM Lite 與 SQL 回歸檢查。
 - `npm run typecheck`：PASS。
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
-- `npm run smoke:public`：PASS；以本次 production build 在獨立 3205 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
+- `npm run smoke:public`：PASS；以本次 production build 在獨立 3206 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
+- `.ics` runtime 驗收：錯誤日期回 400、正常內容回 200、CRLF 注入行不存在，Content-Type 為 `text/calendar`。
 - `npm audit --omit=dev`：PASS，0 vulnerabilities；依賴與原始碼檢查未發現實際密鑰值寫入版本庫。
 - 預約顧客端（LINE／瀏覽器）已支援選填 Email；僅在身分驗證、租戶範圍與預約建立成功後寫入，更新失敗會取消該筆預約。
 - 後台報名管理可由品牌營運角色在場次開始後將已確認報名標記為 `no_show`；更新受品牌／角色／狀態／時間條件限制，並沿用報名狀態稽核 trigger。
@@ -21,7 +22,7 @@
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
 - 公開品牌解析只採用實際 `Host`，不信任可由直接請求偽造的 `x-forwarded-host`，並已加入契約測試防止跨品牌 header 租戶混淆。
-- GitHub `main` 已同步至 commit `b499d5f`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護與公開品牌 Host 租戶邊界修正。
+- GitHub `main` 已同步至 commit `a77ab60`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護、公開品牌 Host 租戶邊界修正與 `.ics` 輸出安全修正。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
