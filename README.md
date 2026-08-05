@@ -20,6 +20,19 @@
 
 ---
 
+## 公開入口 smoke
+
+部署後可用不含密鑰的 HTTP smoke 檢查公開頁與 Cron 未授權邊界：
+
+```powershell
+$env:SMOKE_BASE_URL = "https://your-staging.example.com"
+npm run smoke:public
+```
+
+它會確認 `/`、`/register`、`/book/browser`、`/embed/register` 回 200，且三支 Cron endpoint 在沒有密鑰時回 401；不會建立或修改任何資料。
+
+---
+
 ## 一、Supabase 設定
 
 1. 建立 Supabase 專案。
