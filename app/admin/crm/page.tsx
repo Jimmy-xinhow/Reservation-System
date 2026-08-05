@@ -7,6 +7,7 @@ import {
   SEGMENT_RULE_LABELS,
   SEGMENT_RULE_TYPES,
   describeSegmentRule,
+  previewAutomationTemplate,
   type AutomationTriggerType,
   type SegmentRuleType,
 } from "@/lib/crm";
@@ -18,6 +19,7 @@ import {
   refreshSegmentAction,
   toggleAutomationAction,
   toggleSegmentAction,
+  updateAutomationAction,
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -171,6 +173,9 @@ export default async function CrmPage() {
                     {segment.description ? `｜${segment.description}` : ""}
                   </p>
                 </div>
+                <Link href={`/admin/patients?segment_id=${encodeURIComponent(segment.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">
+                  查看顧客
+                </Link>
                 {canEdit && (
                   <div className="flex flex-wrap gap-2">
                     <form action={refreshSegmentAction}>
@@ -287,8 +292,33 @@ export default async function CrmPage() {
                     {automation.segment_id ? `｜${segmentName.get(automation.segment_id) ?? "指定分眾"}` : "｜全部顧客"}
                     {automation.trigger_type === "appointment_done" ? `｜延遲 ${automation.delay_minutes} 分鐘` : ""}
                   </p>
-                  <p className="mt-1 truncate text-sm text-slate-400">{automation.body}</p>
-                </div>
+                <p className="mt-1 truncate text-sm text-slate-400">{automation.body}</p>
+                <details className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                  <summary className="cursor-pointer text-sm font-medium text-brand-700">預覽與編輯</summary>
+                  <div className="mt-3 space-y-3">
+                    <div className="rounded-lg border border-brand-100 bg-white p-3 text-sm text-slate-700">
+                      <div className="text-xs font-medium text-slate-400">示例預覽（不會實際發送）</div>
+                      {automation.channel === "email" && <div className="mt-2 font-medium">主旨：{previewAutomationTemplate(automation.subject ?? automation.name)}</div>}
+                      <p className="mt-2 whitespace-pre-wrap leading-6">{previewAutomationTemplate(automation.body)}</p>
+                    </div>
+                    {canEdit && (
+                      <form action={updateAutomationAction} className="grid grid-cols-1 gap-3 border-t border-slate-200 pt-3 md:grid-cols-2">
+                        <input type="hidden" name="id" value={automation.id} />
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">自動化名稱</span><input name="name" defaultValue={automation.name} required className="input" /></label>
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">觸發條件</span><select name="trigger_type" defaultValue={automation.trigger_type} className="input">{AUTOMATION_TRIGGER_TYPES.map((type) => <option key={type} value={type}>{AUTOMATION_TRIGGER_LABELS[type]}</option>)}</select></label>
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">套用分眾</span><select name="segment_id" defaultValue={automation.segment_id ?? ""} className="input"><option value="">所有符合資格的顧客</option>{segments.map((segment) => <option key={segment.id} value={segment.id}>{segment.name}</option>)}</select></label>
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">發送渠道</span><select name="channel" defaultValue={automation.channel} className="input"><option value="line">LINE</option><option value="email">Email</option></select></label>
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">完成後延遲分鐘</span><input type="number" min="0" name="delay_minutes" defaultValue={automation.delay_minutes} className="input" /></label>
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">未回訪條件天數</span><input type="number" min="1" name="trigger_days" defaultValue={automation.trigger_days} className="input" /></label>
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">冷卻間隔天數</span><input type="number" min="1" name="cooldown_days" defaultValue={automation.cooldown_days} className="input" /></label>
+                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">Email 主旨（Email 必填）</span><input name="subject" defaultValue={automation.subject ?? ""} className="input" /></label>
+                        <label className="text-sm md:col-span-2"><span className="mb-1 block font-medium text-slate-600">訊息內容</span><textarea name="body" defaultValue={automation.body} required rows={4} className="input" /></label>
+                        <div className="md:col-span-2"><SubmitButton className="btn btn-secondary">儲存修改</SubmitButton></div>
+                      </form>
+                    )}
+                  </div>
+                </details>
+              </div>
                 {canEdit && (
                   <div className="flex flex-wrap gap-2">
                     <form action={toggleAutomationAction}>

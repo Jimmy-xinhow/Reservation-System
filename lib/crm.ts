@@ -45,6 +45,17 @@ export function validateAutomationBody(raw: string): string {
   return value;
 }
 
+/** 後台預覽使用固定示例資料，絕不觸發 LINE、Email 或 CRM 投遞。 */
+export function previewAutomationTemplate(raw: string): string {
+  const values: Record<string, string> = {
+    customer_name: "王小明",
+    appointment_time: "2026/08/08 14:30",
+    doctor_name: "林醫師",
+    clinic_name: "品牌示例",
+  };
+  return raw.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_, key: string) => values[key] ?? "");
+}
+
 export function describeSegmentRule(type: SegmentRuleType, value: string): string {
   switch (type) {
     case "tag_contains":
@@ -59,4 +70,3 @@ export function describeSegmentRule(type: SegmentRuleType, value: string): strin
       return `生日月份為 ${value} 月`;
   }
 }
-

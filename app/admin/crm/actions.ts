@@ -136,6 +136,56 @@ export async function createAutomationAction(fd: FormData): Promise<void> {
   refreshCrm();
 }
 
+export async function updateAutomationAction(fd: FormData): Promise<void> {
+  const { supabase, clinicId } = await requireAdmin();
+  const id = text(fd, "id");
+  const name = text(fd, "name");
+  const triggerType = text(fd, "trigger_type") as AutomationTriggerType;
+  const segmentId = text(fd, "segment_id") || null;
+  const channel = text(fd, "channel") as MarketingChannel;
+  const delayMinutes = Math.max(0, integer(fd, "delay_minutes", 0));
+  const triggerDays = Math.max(1, integer(fd, "trigger_days", 30));
+  const cooldownDays = Math.max(1, integer(fd, "cooldown_days", 30));
+  const subject = text(fd, "subject") || null;
+  const body = validateAutomationBody(text(fd, "body"));
+
+  if (!id) throw new Error("缺少自動化 ID");
+  if (!name) throw new Error("請填寫自動化名稱");
+  if (!AUTOMATION_TRIGGER_TYPES.includes(triggerType)) throw new Error("不支援的自動化觸發條件");
+  if (channel !== "line" && channel !== "email") throw new Error("不支援的發送渠道");
+  if (channel === "email" && !subject) throw new Error("Email 自動化需要主旨");
+  if (segmentId) {
+    const { data: segment } = await supabase
+      .from("crm_segments")
+      .select("id")
+      .eq("id", segmentId)
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+    if (!segment) throw new Error("找不到指定分眾");
+  }
+
+  const { data: updated, error } = await supabase
+    .from("crm_automations")
+    .update({
+      name: name.slice(0, 100),
+      trigger_type: triggerType,
+      segment_id: segmentId,
+      channel,
+      delay_minutes: delayMinutes,
+      trigger_days: triggerDays,
+      cooldown_days: cooldownDays,
+      subject: channel === "email" ? subject : null,
+      body,
+    })
+    .eq("id", id)
+    .eq("clinic_id", clinicId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!updated) throw new Error("找不到指定自動化");
+  refreshCrm();
+}
+
 export async function toggleAutomationAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
   const id = text(fd, "id");

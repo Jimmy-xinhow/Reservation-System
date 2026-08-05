@@ -3,6 +3,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireMember, canViewSensitiveCustomerData } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { DeletePatientButton } from "./DeletePatientButton";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -25,17 +26,36 @@ function isBlocked(p: Patient): boolean {
 export default async function PatientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; segment_id?: string }>;
 }) {
-  const { q, page: pageStr } = await searchParams;
+  const { q, page: pageStr, segment_id: segmentIdParam } = await searchParams;
   const keyword = (q ?? "").trim().replace(/[,%()*]/g, "");
   const page = Math.max(1, Number(pageStr) || 1);
+  const segmentId = (segmentIdParam ?? "").trim();
 
   const { clinicId, role } = await requireMember();
   if (!canViewSensitiveCustomerData(role)) {
     return <p className="card p-6 text-sm text-slate-500">目前角色只能查看被分配的工作，不開放完整顧客名單。</p>;
   }
   const supabase = await createSupabaseServer();
+  let segmentName: string | null = null;
+  let segmentPatientIds: string[] | null = null;
+  if (segmentId) {
+    const [{ data: segment }, members] = await Promise.all([
+      supabase.from("crm_segments").select("id, name").eq("id", segmentId).eq("clinic_id", clinicId).maybeSingle(),
+      fetchAllSupabasePages((from, to) =>
+        supabase
+          .from("crm_segment_members")
+          .select("patient_id")
+          .eq("segment_id", segmentId)
+          .eq("clinic_id", clinicId)
+          .order("patient_id")
+          .range(from, to),
+      ),
+    ]);
+    segmentName = (segment?.name as string | undefined) ?? null;
+    segmentPatientIds = members.map((member) => member.patient_id as string);
+  }
 
   // 四碼數字 = 生日 MMDD;驗證月(01-12)日(01-31)才視為生日搜尋。
   const mmdd = /^\d{4}$/.test(keyword) ? keyword : null;
@@ -46,39 +66,39 @@ export default async function PatientsPage({
 
   let patients: Patient[] = [];
   let total = 0;
-  if (keyword) {
+  if (keyword && segmentPatientIds?.length !== 0) {
     const orParts = [`name.ilike.%${keyword}%`, `phone.ilike.%${keyword}%`];
     if (isFullDate) orParts.push(`birthday.eq.${keyword}`);
-    const { data } = await supabase
+    let query = supabase
       .from("patients")
       .select(SELECT)
       .eq("clinic_id", clinicId)
       .eq("active", true)
-      .or(orParts.join(","))
-      .order("created_at", { ascending: false })
-      .limit(100);
+      .or(orParts.join(","));
+    if (segmentPatientIds) query = query.in("id", segmentPatientIds);
+    const { data } = await query.order("created_at", { ascending: false }).limit(100);
     patients = (data ?? []) as Patient[];
 
     // MMDD:PostgREST 無法對 date 抽月/日,改在此處掃描生日後合併。
     if (isMonthDay) {
-      const { data: withBday } = await supabase
+      let birthdayQuery = supabase
         .from("patients")
         .select(SELECT)
         .eq("clinic_id", clinicId)
         .eq("active", true)
-        .eq("birthday_mmdd", mmdd)
-        .order("created_at", { ascending: false })
-        .limit(100);
+        .eq("birthday_mmdd", mmdd);
+      if (segmentPatientIds) birthdayQuery = birthdayQuery.in("id", segmentPatientIds);
+      const { data: withBday } = await birthdayQuery.order("created_at", { ascending: false }).limit(100);
       patients = (withBday ?? []) as Patient[];
     }
-  } else {
-    const { data, count } = await supabase
+  } else if (segmentPatientIds?.length !== 0) {
+    let query = supabase
       .from("patients")
       .select(SELECT, { count: "exact" })
       .eq("clinic_id", clinicId)
-      .eq("active", true)
-      .order("created_at", { ascending: false })
-      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+      .eq("active", true);
+    if (segmentPatientIds) query = query.in("id", segmentPatientIds);
+    const { data, count } = await query.order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
     patients = (data ?? []) as Patient[];
     total = count ?? 0;
   }
@@ -106,13 +126,17 @@ export default async function PatientsPage({
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-slate-900">病患查詢</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl font-bold text-slate-900">{segmentName ? `分眾顧客：${segmentName}` : "病患查詢"}</h1>
+        {segmentId && <Link href="/admin/patients" className="btn btn-ghost text-sm">清除分眾篩選</Link>}
+      </div>
 
       <form className="flex gap-2">
         <input name="q" defaultValue={keyword} placeholder="姓名 / 電話 / 生日 MMDD" className="input max-w-xs" />
+        {segmentId && <input type="hidden" name="segment_id" value={segmentId} />}
         <SubmitButton className="btn btn-primary">搜尋</SubmitButton>
         {keyword && (
-          <Link href="/admin/patients" className="btn btn-ghost">
+          <Link href={`/admin/patients${segmentId ? `?segment_id=${encodeURIComponent(segmentId)}` : ""}`} className="btn btn-ghost">
             清除
           </Link>
         )}
@@ -135,7 +159,7 @@ export default async function PatientsPage({
             {patients.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-8 text-center text-slate-400">
-                  {keyword ? "查無符合的病患" : "尚無病患"}
+                  {segmentId && !segmentName ? "找不到指定分眾" : keyword ? "查無符合的病患" : segmentId ? "此分眾目前沒有顧客" : "尚無病患"}
                 </td>
               </tr>
             )}
@@ -191,7 +215,7 @@ export default async function PatientsPage({
       {!keyword && totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 text-sm">
           {page > 1 ? (
-            <Link href={`/admin/patients?page=${page - 1}`} className="btn btn-secondary px-3 py-1.5">
+            <Link href={`/admin/patients?page=${page - 1}${segmentId ? `&segment_id=${encodeURIComponent(segmentId)}` : ""}`} className="btn btn-secondary px-3 py-1.5">
               上一頁
             </Link>
           ) : (
@@ -201,7 +225,7 @@ export default async function PatientsPage({
             {page} / {totalPages}(共 {total} 位)
           </span>
           {page < totalPages ? (
-            <Link href={`/admin/patients?page=${page + 1}`} className="btn btn-secondary px-3 py-1.5">
+            <Link href={`/admin/patients?page=${page + 1}${segmentId ? `&segment_id=${encodeURIComponent(segmentId)}` : ""}`} className="btn btn-secondary px-3 py-1.5">
               下一頁
             </Link>
           ) : (

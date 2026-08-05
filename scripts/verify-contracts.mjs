@@ -471,6 +471,19 @@ invariant(
     read("app/admin/crm/page.tsx").includes("{canEdit && (")
 );
 invariant(
+  "CRM Lite admin can update and preview automations",
+  read("app/admin/crm/actions.ts").includes("export async function updateAutomationAction") &&
+    read("app/admin/crm/page.tsx").includes("updateAutomationAction") &&
+    read("app/admin/crm/page.tsx").includes("預覽與編輯") &&
+    read("lib/crm.ts").includes("previewAutomationTemplate")
+);
+invariant(
+  "CRM segments link to a tenant-scoped customer list",
+  read("app/admin/crm/page.tsx").includes("segment_id=") &&
+    read("app/admin/patients/page.tsx").includes("crm_segment_members") &&
+    read("app/admin/patients/page.tsx").includes('.eq("clinic_id", clinicId)')
+);
+invariant(
   "marketing automation paginates large tenant datasets",
   marketingCron.includes("const ID_BATCH_SIZE = 200") &&
     marketingCron.includes("const QUERY_PAGE_SIZE = 1000") &&
