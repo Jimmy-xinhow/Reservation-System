@@ -1409,7 +1409,6 @@ export async function updateEmailSettingsAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const patch: Record<string, unknown> = {
     email_enabled: bool(fd, "email_enabled"),
-    email_from: str(fd, "email_from") || null,
   };
   // 只有輸入新金鑰才更新(避免用遮罩值覆蓋);輸入 "-" 代表清除
   const { error } = await supabase.from("clinic_settings").update(patch).eq("clinic_id", clinicId);

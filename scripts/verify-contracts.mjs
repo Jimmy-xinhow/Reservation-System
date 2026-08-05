@@ -234,6 +234,11 @@ invariant(
     read("app/api/cron/registration/route.ts").includes("processAppointmentNotificationQueue"),
 );
 invariant(
+  "registration notification retries use optimistic concurrency",
+  read("lib/registration-notifications.ts").includes('.eq("updated_at", existing.updated_at)') &&
+    schema.includes("unique (registration_id, kind, channel)"),
+);
+invariant(
   "deposit payments have a public flow and expiry release path",
   read("app/api/payment/create/route.ts").includes("verifyBrowserBookingToken") &&
     read("app/api/payment/create/route.ts").includes("verifyLiffIdToken") &&
@@ -296,7 +301,9 @@ invariant(
     lineWebhook.includes("clinicName") &&
     publicBrand.includes("const clinicId = scope.clinicId?.trim()") &&
     publicBrand.includes("const hostClinicId") &&
+    publicBrand.includes('.not("verified_at", "is", null)') &&
     publicBrand.includes("slugClinic?.id !== hostClinicId") &&
+    publicBrand.includes("clinicId !== configuredClinicId") &&
     publicBrand.includes("slug && clinicId && slugClinic?.id !== idClinic?.id") &&
     homePage.includes("const clinicScopeSuffix") &&
     registrationPage.includes("requestedClinicId") &&
@@ -372,7 +379,9 @@ invariant(
     marketingCron.includes("lineAccessToken: string | null") &&
     marketingCron.includes('automation.channel === "line"') &&
     remindersCron.includes("rows.some((appointment) => Boolean(appointment.patients?.line_user_id))") &&
-    remindersCron.includes('emailConfigForClinic(clinicId, settings.email_from)'),
+    remindersCron.includes('emailConfigForClinic(clinicId)') &&
+    marketingCron.includes('emailConfigForClinic(clinicId)') &&
+    !read("lib/email.ts").includes("fromOverride"),
 );
 invariant(
   "status audit records authenticated actor context",

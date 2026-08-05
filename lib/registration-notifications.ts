@@ -53,7 +53,7 @@ export async function notifyRegistrationStatus(
     svc.from("clinics").select("name, line_destination").eq("id", row.clinic_id).maybeSingle(),
     svc.from("events").select("title").eq("id", row.event_id).eq("clinic_id", row.clinic_id).maybeSingle(),
     svc.from("event_sessions").select("name, start_at, venue").eq("id", row.session_id).eq("clinic_id", row.clinic_id).maybeSingle(),
-    svc.from("clinic_settings").select("email_enabled, email_from").eq("clinic_id", row.clinic_id).maybeSingle(),
+    svc.from("clinic_settings").select("email_enabled").eq("clinic_id", row.clinic_id).maybeSingle(),
   ]);
   if (clinicError || eventError || sessionError || settingsError) {
     throw new Error(clinicError?.message ?? eventError?.message ?? sessionError?.message ?? settingsError?.message ?? "讀取報名通知資料失敗");
@@ -79,7 +79,7 @@ export async function notifyRegistrationStatus(
     }
   }
 
-  const emailConfig = settings?.email_enabled ? emailConfigForClinic(row.clinic_id, settings.email_from as string | null | undefined) : null;
+  const emailConfig = settings?.email_enabled ? emailConfigForClinic(row.clinic_id) : null;
   if (row.email && emailConfig) {
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "email");
     if (claim) {
@@ -156,6 +156,7 @@ async function claimNotification(
     .update({ status: "sending", attempt_count: Number(existing.attempt_count ?? 0) + 1, error: null, updated_at: new Date().toISOString() })
     .eq("id", existing.id)
     .eq("status", existing.status)
+    .eq("updated_at", existing.updated_at)
     .select("id")
     .maybeSingle();
   if (claimError) throw new Error(claimError.message);

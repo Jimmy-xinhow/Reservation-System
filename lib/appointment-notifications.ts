@@ -25,7 +25,6 @@ interface AppointmentRecord {
   doctor_name: string;
   service_name: string | null;
   email_enabled: boolean;
-  email_from: string | null;
 }
 
 interface NotificationResult {
@@ -72,9 +71,7 @@ export async function notifyAppointmentStatus(
     }
   }
 
-  const emailConfig = appointment.email_enabled
-    ? emailConfigForClinic(appointment.clinic_id, appointment.email_from)
-    : null;
+  const emailConfig = appointment.email_enabled ? emailConfigForClinic(appointment.clinic_id) : null;
   if (appointment.patient_email && emailConfig) {
     const claim = await claimNotification(svc, appointment, kind, "email");
     if (claim) {
@@ -145,7 +142,7 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
   const rowClinicId = String((data as { clinic_id: string }).clinic_id);
   const { data: settings, error: settingsError } = await svc
     .from("clinic_settings")
-    .select("email_enabled, email_from")
+    .select("email_enabled")
     .eq("clinic_id", rowClinicId)
     .maybeSingle();
   if (settingsError) throw new Error(settingsError.message);
@@ -188,7 +185,6 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
     doctor_name: doctor.name,
     service_name: service?.name ?? null,
     email_enabled: settings?.email_enabled === true,
-    email_from: settings?.email_from ?? null,
   };
 }
 

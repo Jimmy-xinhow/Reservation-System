@@ -34,7 +34,6 @@ export interface ClinicSettings {
   public_booking_enabled: boolean;
   public_registration_enabled: boolean;
   email_enabled: boolean;
-  email_from: string | null;
 }
 
 /** 讀取診所設定;查無回 null。 */
@@ -44,7 +43,7 @@ export async function getClinicSettings(
 ): Promise<ClinicSettings | null> {
   const { data, error } = await svc
     .from("clinic_settings")
-    .select("clinic_id, booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, public_booking_enabled, public_registration_enabled, email_enabled, email_from")
+    .select("clinic_id, booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, public_booking_enabled, public_registration_enabled, email_enabled")
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -70,7 +69,6 @@ function isClinicSettings(value: unknown): value is ClinicSettings {
     typeof row.max_advance_days === "number" &&
     typeof row.public_booking_enabled === "boolean" &&
     typeof row.public_registration_enabled === "boolean" &&
-    typeof row.email_enabled === "boolean" &&
-    (row.email_from === null || typeof row.email_from === "string")
+    typeof row.email_enabled === "boolean"
   );
 }

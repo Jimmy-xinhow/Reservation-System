@@ -135,7 +135,7 @@ async function runClinic(svc: SupabaseClient, clinicId: string): Promise<{ scann
 async function runAutomation(
   svc: SupabaseClient,
   automation: AutomationRow,
-  settings: { email_enabled: boolean; email_from: string | null },
+  settings: { email_enabled: boolean },
   clinicName: string,
   summary: { sent: number; failed: number; skipped: number; duplicate: number },
   clinicId: string,
@@ -177,7 +177,7 @@ async function runAutomation(
       summary.failed += 1;
       continue;
     }
-    const emailConfig = emailConfigForClinic(clinicId, settings.email_from);
+    const emailConfig = emailConfigForClinic(clinicId);
     if (automation.channel === "email" && (!patient.email || !settings.email_enabled || !emailConfig)) {
       await markDelivery(svc, claim, "skipped", "顧客或診所尚未完成 Email 設定");
       summary.skipped += 1;

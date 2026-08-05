@@ -106,7 +106,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
   }
   let email = 0;
   let emailFailed = 0;
-  const emailConfig = emailConfigForClinic(clinicId, settings.email_from);
+  const emailConfig = emailConfigForClinic(clinicId);
   if (settings.email_enabled && emailConfig) {
     for (const appointment of rows) {
       const to = appointment.patients?.email;

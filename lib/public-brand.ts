@@ -23,8 +23,9 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
   const slug = scope.clinicSlug?.trim();
   const clinicId = scope.clinicId?.trim();
   const host = (scope.host ?? "").split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
+  const configuredClinicId = process.env.NEXT_PUBLIC_CLINIC_ID?.trim() || "";
   if (host) {
-    const { data: domain, error: domainError } = await supabase.from("clinic_domains").select("clinic_id").eq("hostname", host).eq("active", true).maybeSingle();
+    const { data: domain, error: domainError } = await supabase.from("clinic_domains").select("clinic_id, verified_at").eq("hostname", host).eq("active", true).not("verified_at", "is", null).maybeSingle();
     if (domainError) return null;
     if (domain?.clinic_id) {
       const { data: clinic, error: clinicError } = await supabase.from("clinics").select("id").eq("id", domain.clinic_id).eq("active", true).maybeSingle();
@@ -54,10 +55,10 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
   if (idError) return null;
   if (slug && clinicId && slugClinic?.id !== idClinic?.id) return null;
   if (slug) return (slugClinic?.id as string | undefined) ?? null;
+  if (clinicId && clinicId !== configuredClinicId) return null;
   if (clinicId) return (idClinic?.id as string | undefined) ?? null;
 
   // URL clinic_id 只可作為相容輸入，不能用來任意選擇租戶；正式 SaaS 必須使用 slug 或已驗證網域。
-  const configuredClinicId = process.env.NEXT_PUBLIC_CLINIC_ID?.trim() || "";
   return configuredClinicId || null;
 }
 

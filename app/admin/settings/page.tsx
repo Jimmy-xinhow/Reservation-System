@@ -31,7 +31,6 @@ interface Settings {
   public_booking_enabled: boolean;
   public_registration_enabled: boolean;
   email_enabled: boolean;
-  email_from: string | null;
 }
 
 interface PaymentSettings {
@@ -48,7 +47,7 @@ export default async function SettingsPage() {
   const [{ data }, { data: clinicData }, { data: paymentData }, { data: domainData }] = await Promise.all([
     supabase
       .from("clinic_settings")
-      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, public_booking_enabled, public_registration_enabled, email_enabled, email_from")
+      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, public_booking_enabled, public_registration_enabled, email_enabled")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     supabase
@@ -67,7 +66,7 @@ export default async function SettingsPage() {
   const clinic = clinicData as Clinic | null;
   const payment = paymentData as PaymentSettings | null;
   const domains = (domainData ?? []) as ClinicDomain[];
-  const emailConfigured = Boolean(emailConfigForClinic(clinicId, s?.email_from));
+  const emailConfigured = Boolean(emailConfigForClinic(clinicId));
   const paymentSecretConfigured = Boolean(paymentSecretsForClinic(clinicId));
 
   if (!s) {
@@ -303,9 +302,9 @@ export default async function SettingsPage() {
       <form action={updateEmailSettingsAction} className="card space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">Email 看診提醒(選用)</h2>
-          <p className="mt-1 text-xs text-slate-400">
-            Resend 金鑰由部署環境管理，請設定該品牌的 server-side 環境變數；此頁只保存寄件人與啟用狀態。
-          </p>
+           <p className="mt-1 text-xs text-slate-400">
+             Resend 金鑰與寄件人由部署環境管理；請設定該品牌的 server-side 環境變數，此頁只保存啟用狀態。
+           </p>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
@@ -316,19 +315,8 @@ export default async function SettingsPage() {
           />
           啟用 Email 提醒
         </label>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-600">寄件人</span>
-            <input
-              name="email_from"
-              defaultValue={s.email_from ?? ""}
-              placeholder="品牌名稱 <noreply@yourdomain.com>"
-              className="input"
-            />
-          </label>
-          <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-            Resend 金鑰狀態：{emailConfigured ? "已由 server environment 設定 ✓" : "尚未設定"}
-          </div>
+        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+          寄件人與 Resend 金鑰狀態：{emailConfigured ? "已由 server environment 設定 ✓" : "尚未設定"}
         </div>
         <div className="flex items-center gap-3">
           <SubmitButton className="btn btn-primary">儲存 Email 設定</SubmitButton>

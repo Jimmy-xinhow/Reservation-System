@@ -25,9 +25,9 @@ function envMap(name: "RESEND_API_KEYS_JSON" | "RESEND_EMAIL_FROM_JSON"): Record
 }
 
 /** Resend 金鑰只從 server environment 讀取，禁止由 clinic_settings 提供。 */
-export function emailConfigForClinic(clinicId: string, fromOverride?: string | null): EmailConfig | null {
+export function emailConfigForClinic(clinicId: string): EmailConfig | null {
   const apiKey = envMap("RESEND_API_KEYS_JSON")[clinicId] ?? process.env.RESEND_API_KEY;
-  const from = envMap("RESEND_EMAIL_FROM_JSON")[clinicId] ?? fromOverride ?? process.env.RESEND_EMAIL_FROM;
+  const from = envMap("RESEND_EMAIL_FROM_JSON")[clinicId] ?? process.env.RESEND_EMAIL_FROM;
   if (!apiKey || !from) return null;
   return { apiKey, from };
 }
