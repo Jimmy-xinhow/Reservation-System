@@ -113,6 +113,7 @@ const paymentEcpayApi = read("app/api/payment/ecpay/notify/route.ts");
 const paymentNewebpayApi = read("app/api/payment/newebpay/notify/route.ts");
 const paymentWebhook = read("lib/payment-webhook.ts");
 const appointmentNotifications = read("lib/appointment-notifications.ts");
+const registrationNotifications = read("lib/registration-notifications.ts");
 const adminActions = read("app/admin/actions.ts");
 const settingsPage = read("app/admin/settings/page.tsx");
 const browserStartApi = read("app/api/booking/browser/start/route.ts");
@@ -235,8 +236,17 @@ invariant(
 );
 invariant(
   "registration notification retries use optimistic concurrency",
-  read("lib/registration-notifications.ts").includes('.eq("updated_at", existing.updated_at)') &&
+  registrationNotifications.includes('.eq("updated_at", existing.updated_at)') &&
     schema.includes("unique (registration_id, kind, channel)"),
+);
+invariant(
+  "notification skips are recorded for both channels",
+  schema.includes("status in ('sending','sent','failed','skipped')") &&
+    migrationHardening.includes("status in ('sending','sent','failed','skipped')") &&
+    appointmentNotifications.includes("recordSkippedNotification") &&
+    registrationNotifications.includes("recordSkippedNotification") &&
+    appointmentNotifications.includes('status: "skipped"') &&
+    registrationNotifications.includes('status: "skipped"'),
 );
 invariant(
   "deposit payments have a public flow and expiry release path",

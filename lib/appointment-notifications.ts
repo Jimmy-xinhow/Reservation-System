@@ -69,6 +69,9 @@ export async function notifyAppointmentStatus(
     } else {
       result.skipped += 1;
     }
+  } else {
+    await recordSkippedNotification(svc, appointment.clinic_id, appointment.id, kind, "line", "顧客尚未綁定 LINE");
+    result.skipped += 1;
   }
 
   const emailConfig = appointment.email_enabled ? emailConfigForClinic(appointment.clinic_id) : null;
@@ -86,6 +89,14 @@ export async function notifyAppointmentStatus(
     } else {
       result.skipped += 1;
     }
+  } else {
+    const reason = !appointment.patient_email
+      ? "顧客未提供 Email"
+      : !appointment.email_enabled
+        ? "品牌未啟用 Email"
+        : "尚未設定 Email provider";
+    await recordSkippedNotification(svc, appointment.clinic_id, appointment.id, kind, "email", reason);
+    result.skipped += 1;
   }
 
   return result;
@@ -236,6 +247,20 @@ async function finishNotification(svc: SupabaseClient, id: string, status: "sent
     .update({ status, error: error ?? null, sent_at: status === "sent" ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (updateError) throw new Error(updateError.message);
+}
+
+async function recordSkippedNotification(
+  svc: SupabaseClient,
+  clinicId: string,
+  appointmentId: string,
+  kind: AppointmentNotificationKind,
+  channel: "line" | "email",
+  reason: string,
+): Promise<void> {
+  const { error } = await svc
+    .from("appointment_notification_logs")
+    .insert({ clinic_id: clinicId, appointment_id: appointmentId, kind, channel, status: "skipped", attempt_count: 0, error: reason });
+  if (error && error.code !== "23505") throw new Error(error.message);
 }
 
 function buildMessage(appointment: AppointmentRecord, kind: AppointmentNotificationKind): { text: string; subject: string; html: string } {

@@ -2331,7 +2331,7 @@ create table if not exists registration_notification_logs (
   registration_id uuid not null references registrations(id) on delete restrict,
   kind text not null check (kind in ('pending','confirmed','waitlisted','cancelled')),
   channel text not null check (channel in ('line','email')),
-  status text not null default 'sending' check (status in ('sending','sent','failed')),
+  status text not null default 'sending' check (status in ('sending','sent','failed','skipped')),
   attempt_count integer not null default 0 check (attempt_count >= 0),
   error text,
   sent_at timestamptz,
@@ -2339,6 +2339,9 @@ create table if not exists registration_notification_logs (
   updated_at timestamptz not null default now(),
   unique (registration_id, kind, channel)
 );
+alter table registration_notification_logs drop constraint if exists registration_notification_logs_status_check;
+alter table registration_notification_logs add constraint registration_notification_logs_status_check
+  check (status in ('sending','sent','failed','skipped'));
 create index if not exists registration_notification_logs_queue_idx
   on registration_notification_logs (clinic_id, status, updated_at);
 
