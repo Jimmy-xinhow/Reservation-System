@@ -21,7 +21,7 @@
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
 - 公開品牌解析只採用實際 `Host`，不信任可由直接請求偽造的 `x-forwarded-host`，並已加入契約測試防止跨品牌 header 租戶混淆。
-- GitHub `main` 已同步至 commit `565a2e1`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護與最新部署驗收文件。
+- GitHub `main` 已同步至 commit `9d9b70a`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護與公開品牌 Host 租戶邊界修正。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
