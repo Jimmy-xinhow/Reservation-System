@@ -29,7 +29,7 @@
 | 新品牌建立 | owner/admin 授權、DB function 原子建立品牌／預設設定／owner | 靜態契約 PASS |
 | 會員／套票／優惠碼 | migration、租戶 RLS、原子扣抵、付款失敗釋放、後台管理與預約／報名入口；正式 Supabase 報名／預約扣點與折扣碼交易測試 | PASS；核心交易已實測 |
 | Supabase security advisor | linked project migration 後重新檢查 | DB 函式／RPC 警告已清除；Auth leaked password protection 尚待 Dashboard 啟用 |
-| anon REST 讀取邊界 | legacy anon／publishable key 查詢 `patients`、`appointments`、`registrations`、`payment_orders`、`crm_delivery_logs` | 正式 Supabase PASS；全部 HTTP 200 空陣列 |
+| anon REST 讀取邊界 | 以固定 UUID 合成顧客資料後，由 legacy anon／publishable key 查詢 `patients`、`appointments`、`registrations`、`payment_orders`、`crm_delivery_logs` | 正式 Supabase PASS；全部 HTTP 200 空陣列，測試後品牌／設定／顧客殘留數均為 0 |
 
 ## 連接實際環境後必須執行
 

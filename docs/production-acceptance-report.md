@@ -32,7 +32,7 @@
 - 已依既有資料庫順序套用 CRM Lite、報名／付款、v3 hardening、會員／優惠券與 v4 role matrix。
 - 目前 `public` 有 47 張資料表，全部啟用 RLS。
 - 系統目錄檢查沒有 anon／public policy；核心預約與報名 RPC 僅 service role 可執行。
-- 本輪正式 Supabase REST RLS 讀取驗收：legacy anon 與 publishable key 對 `patients`、`appointments`、`registrations`、`payment_orders`、`crm_delivery_logs` 均回 HTTP 200 且空陣列（body length 2）；未輸出金鑰。匿名 key 無法讀取敏感資料；雙品牌跨租戶攻擊仍需 staging 測試資料補做。
+- 本輪正式 Supabase REST RLS 讀取驗收：先以固定 UUID 建立合成品牌／顧客資料，再由 legacy anon 與 publishable key 查詢 `patients`、`appointments`、`registrations`、`payment_orders`、`crm_delivery_logs`；均回 HTTP 200 且空陣列（body length 2），未輸出金鑰。測試後品牌、設定、顧客殘留數均為 0；匿名 key 無法讀取敏感資料，雙品牌跨租戶攻擊仍需 staging 測試資料補做。
 - 已使用 Supabase CLI `2.111.0` 登入並以 linked project 執行唯讀 `select 1`，正式資料庫回傳 `healthcheck: 1`。
 - 正式資料庫唯讀 schema 檢查確認 `patients.blocked_until` 存在，且 `patients` 已啟用 RLS。
 - 本輪 linked 唯讀安全稽核回傳 `public_tables=47`、`rls_tables=47`、anon/public policy `=0`、authenticated policy `=93`；legacy secret 欄位 `=0`，核心預約／報名／取消 RPC 對 anon 與 authenticated 的 execute 權限均為 `0`。
