@@ -837,6 +837,13 @@ invariant(
     migrationRoleMatrix.includes("role in ('owner','admin')") &&
     migrationRoleMatrix.includes("role in ('owner','admin','frontdesk','staff')"),
 );
+invariant(
+  "security advisor hardening fixes mutable trigger paths and public RPC grants",
+  read("supabase/schema.sql").includes("language plpgsql set search_path = ''") &&
+    read("supabase/schema.sql").includes("revoke all on function get_available_sessions(uuid,uuid,date) from public, anon, authenticated") &&
+    read("supabase/schema.sql").includes("revoke all on function record_registration_status_event() from public, anon, authenticated") &&
+    exists("supabase/migration_security_advisor_hardening.sql"),
+);
 
 if (failures.length > 0) {
   console.error(`\nContract verification failed: ${failures.join("; ")}`);

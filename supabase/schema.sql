@@ -51,6 +51,7 @@ begin
     execute 'update public.clinic_settings set email_from = null where email_from is not null';
   end if;
 end $$;
+
 alter table clinic_settings drop column if exists resend_api_key;
 alter table clinic_settings drop column if exists email_from;
 
@@ -159,7 +160,7 @@ where birthday is not null and birthday_mmdd is distinct from to_char(birthday, 
 
 create or replace function sync_patient_birthday_mmdd()
 returns trigger
-language plpgsql as $$
+language plpgsql set search_path = '' as $$
 begin
   new.birthday_mmdd := case when new.birthday is null then null else to_char(new.birthday, 'MMDD') end;
   return new;
@@ -433,7 +434,7 @@ grant execute on function claim_reminder(uuid, text) to service_role;
 
 -- updated_at 自動更新
 create or replace function touch_updated_at() returns trigger
-language plpgsql as $$ begin new.updated_at = now(); return new; end; $$;
+language plpgsql set search_path = '' as $$ begin new.updated_at = now(); return new; end; $$;
 
 drop trigger if exists trg_appt_touch on appointments;
 create trigger trg_appt_touch before update on appointments
@@ -924,10 +925,10 @@ drop function if exists is_clinic_member(uuid);
 drop function if exists auth_clinic_ids();
 
 -- RPC:全 security definer。撤掉 anon/authenticated,只給 service_role(病患端走 service_role)。
-revoke execute on function get_available_slots(uuid,uuid,date,text) from anon, authenticated;
-revoke execute on function get_available_sessions(uuid,uuid,date) from anon, authenticated;
-revoke execute on function book_time_slot(uuid,uuid,uuid,timestamptz,text,boolean,uuid) from anon, authenticated;
-revoke execute on function book_number(uuid,uuid,uuid,uuid,date,text,boolean,uuid) from anon, authenticated;
+revoke all on function get_available_slots(uuid,uuid,date,text) from public, anon, authenticated;
+revoke all on function get_available_sessions(uuid,uuid,date) from public, anon, authenticated;
+revoke all on function book_time_slot(uuid,uuid,uuid,timestamptz,text,boolean,uuid) from public, anon, authenticated;
+revoke all on function book_number(uuid,uuid,uuid,uuid,date,text,boolean,uuid) from public, anon, authenticated;
 
 grant execute on function get_available_slots(uuid,uuid,date,text) to service_role;
 grant execute on function get_available_sessions(uuid,uuid,date) to service_role;
@@ -1585,6 +1586,8 @@ begin
     $policy$, tbl || '_member', tbl, tbl, tbl, tbl, tbl);
   end loop;
 end $$;
+
+
 
 -- Provider row-level hardening: provider 只能讀取被指派醫師的行程與必要病患資料。
 -- 其餘租戶資料維持品牌成員隔離，但 provider 不得透過 Supabase client 直接橫向讀取。
@@ -3207,3 +3210,17 @@ begin
     $policy$, tbl || '_manage', tbl, tbl, tbl, tbl, tbl);
   end loop;
 end $$;
+
+-- SECURITY DEFINER trigger／內部函式不可由 API roles 直接執行；顧客端一律走本專案 server route。
+revoke all on function seed_clinic_settings() from public, anon, authenticated;
+revoke all on function sync_patient_birthday_mmdd() from public, anon, authenticated;
+revoke all on function touch_updated_at() from public, anon, authenticated;
+revoke all on function prevent_provider_appointment_writes() from public, anon, authenticated;
+revoke all on function record_appointment_status_event() from public, anon, authenticated;
+revoke all on function record_registration_status_event() from public, anon, authenticated;
+grant execute on function seed_clinic_settings() to service_role;
+grant execute on function sync_patient_birthday_mmdd() to service_role;
+grant execute on function touch_updated_at() to service_role;
+grant execute on function prevent_provider_appointment_writes() to service_role;
+grant execute on function record_appointment_status_event() to service_role;
+grant execute on function record_registration_status_event() to service_role;

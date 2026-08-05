@@ -34,9 +34,11 @@
 - 已登入 Supabase CLI 並以 linked project 執行唯讀 `select 1`，正式資料庫回傳 `healthcheck: 1`。
 - 正式資料庫唯讀 schema 檢查確認 `patients.blocked_until` 存在，且 `patients` 已啟用 RLS。
 - 本輪 linked 唯讀安全稽核回傳 `public_tables=47`、`rls_tables=47`、anon/public policy `=0`、authenticated policy `=93`；legacy secret 欄位 `=0`，核心預約／報名／取消 RPC 對 anon 與 authenticated 的 execute 權限均為 `0`。
+- 正式 Supabase 套用 `migration_security_advisor_hardening.sql` 後重新執行 `supabase db advisors --linked --type security`，資料庫函式／RPC 警告已清除，目前唯一剩餘警告是 Supabase Auth 控制面尚未啟用 leaked password protection；此項需在 Supabase Dashboard 的 Auth 密碼安全設定完成。
 - `supabase migration list --linked` 目前回傳空清單；正式 schema 的存在與交易行為已驗證，但 CLI migration history／獨立環境 replay 仍未建立，不能將其誤列為 migration replay 證據。
 - `supabase db push --linked --yes` 實際執行並回傳 remote database up to date（`migrations=[]`）；因目前沒有標準 timestamp migration 目錄，此結果僅表示 CLI 沒有可推送的 migration，不等同於獨立環境 replay。
 - 本機以隔離 PostgreSQL 16 建立 Supabase `auth`／角色最小替身後，從空資料庫首次重播 `supabase/schema.sql` PASS，第二次重播亦 PASS；重播後為 47/47 表啟用 RLS、anon policy `=0`、v3 必要表全數存在、legacy secret 欄位 `=0`，並確認核心預約／報名／候補／CRM RPC 已建立。此證據不取代 staging Supabase replay。
+- 本輪安全 advisor 修正後，隔離 PostgreSQL replay 首次／第二次均 PASS；47/47 表啟用 RLS、anon policy `=0`，內部函式對 anon／authenticated execute 權限均為 `0`，`touch_updated_at`／`sync_patient_birthday_mmdd` 已固定空 `search_path`。
 
 ### 正式資料庫交易驗收
 

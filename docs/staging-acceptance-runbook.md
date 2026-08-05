@@ -19,7 +19,7 @@
 
 既有資料庫：
 
-1. 先備份，再依序執行 `migration_crm_lite.sql`、`migration_registration_payments.sql`、`migration_v3_hardening.sql`、`migration_memberships_coupons.sql`、`migration_role_matrix_v4.sql`。
+1. 先備份，再依序執行 `migration_crm_lite.sql`、`migration_registration_payments.sql`、`migration_v3_hardening.sql`、`migration_memberships_coupons.sql`、`migration_role_matrix_v4.sql`、`migration_security_advisor_hardening.sql`。
 2. 每支 migration 執行一次後重跑同一支，確認可重跑且沒有重複 constraint／policy 錯誤。
 3. 檢查 `reminder_logs.clinic_id`、付款欄位、表單版本、會員 ledger 與所有新表的 row count／NULL。
 4. 重新執行三個本機命令並保存輸出。

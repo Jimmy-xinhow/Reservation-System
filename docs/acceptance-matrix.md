@@ -27,6 +27,7 @@
 | 套票取消一致性 | 後台、顧客自助與 LINE 取消共用原子取消 RPC 並恢復堂數 | 靜態契約 PASS；需 staging ledger 實測 |
 | 新品牌建立 | owner/admin 授權、DB function 原子建立品牌／預設設定／owner | 靜態契約 PASS |
 | 會員／套票／優惠碼 | migration、租戶 RLS、原子扣抵、付款失敗釋放、後台管理與預約／報名入口；正式 Supabase 報名／預約扣點與折扣碼交易測試 | PASS；核心交易已實測 |
+| Supabase security advisor | linked project migration 後重新檢查 | DB 函式／RPC 警告已清除；Auth leaked password protection 尚待 Dashboard 啟用 |
 
 ## 連接實際環境後必須執行
 
@@ -49,7 +50,7 @@
 
 正式 staging 的逐項操作、輸入資料與證據欄位，請同步依 [staging 驗收 runbook](staging-acceptance-runbook.md) 執行。
 
-1. 新環境執行 `supabase/schema.sql`；既有環境依 README 的五支 migration 順序執行。
+1. 新環境執行 `supabase/schema.sql`；既有環境依 README 的六支 migration 順序執行。
 2. 設定 `.env.example` 中的 Supabase、LINE、Email、付款與 `CRON_SECRET`。
 3. 先跑 `npm test`、`npm run typecheck`、`npm run build`；部署後再以 `SMOKE_BASE_URL` 執行 `npm run smoke:public`。
 4. 在 staging 建立至少兩個品牌、兩個後台帳號與各自的服務／活動資料。
