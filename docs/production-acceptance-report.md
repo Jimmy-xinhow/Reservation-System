@@ -11,7 +11,7 @@
 - `npm test`：PASS，契約測試包含租戶隔離、RLS、預約／報名／付款／CRM Lite 與 SQL 回歸檢查。
 - `npm run typecheck`：PASS。
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
-- `npm run smoke:public`：PASS；以本次 production build 在獨立 3202 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
+- `npm run smoke:public`：PASS；以本次 production build 在獨立 3204 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
 - `npm audit --omit=dev`：PASS，0 vulnerabilities；依賴與原始碼檢查未發現實際密鑰值寫入版本庫。
 - 預約顧客端（LINE／瀏覽器）已支援選填 Email；僅在身分驗證、租戶範圍與預約建立成功後寫入，更新失敗會取消該筆預約。
 - 後台報名管理可由品牌營運角色在場次開始後將已確認報名標記為 `no_show`；更新受品牌／角色／狀態／時間條件限制，並沿用報名狀態稽核 trigger。
@@ -20,7 +20,7 @@
 - 活動自訂表單由報名 API 重新驗證必填勾選、文字／日期／選項欄位型別，不能只依賴瀏覽器端驗證。
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
-- GitHub `main` 已同步，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留與預約 Email（選填）。
+- GitHub `main` 已同步至 commit `88a5881`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）與公開報名設定缺失時的 fail-closed 防護。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
@@ -31,7 +31,7 @@
 - 目前 `public` 有 47 張資料表，全部啟用 RLS。
 - 系統目錄檢查沒有 anon／public policy；核心預約與報名 RPC 僅 service role 可執行。
 - 本輪 anon REST 探測回應為 404，未將其當作 RLS 正面證據；RLS 以正式庫系統目錄與政策檢查為準，仍需在可用的 staging／部署 REST 入口補做雙品牌 anon 攻擊驗收。
-- 已登入 Supabase CLI 並以 linked project 執行唯讀 `select 1`，正式資料庫回傳 `healthcheck: 1`。
+- 已使用 Supabase CLI `2.111.0` 登入並以 linked project 執行唯讀 `select 1`，正式資料庫回傳 `healthcheck: 1`。
 - 正式資料庫唯讀 schema 檢查確認 `patients.blocked_until` 存在，且 `patients` 已啟用 RLS。
 - 本輪 linked 唯讀安全稽核回傳 `public_tables=47`、`rls_tables=47`、anon/public policy `=0`、authenticated policy `=93`；legacy secret 欄位 `=0`，核心預約／報名／取消 RPC 對 anon 與 authenticated 的 execute 權限均為 `0`。
 - 正式 Supabase 套用 `migration_security_advisor_hardening.sql` 後重新執行 `supabase db advisors --linked --type security`，資料庫函式／RPC 警告已清除，目前唯一剩餘警告是 Supabase Auth 控制面尚未啟用 leaked password protection；此項需在 Supabase Dashboard 的 Auth 密碼安全設定完成。
