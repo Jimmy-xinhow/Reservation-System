@@ -13,7 +13,7 @@
 | TypeScript strict 型別檢查 | `npm run typecheck` | PASS |
 | Next.js production build | `npm run build` | PASS；僅有 custom font、`img` 的非阻塞 lint warning |
 | 公開頁渲染 | `npm run smoke:public` 檢查首頁、報名／付款、瀏覽器預約／我的預約／改期、取消、付款結果、嵌入與 `/admin/login` | HTTP 200，無 Application error |
-| 瀏覽器 UI／互動 | Playwright desktop 1440×900、mobile 390×844；正式 Supabase active brand；初診切換與姓名／電話填寫 | PASS；頁面無 application/page error，外部 Google Fonts 受測試網路政策阻擋 |
+| 瀏覽器 UI／互動 | Playwright desktop 1440×900、mobile 390×844；正式 Supabase active brand；初診切換、姓名／電話填寫與水平溢出檢查 | PASS；頁面無 application/page error 或水平溢出，外部 Google Fonts 受測試網路政策阻擋 |
 | 登入／受保護邊界 | `/admin/login` 為 200；後台資料與三支 Cron API 未登入為 401 | PASS |
 | 多品牌入口邊界 | slug／hostname resolver、URL `clinic_id` 不作為租戶依據 | 靜態契約 PASS |
 | 預約併發設計 | time／number RPC advisory lock、容量條件、無 schedule template `limit 1`；正式 Supabase 兩連線測試 | PASS；time／number 均已實測 |
