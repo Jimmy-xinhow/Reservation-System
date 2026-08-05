@@ -11,7 +11,7 @@
 - `npm test`：PASS，契約測試包含租戶隔離、RLS、預約／報名／付款／CRM Lite 與 SQL 回歸檢查。
 - `npm run typecheck`：PASS。
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
-- `npm run smoke:public`：PASS；以本次 production build 在獨立 3204 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
+- `npm run smoke:public`：PASS；以本次 production build 在獨立 3205 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
 - `npm audit --omit=dev`：PASS，0 vulnerabilities；依賴與原始碼檢查未發現實際密鑰值寫入版本庫。
 - 預約顧客端（LINE／瀏覽器）已支援選填 Email；僅在身分驗證、租戶範圍與預約建立成功後寫入，更新失敗會取消該筆預約。
 - 後台報名管理可由品牌營運角色在場次開始後將已確認報名標記為 `no_show`；更新受品牌／角色／狀態／時間條件限制，並沿用報名狀態稽核 trigger。
