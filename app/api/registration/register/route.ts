@@ -107,10 +107,13 @@ export async function POST(req: NextRequest) {
     const answers = body.answers && typeof body.answers === "object" ? body.answers : {};
     for (const field of fields ?? []) {
       const value = answers[field.field_key];
-      const empty = value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0);
+      const empty = value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0) || (field.field_type === "checkbox" && value === false);
       if (field.required && empty) return fail(`請填寫${field.field_key}`, 400);
-      if (field.field_type === "select" && !empty && (!Array.isArray(field.options) || !field.options.includes(String(value)))) return fail("表單選項無效", 400);
-      if (field.field_type === "checkbox" && !empty && typeof value !== "boolean") return fail("表單勾選格式無效", 400);
+      if (empty) continue;
+      if (["text", "textarea"].includes(field.field_type) && typeof value !== "string") return fail("表單文字格式無效", 400);
+      if (field.field_type === "date" && (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value))) return fail("表單日期格式無效", 400);
+      if (field.field_type === "select" && (typeof value !== "string" || !Array.isArray(field.options) || !field.options.includes(value))) return fail("表單選項無效", 400);
+      if (field.field_type === "checkbox" && typeof value !== "boolean") return fail("表單勾選格式無效", 400);
     }
     if (JSON.stringify(answers).length > 20000) return fail("表單資料過大");
     const { data, error } = await svc.rpc("register_for_event_with_benefits", {

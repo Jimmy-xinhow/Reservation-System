@@ -814,6 +814,13 @@ invariant(
     read("app/register/pay/page.tsx").includes("checkin_token"),
 );
 invariant(
+  "registration custom form answers are validated server-side by field type",
+  read("app/api/registration/register/route.ts").includes('field.field_type === "checkbox" && value === false') &&
+    read("app/api/registration/register/route.ts").includes('typeof value !== "boolean"') &&
+    read("app/api/registration/register/route.ts").includes('field.field_type === "date"') &&
+    read("app/api/registration/register/route.ts").includes('field.field_type === "select"'),
+);
+invariant(
   "benefits are manageable from the protected admin surface",
   exists("app/admin/memberships/page.tsx") &&
     exists("app/admin/memberships/actions.ts") &&
