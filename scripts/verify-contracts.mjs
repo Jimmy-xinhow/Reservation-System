@@ -466,6 +466,12 @@ invariant(
     read("app/api/booking/ics/route.ts").includes("slice(0, 2000)"),
 );
 invariant(
+  "admin image uploads validate content signatures and use cryptographic keys",
+  read("app/api/admin/upload/route.ts").includes("matchesImageSignature") &&
+    read("app/api/admin/upload/route.ts").includes("randomBytes(16)") &&
+    read("app/api/admin/upload/route.ts").includes("檔案內容與圖片格式不符"),
+);
+invariant(
   "reports expose required operational dimensions",
   read("app/admin/reports/page.tsx").includes("服務提供者") &&
     read("app/admin/reports/page.tsx").includes("票種") &&
