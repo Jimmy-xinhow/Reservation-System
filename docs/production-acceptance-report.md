@@ -11,7 +11,7 @@
 - `npm test`：PASS，契約測試包含租戶隔離、RLS、預約／報名／付款／CRM Lite 與 SQL 回歸檢查。
 - `npm run typecheck`：PASS。
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
-- `npm run smoke:public`：PASS；以本次 production build 在獨立 3207 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
+- `npm run smoke:public`：PASS；以本次 production build 在獨立 3208 port 執行，五個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register`）回 200，三支 Cron 未授權回 401。
 - `.ics` runtime 驗收：錯誤日期回 400、正常內容回 200、CRLF 注入行不存在，Content-Type 為 `text/calendar`。
 - `npm audit --omit=dev`：PASS，0 vulnerabilities；依賴與原始碼檢查未發現實際密鑰值寫入版本庫。
 - 預約顧客端（LINE／瀏覽器）已支援選填 Email；僅在身分驗證、租戶範圍與預約建立成功後寫入，更新失敗會取消該筆預約。
@@ -22,7 +22,7 @@
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
 - 公開品牌解析只採用實際 `Host`，不信任可由直接請求偽造的 `x-forwarded-host`，並已加入契約測試防止跨品牌 header 租戶混淆。
-- GitHub `main` 已同步至 commit `99f15f2`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護、公開品牌 Host 租戶邊界修正、`.ics` 輸出安全修正與圖片上傳內容驗證。
+- GitHub `main` 已同步至 commit `b52d0ed`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、報名行銷同意同步至 CRM 顧客、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護、公開品牌 Host 租戶邊界修正、`.ics` 輸出安全修正與圖片上傳內容驗證。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
@@ -38,6 +38,7 @@
 - 本輪 linked 唯讀安全稽核回傳 `public_tables=47`、`rls_tables=47`、anon/public policy `=0`、authenticated policy `=93`；legacy secret 欄位 `=0`，核心預約／報名／取消 RPC 對 anon 與 authenticated 的 execute 權限均為 `0`。
 - 正式 Supabase 套用 `migration_security_advisor_hardening.sql` 後重新執行 `supabase db advisors --linked --type security`，資料庫函式／RPC 警告已清除，目前唯一剩餘警告是 Supabase Auth 控制面尚未啟用 leaked password protection；此項需在 Supabase Dashboard 的 Auth 密碼安全設定完成。
 - 正式 Supabase 已套用 `migration_registration_credentials.sql`，唯讀 schema 查詢確認 `public.registrations.checkin_token_encrypted` 為 `text`。
+- 正式 Supabase 已套用 `migration_marketing_opt_in_sync.sql`，唯讀 schema 查詢確認 `create_or_get_public_patient_with_marketing_opt_in(uuid, text, text, date, text, boolean)` 已建立；報名勾選行銷同意時會在同一 transaction 內將 CRM 顧客 `marketing_opt_in` 設為 `true`，未勾選不會覆蓋既有同意。
 - `supabase migration list --linked` 目前回傳空清單；正式 schema 的存在與交易行為已驗證，但 CLI migration history／獨立環境 replay 仍未建立，不能將其誤列為 migration replay 證據。
 - `supabase db push --linked --yes` 實際執行並回傳 remote database up to date（`migrations=[]`）；因目前沒有標準 timestamp migration 目錄，此結果僅表示 CLI 沒有可推送的 migration，不等同於獨立環境 replay。
 - 本機以隔離 PostgreSQL 16 建立 Supabase `auth`／角色最小替身後，從空資料庫首次重播 `supabase/schema.sql` PASS，第二次重播亦 PASS；重播後為 47/47 表啟用 RLS、anon policy `=0`、v3 必要表全數存在、legacy secret 欄位 `=0`，並確認核心預約／報名／候補／CRM RPC 已建立。此證據不取代 staging Supabase replay。
@@ -53,6 +54,7 @@
 - 會員方案：報名扣點、預約扣點、餘額與 ledger 一致。
 - 折扣碼：折扣金額、報名綁定、redemption audit 與使用次數一致。
 - CRM Lite：標籤分眾刷新、投遞 claim 去重與跨品牌拒絕。
+- 報名行銷同意：報名 API 傳入 `marketing_opt_in` 後，正式資料庫同步更新同租戶 CRM 顧客狀態。
 - 兩連線併發：容量 1 的預約最後只成功 1 筆；容量 1 的活動最後為 1 筆 `confirmed` 與 1 筆 `waitlisted`。
 - 併發 fixture 清理後，clinic、doctor、patient、appointment、event、registration 殘留數均為 0。
 
