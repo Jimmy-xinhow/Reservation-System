@@ -22,7 +22,7 @@
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
 - 公開品牌解析只採用實際 `Host`，不信任可由直接請求偽造的 `x-forwarded-host`，並已加入契約測試防止跨品牌 header 租戶混淆。
-- GitHub `main` 已同步至 commit `b52d0ed`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、報名行銷同意同步至 CRM 顧客、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護、公開品牌 Host 租戶邊界修正、`.ics` 輸出安全修正與圖片上傳內容驗證。
+- GitHub `main` 已同步至 commit `3fbe00f`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、報名行銷同意同步至 CRM 顧客、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護、公開品牌 Host 租戶邊界修正、`.ics` 輸出安全修正與圖片上傳內容驗證。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
@@ -55,6 +55,7 @@
 - 折扣碼：折扣金額、報名綁定、redemption audit 與使用次數一致。
 - CRM Lite：標籤分眾刷新、投遞 claim 去重與跨品牌拒絕。
 - 報名行銷同意：報名 API 傳入 `marketing_opt_in` 後，正式資料庫同步更新同租戶 CRM 顧客狀態。
+- 報名行銷同意正式 transaction 驗收：首次勾選同步、後續未勾選不撤銷、再次勾選更新既有顧客，測試資料已 rollback。
 - 兩連線併發：容量 1 的預約最後只成功 1 筆；容量 1 的活動最後為 1 筆 `confirmed` 與 1 筆 `waitlisted`。
 - 併發 fixture 清理後，clinic、doctor、patient、appointment、event、registration 殘留數均為 0。
 
