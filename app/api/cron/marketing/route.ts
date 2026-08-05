@@ -30,6 +30,7 @@ interface PatientRow {
   line_user_id: string | null;
   email: string | null;
   marketing_opt_in: boolean;
+  blocked_until: string | null;
   birthday: string | null;
 }
 
@@ -167,6 +168,11 @@ async function runAutomation(
       summary.skipped += 1;
       continue;
     }
+    if (patient.blocked_until && new Date(patient.blocked_until).getTime() > Date.now()) {
+      await markDelivery(svc, claim, "skipped", "顧客目前被封鎖");
+      summary.skipped += 1;
+      continue;
+    }
     if (automation.channel === "line" && !patient.line_user_id) {
       await markDelivery(svc, claim, "skipped", "顧客沒有 LINE 身分");
       summary.skipped += 1;
@@ -259,7 +265,7 @@ async function getCandidates(svc: SupabaseClient, automation: AutomationRow, tar
   for (const patientIds of chunked(targetIds, ID_BATCH_SIZE)) {
     const { data: patients, error: patientError } = await svc
       .from("patients")
-      .select("id, name, line_user_id, email, marketing_opt_in, birthday")
+      .select("id, name, line_user_id, email, marketing_opt_in, blocked_until, birthday")
       .eq("clinic_id", clinicId)
       .eq("active", true)
       .in("id", patientIds);

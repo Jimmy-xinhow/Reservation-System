@@ -49,6 +49,7 @@ interface AutomationRow {
 
 export default async function CrmPage() {
   const { supabase, role, clinicId } = await requireMember();
+  const canEdit = role === "owner" || role === "admin";
   if (!canViewSensitiveCustomerData(role)) {
     return <p className="card p-6 text-sm text-slate-500">目前角色無法查看 CRM 顧客資料。</p>;
   }
@@ -114,7 +115,7 @@ export default async function CrmPage() {
           <h2 className="font-semibold text-slate-900">建立顧客分眾</h2>
           <p className="mt-1 text-sm text-slate-500">先提供可查核的規則式分眾，不以黑盒 AI 推測顧客。</p>
         </div>
-        {role === "admin" ? (
+        {canEdit ? (
           <form action={createSegmentAction} className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="text-sm">
               <span className="mb-1 block font-medium text-slate-600">分眾名稱</span>
@@ -170,7 +171,7 @@ export default async function CrmPage() {
                     {segment.description ? `｜${segment.description}` : ""}
                   </p>
                 </div>
-                {role === "admin" && (
+                {canEdit && (
                   <div className="flex flex-wrap gap-2">
                     <form action={refreshSegmentAction}>
                       <input type="hidden" name="id" value={segment.id} />
@@ -200,7 +201,7 @@ export default async function CrmPage() {
             可用變數：&#123;&#123;customer_name&#125;&#125;、&#123;&#123;appointment_time&#125;&#125;、&#123;&#123;doctor_name&#125;&#125;、&#123;&#123;clinic_name&#125;&#125;。
           </p>
         </div>
-        {role === "admin" ? (
+        {canEdit ? (
           <form action={createAutomationAction} className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="text-sm">
               <span className="mb-1 block font-medium text-slate-600">自動化名稱</span>
@@ -288,7 +289,7 @@ export default async function CrmPage() {
                   </p>
                   <p className="mt-1 truncate text-sm text-slate-400">{automation.body}</p>
                 </div>
-                {role === "admin" && (
+                {canEdit && (
                   <div className="flex flex-wrap gap-2">
                     <form action={toggleAutomationAction}>
                       <input type="hidden" name="id" value={automation.id} />

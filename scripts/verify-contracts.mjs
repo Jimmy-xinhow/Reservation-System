@@ -464,6 +464,13 @@ invariant(
     marketingCron.includes("const nowMs = Date.now()"),
 );
 invariant(
+  "marketing automation skips blocked customers with an audit reason",
+  marketingCron.includes("blocked_until") && marketingCron.includes("顧客目前被封鎖") &&
+    read("app/admin/crm/page.tsx").includes('const canEdit = role === "owner" || role === "admin"') &&
+    read("app/admin/crm/page.tsx").includes("{canEdit ? (") &&
+    read("app/admin/crm/page.tsx").includes("{canEdit && (")
+);
+invariant(
   "marketing automation paginates large tenant datasets",
   marketingCron.includes("const ID_BATCH_SIZE = 200") &&
     marketingCron.includes("const QUERY_PAGE_SIZE = 1000") &&
