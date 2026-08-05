@@ -847,12 +847,18 @@ create policy doctor_assignments_admin on doctor_assignments for all to authenti
 drop policy if exists schedule_templates_member on schedule_templates;
 create policy schedule_templates_member on schedule_templates for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
-  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+  with check (
+    clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid())
+    and exists (select 1 from doctors d where d.id = schedule_templates.doctor_id and d.clinic_id = schedule_templates.clinic_id and d.active)
+  );
 
 drop policy if exists schedule_exceptions_member on schedule_exceptions;
 create policy schedule_exceptions_member on schedule_exceptions for all to authenticated
   using (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()))
-  with check (clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid()));
+  with check (
+    clinic_id in (select cm.clinic_id from clinic_members cm where cm.user_id = auth.uid())
+    and exists (select 1 from doctors d where d.id = schedule_exceptions.doctor_id and d.clinic_id = schedule_exceptions.clinic_id and d.active)
+  );
 
 drop policy if exists patients_member on patients;
 create policy patients_member on patients for all to authenticated
@@ -1597,7 +1603,10 @@ create policy schedule_templates_provider_read on schedule_templates for select 
   );
 create policy schedule_templates_nonprovider_manage on schedule_templates for all to authenticated
   using (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_templates.clinic_id and cm.user_id = auth.uid() and cm.role <> 'provider'))
-  with check (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_templates.clinic_id and cm.user_id = auth.uid() and cm.role <> 'provider'));
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = schedule_templates.clinic_id and cm.user_id = auth.uid() and cm.role <> 'provider')
+    and exists (select 1 from doctors d where d.id = schedule_templates.doctor_id and d.clinic_id = schedule_templates.clinic_id and d.active)
+  );
 
 drop policy if exists schedule_exceptions_member on schedule_exceptions;
 drop policy if exists schedule_exceptions_provider_read on schedule_exceptions;
@@ -1612,7 +1621,10 @@ create policy schedule_exceptions_provider_read on schedule_exceptions for selec
   );
 create policy schedule_exceptions_nonprovider_manage on schedule_exceptions for all to authenticated
   using (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_exceptions.clinic_id and cm.user_id = auth.uid() and cm.role <> 'provider'))
-  with check (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_exceptions.clinic_id and cm.user_id = auth.uid() and cm.role <> 'provider'));
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = schedule_exceptions.clinic_id and cm.user_id = auth.uid() and cm.role <> 'provider')
+    and exists (select 1 from doctors d where d.id = schedule_exceptions.doctor_id and d.clinic_id = schedule_exceptions.clinic_id and d.active)
+  );
 
 drop policy if exists patients_member on patients;
 drop policy if exists patients_provider_read on patients;
@@ -2892,7 +2904,10 @@ create policy schedule_templates_provider_read on schedule_templates for select 
   );
 create policy schedule_templates_nonprovider_manage on schedule_templates for all to authenticated
   using (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_templates.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')))
-  with check (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_templates.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')));
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = schedule_templates.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff'))
+    and exists (select 1 from doctors d where d.id = schedule_templates.doctor_id and d.clinic_id = schedule_templates.clinic_id and d.active)
+  );
 
 create policy schedule_exceptions_provider_read on schedule_exceptions for select to authenticated
   using (
@@ -2904,7 +2919,10 @@ create policy schedule_exceptions_provider_read on schedule_exceptions for selec
   );
 create policy schedule_exceptions_nonprovider_manage on schedule_exceptions for all to authenticated
   using (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_exceptions.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')))
-  with check (exists (select 1 from clinic_members cm where cm.clinic_id = schedule_exceptions.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff')));
+  with check (
+    exists (select 1 from clinic_members cm where cm.clinic_id = schedule_exceptions.clinic_id and cm.user_id = auth.uid() and cm.role in ('owner','admin','frontdesk','staff'))
+    and exists (select 1 from doctors d where d.id = schedule_exceptions.doctor_id and d.clinic_id = schedule_exceptions.clinic_id and d.active)
+  );
 
 create policy patients_provider_read on patients for select to authenticated
   using (

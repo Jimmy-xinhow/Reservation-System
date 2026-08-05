@@ -808,9 +808,19 @@ export async function rescheduleAppointmentAction(fd: FormData) {
 // ── 門診表 schedule_templates ──────────────────────────────
 export async function createTemplateAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
+  const doctorId = str(fd, "doctor_id");
+  const { data: doctor, error: doctorError } = await supabase
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .eq("active", true)
+    .maybeSingle();
+  if (doctorError) throw new Error(doctorError.message);
+  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
   const { error } = await supabase.from("schedule_templates").insert({
     clinic_id: clinicId,
-    doctor_id: str(fd, "doctor_id"),
+    doctor_id: doctorId,
     weekday: intOr(fd, "weekday", 1),
     start_time: str(fd, "start_time"),
     end_time: str(fd, "end_time"),
@@ -825,11 +835,21 @@ export async function createTemplateAction(fd: FormData) {
 export async function updateTemplateAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
+  const doctorId = str(fd, "doctor_id");
+  const { data: doctor, error: doctorError } = await supabase
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .eq("active", true)
+    .maybeSingle();
+  if (doctorError) throw new Error(doctorError.message);
+  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
   if (!id) throw new Error("缺少 id");
   const { error } = await supabase
     .from("schedule_templates")
     .update({
-      doctor_id: str(fd, "doctor_id"),
+      doctor_id: doctorId,
       weekday: intOr(fd, "weekday", 1),
       start_time: str(fd, "start_time"),
       end_time: str(fd, "end_time"),
@@ -890,9 +910,20 @@ export async function createExceptionAction(fd: FormData) {
   }
   if (!date) throw new Error("請選擇日期");
 
+  const doctorId = str(fd, "doctor_id");
+  const { data: doctor, error: doctorError } = await supabase
+    .from("doctors")
+    .select("id")
+    .eq("id", doctorId)
+    .eq("clinic_id", clinicId)
+    .eq("active", true)
+    .maybeSingle();
+  if (doctorError) throw new Error(doctorError.message);
+  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
+
   const row: Record<string, unknown> = {
     clinic_id: clinicId,
-    doctor_id: str(fd, "doctor_id"),
+    doctor_id: doctorId,
     date,
     is_closed: isClosed,
   };

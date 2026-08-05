@@ -502,6 +502,19 @@ invariant(
     migrationRoleMatrix.includes('d.clinic_id = serving_numbers.clinic_id'),
 );
 invariant(
+  "schedule writes bind to active doctors in the same clinic",
+  adminActions.includes('export async function createTemplateAction') &&
+    adminActions.includes('export async function updateTemplateAction') &&
+    adminActions.includes('export async function createExceptionAction') &&
+    adminActions.includes('.from("doctors")') &&
+    schema.includes('d.id = schedule_templates.doctor_id') &&
+    schema.includes('d.clinic_id = schedule_templates.clinic_id') &&
+    schema.includes('d.id = schedule_exceptions.doctor_id') &&
+    schema.includes('d.clinic_id = schedule_exceptions.clinic_id') &&
+    migrationRoleMatrix.includes('d.id = schedule_templates.doctor_id') &&
+    migrationRoleMatrix.includes('d.id = schedule_exceptions.doctor_id'),
+);
+invariant(
   "CRM timeline failures do not retry delivered marketing messages",
   marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
     marketingCron.includes('await recordCrmInteraction(svc, {') &&
