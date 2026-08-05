@@ -28,6 +28,7 @@
 - anon REST 對 `clinics`、`patients`、`appointments`、`registrations` 的唯讀結果均為空集合。
 - 已登入 Supabase CLI 並以 linked project 執行唯讀 `select 1`，正式資料庫回傳 `healthcheck: 1`。
 - 正式資料庫唯讀 schema 檢查確認 `patients.blocked_until` 存在，且 `patients` 已啟用 RLS。
+- 本輪 linked 唯讀安全稽核回傳 `public_tables=47`、`rls_tables=47`、anon/public policy `=0`、authenticated policy `=93`；legacy secret 欄位 `=0`，核心預約／報名／取消 RPC 對 anon 與 authenticated 的 execute 權限均為 `0`。
 - `supabase migration list --linked` 目前回傳空清單；正式 schema 的存在與交易行為已驗證，但 CLI migration history／獨立環境 replay 仍未建立，不能將其誤列為 migration replay 證據。
 
 ### 正式資料庫交易驗收
