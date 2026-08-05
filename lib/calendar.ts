@@ -2,7 +2,9 @@
 
 function toUtcStamp(iso: string): string {
   // → 20260701T053000Z
-  return new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) throw new Error("invalid calendar datetime");
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
 export interface CalEvent {
@@ -27,7 +29,12 @@ export function googleCalendarUrl(e: CalEvent): string {
 
 /** .ics 檔內容(iOS/Outlook 相容);前端做成 data URL 下載。 */
 export function icsContent(e: CalEvent): string {
-  const esc = (s: string) => s.replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+  const start = new Date(e.startIso);
+  const end = new Date(e.endIso);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) {
+    throw new Error("invalid calendar range");
+  }
+  const esc = (s: string) => s.replace(/([,;\\])/g, "\\$1").replace(/\r\n|\r|\n/g, "\\n");
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",

@@ -15,16 +15,17 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const startIso = sp.get("start") ?? "";
   const endIso = sp.get("end") ?? startIso;
-  const title = sp.get("title") ?? "看診預約";
+  const title = (sp.get("title") ?? "看診預約").slice(0, 200);
+  const details = sp.get("details")?.slice(0, 2000) ?? undefined;
+  const location = sp.get("location")?.slice(0, 500) ?? undefined;
   if (!startIso) return new Response("missing start", { status: 400 });
 
-  const ics = icsContent({
-    title,
-    startIso,
-    endIso,
-    details: sp.get("details") ?? undefined,
-    location: sp.get("location") ?? undefined,
-  });
+  let ics: string;
+  try {
+    ics = icsContent({ title, startIso, endIso, details, location });
+  } catch {
+    return new Response("invalid calendar range", { status: 400 });
+  }
 
   return new Response(ics, {
     headers: {

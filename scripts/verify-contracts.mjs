@@ -459,6 +459,13 @@ invariant(
     read("app/api/registration/events/[id]/route.ts").includes("rateLimitResponse"),
 );
 invariant(
+  "calendar export validates ranges and escapes line breaks",
+  read("lib/calendar.ts").includes("invalid calendar range") &&
+    read("lib/calendar.ts").includes("replace(/\\r\\n|\\r|\\n/g") &&
+    read("app/api/booking/ics/route.ts").includes("invalid calendar range") &&
+    read("app/api/booking/ics/route.ts").includes("slice(0, 2000)"),
+);
+invariant(
   "reports expose required operational dimensions",
   read("app/admin/reports/page.tsx").includes("服務提供者") &&
     read("app/admin/reports/page.tsx").includes("票種") &&
