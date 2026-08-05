@@ -50,7 +50,7 @@ export async function notifyRegistrationStatus(
 
   const row = registration as RegistrationRecord;
   const [{ data: clinic, error: clinicError }, { data: event, error: eventError }, { data: session, error: sessionError }, { data: settings, error: settingsError }] = await Promise.all([
-    svc.from("clinics").select("name, line_destination").eq("id", row.clinic_id).maybeSingle(),
+    svc.from("clinics").select("name, slug, line_destination").eq("id", row.clinic_id).maybeSingle(),
     svc.from("events").select("title").eq("id", row.event_id).eq("clinic_id", row.clinic_id).maybeSingle(),
     svc.from("event_sessions").select("name, start_at, venue").eq("id", row.session_id).eq("clinic_id", row.clinic_id).maybeSingle(),
     svc.from("clinic_settings").select("email_enabled").eq("clinic_id", row.clinic_id).maybeSingle(),
@@ -60,7 +60,8 @@ export async function notifyRegistrationStatus(
   }
 
   const result: NotificationResult = { sent: 0, failed: 0, skipped: 0 };
-  const message = buildMessage({ row, clinicName: clinic?.name ?? "", eventTitle: event?.title ?? "活動", sessionName: session?.name ?? "", startAt: session?.start_at ?? null, venue: session?.venue ?? null, kind, checkinToken: checkinToken ?? null });
+  const paymentUrl = kind === "pending" ? publicRegistrationPaymentUrl(row, clinic?.slug as string | null | undefined) : null;
+  const message = buildMessage({ row, clinicName: clinic?.name ?? "", eventTitle: event?.title ?? "活動", sessionName: session?.name ?? "", startAt: session?.start_at ?? null, venue: session?.venue ?? null, kind, checkinToken: checkinToken ?? null, paymentUrl });
 
   if (row.line_user_id) {
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "line");
@@ -239,6 +240,7 @@ function buildMessage(args: {
   venue: string | null;
   kind: RegistrationNotificationKind;
   checkinToken: string | null;
+  paymentUrl: string | null;
 }): { text: string; subject: string; html: string } {
   const labels: Record<RegistrationNotificationKind, string> = { pending: "待付款", confirmed: "已確認", waitlisted: "候補中", cancelled: "已取消" };
   const status = labels[args.kind];
@@ -251,7 +253,10 @@ function buildMessage(args: {
     args.venue ? `地點：${args.venue}` : "",
     `金額：${formatAmount(Number(args.row.amount))}`,
   ].filter(Boolean);
-  if (args.kind === "pending") lines.push("請於報名頁完成付款，逾期未付款將自動取消。\n");
+  if (args.kind === "pending") {
+    lines.push(args.paymentUrl ? `付款連結：${args.paymentUrl}` : "請回到品牌活動頁完成付款");
+    lines.push("逾期未付款將自動取消。\n");
+  }
   if (args.kind === "waitlisted") lines.push("目前為候補，若有名額釋出，系統會再通知您。\n");
   if (args.kind === "confirmed" && args.checkinToken) lines.push(`報到憑證：${args.checkinToken}`);
   if (args.kind === "cancelled") lines.push("如需重新參加，請回到公開活動頁重新報名。\n");
@@ -259,6 +264,19 @@ function buildMessage(args: {
   const subject = `${args.eventTitle}｜報名${status}`;
   const html = `<div style="font-family:sans-serif;line-height:1.8;max-width:560px"><h2>${escapeHtml(subject)}</h2><p>${lines.map((line) => escapeHtml(line).replace(/\n/g, "<br>")).join("<br>")}</p></div>`;
   return { text, subject, html };
+}
+
+function publicRegistrationPaymentUrl(row: RegistrationRecord, clinicSlug: string | null | undefined): string | null {
+  const configured = process.env.APP_URL?.trim();
+  if (!configured) return null;
+  try {
+    const url = new URL("/register/pay", configured);
+    url.searchParams.set("registration_id", row.id);
+    if (clinicSlug) url.searchParams.set("clinic_slug", clinicSlug);
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function escapeHtml(value: string): string {

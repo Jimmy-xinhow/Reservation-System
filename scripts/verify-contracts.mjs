@@ -805,6 +805,14 @@ invariant(
     read("app/admin/registrations/actions.ts").includes("場次尚未開始，不能標記為未到") &&
     read("app/admin/registrations/page.tsx").includes("markRegistrationNoShowAction"),
 );
+
+invariant(
+  "paid waitlist promotion has a resumable payment entry point",
+  read("lib/registration-notifications.ts").includes("publicRegistrationPaymentUrl") &&
+    read("lib/registration-notifications.ts").includes("/register/pay") &&
+    read("app/register/pay/page.tsx").includes("/api/payment/create") &&
+    read("app/register/pay/page.tsx").includes("checkin_token"),
+);
 invariant(
   "benefits are manageable from the protected admin surface",
   exists("app/admin/memberships/page.tsx") &&

@@ -5,7 +5,7 @@ if (!baseUrl) {
   process.exit(1);
 }
 
-const publicRoutes = ["/", "/register", "/book/browser", "/embed/register"];
+const publicRoutes = ["/", "/register", "/register/pay", "/book/browser", "/embed/register"];
 const cronRoutes = ["/api/cron/reminders", "/api/cron/registration", "/api/cron/marketing"];
 
 async function fetchWithTimeout(path) {
