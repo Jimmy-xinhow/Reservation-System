@@ -77,7 +77,12 @@ function invariant(label, condition) {
 
 invariant(
   "public smoke covers public and admin login routes",
-  smokePublic.includes('"/register/pay"') &&
+    smokePublic.includes('"/register/pay"') &&
+    smokePublic.includes('"/book/browser/my"') &&
+    smokePublic.includes('"/book/browser/reschedule"') &&
+    smokePublic.includes('"/book/reschedule"') &&
+    smokePublic.includes('"/register/cancel"') &&
+    smokePublic.includes('"/payment/result"') &&
     smokePublic.includes('"/embed/register"') &&
     smokePublic.includes('"/admin/login"') &&
     smokePublic.includes("/api/cron/marketing"),
