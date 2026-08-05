@@ -11,7 +11,7 @@
 - `npm test`：PASS，契約測試包含租戶隔離、RLS、預約／報名／付款／CRM Lite 與 SQL 回歸檢查。
 - `npm run typecheck`：PASS。
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
-- GitHub `main` 已同步至 `4f26b20`；另修正管理員成員密碼重設流程的錯誤訊息亂碼。
+- GitHub `main` 已同步至 `cc29a60`；另修正管理員成員密碼重設流程的錯誤訊息亂碼。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
