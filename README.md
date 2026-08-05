@@ -29,7 +29,7 @@ $env:SMOKE_BASE_URL = "https://your-staging.example.com"
 npm run smoke:public
 ```
 
-它會確認 `/`、`/register`、`/book/browser`、`/embed/register` 回 200，且三支 Cron endpoint 在沒有密鑰時回 401；不會建立或修改任何資料。
+它會確認 `/`、`/register`、`/register/pay`、`/book/browser`、`/embed/register` 回 200，且三支 Cron endpoint 在沒有密鑰時回 401；不會建立或修改任何資料。
 
 ---
 

@@ -257,7 +257,11 @@ function buildMessage(args: {
     lines.push(args.paymentUrl ? `付款連結：${args.paymentUrl}` : "請回到品牌活動頁完成付款");
     lines.push("逾期未付款將自動取消。\n");
   }
-  if (args.kind === "waitlisted") lines.push("目前為候補，若有名額釋出，系統會再通知您。\n");
+  if (args.kind === "pending" && args.checkinToken) lines.push(`付款／取消憑證：${args.checkinToken}`);
+  if (args.kind === "waitlisted") {
+    lines.push("目前為候補，若有名額釋出，系統會再通知您。\n");
+    if (args.checkinToken) lines.push(`候補取消憑證：${args.checkinToken}`);
+  }
   if (args.kind === "confirmed" && args.checkinToken) lines.push(`報到憑證：${args.checkinToken}`);
   if (args.kind === "cancelled") lines.push("如需重新參加，請回到公開活動頁重新報名。\n");
   const text = lines.join("\n");
