@@ -292,12 +292,21 @@ export async function removeStaffAction(fd: FormData) {
 }
 
 export async function resetStaffPasswordAction(fd: FormData) {
-  await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const userId = str(fd, "user_id");
   const password = str(fd, "password");
   if (!userId) throw new Error("缺少帳號");
   if (password.length < 8) throw new Error("密碼至少 8 碼");
   const svc = createServiceClient();
+  const { data: target, error: targetError } = await svc
+    .from("clinic_members")
+    .select("role")
+    .eq("clinic_id", clinicId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (targetError) throw new Error(targetError.message);
+  if (!target) throw new Error("撣唾?銝???憭望?");
+  if (target.role === "owner") throw new Error("不可重設 owner 密碼");
   const { error } = await svc.auth.admin.updateUserById(userId, { password });
   if (error) throw new Error(error.message);
   revalidatePath("/admin/users");

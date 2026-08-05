@@ -482,6 +482,14 @@ invariant(
     adminActions.includes('p_actor_user_id: user.id'),
 );
 invariant(
+  "staff password reset is tenant-bound and owner-protected",
+  adminActions.includes('export async function resetStaffPasswordAction') &&
+    adminActions.includes('.from("clinic_members")') &&
+    adminActions.includes('.eq("clinic_id", clinicId)') &&
+    adminActions.includes('.eq("user_id", userId)') &&
+    adminActions.includes('target.role === "owner"'),
+);
+invariant(
   "CRM timeline failures do not retry delivered marketing messages",
   marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
     marketingCron.includes('await recordCrmInteraction(svc, {') &&
