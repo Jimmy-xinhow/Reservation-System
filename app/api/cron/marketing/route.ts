@@ -198,6 +198,7 @@ async function runAutomation(
         );
       }
       await markDelivery(svc, claim, "sent", null);
+      summary.sent += 1;
       await recordCrmInteraction(svc, {
         clinicId,
         patientId: patient.id,
@@ -206,8 +207,7 @@ async function runAutomation(
         title: automation.name,
         body: rendered,
         appointmentId: candidate.appointment?.id ?? null,
-      });
-      summary.sent += 1;
+      }).catch((error: unknown) => console.error("CRM campaign interaction failed", error));
     } catch (error) {
       await markDelivery(svc, claim, "failed", error instanceof Error ? error.message : "投遞失敗");
       summary.failed += 1;

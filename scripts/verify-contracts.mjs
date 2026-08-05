@@ -445,6 +445,17 @@ invariant(
     !read("lib/email.ts").includes("fromOverride"),
 );
 invariant(
+  "LINE confirmation cannot overwrite a concurrent cancellation",
+  lineWebhook.includes('.update({ status: newStatus })') &&
+    lineWebhook.includes('.in("status", ["booked", "confirmed"])'),
+);
+invariant(
+  "CRM timeline failures do not retry delivered marketing messages",
+  marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
+    marketingCron.includes('await recordCrmInteraction(svc, {') &&
+    marketingCron.includes('}).catch((error: unknown) => console.error("CRM campaign interaction failed", error));'),
+);
+invariant(
   "status audit records authenticated actor context",
   schema.includes("v_actor uuid := auth.uid()") &&
     schema.includes("source, actor_id") &&

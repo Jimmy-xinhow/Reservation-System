@@ -707,7 +707,8 @@ async function handleStatusPostback(
         .from("appointments")
         .update({ status: newStatus })
         .eq("id", id)
-        .eq("clinic_id", clinicId);
+        .eq("clinic_id", clinicId)
+        .in("status", ["booked", "confirmed"]);
   if (error) {
     await safeReply(replyToken, "處理失敗,請稍後再試或洽櫃檯。", lineAccessToken);
     return;
