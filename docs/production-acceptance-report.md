@@ -11,11 +11,11 @@
 - `npm test`：PASS，契約測試包含租戶隔離、RLS、預約／報名／付款／CRM Lite 與 SQL 回歸檢查。
 - `npm run typecheck`：PASS。
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
-- `npm run smoke:public`：PASS；本機 production server 的四個公開頁回 200，三支 Cron 未授權回 401。
+- `npm run smoke:public`：PASS；以本次 production build 在獨立 3199 port 執行，四個公開頁回 200，三支 Cron 未授權回 401。
 - `npm audit --omit=dev`：PASS，0 vulnerabilities；依賴與原始碼檢查未發現實際密鑰值寫入版本庫。
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
-- GitHub `main` 已同步，並包含管理員成員密碼重設流程的錯誤訊息亂碼修正與本報告更新。
+- GitHub `main` 已同步至 `baa423b`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口與分眾篩選保留。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
