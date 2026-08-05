@@ -460,6 +460,11 @@ invariant(
     lineWebhook.includes('.in("status", ["booked", "confirmed"])'),
 );
 invariant(
+  "LINE confirmation cannot bypass pending deposits",
+  lineWebhook.includes("deposit_status") &&
+    lineWebhook.includes('if (action === "confirm" && appt.deposit_status === "pending")'),
+);
+invariant(
   "admin status updates cannot resurrect terminal appointments",
   adminActions.includes('.update({ status })') &&
     adminActions.includes('.in("status", ["booked", "confirmed"])'),

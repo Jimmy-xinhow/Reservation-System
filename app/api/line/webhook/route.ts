@@ -673,7 +673,7 @@ async function handleStatusPostback(
   }
   const { data: appt } = await svc
     .from("appointments")
-    .select("id, status, clinic_id, patient_id, membership_id, patients(line_user_id)")
+    .select("id, status, deposit_status, clinic_id, patient_id, membership_id, patients(line_user_id)")
     .eq("id", id)
     .eq("clinic_id", clinicId)
     .maybeSingle();
@@ -696,6 +696,10 @@ async function handleStatusPostback(
     return;
   }
 
+  if (action === "confirm" && appt.deposit_status === "pending") {
+    await safeReply(replyToken, "請先完成訂金付款，付款完成後才會正式確認預約。", lineAccessToken);
+    return;
+  }
   const newStatus = action === "confirm" ? "confirmed" : "cancelled";
   const { error } = action === "cancel"
     ? await svc.rpc("cancel_appointment", {
