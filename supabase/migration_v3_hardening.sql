@@ -324,6 +324,7 @@ declare
   s record;
   r record;
   v_taken integer;
+  v_ticket_taken integer;
   v_promoted integer := 0;
 begin
   select * into s from event_sessions
@@ -339,15 +340,28 @@ begin
      and (status <> 'pending' or expires_at is null or expires_at > now());
 
   for r in
-    select w.id as waitlist_id, w.registration_id, reg.payment_status, reg.amount
+    select w.id as waitlist_id, w.registration_id, reg.ticket_type_id, tt.capacity as ticket_capacity, reg.amount
       from waitlist_entries w
       join registrations reg on reg.id = w.registration_id
+      left join event_ticket_types tt
+        on tt.id = reg.ticket_type_id and tt.event_id = s.event_id and tt.clinic_id = p_clinic_id
      where w.clinic_id = p_clinic_id and w.session_id = p_session_id
        and w.status = 'waiting' and reg.status = 'waitlisted'
      order by w.position, w.created_at
      for update of w, reg
   loop
     exit when v_taken >= s.capacity;
+    if r.ticket_capacity is not null then
+      select count(*)::int into v_ticket_taken
+        from registrations active_reg
+       where active_reg.clinic_id = p_clinic_id
+         and active_reg.ticket_type_id = r.ticket_type_id
+         and active_reg.status in ('pending', 'confirmed', 'attended')
+         and (active_reg.status <> 'pending' or active_reg.expires_at is null or active_reg.expires_at > now());
+      if v_ticket_taken >= r.ticket_capacity then
+        continue;
+      end if;
+    end if;
     if r.amount > 0 then
       update registrations
          set status = 'pending', payment_status = 'pending', expires_at = now() + interval '15 minutes'

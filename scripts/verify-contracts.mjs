@@ -273,6 +273,15 @@ invariant(
     registrationNotifications.includes("markRegistrationStatusEventProcessed"),
 );
 invariant(
+  "waitlist promotion preserves ticket type capacity",
+  schema.includes("left join event_ticket_types tt") &&
+    migrationHardening.includes("left join event_ticket_types tt") &&
+    schema.includes("r.ticket_capacity") &&
+    migrationHardening.includes("r.ticket_capacity") &&
+    schema.includes("active_reg.ticket_type_id = r.ticket_type_id") &&
+    migrationHardening.includes("active_reg.ticket_type_id = r.ticket_type_id"),
+);
+invariant(
   "deposit payments have a public flow and expiry release path",
   read("app/api/payment/create/route.ts").includes("verifyBrowserBookingToken") &&
     read("app/api/payment/create/route.ts").includes("verifyLiffIdToken") &&
