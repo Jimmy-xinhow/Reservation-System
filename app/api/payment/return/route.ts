@@ -34,10 +34,11 @@ function resultRedirect(req: NextRequest, order: string, provider: Provider, sta
   return NextResponse.redirect(url);
 }
 
-async function notifyRegistrationForPayment(svc: SupabaseClient, provider: Provider, merchantOrderNo: string): Promise<void> {
+async function notifyRegistrationForPayment(svc: SupabaseClient, clinicId: string, provider: Provider, merchantOrderNo: string): Promise<void> {
   const { data: order, error } = await svc
     .from("payment_orders")
     .select("registration_id, status")
+    .eq("clinic_id", clinicId)
     .eq("provider", provider)
     .eq("merchant_order_no", merchantOrderNo)
     .maybeSingle();
@@ -46,10 +47,11 @@ async function notifyRegistrationForPayment(svc: SupabaseClient, provider: Provi
   if (kind) await notifyRegistrationStatus(svc, String(order.registration_id), kind);
 }
 
-async function notifyAppointmentForPayment(svc: SupabaseClient, provider: Provider, merchantOrderNo: string): Promise<void> {
+async function notifyAppointmentForPayment(svc: SupabaseClient, clinicId: string, provider: Provider, merchantOrderNo: string): Promise<void> {
   const { data: order, error } = await svc
     .from("payment_orders")
     .select("appointment_id, status")
+    .eq("clinic_id", clinicId)
     .eq("provider", provider)
     .eq("merchant_order_no", merchantOrderNo)
     .maybeSingle();
@@ -72,6 +74,7 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
     }
     await processPaymentWebhook(svc, {
       provider,
+      clinicId: settings.clinic_id,
       merchantOrderNo,
       providerTransactionNo: fields.TradeNo ?? null,
       eventKey: `${merchantOrderNo}:${fields.TradeNo ?? "none"}:${fields.RtnCode ?? ""}`,
@@ -79,8 +82,8 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
       amount: Number(fields.TradeAmt ?? fields.TotalAmount ?? 0),
       payload: fields,
     });
-    await notifyRegistrationForPayment(svc, provider, merchantOrderNo).catch(() => undefined);
-    await notifyAppointmentForPayment(svc, provider, merchantOrderNo).catch(() => undefined);
+    await notifyRegistrationForPayment(svc, settings.clinic_id, provider, merchantOrderNo).catch(() => undefined);
+    await notifyAppointmentForPayment(svc, settings.clinic_id, provider, merchantOrderNo).catch(() => undefined);
     return resultRedirect(req, merchantOrderNo, provider, "returned", clinicSlug);
   }
 
@@ -95,6 +98,7 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
   const resultCode = String(payload.ResultCode ?? "");
   await processPaymentWebhook(svc, {
     provider,
+    clinicId: settings.clinic_id,
     merchantOrderNo,
     providerTransactionNo: tradeNo,
     eventKey: `${merchantOrderNo}:${tradeNo ?? "none"}:${status}:${resultCode}`,
@@ -102,8 +106,8 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
     amount: Number(payload.Amt ?? 0),
     payload,
   });
-  await notifyRegistrationForPayment(svc, provider, merchantOrderNo).catch(() => undefined);
-  await notifyAppointmentForPayment(svc, provider, merchantOrderNo).catch(() => undefined);
+  await notifyRegistrationForPayment(svc, settings.clinic_id, provider, merchantOrderNo).catch(() => undefined);
+  await notifyAppointmentForPayment(svc, settings.clinic_id, provider, merchantOrderNo).catch(() => undefined);
   return resultRedirect(req, merchantOrderNo, provider, "returned", clinicSlug);
 }
 

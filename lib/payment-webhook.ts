@@ -5,6 +5,7 @@ import type { PaymentProvider } from "./payment";
 
 export interface VerifiedPaymentEvent {
   provider: PaymentProvider;
+  clinicId: string;
   merchantOrderNo: string;
   providerTransactionNo: string | null;
   eventKey: string;
@@ -64,7 +65,7 @@ export async function processPaymentWebhook(
   supabase: SupabaseClient,
   event: VerifiedPaymentEvent,
 ): Promise<{ duplicate: boolean; accepted: boolean; changed: boolean }> {
-  if (!event.merchantOrderNo || !Number.isInteger(event.amount) || event.amount < 0) {
+  if (!event.clinicId || !event.merchantOrderNo || !Number.isInteger(event.amount) || event.amount < 0) {
     throw new Error("付款回呼欄位錯誤");
   }
 
@@ -72,6 +73,7 @@ export async function processPaymentWebhook(
     .from("payment_orders")
     .select("id, clinic_id, registration_id, appointment_id, amount, status, provider")
     .eq("provider", event.provider)
+    .eq("clinic_id", event.clinicId)
     .eq("merchant_order_no", event.merchantOrderNo)
     .maybeSingle();
   if (orderError) throw new Error(orderError.message);

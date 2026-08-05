@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     const eventKey = `${merchantOrderNo}:${tradeNo ?? "none"}:${fields.RtnCode ?? ""}`;
     const result = await processPaymentWebhook(svc, {
       provider: "ecpay",
+      clinicId: settings.clinic_id,
       merchantOrderNo,
       providerTransactionNo: tradeNo,
       eventKey,
@@ -32,7 +33,7 @@ export async function POST(req: NextRequest) {
       amount: Number(fields.TradeAmt ?? fields.TotalAmount ?? 0),
       payload: fields,
     });
-    const { data: order } = await svc.from("payment_orders").select("registration_id, appointment_id").eq("merchant_order_no", merchantOrderNo).eq("provider", "ecpay").maybeSingle();
+    const { data: order } = await svc.from("payment_orders").select("registration_id, appointment_id").eq("clinic_id", settings.clinic_id).eq("merchant_order_no", merchantOrderNo).eq("provider", "ecpay").maybeSingle();
     if (result.changed && order?.registration_id) await notifyRegistrationStatus(svc, String(order.registration_id), fields.RtnCode === "1" ? "confirmed" : "cancelled").catch(() => undefined);
     if (result.changed && order?.appointment_id) await notifyAppointmentStatus(svc, String(order.appointment_id), fields.RtnCode === "1" ? "confirmed" : "cancelled").catch(() => undefined);
     return response("1|OK");

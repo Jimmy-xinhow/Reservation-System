@@ -221,6 +221,15 @@ invariant(
     paymentNewebpayApi.includes("result.changed"),
 );
 invariant(
+  "payment webhooks stay bound to the verified merchant brand",
+  paymentWebhook.includes('.eq("clinic_id", event.clinicId)') &&
+    paymentReturnApi.includes("clinicId: settings.clinic_id") &&
+    paymentEcpayApi.includes("clinicId: settings.clinic_id") &&
+    paymentNewebpayApi.includes("clinicId: settings.clinic_id") &&
+    paymentReturnApi.includes("notifyRegistrationForPayment(svc, settings.clinic_id") &&
+    paymentReturnApi.includes("notifyAppointmentForPayment(svc, settings.clinic_id"),
+);
+invariant(
   "payment webhook retries reconcile downstream registration state",
   paymentWebhook.includes("duplicateEvent") &&
     paymentWebhook.includes("reconcilePaymentState") &&
