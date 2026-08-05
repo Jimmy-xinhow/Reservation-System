@@ -46,6 +46,7 @@
 | Email／行銷投遞 | Resend provider、寄件網域、測試信箱 | 需要部署環境 secret 與寄件網域驗證 |
 | Cron 重跑、LINE 額度與錯誤恢復 | Vercel Cron 或 Railway scheduler | 需要部署後的排程與 log |
 | 自訂網址／HTTPS | DNS 控制權、TLS／反向代理 | 本機無法證明 DNS ownership 與正式 HTTPS |
+| Railway production 頁面／API | repo 記錄的 Railway URL；頁面 smoke 與 `/api/booking/config`、`/api/registration/events` | 頁面 200／Cron 401 PASS；兩個公開資料 API 回 `缺少品牌設定`，部署品牌 context 尚未完成 |
 | 行動 LIFF、嵌入元件與瀏覽器完整流程 | staging URL、手機或 Playwright 環境 | 本回合沒有實際第三方登入與資料庫資料 |
 | 備份／還原演練 | Supabase backup 或等價 staging backup；本機已找到 PostgreSQL 16 `pg_dump.exe` | 尚缺可用的 Supabase DB connection string／password 與獨立還原目標 |
 
