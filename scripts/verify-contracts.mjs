@@ -19,6 +19,7 @@ const migrationBenefits = read("supabase/migration_memberships_coupons.sql");
 const migrationRoleMatrix = read("supabase/migration_role_matrix_v4.sql");
 const migrationMarketingOptIn = read("supabase/migration_marketing_opt_in_sync.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
+const smokePublic = read("scripts/smoke-public.mjs");
 
 const checks = [
   ["registration payment migration has core tables", ["create table if not exists events", "create table if not exists registrations", "create table if not exists payment_orders"]],
@@ -73,6 +74,14 @@ function invariant(label, condition) {
   if (condition) console.log(`[PASS] ${label}`);
   else failures.push(label);
 }
+
+invariant(
+  "public smoke covers public and admin login routes",
+  smokePublic.includes('"/register/pay"') &&
+    smokePublic.includes('"/embed/register"') &&
+    smokePublic.includes('"/admin/login"') &&
+    smokePublic.includes("/api/cron/marketing"),
+);
 
 invariant(
   "payment and email secrets are not schema columns",
