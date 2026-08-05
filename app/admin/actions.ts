@@ -1477,13 +1477,13 @@ export async function unpublishRichMenuAction() {
   revalidatePath("/admin/richmenu");
 }
 
-// ── Email 提醒設定(存於 clinic_settings;金鑰留空則沿用舊值)──────
+// ── Email 提醒設定(只在 clinic_settings 保存啟用狀態；金鑰與寄件人由 server environment 管理)──────
 export async function updateEmailSettingsAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const patch: Record<string, unknown> = {
     email_enabled: bool(fd, "email_enabled"),
   };
-  // 只有輸入新金鑰才更新(避免用遮罩值覆蓋);輸入 "-" 代表清除
+  // Email 機密不由後台表單寫入資料庫，僅更新品牌的啟用狀態。
   const { error } = await supabase.from("clinic_settings").update(patch).eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/settings");
