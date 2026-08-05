@@ -12,7 +12,7 @@
 | 契約與安全邊界靜態檢查 | `npm test` / `npm run verify:contracts` | PASS |
 | TypeScript strict 型別檢查 | `npm run typecheck` | PASS |
 | Next.js production build | `npm run build` | PASS；僅有 custom font、`img` 的非阻塞 lint warning |
-| 公開頁渲染 | `/`、`/register`、`/book/browser`、`/embed/register` | HTTP 200，無 Application error |
+| 公開頁渲染 | `npm run smoke:public` 檢查 `/`、`/register`、`/book/browser`、`/embed/register` | HTTP 200，無 Application error |
 | 登入／受保護邊界 | `/admin/login` 為 200；後台資料與三支 Cron API 未登入為 401 | PASS |
 | 多品牌入口邊界 | slug／hostname resolver、URL `clinic_id` 不作為租戶依據 | 靜態契約 PASS |
 | 預約併發設計 | time／number RPC advisory lock、容量條件、無 schedule template `limit 1`；正式 Supabase 兩連線測試 | PASS；time／number 均已實測 |
@@ -51,7 +51,7 @@
 
 1. 新環境執行 `supabase/schema.sql`；既有環境依 README 的五支 migration 順序執行。
 2. 設定 `.env.example` 中的 Supabase、LINE、Email、付款與 `CRON_SECRET`。
-3. 先跑 `npm test`、`npm run typecheck`、`npm run build`。
+3. 先跑 `npm test`、`npm run typecheck`、`npm run build`；部署後再以 `SMOKE_BASE_URL` 執行 `npm run smoke:public`。
 4. 在 staging 建立至少兩個品牌、兩個後台帳號與各自的服務／活動資料。
 5. 執行跨品牌、RLS、最後名額、回呼重送、提醒／行銷去重與 PII 匯出測試。
 6. 通過後才把 staging URL、LINE／付款／Email／DNS 結果交給使用者做功能驗收。
