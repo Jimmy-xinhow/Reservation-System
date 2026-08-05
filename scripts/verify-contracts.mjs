@@ -409,6 +409,16 @@ invariant(
     publicPatientFunction.includes("max_patients_per_phone"),
 );
 invariant(
+  "public appointment captures optional email within verified identity scope",
+  bookingReserveApi.includes("email?: string") &&
+    bookingReserveApi.includes("Email 格式不正確") &&
+    bookingReserveApi.includes('.update({ email })') &&
+    bookingReserveApi.includes('eq("clinic_id", clinicId)') &&
+    bookingPage.includes('name="email"') &&
+    browserBookingPage.includes('type="email"') &&
+    read("app/api/booking/patients-of-line/route.ts").includes("email")
+);
+invariant(
   "number availability excludes full sessions",
   schema.includes("having count(a.id) < x.capacity") && migrationHardening.includes("having count(a.id) < x.capacity"),
 );

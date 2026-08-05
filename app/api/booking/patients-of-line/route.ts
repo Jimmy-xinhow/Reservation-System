@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     if (!clinicId) return fail("缺少品牌設定", 500);
     const { data, error } = await svc
       .from("patients")
-      .select("id, name, phone, blocked_until")
+      .select("id, name, phone, email, blocked_until")
       .eq("clinic_id", clinicId)
       .eq("line_user_id", lineUserId)
       .eq("active", true)

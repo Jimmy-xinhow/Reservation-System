@@ -13,6 +13,7 @@
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
 - `npm run smoke:public`：PASS；以本次 production build 在獨立 3199 port 執行，四個公開頁回 200，三支 Cron 未授權回 401。
 - `npm audit --omit=dev`：PASS，0 vulnerabilities；依賴與原始碼檢查未發現實際密鑰值寫入版本庫。
+- 預約顧客端（LINE／瀏覽器）已支援選填 Email；僅在身分驗證、租戶範圍與預約建立成功後寫入，更新失敗會取消該筆預約。
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
 - GitHub `main` 已同步至 `baa423b`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口與分眾篩選保留。

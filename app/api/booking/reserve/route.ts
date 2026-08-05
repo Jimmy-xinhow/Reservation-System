@@ -21,6 +21,7 @@ interface ReserveBody {
   visit_type?: "first" | "return";
   is_self_pay?: boolean;
   membership_code?: string;
+  email?: string;
   // time 模式
   start_at?: string;
   // number 模式
@@ -49,7 +50,9 @@ export async function POST(req: NextRequest) {
     const visitType: "first" | "return" = body.visit_type === "first" ? "first" : "return";
     const isSelfPay = body.is_self_pay === true;
     const membershipCode = body.membership_code?.trim().toUpperCase() || null;
+    const email = body.email?.trim() || null;
     if (membershipCode && membershipCode.length > 40) return fail("套票序號格式錯誤", 400);
+    if (email && (email.length > 254 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))) return fail("Email 格式不正確", 400);
 
     // 驗 LINE 身分
     let lineUserId: string | null = null;
@@ -185,6 +188,26 @@ export async function POST(req: NextRequest) {
         p_note: "booking metadata binding failed",
       });
       return fail(bindingError.message, 500);
+    }
+
+    // 只有在 LINE／瀏覽器身分已驗證且預約建立成功後，才更新顧客 Email。
+    // 更新失敗時取消剛建立的預約，避免成功頁與 Email 資料不同步。
+    if (email) {
+      let emailUpdate = svc
+        .from("patients")
+        .update({ email })
+        .eq("id", patientId)
+        .eq("clinic_id", clinicId);
+      if (lineUserId) emailUpdate = emailUpdate.eq("line_user_id", lineUserId);
+      const { error: emailError } = await emailUpdate;
+      if (emailError) {
+        await svc.rpc("cancel_appointment", {
+          p_clinic_id: clinicId,
+          p_appointment_id: appointmentId,
+          p_note: "booking email update failed",
+        });
+        return fail(emailError.message, 500);
+      }
     }
 
     // 回傳訂金狀態與行事曆所需資訊供成功頁顯示

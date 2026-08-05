@@ -32,6 +32,7 @@ interface BoundPatient {
   id: string;
   name: string;
   phone: string;
+  email: string | null;
   blocked_until: string | null;
 }
 interface Slot {
@@ -107,6 +108,7 @@ export default function BookPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [birthday, setBirthday] = useState("");
+  const [email, setEmail] = useState("");
   const [membershipCode, setMembershipCode] = useState("");
   const [visitType, setVisitType] = useState<"first" | "return">("return");
 
@@ -155,6 +157,15 @@ export default function BookPage() {
   useEffect(() => {
     if (ready && idToken) loadBound();
   }, [ready, idToken, loadBound]);
+
+  useEffect(() => {
+    if (selectedPatientId === "__new__") {
+      setEmail("");
+      return;
+    }
+    const patient = (bound ?? []).find((item) => item.id === selectedPatientId);
+    setEmail(patient?.email ?? "");
+  }, [bound, selectedPatientId]);
 
   const maxDate = useMemo(
     () => (config ? todayStr(config.max_advance_days) : todayStr(30)),
@@ -234,6 +245,7 @@ export default function BookPage() {
         service_id: serviceId || undefined,
         visit_type: visitType,
         is_self_pay: false,
+        email: email.trim() || undefined,
         membership_code: membershipCode.trim().toUpperCase() || undefined,
       };
       if (config.booking_mode === "time") {
@@ -467,6 +479,18 @@ export default function BookPage() {
                 此就診者目前暫停線上預約,請洽櫃檯。
               </p>
             )}
+            <div>
+              <label className="label">Email（選填，用於提醒）</label>
+              <input
+                type="email"
+                name="email"
+                className="input"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
+                autoComplete="email"
+              />
+            </div>
             {addingNew && (
               <>
                 <div>
