@@ -108,6 +108,7 @@ invariant(
 const timeBooking = between(schema, "create or replace function book_time_slot", "create or replace function get_available_sessions");
 const numberBooking = between(schema, "create or replace function book_number", "-- 後台 authenticated 只能存取自己診所");
 const registrationFunction = between(schema, "create or replace function register_for_event", "create or replace function checkin_registration");
+const benefitRegistrationFunction = between(schema, "create or replace function register_for_event_with_benefits", "create or replace function apply_registration_benefits");
 const registrationApi = read("app/api/registration/register/route.ts");
 const registrationEventsApi = read("app/api/registration/events/route.ts");
 const bookingReserveApi = read("app/api/booking/reserve/route.ts");
@@ -194,6 +195,28 @@ invariant(
 invariant(
   "registration has concurrency lock and answer snapshot",
   registrationFunction.includes("pg_advisory_xact_lock") && registrationFunction.includes("insert into registration_answers"),
+);
+invariant(
+  "registration SQL qualifies identifiers and supports current date-sized sequence numbers",
+  [registrationFunction, migrationRegistration].every(
+    (source) =>
+      source.includes("regexp_replace(r.registration_no") &&
+      source.includes("::bigint") &&
+      source.includes("from registrations r"),
+  ) &&
+    schema.includes("if exists (select 1 from checkins c where c.registration_id") &&
+    migrationRegistration.includes("if exists (select 1 from checkins c where c.registration_id"),
+);
+invariant(
+  "benefit registration branches avoid uninitialized records",
+  [benefitRegistrationFunction, migrationBenefits].every(
+    (source) =>
+      source.includes("v_discount_code_id uuid") &&
+      source.includes("v_membership_id uuid") &&
+      source.includes("v_discount_code_id") &&
+      source.includes("v_membership_id") &&
+      source.includes("plan_service_id"),
+  ),
 );
 invariant(
   "reminder and CRM delivery de-duplication constraints exist",
