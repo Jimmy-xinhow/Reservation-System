@@ -222,10 +222,12 @@ invariant(
 );
 invariant(
   "appointment payment failure restores benefits atomically",
-  paymentWebhook.includes('rpc("fail_appointment_payment"') &&
+    paymentWebhook.includes('rpc("fail_appointment_payment"') &&
     schema.includes("create or replace function fail_appointment_payment") &&
     migrationBenefits.includes("create or replace function fail_appointment_payment") &&
     schema.includes("perform restore_membership_credit(p_clinic_id, appt.membership_id, 'appointment', appt.id, p_note)") &&
+    schema.includes("perform fail_appointment_payment(a.clinic_id, a.id, 'appointment deposit expired')") &&
+    migrationBenefits.includes("perform fail_appointment_payment(a.clinic_id, a.id, 'appointment deposit expired')") &&
     schema.includes("grant execute on function fail_appointment_payment(uuid, uuid, text) to service_role"),
 );
 invariant(

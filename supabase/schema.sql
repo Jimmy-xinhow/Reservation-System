@@ -2604,9 +2604,7 @@ begin
        and status in ('booked', 'confirmed')
      for update skip locked
   loop
-    update appointments
-       set status = 'cancelled', deposit_status = 'failed', deposit_expires_at = null, updated_at = now()
-     where id = a.id and clinic_id = a.clinic_id and status in ('booked', 'confirmed') and deposit_status = 'pending';
+    perform fail_appointment_payment(a.clinic_id, a.id, 'appointment deposit expired');
     for order_row in
       update payment_orders
          set status = 'expired', updated_at = now()

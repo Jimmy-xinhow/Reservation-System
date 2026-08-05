@@ -312,6 +312,42 @@ $$;
 revoke all on function fail_appointment_payment(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function fail_appointment_payment(uuid, uuid, text) to service_role;
 
+create or replace function expire_pending_appointment_deposits()
+returns integer
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  a record;
+  order_row record;
+  n integer := 0;
+begin
+  for a in
+    select id, clinic_id
+      from appointments
+     where deposit_status = 'pending'
+       and deposit_expires_at is not null
+       and deposit_expires_at <= now()
+       and status in ('booked', 'confirmed')
+     for update skip locked
+  loop
+    perform fail_appointment_payment(a.clinic_id, a.id, 'appointment deposit expired');
+    for order_row in
+      update payment_orders
+         set status = 'expired', updated_at = now()
+       where appointment_id = a.id and clinic_id = a.clinic_id and status = 'pending'
+       returning id
+    loop
+      insert into payment_status_events (clinic_id, payment_order_id, from_status, to_status, source)
+        values (a.clinic_id, order_row.id, 'pending', 'expired', 'appointment_deposit_expiry');
+    end loop;
+    n := n + 1;
+  end loop;
+  return n;
+end;
+$$;
+
 create or replace function cancel_appointment_by_operator(
   p_clinic_id uuid,
   p_appointment_id uuid,
