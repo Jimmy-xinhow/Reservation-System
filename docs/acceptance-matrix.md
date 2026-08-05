@@ -1,6 +1,6 @@
 # Reservation System v3 驗收矩陣
 
-日期：2026-08-05  
+日期：2026-08-06
 基準：`AGENTS.md`、`clinic-booking-spec-v3.md`
 
 本文件把「程式碼與本機可證明的結果」和「必須連接實際外部環境的結果」分開。沒有 Supabase 或第三方服務證據的項目，不視為已完成正式上線驗收。
@@ -19,7 +19,8 @@
 | 報名併發設計 | registration RPC advisory lock、答案快照、候補資料域；正式 Supabase 兩連線測試 | PASS；confirmed／waitlisted 已實測 |
 | 付款建立／回跳 | ECPay／NewebPay server-only、TWD 幣別、付款期限、公開預約／報名回跳保留品牌路徑 | 靜態契約 PASS |
 | 付款回呼 | ECPay／NewebPay server-only、簽章、event key、終態保護、重送後仍會 reconcile 下游狀態 | 靜態契約 PASS |
-| CRM Lite | 分眾、三種規則式自動化、opt-in、冷卻、投遞去重 | 靜態契約 PASS |
+| CRM Lite | 分眾、三種規則式自動化、opt-in、冷卻、投遞去重 | 靜態契約 PASS；行銷 opt-in 正式 Supabase transaction PASS |
+| 報名行銷同意同步 | 報名 API、`create_or_get_public_patient_with_marketing_opt_in`、既有顧客更新與未勾選不撤銷 | 正式 Supabase transaction PASS；測試資料已 rollback |
 | appointment notifications | 預約建立、取消、改期與付款結果的 LINE／Email 投遞；appointment_notification_logs 去重與失敗重試 | 靜態契約 PASS |
 | notification queue draining | 狀態事件以 `notification_processed_at` 與 `created_at + id` 游標逐頁處理；失敗保留重試 | 靜態契約 PASS；需 staging Cron 壓力／重跑實測 |
 | PII 角色邊界 | provider 的報名 JSON／CSV 匯出遮蔽姓名、電話、Email | 靜態契約 PASS |
@@ -50,7 +51,7 @@
 
 正式 staging 的逐項操作、輸入資料與證據欄位，請同步依 [staging 驗收 runbook](staging-acceptance-runbook.md) 執行。
 
-1. 新環境執行 `supabase/schema.sql`；既有環境依 README 的七支 migration 順序執行。
+1. 新環境執行 `supabase/schema.sql`；既有環境依 README 的八支 migration 順序執行。
 2. 設定 `.env.example` 中的 Supabase、LINE、Email、付款與 `CRON_SECRET`。
 3. 先跑 `npm test`、`npm run typecheck`、`npm run build`；部署後再以 `SMOKE_BASE_URL` 執行 `npm run smoke:public`。
 4. 在 staging 建立至少兩個品牌、兩個後台帳號與各自的服務／活動資料。
