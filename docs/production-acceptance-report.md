@@ -20,7 +20,7 @@
 - 活動自訂表單由報名 API 重新驗證必填勾選、文字／日期／選項欄位型別，不能只依賴瀏覽器端驗證。
 - 簡報視覺 token：深青／天藍／金色與 Noto Sans TC／Inter 字體基線已同步，`accent-700` CSS class 已由 production build 產生。
 - client static output 掃描：未發現 `SUPABASE_SERVICE_ROLE_KEY`、金流／Email／LINE secrets 或 `service_role`／敏感資料欄位標記。
-- GitHub `main` 已同步至 commit `88a5881`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）與公開報名設定缺失時的 fail-closed 防護。
+- GitHub `main` 已同步至 commit `565a2e1`，包含 CRM Lite 自動化編輯／預覽、分眾顧客明細入口、分眾篩選保留、預約 Email（選填）、公開報名設定缺失時的 fail-closed 防護與最新部署驗收文件。
 - 已保留 smoke 與 Supabase CLI 暫存目錄，未納入提交。
 
 ### 正式 Supabase
@@ -61,6 +61,7 @@
 - Email／行銷投遞：需要 Email provider、寄件網域與測試信箱。
 - ECPay／NewebPay：需要 test merchant、金流設定與可接收的 callback URL。
 - Cron 重跑：需要部署 URL 與 `CRON_SECRET`。
+- Railway：帳號 `jimmy@xinhow.com.tw` 已登入，但本 repo 尚未連結專案；`railway status` 無法取得服務與部署狀態，需指定正確 project／environment 後才能執行部署驗收。
 - 報名通知重試：部署環境需設定 `REGISTRATION_TOKEN_ENCRYPTION_KEY`（至少 32 字元）；正式資料庫欄位已套用，但目前未替部署環境代填秘密值。
 - 自訂網域／HTTPS：需要 DNS 控制權與正式 TLS／反向代理設定。
 
