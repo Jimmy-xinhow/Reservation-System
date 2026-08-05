@@ -305,7 +305,7 @@ export async function resetStaffPasswordAction(fd: FormData) {
     .eq("user_id", userId)
     .maybeSingle();
   if (targetError) throw new Error(targetError.message);
-  if (!target) throw new Error("撣唾?銝???憭望?");
+  if (!target) throw new Error("找不到目標成員或無權限操作");
   if (target.role === "owner") throw new Error("不可重設 owner 密碼");
   const { error } = await svc.auth.admin.updateUserById(userId, { password });
   if (error) throw new Error(error.message);
