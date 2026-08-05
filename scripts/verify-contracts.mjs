@@ -799,6 +799,13 @@ invariant(
     !read("app/api/registration/cancel/route.ts").includes('rpc("release_registration_benefits"'),
 );
 invariant(
+  "registration no-show is an operator-only post-session transition",
+  read("app/admin/registrations/actions.ts").includes("markRegistrationNoShowAction") &&
+    read("app/admin/registrations/actions.ts").includes('registration.status !== "confirmed"') &&
+    read("app/admin/registrations/actions.ts").includes("場次尚未開始，不能標記為未到") &&
+    read("app/admin/registrations/page.tsx").includes("markRegistrationNoShowAction"),
+);
+invariant(
   "benefits are manageable from the protected admin surface",
   exists("app/admin/memberships/page.tsx") &&
     exists("app/admin/memberships/actions.ts") &&
