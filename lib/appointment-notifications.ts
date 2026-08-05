@@ -103,42 +103,87 @@ export async function notifyAppointmentStatus(
 }
 
 export async function processAppointmentNotificationQueue(svc: SupabaseClient): Promise<NotificationResult> {
-  const { data: events, error } = await svc
-    .from("appointment_status_events")
-    .select("appointment_id, to_status, note")
-    .in("to_status", ["booked", "confirmed", "cancelled"])
-    .order("created_at", { ascending: false })
-    .limit(250);
-  if (error) throw new Error(error.message);
-
   const summary: NotificationResult = { sent: 0, failed: 0, skipped: 0 };
-  for (const event of events ?? []) {
-    if (String(event.note ?? "") === "rescheduled appointment") continue;
-    const { data: appointment, error: appointmentError } = await svc
-      .from("appointments")
-      .select("status, deposit_status")
-      .eq("id", String(event.appointment_id))
-      .maybeSingle();
-    if (appointmentError) {
-      summary.failed += 1;
-      continue;
+  const pageSize = 250;
+  let cursorCreatedAt: string | null = null;
+  let cursorId: string | null = null;
+
+  // Use a durable processed marker plus a created_at/id cursor. A fixed newest-N
+  // query can permanently starve older events when a busy brand has more than N
+  // status changes between cron runs.
+  for (;;) {
+    let query = svc
+      .from("appointment_status_events")
+      .select("id, appointment_id, to_status, note, created_at")
+      .in("to_status", ["booked", "confirmed", "cancelled"])
+      .is("notification_processed_at", null)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(pageSize);
+    if (cursorCreatedAt && cursorId) {
+      query = query.or(`created_at.gt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.gt.${cursorId})`);
     }
-    if (String(appointment?.status ?? "") !== String(event.to_status)) continue;
-    const kind = appointmentNotificationKindForState(
-      String(event.to_status),
-      String(appointment?.deposit_status ?? "none"),
-    );
-    if (!kind) continue;
-    try {
-      const result = await notifyAppointmentStatus(svc, String(event.appointment_id), kind);
-      summary.sent += result.sent;
-      summary.failed += result.failed;
-      summary.skipped += result.skipped;
-    } catch {
-      summary.failed += 1;
+
+    const { data: events, error } = await query;
+    if (error) throw new Error(error.message);
+    const page = events ?? [];
+    for (const event of page) {
+      const eventId = String(event.id);
+      if (String(event.note ?? "") === "rescheduled appointment") {
+        await markAppointmentStatusEventProcessed(svc, eventId);
+        continue;
+      }
+
+      const { data: appointment, error: appointmentError } = await svc
+        .from("appointments")
+        .select("status, deposit_status")
+        .eq("id", String(event.appointment_id))
+        .maybeSingle();
+      if (appointmentError) {
+        summary.failed += 1;
+        continue;
+      }
+      // A later state transition supersedes this event; it no longer needs a
+      // notification, but it must still leave the queue permanently.
+      if (String(appointment?.status ?? "") !== String(event.to_status)) {
+        await markAppointmentStatusEventProcessed(svc, eventId);
+        continue;
+      }
+      const kind = appointmentNotificationKindForState(
+        String(event.to_status),
+        String(appointment?.deposit_status ?? "none"),
+      );
+      if (!kind) {
+        await markAppointmentStatusEventProcessed(svc, eventId);
+        continue;
+      }
+      try {
+        const result = await notifyAppointmentStatus(svc, String(event.appointment_id), kind);
+        summary.sent += result.sent;
+        summary.failed += result.failed;
+        summary.skipped += result.skipped;
+        if (result.failed === 0) await markAppointmentStatusEventProcessed(svc, eventId);
+      } catch {
+        summary.failed += 1;
+      }
     }
+
+    if (page.length < pageSize) break;
+    const last = page[page.length - 1] as { created_at?: unknown; id?: unknown };
+    cursorCreatedAt = typeof last.created_at === "string" ? last.created_at : null;
+    cursorId = typeof last.id === "string" ? last.id : null;
+    if (!cursorCreatedAt || !cursorId) break;
   }
   return summary;
+}
+
+async function markAppointmentStatusEventProcessed(svc: SupabaseClient, eventId: string): Promise<void> {
+  const { error } = await svc
+    .from("appointment_status_events")
+    .update({ notification_processed_at: new Date().toISOString() })
+    .eq("id", eventId)
+    .is("notification_processed_at", null);
+  if (error) throw new Error(error.message);
 }
 
 async function loadAppointment(svc: SupabaseClient, appointmentId: string): Promise<AppointmentRecord | null> {

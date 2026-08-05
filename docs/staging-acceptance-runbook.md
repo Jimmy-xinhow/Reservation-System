@@ -104,7 +104,7 @@
 
 1. 在 staging 建立備份，執行一次 migration／測試資料寫入，再以備份還原到獨立資料庫。
 2. 確認品牌、預約、報名、付款、CRM ledger 與通知 log 均可讀取。
-3. 讓提醒／報名／行銷 cron 在中途失敗後重跑，確認去重鍵、retry window 與結果一致。
+3. 讓提醒／報名／行銷 cron 在中途失敗後重跑，確認去重鍵、`notification_processed_at` 游標、retry window 與結果一致；先製造超過單批上限的狀態事件，確認較早事件不會被餓死。
 4. 保存 Cron authorization、HTTP status、summary、錯誤 log 與資料庫前後差異。
 
 ## 10. 交付判定

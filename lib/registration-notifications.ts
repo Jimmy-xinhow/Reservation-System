@@ -111,28 +111,62 @@ export async function notifyRegistrationStatus(
 }
 
 export async function processRegistrationNotificationQueue(svc: SupabaseClient): Promise<NotificationResult> {
-  const { data: events, error } = await svc
-    .from("registration_status_events")
-    .select("registration_id, to_status")
-    .in("to_status", [...REGISTRATION_NOTIFICATION_KINDS])
-    .order("created_at", { ascending: false })
-    .limit(250);
-  if (error) throw new Error(error.message);
-
   const summary: NotificationResult = { sent: 0, failed: 0, skipped: 0 };
-  for (const event of events ?? []) {
-    const kind = notificationKindForStatus(String(event.to_status));
-    if (!kind) continue;
-    try {
-      const result = await notifyRegistrationStatus(svc, String(event.registration_id), kind);
-      summary.sent += result.sent;
-      summary.failed += result.failed;
-      summary.skipped += result.skipped;
-    } catch {
-      summary.failed += 1;
+  const pageSize = 250;
+  let cursorCreatedAt: string | null = null;
+  let cursorId: string | null = null;
+
+  // Process every pending page in chronological order. Limiting to the newest
+  // page makes older registration events unreachable on busy cron intervals.
+  for (;;) {
+    let query = svc
+      .from("registration_status_events")
+      .select("id, registration_id, to_status, created_at")
+      .in("to_status", [...REGISTRATION_NOTIFICATION_KINDS])
+      .is("notification_processed_at", null)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(pageSize);
+    if (cursorCreatedAt && cursorId) {
+      query = query.or(`created_at.gt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.gt.${cursorId})`);
     }
+
+    const { data: events, error } = await query;
+    if (error) throw new Error(error.message);
+    const page = events ?? [];
+    for (const event of page) {
+      const kind = notificationKindForStatus(String(event.to_status));
+      if (!kind) {
+        await markRegistrationStatusEventProcessed(svc, String(event.id));
+        continue;
+      }
+      try {
+        const result = await notifyRegistrationStatus(svc, String(event.registration_id), kind);
+        summary.sent += result.sent;
+        summary.failed += result.failed;
+        summary.skipped += result.skipped;
+        if (result.failed === 0) await markRegistrationStatusEventProcessed(svc, String(event.id));
+      } catch {
+        summary.failed += 1;
+      }
+    }
+
+    if (page.length < pageSize) break;
+    const last = page[page.length - 1] as { created_at?: unknown; id?: unknown };
+    cursorCreatedAt = typeof last.created_at === "string" ? last.created_at : null;
+    cursorId = typeof last.id === "string" ? last.id : null;
+    if (!cursorCreatedAt || !cursorId) break;
   }
   return summary;
+}
+
+async function markRegistrationStatusEventProcessed(svc: SupabaseClient, eventId: string): Promise<void> {
+  const { error } = await svc
+    .from("registration_status_events")
+    .update({ notification_processed_at: new Date().toISOString() })
+    .eq("id", eventId)
+    .is("notification_processed_at", null);
+  if (error) throw new Error(error.message);
 }
 
 async function claimNotification(

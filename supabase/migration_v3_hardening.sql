@@ -123,10 +123,15 @@ create table if not exists appointment_status_events (
   source text not null default 'system',
   actor_id uuid references auth.users(id) on delete set null,
   note text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  notification_processed_at timestamptz
 );
+alter table appointment_status_events add column if not exists notification_processed_at timestamptz;
 create index if not exists appointment_status_events_lookup_idx
   on appointment_status_events (clinic_id, appointment_id, created_at desc);
+create index if not exists appointment_status_events_notification_queue_idx
+  on appointment_status_events (created_at, id)
+  where notification_processed_at is null;
 
 create table if not exists appointment_notification_logs (
   id uuid primary key default gen_random_uuid(),
@@ -226,10 +231,15 @@ create table if not exists registration_status_events (
   source text not null default 'system',
   actor_id uuid references auth.users(id) on delete set null,
   note text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  notification_processed_at timestamptz
 );
+alter table registration_status_events add column if not exists notification_processed_at timestamptz;
 create index if not exists registration_status_events_lookup_idx
   on registration_status_events (clinic_id, registration_id, created_at desc);
+create index if not exists registration_status_events_notification_queue_idx
+  on registration_status_events (created_at, id)
+  where notification_processed_at is null;
 
 create table if not exists registration_notification_logs (
   id uuid primary key default gen_random_uuid(),

@@ -21,6 +21,7 @@
 | 付款回呼 | ECPay／NewebPay server-only、簽章、event key、終態保護、重送後仍會 reconcile 下游狀態 | 靜態契約 PASS |
 | CRM Lite | 分眾、三種規則式自動化、opt-in、冷卻、投遞去重 | 靜態契約 PASS |
 | appointment notifications | 預約建立、取消、改期與付款結果的 LINE／Email 投遞；appointment_notification_logs 去重與失敗重試 | 靜態契約 PASS |
+| notification queue draining | 狀態事件以 `notification_processed_at` 與 `created_at + id` 游標逐頁處理；失敗保留重試 | 靜態契約 PASS；需 staging Cron 壓力／重跑實測 |
 | PII 角色邊界 | provider 的報名 JSON／CSV 匯出遮蔽姓名、電話、Email | 靜態契約 PASS |
 | Provider 列級權限 | 指派醫師範圍 RLS、完成／未到限定寫入、叫號唯讀 | 靜態契約 PASS；需 staging PostgreSQL 實測 |
 | 套票取消一致性 | 後台、顧客自助與 LINE 取消共用原子取消 RPC 並恢復堂數 | 靜態契約 PASS；需 staging ledger 實測 |

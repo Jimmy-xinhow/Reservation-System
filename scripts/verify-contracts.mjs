@@ -260,6 +260,19 @@ invariant(
     registrationNotifications.includes('status: "skipped"'),
 );
 invariant(
+  "notification queues do not starve older status events",
+  schema.includes("notification_processed_at timestamptz") &&
+    migrationHardening.includes("add column if not exists notification_processed_at") &&
+    schema.includes("appointment_status_events_notification_queue_idx") &&
+    schema.includes("registration_status_events_notification_queue_idx") &&
+    appointmentNotifications.includes('.is("notification_processed_at", null)') &&
+    registrationNotifications.includes('.is("notification_processed_at", null)') &&
+    appointmentNotifications.includes("created_at.gt.") &&
+    registrationNotifications.includes("created_at.gt.") &&
+    appointmentNotifications.includes("markAppointmentStatusEventProcessed") &&
+    registrationNotifications.includes("markRegistrationStatusEventProcessed"),
+);
+invariant(
   "deposit payments have a public flow and expiry release path",
   read("app/api/payment/create/route.ts").includes("verifyBrowserBookingToken") &&
     read("app/api/payment/create/route.ts").includes("verifyLiffIdToken") &&
