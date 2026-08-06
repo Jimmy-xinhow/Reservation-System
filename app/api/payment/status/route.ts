@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     if (!clinicId) return fail("缺少品牌設定", 500);
     const { data: order, error: orderError } = await svc
       .from("payment_orders")
-      .select("status, amount, registration_id, appointment_id, expires_at")
+      .select("id, status, amount, registration_id, appointment_id, membership_plan_id, patient_id, expires_at")
       .eq("clinic_id", clinicId)
       .eq("provider", provider)
       .eq("merchant_order_no", orderNo)
@@ -50,14 +50,26 @@ export async function GET(req: NextRequest) {
       if (error) return fail(error.message, 500);
       appointmentStatus = appointment?.status ?? null;
     }
+    let membershipId: string | null = null;
+    if (order.membership_plan_id && order.patient_id) {
+      const { data: membership, error } = await svc
+        .from("patient_memberships")
+        .select("id")
+        .eq("payment_order_id", order.id)
+        .eq("clinic_id", clinicId)
+        .maybeSingle();
+      if (error) return fail(error.message, 500);
+      membershipId = membership?.id ?? null;
+    }
     return ok({
       status: order.status,
       amount: Number(order.amount),
-      target: order.registration_id ? "registration" : "appointment",
+      target: order.registration_id ? "registration" : order.membership_plan_id ? "membership" : "appointment",
       registration_id: order.registration_id,
       registration_status: registrationStatus,
       registration_payment_status: registrationPaymentStatus,
       appointment_status: appointmentStatus,
+      membership_id: membershipId,
       expires_at: order.expires_at,
     });
   } catch (error) {

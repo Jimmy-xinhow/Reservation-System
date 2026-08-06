@@ -7,11 +7,12 @@ import { createQrSvg } from "@/lib/qr";
 interface PaymentStatus {
   status: string;
   amount: number;
-  target: "registration" | "appointment";
+  target: "registration" | "appointment" | "membership";
   registration_id: string | null;
   registration_status: string | null;
   registration_payment_status: string | null;
   appointment_status: string | null;
+  membership_id: string | null;
 }
 
 export default function PaymentResultPage() {
@@ -55,7 +56,7 @@ export default function PaymentResultPage() {
   }, [clinicSlug, order, provider]);
 
   const qr = token && data?.target === "registration" && data.registration_status === "confirmed" ? createQrSvg(token) : null;
-  const succeeded = data?.status === "paid" && (data.target === "appointment" ? data.appointment_status === "confirmed" : data.registration_payment_status === "paid");
+  const succeeded = data?.status === "paid" && (data.target === "appointment" ? data.appointment_status === "confirmed" : data.target === "membership" ? Boolean(data.membership_id) : data.registration_payment_status === "paid");
   const backHref = clinicSlug ? `/?clinic_slug=${encodeURIComponent(clinicSlug)}` : "/";
 
   return (
@@ -63,7 +64,7 @@ export default function PaymentResultPage() {
       <section className="card w-full space-y-5 p-6 text-center">
         <div className={`text-4xl ${succeeded ? "text-emerald-600" : "text-amber-600"}`}>{succeeded ? "✓" : "…"}</div>
         <h1 className="text-xl font-bold text-slate-900">{succeeded ? "付款完成" : data?.status === "failed" || data?.status === "expired" ? "付款未完成" : "付款處理中"}</h1>
-        {error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : data && <p className="text-sm text-slate-600">{data.target === "registration" ? `報名付款金額 NT$${data.amount.toLocaleString("zh-TW")}` : `預約訂金 NT$${data.amount.toLocaleString("zh-TW")}`}</p>}
+        {error ? <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p> : data && <p className="text-sm text-slate-600">{data.target === "registration" ? `報名付款金額 NT$${data.amount.toLocaleString("zh-TW")}` : data.target === "membership" ? `會員套票付款金額 NT$${data.amount.toLocaleString("zh-TW")}` : `預約訂金 NT$${data.amount.toLocaleString("zh-TW")}`}</p>}
         {qr && <div className="mx-auto w-52 rounded-xl border border-slate-200 bg-white p-3" dangerouslySetInnerHTML={{ __html: qr }} />}
         {qr && <p className="text-xs text-slate-500">報到 QR 已從本裝置的報名資料恢復，請勿轉傳。</p>}
         <Link href={backHref} className="btn btn-secondary w-full">返回品牌首頁</Link>

@@ -8,6 +8,144 @@ do $$ begin
   if not exists (select 1 from pg_constraint where conname = 'clinic_settings_reschedule_lead_check') then alter table public.clinic_settings add constraint clinic_settings_reschedule_lead_check check (reschedule_lead_minutes >= 0) not valid; end if;
 end $$;
 
+-- 會員套票公開購買：付款訂單只在 service role 建立，付款成功後冪等發放套票。
+alter table public.payment_orders add column if not exists membership_plan_id uuid;
+alter table public.payment_orders add column if not exists patient_id uuid;
+alter table public.payment_orders drop constraint if exists payment_orders_check;
+alter table public.payment_orders drop constraint if exists payment_orders_subject_check;
+alter table public.payment_orders
+  add constraint payment_orders_subject_check check (
+    (appointment_id is not null and registration_id is null and membership_plan_id is null and patient_id is null)
+    or (registration_id is not null and appointment_id is null and membership_plan_id is null and patient_id is null)
+    or (membership_plan_id is not null and patient_id is not null and appointment_id is null and registration_id is null)
+  );
+create unique index if not exists payment_orders_membership_pending_idx
+  on public.payment_orders (membership_plan_id, patient_id)
+  where membership_plan_id is not null and patient_id is not null and status = 'pending';
+alter table public.patient_memberships add column if not exists payment_order_id uuid;
+create unique index if not exists patient_memberships_payment_order_idx
+  on public.patient_memberships (payment_order_id)
+  where payment_order_id is not null;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.payment_orders'::regclass
+      and conname = 'payment_orders_membership_plan_fk'
+  ) then
+    alter table public.payment_orders
+      add constraint payment_orders_membership_plan_fk
+      foreign key (membership_plan_id) references public.membership_plans(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.payment_orders'::regclass
+      and conname = 'payment_orders_patient_fk'
+  ) then
+    alter table public.payment_orders
+      add constraint payment_orders_patient_fk
+      foreign key (patient_id) references public.patients(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.patient_memberships'::regclass
+      and conname = 'patient_memberships_payment_order_fk'
+  ) then
+    alter table public.patient_memberships
+      add constraint patient_memberships_payment_order_fk
+      foreign key (payment_order_id) references public.payment_orders(id) on delete restrict;
+  end if;
+end $$;
+
+create or replace function public.grant_paid_membership_from_order(
+  p_clinic_id uuid,
+  p_payment_order_id uuid
+)
+returns table (membership_id uuid, membership_code text, expires_at timestamptz, credits_remaining integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  o record;
+  plan_row record;
+  existing record;
+  v_id uuid;
+  v_code text;
+  v_expires timestamptz;
+begin
+  select po.id, po.status, po.clinic_id, po.patient_id, po.membership_plan_id
+    into o
+    from public.payment_orders po
+   where po.id = p_payment_order_id and po.clinic_id = p_clinic_id
+   for update;
+  if not found or o.membership_plan_id is null or o.patient_id is null then
+    raise exception 'membership payment order not found';
+  end if;
+  if o.status <> 'paid' then raise exception 'membership payment is not paid'; end if;
+
+  select pm.id, pm.membership_code, pm.expires_at, pm.credits_remaining
+    into existing
+    from public.patient_memberships pm
+   where pm.payment_order_id = p_payment_order_id;
+  if found then
+    return query select existing.id, existing.membership_code, existing.expires_at, existing.credits_remaining;
+    return;
+  end if;
+
+  select * into plan_row from public.membership_plans
+   where id = o.membership_plan_id and clinic_id = p_clinic_id;
+  if not found then raise exception 'membership plan not found'; end if;
+  if not exists (select 1 from public.patients where id = o.patient_id and clinic_id = p_clinic_id and active) then
+    raise exception 'patient not found';
+  end if;
+  if plan_row.valid_days is not null then v_expires := now() + (plan_row.valid_days || ' days')::interval; end if;
+  loop
+    v_code := upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 10));
+    exit when not exists (select 1 from public.patient_memberships where clinic_id = p_clinic_id and membership_code = v_code);
+  end loop;
+  insert into public.patient_memberships
+    (clinic_id, patient_id, plan_id, payment_order_id, membership_code, credits_total, credits_remaining, starts_at, expires_at, source, note)
+    values (p_clinic_id, o.patient_id, o.membership_plan_id, p_payment_order_id, v_code, plan_row.credits_total, plan_row.credits_total, now(), v_expires, 'purchase', 'membership payment purchase')
+    returning id into v_id;
+  insert into public.membership_ledger
+    (clinic_id, membership_id, patient_id, kind, credits_delta, reference_type, reference_id, note)
+    values (p_clinic_id, v_id, o.patient_id, 'grant', plan_row.credits_total, 'payment_order', p_payment_order_id, 'membership payment purchase');
+  return query select v_id, v_code, v_expires, plan_row.credits_total;
+end;
+$$;
+revoke all on function public.grant_paid_membership_from_order(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.grant_paid_membership_from_order(uuid, uuid) to service_role;
+
+create or replace function public.expire_pending_membership_payments()
+returns integer
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  n integer;
+begin
+  with expired_orders as (
+    update public.payment_orders
+       set status = 'expired', updated_at = now()
+     where membership_plan_id is not null
+       and patient_id is not null
+       and status = 'pending'
+       and expires_at is not null
+       and expires_at <= now()
+    returning id, clinic_id
+  )
+  insert into public.payment_status_events (clinic_id, payment_order_id, from_status, to_status, source)
+    select clinic_id, id, 'pending', 'expired', 'membership_expiry'
+      from expired_orders;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+revoke all on function public.expire_pending_membership_payments() from public, anon, authenticated;
+grant execute on function public.expire_pending_membership_payments() to service_role;
+
 alter table public.services add column if not exists category text;
 alter table public.services add column if not exists duration_minutes integer;
 alter table public.services add column if not exists buffer_minutes integer not null default 0;
@@ -413,3 +551,30 @@ create index if not exists membership_notification_logs_clinic_idx
   on public.membership_notification_logs (clinic_id, created_at desc);
 alter table public.membership_notification_logs enable row level security;
 revoke all on table public.membership_notification_logs from public, anon, authenticated;
+
+-- 優惠碼與禮券共用核銷流程；禮券固定為單次使用，並可記錄發放對象。
+alter table public.discount_codes add column if not exists benefit_type text not null default 'coupon';
+alter table public.discount_codes add column if not exists recipient_name text;
+alter table public.discount_codes add column if not exists recipient_phone text;
+alter table public.discount_codes add column if not exists issued_at timestamptz not null default now();
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.discount_codes'::regclass
+      and conname = 'discount_codes_benefit_type_check'
+  ) then
+    alter table public.discount_codes
+      add constraint discount_codes_benefit_type_check
+      check (benefit_type in ('coupon', 'voucher'));
+  end if;
+  if not exists (
+    select 1 from pg_constraint
+    where conrelid = 'public.discount_codes'::regclass
+      and conname = 'discount_codes_voucher_single_use_check'
+  ) then
+    alter table public.discount_codes
+      add constraint discount_codes_voucher_single_use_check
+      check (benefit_type <> 'voucher' or max_uses = 1);
+  end if;
+end $$;

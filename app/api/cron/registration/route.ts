@@ -17,9 +17,11 @@ export async function GET(req: NextRequest) {
     if (benefitError) throw new Error(benefitError.message);
     const { data: expiredAppointments, error: appointmentExpiryError } = await svc.rpc("expire_pending_appointment_deposits");
     if (appointmentExpiryError) throw new Error(appointmentExpiryError.message);
+    const { data: expiredMembershipPayments, error: membershipExpiryError } = await svc.rpc("expire_pending_membership_payments");
+    if (membershipExpiryError) throw new Error(membershipExpiryError.message);
     const notifications = await processRegistrationNotificationQueue(svc);
     const appointmentNotifications = await processAppointmentNotificationQueue(svc);
-    return Response.json({ ok: true, expired: Number(data ?? 0), expired_appointments: Number(expiredAppointments ?? 0), released_benefits: Number(releasedBenefits ?? 0), notifications, appointment_notifications: appointmentNotifications });
+    return Response.json({ ok: true, expired: Number(data ?? 0), expired_appointments: Number(expiredAppointments ?? 0), expired_membership_payments: Number(expiredMembershipPayments ?? 0), released_benefits: Number(releasedBenefits ?? 0), notifications, appointment_notifications: appointmentNotifications });
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : "報名付款逾時處理失敗" }, { status: 500 });
   }

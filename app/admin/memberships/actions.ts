@@ -63,16 +63,20 @@ export async function grantPatientMembershipAction(fd: FormData): Promise<void> 
 export async function createDiscountCodeAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
   const code = text(fd, "code").toUpperCase().replace(/[^A-Z0-9_-]/g, "");
+  const benefitType = text(fd, "benefit_type");
   const kind = text(fd, "kind");
   const value = integer(fd, "value", 0);
   const minAmount = Math.max(0, integer(fd, "min_amount", 0));
   const maxUsesValue = text(fd, "max_uses");
   const maxUses = maxUsesValue ? integer(fd, "max_uses", 0) : null;
+  const recipientName = text(fd, "recipient_name") || null;
+  const recipientPhone = text(fd, "recipient_phone") || null;
   const startsAt = text(fd, "starts_at") ? new Date(text(fd, "starts_at")).toISOString() : null;
   const endsAt = text(fd, "ends_at") ? new Date(text(fd, "ends_at")).toISOString() : null;
-  if (!code || !["percent", "fixed"].includes(kind) || value < 1 || (kind === "percent" && value > 100) || (maxUses !== null && maxUses < 1)) throw new Error("優惠碼設定不正確");
+  if (!code || !["coupon", "voucher"].includes(benefitType) || !["percent", "fixed"].includes(kind) || value < 1 || (kind === "percent" && value > 100) || (maxUses !== null && maxUses < 1)) throw new Error("優惠碼／禮券設定不正確");
   if (startsAt && endsAt && new Date(endsAt) <= new Date(startsAt)) throw new Error("優惠碼結束時間必須晚於開始時間");
-  const { error } = await supabase.from("discount_codes").insert({ clinic_id: clinicId, code, kind, value, min_amount: minAmount, max_uses: maxUses, starts_at: startsAt, ends_at: endsAt, active: true });
+  const resolvedMaxUses = benefitType === "voucher" ? 1 : maxUses;
+  const { error } = await supabase.from("discount_codes").insert({ clinic_id: clinicId, code, benefit_type: benefitType, kind, value, min_amount: minAmount, max_uses: resolvedMaxUses, recipient_name: recipientName, recipient_phone: recipientPhone, starts_at: startsAt, ends_at: endsAt, active: true });
   if (error) throw new Error(error.message);
   refresh();
 }

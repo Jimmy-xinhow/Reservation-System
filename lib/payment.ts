@@ -94,7 +94,7 @@ function withPaymentSecrets(data: Omit<PaymentSettings, "hash_key" | "hash_iv">)
   return { ...data, hash_key: secret?.hashKey ?? null, hash_iv: secret?.hashIv ?? null };
 }
 
-export function createMerchantOrderNo(prefix: "REG" | "APT" = "REG"): string {
+export function createMerchantOrderNo(prefix: "REG" | "APT" | "MEM" = "REG"): string {
   const stamp = Date.now().toString(36).toUpperCase();
   const suffix = randomBytes(4).toString("hex").toUpperCase();
   return `${prefix}${stamp}${suffix}`.slice(0, 20);

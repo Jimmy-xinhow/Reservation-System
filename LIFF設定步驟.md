@@ -1,4 +1,4 @@
-# 建立 LIFF(病患預約入口)逐步清單 — 慈愛中醫診所
+# 建立 LIFF(品牌預約入口)逐步清單
 
 > 目的:讓 `/book` 能在 LINE 內開啟、取得並驗證病患的 LINE 身分。
 > 重點:LIFF 現在**只能建在「LINE Login 頻道」**(不能掛在 Messaging API 頻道)。
@@ -12,10 +12,10 @@
 ## A. 建立 LINE Login 頻道
 
 - [ ] 1. 進 **LINE Developers Console**(developers.line.biz)登入。
-- [ ] 2. 選到**和 Messaging API 同一個 Provider**(慈愛中醫診所那個)。
+- [ ] 2. 選到**和 Messaging API 同一個 Provider**(品牌所使用的 Provider)。
 - [ ] 3. **Create a new channel → 選「LINE Login」**。
 - [ ] 4. 填寫:
-  - Channel name:例「慈愛中醫診所預約」
+  - Channel name:例「品牌線上預約」
   - Region:Taiwan
   - App types:勾 **Web app**
 - [ ] 5. 建立完成。
@@ -36,7 +36,7 @@
 
 - [ ] 9. 在 LINE Login 頻道 → **Basic settings → Channel ID**(純數字)。
   - → 這就是 **`LINE_LOGIN_CHANNEL_ID`**(注意:**不是** Messaging API 的 `2010483361`)
-- [ ] 10.(建議)Basic settings 裡把 **Linked Official Account** 連到「慈愛中醫診所官方帳號」,登入體驗較一致。
+- [ ] 10.(建議)Basic settings 裡把 **Linked Official Account** 連到品牌官方帳號,登入體驗較一致。
 
 ## D. 設定 Railway 環境變數並重新部署
 

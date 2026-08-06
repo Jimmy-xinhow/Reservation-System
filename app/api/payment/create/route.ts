@@ -55,7 +55,7 @@ interface PublicAppointment {
 
 async function formForOrder(
   settings: PaymentSettings,
-  order: { merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; return_path: string },
+  order: { merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; membership_plan_id: string | null; return_path: string },
   baseUrl: string,
   clinicSlug: string | null,
 ) {
@@ -69,7 +69,7 @@ async function formForOrder(
     settings,
     merchantOrderNo: order.merchant_order_no,
     amount: order.amount,
-    itemName: isRegistration ? "課程／活動報名" : "預約訂金",
+    itemName: isRegistration ? "課程／活動報名" : order.membership_plan_id ? "會員套票" : "預約訂金",
     returnUrl,
     notifyUrl,
     clientBackUrl,
@@ -88,23 +88,26 @@ export async function POST(req: NextRequest) {
     registration_id?: string;
     checkin_token?: string;
     appointment_id?: string;
+    membership_plan_id?: string;
     idToken?: string;
     browser_token?: string;
     return_path?: string;
   } | null;
-  if (!body?.registration_id && !body?.appointment_id) return fail("缺少付款對象");
-  if (body.registration_id && body.appointment_id) return fail("付款對象不唯一");
+  if (!body?.registration_id && !body?.appointment_id && !body?.membership_plan_id) return fail("缺少付款對象");
+  if ([body.registration_id, body.appointment_id, body.membership_plan_id].filter(Boolean).length > 1) return fail("付款對象不唯一");
   if (body.idToken && body.browser_token) return fail("付款身分不唯一");
 
   const svc = createServiceClient();
   let clinicId: string;
   let registrationId: string | null = null;
   let appointmentId: string | null = null;
+  let membershipPlanId: string | null = null;
+  let patientId: string | null = null;
   let amount = 0;
   let publicAppointment: PublicAppointment | null = null;
   let paymentExpiresAt: string | null = null;
-  let returnPath = body.registration_id ? "/register" : "/admin";
-  let existingOrder: { id: string; merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; provider: string; status: string; expires_at: string | null; return_path: string | null } | null = null;
+  let returnPath = body.registration_id ? "/register" : body.membership_plan_id ? "/membership" : "/admin";
+  let existingOrder: { id: string; merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; membership_plan_id: string | null; patient_id: string | null; provider: string; status: string; expires_at: string | null; return_path: string | null } | null = null;
 
   try {
     if (body.registration_id) {
@@ -137,8 +140,40 @@ export async function POST(req: NextRequest) {
       amount = Number(registration.amount);
       const { data: found, error: foundError } = await svc
         .from("payment_orders")
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, provider, status, expires_at, return_path")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
         .eq("registration_id", registration.id)
+        .eq("status", "pending")
+        .maybeSingle();
+      if (foundError) throw new Error(foundError.message);
+      existingOrder = found;
+    } else if (body.membership_plan_id) {
+      if (!body.browser_token) return fail("缺少會員身分憑證");
+      const publicClinicId = await resolvePublicClinicId(req, svc);
+      if (!publicClinicId) return fail("缺少品牌設定", 500);
+      const identity = verifyBrowserBookingToken(body.browser_token);
+      if (!identity || identity.clinicId !== publicClinicId) return fail("會員身分憑證已失效", 401);
+      clinicId = publicClinicId;
+      const [{ data: patient, error: patientError }, { data: plan, error: planError }] = await Promise.all([
+        svc.from("patients").select("id").eq("id", identity.patientId).eq("clinic_id", clinicId).eq("active", true).maybeSingle(),
+        svc.from("membership_plans").select("id, active").eq("id", body.membership_plan_id).eq("clinic_id", clinicId).eq("active", true).maybeSingle(),
+      ]);
+      if (patientError) throw new Error(patientError.message);
+      if (planError) throw new Error(planError.message);
+      if (!patient || !plan) return fail("會員方案不存在或已停用", 404);
+      const { data: price, error: priceError } = await svc.rpc("get_membership_plan_price", { p_clinic_id: clinicId, p_plan_id: plan.id, p_patient_id: patient.id });
+      if (priceError) throw new Error(priceError.message);
+      const priceRow = Array.isArray(price) ? price[0] : price;
+      amount = Number((priceRow as { price?: number } | null)?.price ?? 0);
+      if (!Number.isInteger(amount) || amount <= 0) return fail("此方案目前不提供公開付款", 409);
+      paymentExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      returnPath = safeReturnPath(body.return_path, "/membership");
+      membershipPlanId = plan.id;
+      patientId = patient.id;
+      const { data: found, error: foundError } = await svc
+        .from("payment_orders")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
+        .eq("membership_plan_id", plan.id)
+        .eq("patient_id", patient.id)
         .eq("status", "pending")
         .maybeSingle();
       if (foundError) throw new Error(foundError.message);
@@ -193,7 +228,7 @@ export async function POST(req: NextRequest) {
       paymentExpiresAt = appointment.deposit_expires_at ?? null;
       const { data: found, error: foundError } = await svc
         .from("payment_orders")
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, provider, status, expires_at, return_path")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
         .eq("appointment_id", appointment.id)
         .eq("status", "pending")
         .maybeSingle();
@@ -213,10 +248,12 @@ export async function POST(req: NextRequest) {
 
     const order = existingOrder ?? {
       id: "",
-      merchant_order_no: createMerchantOrderNo(registrationId ? "REG" : "APT"),
+      merchant_order_no: createMerchantOrderNo(registrationId ? "REG" : membershipPlanId ? "MEM" : "APT"),
       amount,
       registration_id: registrationId,
       appointment_id: appointmentId,
+      membership_plan_id: membershipPlanId,
+      patient_id: patientId,
       expires_at: paymentExpiresAt,
       return_path: returnPath,
       status: "pending",
@@ -229,6 +266,8 @@ export async function POST(req: NextRequest) {
           clinic_id: clinicId,
           registration_id: registrationId,
           appointment_id: appointmentId,
+          membership_plan_id: membershipPlanId,
+          patient_id: patientId,
           provider: settings.provider,
           merchant_order_no: order.merchant_order_no,
           amount,
@@ -237,17 +276,19 @@ export async function POST(req: NextRequest) {
           status: "pending",
           provider_payload: {},
         })
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, provider, status, expires_at, return_path")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
         .single();
       if (error) {
         // 多個付款頁同時開啟時，partial unique index 只允許同一對象保留一筆 pending 訂單；競爭輸入改用已存在的訂單。
         if (error.code !== "23505") throw new Error(error.message);
-        const { data: concurrent, error: concurrentError } = await svc
+        let concurrentQuery = svc
           .from("payment_orders")
-          .select("id, merchant_order_no, amount, registration_id, appointment_id, provider, status, expires_at, return_path")
-          .eq(registrationId ? "registration_id" : "appointment_id", registrationId ?? appointmentId)
-          .eq("status", "pending")
-          .maybeSingle();
+          .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
+          .eq("status", "pending");
+        if (registrationId) concurrentQuery = concurrentQuery.eq("registration_id", registrationId);
+        else if (membershipPlanId && patientId) concurrentQuery = concurrentQuery.eq("membership_plan_id", membershipPlanId).eq("patient_id", patientId);
+        else if (appointmentId) concurrentQuery = concurrentQuery.eq("appointment_id", appointmentId);
+        const { data: concurrent, error: concurrentError } = await concurrentQuery.maybeSingle();
         if (concurrentError || !concurrent) throw new Error(concurrentError?.message ?? "建立付款訂單失敗");
         Object.assign(order, concurrent);
       } else if (!inserted) {

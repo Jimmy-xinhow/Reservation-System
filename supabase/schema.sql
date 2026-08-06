@@ -1404,6 +1404,8 @@ create table if not exists payment_orders (
   clinic_id uuid not null references clinics(id) on delete cascade,
   appointment_id uuid references appointments(id) on delete restrict,
   registration_id uuid references registrations(id) on delete restrict,
+  membership_plan_id uuid,
+  patient_id uuid references patients(id) on delete restrict,
   provider text not null check (provider in ('ecpay','newebpay')),
   merchant_order_no text not null,
   amount integer not null check (amount > 0),
@@ -1415,15 +1417,31 @@ create table if not exists payment_orders (
   provider_payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check ((appointment_id is null) <> (registration_id is null)),
+  check (
+    (appointment_id is not null and registration_id is null and membership_plan_id is null and patient_id is null)
+    or (registration_id is not null and appointment_id is null and membership_plan_id is null and patient_id is null)
+    or (membership_plan_id is not null and patient_id is not null and appointment_id is null and registration_id is null)
+  ),
   unique (provider, merchant_order_no)
 );
 alter table payment_orders add column if not exists expires_at timestamptz;
+alter table payment_orders add column if not exists membership_plan_id uuid;
+alter table payment_orders add column if not exists patient_id uuid references patients(id) on delete restrict;
+alter table payment_orders drop constraint if exists payment_orders_check;
+alter table payment_orders drop constraint if exists payment_orders_subject_check;
+alter table payment_orders add constraint payment_orders_subject_check check (
+  (appointment_id is not null and registration_id is null and membership_plan_id is null and patient_id is null)
+  or (registration_id is not null and appointment_id is null and membership_plan_id is null and patient_id is null)
+  or (membership_plan_id is not null and patient_id is not null and appointment_id is null and registration_id is null)
+);
 create index if not exists payment_orders_clinic_idx on payment_orders (clinic_id, status, created_at desc);
 create unique index if not exists payment_orders_registration_pending_idx
   on payment_orders (registration_id) where registration_id is not null and status = 'pending';
 create unique index if not exists payment_orders_appointment_pending_idx
   on payment_orders (appointment_id) where appointment_id is not null and status = 'pending';
+create unique index if not exists payment_orders_membership_pending_idx
+  on payment_orders (membership_plan_id, patient_id)
+  where membership_plan_id is not null and patient_id is not null and status = 'pending';
 
 create table if not exists payment_transactions (
   id uuid primary key default gen_random_uuid(),
@@ -1887,6 +1905,7 @@ create table if not exists patient_memberships (
   clinic_id uuid not null references clinics(id) on delete restrict,
   patient_id uuid not null references patients(id) on delete restrict,
   plan_id uuid not null references membership_plans(id) on delete restrict,
+  payment_order_id uuid,
   membership_code text not null,
   status text not null default 'active' check (status in ('active','exhausted','expired','cancelled')),
   credits_total integer not null check (credits_total > 0),
@@ -1900,6 +1919,7 @@ create table if not exists patient_memberships (
   check (expires_at is null or expires_at > starts_at)
 );
 create unique index if not exists patient_memberships_code_idx on patient_memberships (clinic_id, membership_code);
+create unique index if not exists patient_memberships_payment_order_idx on patient_memberships (payment_order_id) where payment_order_id is not null;
 create index if not exists patient_memberships_patient_idx on patient_memberships (clinic_id, patient_id, status, expires_at);
 
 create table if not exists membership_ledger (
@@ -1942,6 +1962,15 @@ create table if not exists membership_plan_level_prices (
   unique (plan_id, level_id)
 );
 alter table patients add column if not exists membership_level_id uuid references membership_levels(id) on delete set null;
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.payment_orders'::regclass and conname = 'payment_orders_membership_plan_fk') then
+    alter table payment_orders add constraint payment_orders_membership_plan_fk foreign key (membership_plan_id) references membership_plans(id) on delete restrict;
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.patient_memberships'::regclass and conname = 'patient_memberships_payment_order_fk') then
+    alter table patient_memberships add constraint patient_memberships_payment_order_fk foreign key (payment_order_id) references payment_orders(id) on delete restrict;
+  end if;
+end $$;
 create index if not exists patients_membership_level_idx on patients (clinic_id, membership_level_id);
 create index if not exists membership_levels_clinic_idx on membership_levels (clinic_id, active, sort_order);
 create index if not exists membership_plan_level_prices_clinic_idx on membership_plan_level_prices (clinic_id, plan_id);
@@ -1965,12 +1994,30 @@ create table if not exists discount_codes (
   used_count integer not null default 0 check (used_count >= 0),
   starts_at timestamptz,
   ends_at timestamptz,
+  benefit_type text not null default 'coupon' check (benefit_type in ('coupon','voucher')),
+  recipient_name text,
+  recipient_phone text,
+  issued_at timestamptz not null default now(),
   active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (kind <> 'percent' or value <= 100),
+  check (benefit_type <> 'voucher' or max_uses = 1),
   check (ends_at is null or starts_at is null or ends_at > starts_at)
 );
+alter table discount_codes add column if not exists benefit_type text not null default 'coupon';
+alter table discount_codes add column if not exists recipient_name text;
+alter table discount_codes add column if not exists recipient_phone text;
+alter table discount_codes add column if not exists issued_at timestamptz not null default now();
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conrelid = 'public.discount_codes'::regclass and conname = 'discount_codes_benefit_type_check') then
+    alter table discount_codes add constraint discount_codes_benefit_type_check check (benefit_type in ('coupon', 'voucher'));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'public.discount_codes'::regclass and conname = 'discount_codes_voucher_single_use_check') then
+    alter table discount_codes add constraint discount_codes_voucher_single_use_check check (benefit_type <> 'voucher' or max_uses = 1);
+  end if;
+end $$;
 create unique index if not exists discount_codes_code_idx on discount_codes (clinic_id, lower(code));
 create index if not exists discount_codes_active_idx on discount_codes (clinic_id, active, starts_at, ends_at);
 
@@ -3914,3 +3961,90 @@ create policy service_resource_assignments_tenant on public.service_resource_ass
     and exists (select 1 from public.services service where service.id = service_resource_assignments.service_id and service.clinic_id = service_resource_assignments.clinic_id)
     and exists (select 1 from public.service_resources resource where resource.id = service_resource_assignments.resource_id and resource.clinic_id = service_resource_assignments.clinic_id)
   );
+
+create or replace function public.grant_paid_membership_from_order(
+  p_clinic_id uuid,
+  p_payment_order_id uuid
+)
+returns table (membership_id uuid, membership_code text, expires_at timestamptz, credits_remaining integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  o record;
+  plan_row record;
+  existing record;
+  v_id uuid;
+  v_code text;
+  v_expires timestamptz;
+begin
+  select po.id, po.status, po.clinic_id, po.patient_id, po.membership_plan_id
+    into o
+    from public.payment_orders po
+   where po.id = p_payment_order_id and po.clinic_id = p_clinic_id
+   for update;
+  if not found or o.membership_plan_id is null or o.patient_id is null then
+    raise exception 'membership payment order not found';
+  end if;
+  if o.status <> 'paid' then raise exception 'membership payment is not paid'; end if;
+  select pm.id, pm.membership_code, pm.expires_at, pm.credits_remaining
+    into existing
+    from public.patient_memberships pm
+   where pm.payment_order_id = p_payment_order_id;
+  if found then
+    return query select existing.id, existing.membership_code, existing.expires_at, existing.credits_remaining;
+    return;
+  end if;
+  select * into plan_row from public.membership_plans
+   where id = o.membership_plan_id and clinic_id = p_clinic_id;
+  if not found then raise exception 'membership plan not found'; end if;
+  if not exists (select 1 from public.patients where id = o.patient_id and clinic_id = p_clinic_id and active) then
+    raise exception 'patient not found';
+  end if;
+  if plan_row.valid_days is not null then v_expires := now() + (plan_row.valid_days || ' days')::interval; end if;
+  loop
+    v_code := upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 10));
+    exit when not exists (select 1 from public.patient_memberships where clinic_id = p_clinic_id and membership_code = v_code);
+  end loop;
+  insert into public.patient_memberships
+    (clinic_id, patient_id, plan_id, payment_order_id, membership_code, credits_total, credits_remaining, starts_at, expires_at, source, note)
+    values (p_clinic_id, o.patient_id, o.membership_plan_id, p_payment_order_id, v_code, plan_row.credits_total, plan_row.credits_total, now(), v_expires, 'purchase', 'membership payment purchase')
+    returning id into v_id;
+  insert into public.membership_ledger
+    (clinic_id, membership_id, patient_id, kind, credits_delta, reference_type, reference_id, note)
+    values (p_clinic_id, v_id, o.patient_id, 'grant', plan_row.credits_total, 'payment_order', p_payment_order_id, 'membership payment purchase');
+  return query select v_id, v_code, v_expires, plan_row.credits_total;
+end;
+$$;
+revoke all on function public.grant_paid_membership_from_order(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.grant_paid_membership_from_order(uuid, uuid) to service_role;
+
+create or replace function public.expire_pending_membership_payments()
+returns integer
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  n integer;
+begin
+  with expired_orders as (
+    update public.payment_orders
+       set status = 'expired', updated_at = now()
+     where membership_plan_id is not null
+       and patient_id is not null
+       and status = 'pending'
+       and expires_at is not null
+       and expires_at <= now()
+    returning id, clinic_id
+  )
+  insert into public.payment_status_events (clinic_id, payment_order_id, from_status, to_status, source)
+    select clinic_id, id, 'pending', 'expired', 'membership_expiry'
+      from expired_orders;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+revoke all on function public.expire_pending_membership_payments() from public, anon, authenticated;
+grant execute on function public.expire_pending_membership_payments() to service_role;

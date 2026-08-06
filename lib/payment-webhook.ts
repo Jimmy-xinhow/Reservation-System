@@ -19,6 +19,8 @@ interface PaymentOrderState {
   clinic_id: string;
   registration_id: string | null;
   appointment_id: string | null;
+  membership_plan_id: string | null;
+  patient_id: string | null;
   amount: number;
   status: string;
   provider: string;
@@ -65,6 +67,14 @@ async function reconcilePaymentState(supabase: SupabaseClient, order: PaymentOrd
       if (error) throw new Error(error.message);
     }
   }
+
+  if (order.membership_plan_id && order.patient_id && success) {
+    const { error } = await supabase.rpc("grant_paid_membership_from_order", {
+      p_clinic_id: order.clinic_id,
+      p_payment_order_id: order.id,
+    });
+    if (error) throw new Error(error.message);
+  }
 }
 
 export async function processPaymentWebhook(
@@ -77,7 +87,7 @@ export async function processPaymentWebhook(
 
   const { data: order, error: orderError } = await supabase
     .from("payment_orders")
-    .select("id, clinic_id, registration_id, appointment_id, amount, status, provider")
+    .select("id, clinic_id, registration_id, appointment_id, membership_plan_id, patient_id, amount, status, provider")
     .eq("provider", event.provider)
     .eq("clinic_id", event.clinicId)
     .eq("merchant_order_no", event.merchantOrderNo)

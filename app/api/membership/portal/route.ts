@@ -32,9 +32,18 @@ export async function POST(request: NextRequest) {
       patientId = row?.patient_id ?? null;
     }
     if (!patientId) return fail("找不到會員資料", 404);
-    const { data, error } = await service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, membership_plans(name, description, price)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false });
+    const [{ data, error }, { data: plans, error: plansError }] = await Promise.all([
+      service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, membership_plans(name, description, price)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }),
+      service.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id").eq("clinic_id", clinicId).eq("active", true).order("created_at", { ascending: false }),
+    ]);
     if (error) return fail(error.message, 500);
-    return ok({ browser_token: identity ? body?.browser_token : createBrowserBookingToken(clinicId, patientId), memberships: data ?? [] });
+    if (plansError) return fail(plansError.message, 500);
+    const plansWithPrices = await Promise.all((plans ?? []).map(async (plan) => {
+      const { data: price, error: priceError } = await service.rpc("get_membership_plan_price", { p_clinic_id: clinicId, p_plan_id: plan.id, p_patient_id: patientId });
+      if (priceError) throw new Error(priceError.message);
+      const priceRow = Array.isArray(price) ? price[0] : price;
+      return { ...plan, price: Number((priceRow as { price?: number } | null)?.price ?? plan.price) };
+    }));
+    return ok({ browser_token: identity ? body?.browser_token : createBrowserBookingToken(clinicId, patientId), memberships: data ?? [], plans: plansWithPrices });
   } catch (error) { return fail(error instanceof Error ? error.message : "會員資料查詢失敗", 500); }
 }
-
