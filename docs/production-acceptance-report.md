@@ -13,7 +13,7 @@
 - `npm run build`：PASS。現有 lint warning 只涉及 custom font 與 `<img>`，不阻擋 build。
 - `npm run smoke:public`：PASS；以本次 production build 在獨立 3209 port 執行，十一個公開頁（`/`、`/register`、`/register/pay`、`/book/browser`、`/book/browser/my`、`/book/browser/reschedule`、`/book/reschedule`、`/register/cancel`、`/payment/result`、`/embed/register`、`/admin/login`）回 200，三支 Cron 未授權回 401。
 - Playwright UI recon：以正式 Supabase runtime 與 active brand 在 3210 port 執行，桌面 1440×900／手機 390×844 的首頁、報名、瀏覽器預約、嵌入與後台登入皆無 application/page error 且無水平溢出；瀏覽器預約可切換初診並填入姓名／電話。Google Fonts 請求受測試環境網路政策阻擋，未影響頁面渲染，列為外部資源限制。
-- Railway 公開網址唯讀 smoke：`https://reservation-system-production-9b71.up.railway.app` 的十一個頁面均 HTTP 200、三支 Cron 未授權均 HTTP 401；但 `/api/booking/config` 與 `/api/registration/events` 在正式網址回 HTTP 500 `缺少品牌設定`，因此目前只能證明部署頁面存在，不能視為公開預約／報名可用。
+- Railway 公開網址唯讀 smoke：`https://reservation-system-production-9b71.up.railway.app` 的公開頁面均 HTTP 200、三支 Cron 未授權均 HTTP 401；設定 `NEXT_PUBLIC_CLINIC_ID` 與 `PUBLIC_SHARED_HOSTS` 後，`/api/booking/config` 與 `/api/registration/events` 均 HTTP 200 且 `ok=true`，正式公開預約／報名 API 已恢復可用。
 - `.ics` runtime 驗收：錯誤日期回 400、正常內容回 200、CRLF 注入行不存在，Content-Type 為 `text/calendar`。
 - `npm audit --omit=dev`：PASS，0 vulnerabilities；依賴與原始碼檢查未發現實際密鑰值寫入版本庫。
 - 預約顧客端（LINE／瀏覽器）已支援選填 Email；僅在身分驗證、租戶範圍與預約建立成功後寫入，更新失敗會取消該筆預約。
@@ -68,7 +68,6 @@
 - Email／行銷投遞：需要 Email provider、寄件網域與測試信箱。
 - ECPay／NewebPay：需要 test merchant、金流設定與可接收的 callback URL。
 - Cron 重跑：需要部署 URL 與 `CRON_SECRET`。
-- Railway：repo 內記錄的公開網址頁面 smoke 通過，但正式 API 回 `缺少品牌設定`；帳號 `jimmy@xinhow.com.tw` 已登入，CLI 仍無 linked project，需指定正確 project／environment 並補齊部署品牌 context（`NEXT_PUBLIC_CLINIC_ID` 相容 fallback 或已驗證 host／slug）後才能完成 API／UI 部署驗收。
 - 報名通知重試：部署環境需設定 `REGISTRATION_TOKEN_ENCRYPTION_KEY`（至少 32 字元）；正式資料庫欄位已套用，但目前未替部署環境代填秘密值。
 - 自訂網域／HTTPS：需要 DNS 控制權與正式 TLS／反向代理設定。
 
