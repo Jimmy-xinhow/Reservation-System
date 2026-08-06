@@ -17,6 +17,8 @@ export const dynamic = "force-dynamic";
 interface Row {
   id: string;
   start_at: string;
+  doctor_id: string | null;
+  service_id: string | null;
   queue_number: number | null;
   visit_type: string;
   status: string;
@@ -29,7 +31,7 @@ interface Row {
 
 const STATUS_LABEL: Record<string, string> = {
   booked: "已預約",
-  confirmed: "已預約", // 不再區分赴診確認
+  confirmed: "已確認",
   cancelled: "已取消",
   done: "完成",
   no_show: "未到",
@@ -103,7 +105,7 @@ export default async function TodayPage({
       return query.order("name");
     })(),
     apptQuery.order("start_at").order("queue_number", { nullsFirst: true }),
-    supabase.from("services").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("created_at"),
+    supabase.from("services").select("id, name, booking_target, booking_fields").eq("clinic_id", clinicId).eq("active", true).order("created_at"),
   ]);
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
@@ -115,10 +117,12 @@ export default async function TodayPage({
     .filter((r) => r.status === "booked" || r.status === "confirmed")
     .map((r) => ({
       id: r.id,
+      doctor_id: r.doctor_id,
+      service_id: r.service_id,
       label: `${r.patients?.name ?? ""} ${mode === "time" ? formatTime(r.start_at) : `第${r.queue_number}號`}`,
     }));
 
-  // 切換日期時保留醫師/狀態篩選
+  // 切換日期時保留服務提供者/狀態篩選
   const dayLink = (d: string) => {
     const u = new URLSearchParams();
     u.set("date", d);
@@ -132,7 +136,7 @@ export default async function TodayPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold text-slate-900">
-            約診 · {viewDate}
+            預約列表 · {viewDate}
             {viewDate === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
           </h1>
         </div>
@@ -156,21 +160,21 @@ export default async function TodayPage({
 
       {settingsUnavailable && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
-          讀不到此診所設定(clinic_settings)。請確認登入帳號已對應到本診所(clinic_members),
+          讀不到此品牌設定(clinic_settings)。請確認登入帳號已對應到本品牌(clinic_members),
           否則畫面模式與部分功能會不正確。
         </p>
       )}
 
       {!canOperate(role) ? (
         <div className="card space-y-2 p-5">
-          <p className="text-sm font-medium text-slate-700">服務提供者僅能查看已指派醫師的工作資料。</p>
+          <p className="text-sm font-medium text-slate-700">服務提供者僅能查看已指派的工作資料。</p>
           <p className="text-xs text-slate-500">
-            {assignedDoctorIds.length > 0 ? "目前已套用醫師指派範圍；顧客電話已遮罩。" : "目前尚未指派醫師，請由品牌管理員在帳號管理中設定。"}
+            {assignedDoctorIds.length > 0 ? "目前已套用指派範圍；顧客電話已遮罩。" : "目前尚未設定指派範圍，請由品牌管理員在帳號管理中設定。"}
           </p>
         </div>
-      ) : (doctors ?? []).length === 0 ? (
+      ) : (doctors ?? []).length === 0 && (services ?? []).length === 0 ? (
         <div className="card flex flex-col items-start gap-2 p-5">
-          <p className="text-sm text-slate-600">尚未建立服務提供者，顧客目前無法預約。</p>
+          <p className="text-sm text-slate-600">尚未建立服務提供者或服務項目，顧客目前無法預約。</p>
           <a href="/admin/schedules" className="btn btn-primary">
             前往服務排程新增服務提供者
           </a>
@@ -244,7 +248,7 @@ export default async function TodayPage({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={8} className="py-10 text-center text-slate-400">
-                  本日尚無約診
+                  本日尚無預約
                 </td>
               </tr>
             )}
@@ -269,9 +273,9 @@ export default async function TodayPage({
                 </td>
                 <td>
                   {r.visit_type === "first" ? (
-                    <span className="badge bg-accent-500/10 text-accent-600">初診</span>
+                    <span className="badge bg-accent-500/10 text-accent-600">首次服務</span>
                   ) : (
-                    <span className="badge bg-slate-100 text-slate-600">複診</span>
+                    <span className="badge bg-slate-100 text-slate-600">再次服務</span>
                   )}
                 </td>
                 <td>
@@ -303,6 +307,7 @@ export default async function TodayPage({
                 <td>
                   {r.status !== "cancelled" && r.status !== "done" && (
                     <div className="flex flex-wrap gap-1.5">
+                      {r.status === "booked" && <StatusBtn id={r.id} status="confirmed" label="確認" />}
                       <StatusBtn id={r.id} status="done" label="完成" />
                       <StatusBtn id={r.id} status="no_show" label="未到" />
                       <form action={cancelAppointmentAction}>

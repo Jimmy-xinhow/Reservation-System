@@ -170,7 +170,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
                 >
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium text-slate-800">
-                      {t.name ?? "未建檔病患"}
+                      {t.name ?? "未建檔顧客"}
                     </span>
                     {t.blocked && (
                       <span className="shrink-0 rounded bg-slate-200 px-1.5 text-[10px] font-medium text-slate-500">
@@ -209,7 +209,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
           <>
             <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
               <span className="font-semibold text-slate-800">
-                {activeThread.name ?? "未建檔病患"}
+                {activeThread.name ?? "未建檔顧客"}
               </span>
               {activeThread.blocked && (
                 <span className="rounded bg-slate-200 px-1.5 text-[10px] font-medium text-slate-500">

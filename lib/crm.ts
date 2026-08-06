@@ -50,7 +50,7 @@ export function previewAutomationTemplate(raw: string): string {
   const values: Record<string, string> = {
     customer_name: "王小明",
     appointment_time: "2026/08/08 14:30",
-    doctor_name: "林醫師",
+    doctor_name: "服務提供者 A",
     clinic_name: "品牌示例",
   };
   return raw.replace(/\{\{\s*([a-z_]+)\s*\}\}/g, (_, key: string) => values[key] ?? "");

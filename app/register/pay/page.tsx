@@ -23,6 +23,7 @@ export default function RegistrationPaymentPage() {
   const [registrationId, setRegistrationId] = useState("");
   const [clinicScope, setClinicScope] = useState("");
   const [token, setToken] = useState("");
+  const [browserToken, setBrowserToken] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
@@ -48,6 +49,8 @@ export default function RegistrationPaymentPage() {
         const parsed = JSON.parse(saved) as { checkin_token?: unknown };
         if (typeof parsed.checkin_token === "string") setToken(parsed.checkin_token);
       }
+      const scopeKey = clinicSlug || clinicId || "default";
+      setBrowserToken(window.localStorage.getItem(`customer_browser_token:${scopeKey}`) || window.localStorage.getItem(`booking_browser_token:${scopeKey}`) || "");
     } catch {
       // 私密瀏覽或瀏覽器禁用儲存時，改由使用者貼上憑證。
     }
@@ -55,8 +58,8 @@ export default function RegistrationPaymentPage() {
   }, []);
 
   async function pay() {
-    if (!validRegistrationId(registrationId) || !token.trim()) {
-      setError("請輸入報名完成頁顯示的報到憑證。");
+    if (!validRegistrationId(registrationId) || (!token.trim() && !browserToken.trim())) {
+      setError("找不到此筆報名的付款身分，請重新從報名完成頁或我的紀錄操作。");
       return;
     }
     setSubmitting(true);
@@ -70,7 +73,7 @@ export default function RegistrationPaymentPage() {
       const data = await readApi<PaymentFormResponse>(`/api/payment/create${clinicScope}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registration_id: registrationId, checkin_token: token.trim(), return_path: `/register/pay?registration_id=${encodeURIComponent(registrationId)}${clinicScope.replace("?", "&")}` }),
+        body: JSON.stringify({ registration_id: registrationId, checkin_token: token.trim() || undefined, browser_token: browserToken.trim() || undefined, return_path: `/register/pay?registration_id=${encodeURIComponent(registrationId)}${clinicScope.replace("?", "&")}` }),
       });
       const form = document.createElement("form");
       form.method = "POST";
@@ -100,7 +103,7 @@ export default function RegistrationPaymentPage() {
         {!ready ? <p className="text-sm text-slate-400">載入付款資料中…</p> : <>
           <label className="block text-sm"><span className="label">報到憑證</span><input className="input font-mono" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" placeholder="請貼上報名完成頁的憑證" /></label>
           {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-          <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={() => void pay()} disabled={submitting || !validRegistrationId(registrationId) || !token.trim()} className="btn btn-primary flex-1">{submitting ? "正在前往付款…" : "前往付款"}</button><Link href={backHref} className="btn btn-secondary flex-1">返回活動列表</Link></div>
+          <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={() => void pay()} disabled={submitting || !validRegistrationId(registrationId) || (!token.trim() && !browserToken.trim())} className="btn btn-primary flex-1">{submitting ? "正在前往付款…" : "前往付款"}</button><Link href={backHref} className="btn btn-secondary flex-1">返回活動列表</Link></div>
         </>}
       </section>
     </main>

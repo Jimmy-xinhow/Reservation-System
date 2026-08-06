@@ -47,13 +47,13 @@ insert into clinics (name) values ('示範品牌') returning id;
 
 -- 2) 預設 clinic_settings(出廠即可用)
 insert into clinic_settings (clinic_id) values ('<clinic_id>');
--- 其餘欄位皆有預設值:time 模式、不延長初診、一電話一人、不收訂金、前置30分、可約30天
+-- 其餘欄位皆有預設值:time 模式、不延長首次服務、一電話一人、不收訂金、前置30分、可約30天
 
 -- 3) 後台帳號:先在 Authentication → Users 以 email/密碼建立一名使用者,取得其 user id,
 --    再建立其與品牌的對應(後台 RLS 以此判斷可存取哪個品牌)
 insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_user_id>');
 
--- 4)(選用)新增醫師、門診段,亦可改由後台「門診表」頁建立
+-- 4)(選用)新增服務提供者、服務時段,亦可改由後台「服務排程」頁建立
 ```
 
 4. 相容單品牌部署時，把預設品牌 id 填進 `NEXT_PUBLIC_CLINIC_ID`；SaaS 模式不可只依賴此變數，必須使用登入後的品牌 context。
@@ -85,10 +85,10 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 | `PAYMENT_SECRETS_JSON` | 多品牌 `clinic_id` → `{hashKey,hashIv}` JSON；僅 server environment，不寫入資料庫 |
 | `REGISTRATION_TOKEN_ENCRYPTION_KEY` | 報名通知重試用 AES-GCM 加密金鑰（至少 32 字元）；僅 server environment，不寫入資料庫 |
 | `LINE_LOGIN_CHANNEL_ID` | LIFF 所屬 channel id(驗 ID token 用) |
-| `NEXT_PUBLIC_LIFF_ID` | 病患端 LIFF ID |
+| `NEXT_PUBLIC_LIFF_ID` | 顧客端 LIFF ID |
 | `PLATFORM_ADMIN_USER_IDS` | 平台總後台 bootstrap 管理員 UUID（逗號分隔；僅 server environment） |
 | `CRON_SECRET` | Vercel／Railway Cron 呼叫提醒、報名逾時與行銷 endpoint 的密鑰(長亂數) |
-| `REMINDER_HOURS_BEFORE` | 看診前幾小時發提醒(預設 24) |
+| `REMINDER_HOURS_BEFORE` | 預約前幾小時發提醒(預設 24) |
 | `MEMBERSHIP_LOW_BALANCE_THRESHOLD` | 會員餘額提醒門檻（預設 1 堂） |
 | `MEMBERSHIP_EXPIRY_NOTICE_DAYS` | 會員到期前提醒天數（預設 7 天） |
 | `APP_URL` | 公開 canonical URL；付款回呼／回跳與 Railway Cron 都使用此 server-side 網址 |
@@ -103,14 +103,14 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 1. **Messaging API channel**:取得 access token 與 channel secret。
 2. **Webhook URL**:設為 `https://<你的網域>/api/line/webhook`,並開啟「使用 webhook」。
    - 系統會驗 `x-line-signature`(HMAC-SHA256 / `LINE_CHANNEL_SECRET`)。
-   - 提醒訊息的「確認赴診/取消」按鈕以 postback 回寫約診狀態。
+   - 提醒訊息的「確認／取消」按鈕以 postback 回寫預約狀態。
 3. **LIFF**:在對應 channel 新增一個 LIFF app,Endpoint URL 設為 `https://<你的網域>/book`,取得 LIFF ID 填入 `NEXT_PUBLIC_LIFF_ID`;其所屬 channel id 填入 `LINE_LOGIN_CHANNEL_ID`。
 4. Rich Menu 連到該 LIFF。
 5. 多品牌 webhook：在各品牌公開設定填入 LINE webhook payload 的 `destination`；若各品牌使用不同 LINE channel，將 destination 對應的 secret／access token 放入 `LINE_CHANNEL_SECRETS_JSON`／`LINE_CHANNEL_ACCESS_TOKENS_JSON`，不可放到前端或資料庫。
 
 > 多品牌必須同時維護 `clinics.line_destination` 與兩張 credential map；只要任一 map 已啟用，未對應的 destination 會 fail-closed，不會回退到預設品牌 token。Rich Menu 與 webhook 回覆中的 LIFF 連結也會帶入目前品牌的 `clinic_slug`。
 
-> 病患端永不直接連 Supabase:LIFF 頁只呼叫本專案 API route,server 端以 service role 操作。前端送來的 `line_user_id` 一律先用 LIFF ID token 向 LINE 驗證後才採用。
+> 顧客端永不直接連 Supabase:LIFF 頁只呼叫本專案 API route,server 端以 service role 操作。前端送來的 `line_user_id` 一律先用 LIFF ID token 向 LINE 驗證後才採用。
 
 ---
 
@@ -124,7 +124,7 @@ npm run typecheck  # tsc --noEmit
 npm run verify:contracts  # 規格、路由、RLS 與秘密邊界靜態檢查
 ```
 
-- 病患預約頁:`/book`(需在 LINE/LIFF 環境;或設好 `NEXT_PUBLIC_LIFF_ID` 後於 LINE 內開啟)。
+- 顧客預約頁:`/book`(需在 LINE/LIFF 環境;或設好 `NEXT_PUBLIC_LIFF_ID` 後於 LINE 內開啟)。
 - 後台:`/admin`(未登入導向 `/admin/login`)。
 
 ---
@@ -183,8 +183,8 @@ Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders`
 ### Cron 時間(重要:Railway Cron 為 UTC)
 
 - `0 * * * *` = **每小時整點(UTC)**。台北時間 = **UTC + 8**(整點偏移),故台北亦為每小時整點觸發。
-- 採「看診前 N 小時」邏輯(`REMINDER_HOURS_BEFORE`,預設 24):每次掃描「未來 N 小時內、`status=booked`、尚無 LINE 提醒紀錄」的約診並推播。**因每小時整窗掃描,當天才新增的預約也會被涵蓋。**
-- `reminder_logs (appointment_id, channel)` unique 約束保證同一約診同管道只發一次。
+- 採「預約前 N 小時」邏輯(`REMINDER_HOURS_BEFORE`,預設 24):每次掃描「未來 N 小時內、`status=booked`、尚無 LINE 提醒紀錄」的預約並推播。**因每小時整窗掃描,當天才新增的預約也會被涵蓋。**
+- `reminder_logs (appointment_id, channel)` unique 約束保證同一預約同管道只發一次。
 - Railway 的每小時腳本會同時執行報名／付款逾時釋放與 CRM Lite 規則式行銷；各 endpoint 內部仍以冪等鍵與投遞紀錄防止重複。
 
 ### Vercel Cron 排程
@@ -207,21 +207,21 @@ Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders`
 
 ## 六、安全與個資要點
 
-- 所有資料表開啟 RLS,**不給 anon 任何 policy** → 用 anon key 讀不到任何病患資料。
-- 病患端一律經 Next.js API route 以 service role 操作;service key 僅存在 server 端。
-- 後台走 Supabase Auth(authenticated)+ `clinic_members` policy,只能存取自己診所。
+- 所有資料表開啟 RLS,**不給 anon 任何 policy** → 用 anon key 讀不到任何顧客資料。
+- 顧客端一律經 Next.js API route 以 service role 操作;service key 僅存在 server 端。
+- 後台走 Supabase Auth(authenticated)+ `clinic_members` policy,只能存取自己品牌。
 - RPC 全 `security definer`,execute 權限只給 `service_role`。
-- 取消約診為改 `status='cancelled'`,不 DELETE;醫師/診所為 soft-delete(`active=false`)。
+- 取消預約為改 `status='cancelled'`,不 DELETE;服務提供者／品牌為 soft-delete(`active=false`)。
 
 ---
 
 ## 七、目錄結構
 
 ```
-app/book/                 病患 LIFF 預約頁(依 booking_mode 渲染兩套 UI)
+app/book/                 顧客 LIFF 預約頁(依 booking_mode 渲染兩套 UI)
 app/my/                   統一顧客紀錄中心(預約／報名／會員)
-app/admin/                後台(今日約診/門診表/休診加診/病患查詢/診所設定)
-app/api/booking/          病患端 config/availability/patient/reserve(server, service role)
+app/admin/                後台(預約列表/服務排程/例外日期/顧客查詢/品牌設定)
+app/api/booking/          顧客端 config/availability/patient/reserve(server, service role)
 app/api/cron/reminders/   提醒排程(CRON_SECRET 驗證)
 app/api/line/webhook/     webhook 回寫(驗簽 + postback)
 lib/supabase.ts           anon / service-role client
@@ -251,5 +251,9 @@ vercel.json               (僅 Vercel 用;Railway 不讀)
 9. `supabase/migrations/202608060001_customer_portal_identity.sql`
 10. `supabase/migrations/202608060002_funnel_events.sql`
 11. `supabase/migrations/202608060003_registration_patient_transaction.sql`
+12. `supabase/migrations/202608060004_cross_industry_booking_foundation.sql`
+13. `supabase/migrations/202608060005_isolate_legacy_progress.sql`
+14. `supabase/migrations/202608060006_service_reschedule_transaction.sql`
+15. `supabase/migrations/202608060007_reschedule_same_day_fix.sql`
 
-每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣，`202608060001_customer_portal_identity.sql` 會把活動報名接到統一顧客入口，`202608060002_funnel_events.sql` 只保存匿名漏斗事件，`202608060003_registration_patient_transaction.sql` 讓報名與顧客關聯在同一個 DB transaction 完成。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `npm test`、`npm run typecheck` 與 `npm run build`。
+每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣，`202608060001_customer_portal_identity.sql` 會把活動報名接到統一顧客入口，`202608060002_funnel_events.sql` 只保存匿名漏斗事件，`202608060003_registration_patient_transaction.sql` 讓報名與顧客關聯在同一個 DB transaction 完成，`202608060004_cross_industry_booking_foundation.sql` 新增服務目標、共用服務排程與服務客製欄位，`202608060005_isolate_legacy_progress.sql` 將舊版服務進度設為明確 opt-in，`202608060006_service_reschedule_transaction.sql` 讓免指定服務提供者的預約也能原子改期，`202608060007_reschedule_same_day_fix.sql` 修正同日改期時舊預約佔位造成的誤判。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `npm test`、`npm run typecheck` 與 `npm run build`。

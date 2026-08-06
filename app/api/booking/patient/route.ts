@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/booking/patient
  * body: { idToken, name, phone }
- * 以 clinic_id+phone 建立或取得病患;依設定檢查一電話多病患上限。
+ * 以 clinic_id+phone 建立或取得顧客;依設定檢查一電話多顧客上限。
  * 順手存入經驗證的 line_user_id。
  */
 export async function POST(req: NextRequest) {
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     if (!clinicId) return fail("缺少品牌設定", 500);
     const settings = await getClinicSettings(svc, clinicId);
     if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);
-    if (!settings) return fail("查無診所設定", 500);
+    if (!settings) return fail("查無品牌設定", 500);
 
     const { data, error } = await svc.rpc("create_or_get_public_patient", {
       p_clinic_id: clinicId,
@@ -63,17 +63,17 @@ export async function POST(req: NextRequest) {
     });
     if (error) return fail(translatePatientError(error.message), 409);
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row?.patient_id) return fail("建立病患失敗", 500);
+    if (!row?.patient_id) return fail("建立顧客失敗", 500);
     return ok({ patient_id: row.patient_id, reused: row.reused === true });
   } catch (e) {
-    return fail(e instanceof Error ? e.message : "建立病患失敗", 500);
+    return fail(e instanceof Error ? e.message : "建立顧客失敗", 500);
   }
 }
 
 function translatePatientError(message: string): string {
-  if (message.includes("bound to another LINE")) return "此病患資料已綁定其他 LINE 帳號，請確認姓名、電話與生日";
+  if (message.includes("bound to another LINE")) return "此顧客資料已綁定其他 LINE 帳號，請確認姓名、電話與生日";
   if (message.includes("patient limit")) return "此電話可登記人數已達上限";
-  if (message.includes("phone already")) return "此電話已登記其他病患，請洽櫃檯";
+  if (message.includes("phone already")) return "此電話已登記其他顧客，請洽服務人員";
   if (message.includes("public booking")) return "目前暫停線上預約";
-  return "建立病患失敗，請稍後再試";
+  return "建立顧客失敗，請稍後再試";
 }

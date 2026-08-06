@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
 
 async function runClinic(svc: SupabaseClient, clinicId: string): Promise<{ scanned: number; sent: number; failed: number; skipped: number; duplicate: number; automations: number }> {
   const settings = await getClinicSettings(svc, clinicId);
-  if (!settings) throw new Error("找不到診所設定");
+  if (!settings) throw new Error("找不到品牌設定");
   const [{ data: automations, error: automationError }, { data: clinic, error: clinicError }] = await Promise.all([
     svc.from("crm_automations").select("id, name, trigger_type, segment_id, channel, delay_minutes, trigger_days, cooldown_days, subject, body, active").eq("clinic_id", clinicId).eq("active", true).order("created_at", { ascending: true }),
     svc.from("clinics").select("name, line_destination").eq("id", clinicId).maybeSingle(),
@@ -185,7 +185,7 @@ async function runAutomation(
     }
     const emailConfig = emailConfigForClinic(clinicId);
     if (automation.channel === "email" && (!patient.email || !settings.email_enabled || !emailConfig)) {
-      await markDelivery(svc, claim, "skipped", "顧客或診所尚未完成 Email 設定");
+      await markDelivery(svc, claim, "skipped", "顧客或品牌尚未完成 Email 設定");
       summary.skipped += 1;
       continue;
     }

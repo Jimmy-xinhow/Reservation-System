@@ -111,16 +111,19 @@ export async function POST(req: NextRequest) {
 
   try {
     if (body.registration_id) {
-      if (!body.checkin_token) return fail("缺少付款憑證");
       const publicClinicId = await resolvePublicClinicId(req, svc);
       if (!publicClinicId) return fail("缺少品牌設定", 500);
-      const { data: registration, error } = await svc
+      const customerIdentity = !body.checkin_token && body.browser_token ? verifyBrowserBookingToken(body.browser_token) : null;
+      if (!body.checkin_token && (!customerIdentity || customerIdentity.clinicId !== publicClinicId)) return fail("缺少付款憑證", 401);
+      let registrationQuery = svc
         .from("registrations")
-        .select("id, clinic_id, amount, status, payment_status, checkin_token_hash, expires_at")
+        .select("id, clinic_id, patient_id, amount, status, payment_status, checkin_token_hash, expires_at")
         .eq("id", body.registration_id)
-        .eq("clinic_id", publicClinicId)
-        .eq("checkin_token_hash", tokenHash(body.checkin_token))
-        .maybeSingle();
+        .eq("clinic_id", publicClinicId);
+      registrationQuery = body.checkin_token
+        ? registrationQuery.eq("checkin_token_hash", tokenHash(body.checkin_token))
+        : registrationQuery.eq("patient_id", customerIdentity!.patientId);
+      const { data: registration, error } = await registrationQuery.maybeSingle();
       if (error) throw new Error(error.message);
       if (!registration) return fail("付款憑證無效", 404);
       if (registration.payment_status !== "pending" || registration.status !== "pending") return fail("此報名目前不需要付款");

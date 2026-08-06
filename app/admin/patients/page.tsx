@@ -103,7 +103,7 @@ export default async function PatientsPage({
     total = count ?? 0;
   }
 
-  // 各病患的約診/未到統計
+  // 各顧客的預約/未到統計
   const counts = new Map<string, { all: number; noShow: number }>();
   if (patients.length > 0) {
     const { data: appts } = await supabase
@@ -149,7 +149,7 @@ export default async function PatientsPage({
               <th>姓名</th>
               <th>電話</th>
               <th>標籤</th>
-              <th>約診</th>
+              <th>預約</th>
               <th>未到</th>
               <th>狀態</th>
               <th></th>

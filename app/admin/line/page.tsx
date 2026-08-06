@@ -41,7 +41,7 @@ export default async function LinePage({
     { key: "LINE_CHANNEL_ACCESS_TOKEN", label: "Messaging API access token(推播/回覆)" },
     { key: "LINE_CHANNEL_SECRET", label: "Channel secret(驗 webhook 簽章)" },
     { key: "LINE_LOGIN_CHANNEL_ID", label: "LIFF channel id(驗 ID token)" },
-    { key: "NEXT_PUBLIC_LIFF_ID", label: "LIFF ID(病患端入口)" },
+    { key: "NEXT_PUBLIC_LIFF_ID", label: "LIFF ID(顧客端入口)" },
     { key: "CRON_SECRET", label: "Cron 密鑰(提醒排程)" },
   ];
 
@@ -57,7 +57,7 @@ export default async function LinePage({
     }
   }
 
-  // 取一個有 line_user_id 的病患,方便快速測試
+  // 取一個有 line_user_id 的顧客,方便快速測試
   const { data: sample } = await supabase
     .from("patients")
     .select("name, line_user_id")
@@ -126,7 +126,7 @@ export default async function LinePage({
       <section className="card p-5">
         <h2 className="mb-3 font-semibold text-slate-900">要設定到 LINE 後台的網址</h2>
         <CopyRow label="Webhook URL(Messaging API)" value={`${base}/api/line/webhook`} />
-        <CopyRow label="LIFF Endpoint URL(病患預約頁)" value={`${base}/book`} />
+        <CopyRow label="LIFF Endpoint URL(顧客預約頁)" value={`${base}/book`} />
         <p className="mt-3 text-xs text-slate-400">
           於 LINE Developers:Messaging API → Webhook URL 貼上第一條並啟用;LIFF app 的 Endpoint URL 貼上第二條。
         </p>
@@ -166,7 +166,7 @@ export default async function LinePage({
               placeholder="Uxxxxxxxx..."
             />
             {sample?.line_user_id && (
-              <p className="mt-1 text-xs text-slate-400">已帶入病患「{sample.name}」的 LINE ID 方便測試。</p>
+              <p className="mt-1 text-xs text-slate-400">已帶入顧客「{sample.name}」的 LINE ID 方便測試。</p>
             )}
           </div>
           <SubmitButton className="btn btn-primary" disabled={!clinicToken}>

@@ -79,7 +79,7 @@ export default function RichMenuEditor({
       {/* ③ 每格動作 */}
       <section className="space-y-3">
         <h3 className="font-semibold text-slate-900">③ 每格動作</h3>
-        <p className="text-sm text-slate-400">設定病患點每一格時要做什麼(格號對應上方示意圖)。</p>
+        <p className="text-sm text-slate-400">設定顧客點每一格時要做什麼(格號對應上方示意圖)。</p>
         {slots.map((s, i) => (
           <div key={i} className="rounded-xl border border-slate-200 p-3">
             <div className="mb-2 text-sm font-medium text-slate-700">

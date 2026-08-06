@@ -17,7 +17,7 @@ export interface ChatMsg {
 /**
  * POST /api/chat/messages
  * body: { idToken }
- * 病患輪詢自己的客服對話(最近 200 則)。順帶把櫃檯訊息標記為病患已讀。
+ * 顧客輪詢自己的客服對話(最近 200 則)。順帶把服務人員訊息標記為顧客已讀。
  */
 export async function POST(req: NextRequest) {
   const limited = rateLimitResponse(req, "chat:messages", 20);
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
       .limit(200);
     if (error) return fail(error.message, 500);
 
-    // 標記櫃檯訊息為病患已讀(不影響回傳)
+    // 標記服務人員訊息為顧客已讀(不影響回傳)
     await svc
       .from("chat_messages")
       .update({ read_by_patient: true })

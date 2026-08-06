@@ -10,8 +10,8 @@ import { recordCrmInteraction } from "@/lib/crm-interactions";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 非看診時間的自動回覆
-const OFFHOURS_REPLY = "現在非看診時間,我們將在看診時間時盡快回復您";
+// 非服務時間的自動回覆
+const OFFHOURS_REPLY = "目前非服務時間,我們將在服務時間盡快回覆您";
 
 /**
  * POST /api/chat/send

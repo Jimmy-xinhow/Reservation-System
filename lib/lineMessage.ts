@@ -27,7 +27,7 @@ export interface MsgData {
 export const BTN_ACTION_OPTIONS: { value: BtnAction; label: string }[] = [
   { value: "booking", label: "開啟預約" },
   { value: "query", label: "查詢預約" },
-  { value: "progress", label: "看診進度" },
+  { value: "progress", label: "服務進度（舊版）" },
   { value: "uri", label: "自訂連結" },
   { value: "text", label: "送出文字" },
 ];
@@ -51,7 +51,7 @@ function actionObj(b: MsgButton, ctx: BuildCtx): Flex | null {
     case "query":
       return { type: "postback", label: lbl, data: "action=my", displayText: "查詢預約" };
     case "progress":
-      return { type: "postback", label: lbl, data: "action=progress", displayText: "看診進度" };
+      return { type: "postback", label: lbl, data: "action=progress", displayText: "服務進度" };
     case "uri":
       return b.value ? { type: "uri", label: lbl, uri: b.value } : null;
     case "text":

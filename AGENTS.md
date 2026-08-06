@@ -1,4 +1,4 @@
-# AGENTS.md — 診所預約系統 開發規範
+# AGENTS.md — 多品牌預約與報名 SaaS 開發規範
 
 本檔是這個專案的最高規則。`clinic-booking-spec-v3.md` 是目前功能、開發與驗收規格；`clinic-booking-spec-v2.md` 與 `saas-platform-plan-v1.md` 僅供歷史追溯。**當規格與本檔衝突,以本檔為準**。動工前先讀完本檔與 v3 規格。
 
@@ -7,7 +7,7 @@
 ## 專案是什麼
 
 多品牌 SaaS 的線上預約與報名系統,範圍包含:**預約、報名、收款、提醒、CRM Lite、報表、品牌與後台管理**。
-- 病患端:LINE 官方帳號 Rich Menu → LIFF 開啟預約頁。
+- 顧客端:LINE 官方帳號 Rich Menu → LIFF 開啟預約頁。
 - 顧客端:主要使用 LINE Rich Menu → LIFF,並提供瀏覽器、自訂網址、嵌入元件與自訂網域入口。
 - 後台:品牌成員依角色管理預約、報名、報到、顧客、訊息、CRM Lite 與報表。
 - 提醒與行銷:LINE／Email 行前提醒及規則式行銷自動化。
@@ -23,16 +23,18 @@
 
 這是**多租戶產品,不是單一客戶**。品牌／租戶之間的行為差異一律放設定,目前相容欄位為 `clinic_settings`,程式讀設定決定行為,**禁止寫死任何單一模式或門檻**。
 
-- **預約模式**:讀 `booking_mode`。`time`=時間制(選確切時段、區間重疊算容量)、`number`=號次制(選診次給號、整診總量)。兩套 UI 與兩組 RPC 都要做,依設定切換,不可只實作一種。
-- **初診時長**:讀 `first_visit_extends` / `first_visit_minutes`,不要假設初複診等長。
-- **一電話多病患**:讀 `allow_multi_patient_per_phone` / `max_patients_per_phone`,建立病患時在 server 端檢查上限。
+- **預約模式**:讀 `booking_mode`。`time`=時間制(選確切時段、區間重疊算容量)、`number`=場次制(選服務場次給號、整場總量)。兩套 UI 與兩組 RPC 都要做,依設定切換,不可只實作一種。
+- **首次服務時長**:讀 `first_visit_extends` / `first_visit_minutes`,不要假設首次與再次服務等長。
+- **一電話多顧客**:讀 `allow_multi_patient_per_phone` / `max_patients_per_phone`,建立顧客時在 server 端檢查上限。
 - **訂金**:讀 `deposit_enabled` / `deposit_amount` / `deposit_scope`;付款狀態與訂金狀態分開保存,依 v3 標準金流流程處理。
 - **標準金流**:綠界／藍新付款、回呼與付款狀態納入;其他金流、完整退款與對帳另行報價,不代收款。
 - **會員／套票／優惠碼**:標準功能包含會員套票、堂數 ledger 與報名優惠碼；一堂抵一次預約或一張指定活動票，優惠碼與套票不可疊加，完整退款／對帳仍屬加購範圍。
 - **預約區間**:讀 `min_lead_minutes` / `max_advance_days`。
 - **品牌與入口**:品牌設定、Rich Menu → LIFF、瀏覽器備援、自訂網址、嵌入元件與自訂網域依租戶設定運作。
+- **跨產業服務目標**:服務可設定為必須指定服務提供者、可指定或由系統安排、或只使用場地／設備資源；後兩者使用 `service_id` 排程，不得要求虛構人員。
+- **舊版服務進度**:叫號／服務進度僅作相容保留，`clinic_settings.legacy_progress_enabled` 預設關閉；標準預約與報名流程不得依賴它。
 
-新建診所要自動帶一筆預設 `clinic_settings`(出廠即可用)。任何「要哪一種」的問題,答案都是「做成設定、兩種都做」。
+新建品牌要自動帶一筆預設 `clinic_settings`(出廠即可用)。任何「要哪一種」的問題,答案都是「做成設定、兩種都做」。
 
 ---
 
@@ -40,7 +42,7 @@
 - Next.js 15 App Router + TypeScript(`strict: true`)
 - Supabase (Postgres) — 資料 + 後台 Auth
 - Tailwind CSS v4
-- LINE Messaging API(推播 / webhook)+ LIFF(病患入口)
+- LINE Messaging API(推播 / webhook)+ LIFF(顧客入口)
 - Vercel Cron(排程)
 
 不要為了某個小功能引入新框架或 ORM。要加任何相依套件前先說明理由。
@@ -49,10 +51,10 @@
 
 ## 安全與個資(最高優先,違反視為 bug)
 
-1. **病患端永不直接連 Supabase。** LIFF 頁只能呼叫本專案的 Next.js API route;所有 DB 操作在 server 端用 `SUPABASE_SERVICE_ROLE_KEY` 執行。`service_role key` 絕不可出現在任何 client component 或 `NEXT_PUBLIC_*` 變數。
+1. **顧客端永不直接連 Supabase。** LIFF 頁只能呼叫本專案的 Next.js API route;所有 DB 操作在 server 端用 `SUPABASE_SERVICE_ROLE_KEY` 執行。`service_role key` 絕不可出現在任何 client component 或 `NEXT_PUBLIC_*` 變數。
 2. **所有資料表開啟 RLS,且不給 anon 任何 policy。** anon key 視為公開資訊。後台讀寫走 Supabase Auth(authenticated)+ 對應 policy。
 3. **信任 LINE 身分前要驗證。** 前端送來的 `line_user_id` 不可信;server 端必須用 LIFF ID token 向 LINE 驗證後才採用。webhook 必須驗 `x-line-signature`(HMAC-SHA256 / `LINE_CHANNEL_SECRET`)。
-4. **病患 PII(姓名 / 電話 / line_user_id)只在必要時回傳**,不要整包丟到前端。後台列表也只給登入櫃檯看。
+4. **顧客 PII(姓名 / 電話 / line_user_id)只在必要時回傳**,不要整包丟到前端。後台列表也只給授權成員看。
 5. 機密一律走環境變數,禁止寫死在程式碼或 commit 進 repo。
 6. 多品牌 LINE webhook 以 payload `destination` 對應品牌;各品牌 channel secret／access token 使用 server-only `LINE_CHANNEL_SECRETS_JSON`／`LINE_CHANNEL_ACCESS_TOKENS_JSON`,未提供 mapping 時僅相容單品牌 fallback。
 
@@ -60,11 +62,11 @@
 
 ## 資料模型規則
 
-1. **一個醫師一天可有多段門診**(上午 / 下午 / 晚診)。`schedule_templates` 同 `(doctor_id, weekday)` 允許多筆;算空檔與訂位時,依目標時間落在哪一段決定時長與容量。**禁止用 `limit 1` 抓單一模板。**
+1. **一個服務提供者一天可有多段服務時段**(上午 / 下午 / 晚間)。`schedule_templates` 同 `(doctor_id, weekday)` 允許多筆；資源型服務可用 `doctor_id is null, service_id is not null` 建立共用服務排程。算空檔與預約時,依目標時間落在哪一段決定時長與容量。**禁止用 `limit 1` 抓單一模板。**
 2. `appointments.status` 限定 `booked / confirmed / cancelled / done / no_show`,用 enum 或 CHECK 約束。`visit_type` 限定 `first / return`。
 3. **取消是改 `status='cancelled'`,不是 DELETE。** 保留歷史。
-4. **醫師、診所用 soft-delete(`active=false`),不要硬刪**,避免連帶刪掉約診。外鍵不要對 appointments 用 `on delete cascade` 往上刪。
-5. 加 `updated_at`(trigger 自動更新)。約診的狀態異動要可追溯(誰、何時)。
+4. **服務提供者、品牌用 soft-delete(`active=false`),不要硬刪**,避免連帶刪掉預約。外鍵不要對 appointments 用 `on delete cascade` 往上刪。
+5. 加 `updated_at`(trigger 自動更新)。預約的狀態異動要可追溯(誰、何時)。
 6. 時間一律 `timestamptz`;所有「日期 / 時段」運算的時區基準是 `Asia/Taipei`。
 
 ---
@@ -74,15 +76,15 @@
 1. 只顯示 / 接受**未來且容量未滿**的時段;算容量時 `status in ('booked','confirmed','done')` 才算佔位。
 2. 訂位必須原子化(advisory lock 或等價機制),禁止兩人搶到同一個最後名額。
 3. 預約有**最短前置時間**(預設 30 分鐘內不可約)與**最長可預約區間**(預設 30 天),做成可設定常數。
-4. 初診(`first`)可能比複診長,時長要能依 `visit_type` 調整(先預留邏輯,值可後設)。
-5. 同一支電話是否能對應多名病患由 `clinic_settings` 決定:關閉時一電話一人;開啟時可多人但建立病患要檢查 `max_patients_per_phone` 上限。`patients.phone` 不可設唯一鍵。
+4. 首次服務(`first`)可能比再次服務長,時長要能依 `visit_type` 調整(先預留邏輯,值可後設)。
+5. 同一支電話是否能對應多名顧客由 `clinic_settings` 決定:關閉時一電話一人;開啟時可多人但建立顧客要檢查 `max_patients_per_phone` 上限。`patients.phone` 不可設唯一鍵。
 
 ---
 
 ## 提醒規則
 
-1. 提醒要涵蓋**當天才新增的預約**,不能只在固定時間掃隔天。採「看診前 N 小時」邏輯,或多支 cron 補當天。
-2. 用 `reminder_logs` 的 unique 約束保證**同一約診同管道只發一次**。
+1. 提醒要涵蓋**當天才新增的預約**,不能只在固定時間掃隔天。採「預約前 N 小時」邏輯,或多支 cron 補當天。
+2. 用 `reminder_logs` 的 unique 約束保證**同一預約同管道只發一次**。
 3. **Vercel Cron 是 UTC**,排程註解要標清楚換算後的台北時間。
 4. 推播文字的時間要轉成台北、含星期與上午 / 下午。
 5. 留意 LINE 推播額度;大量提醒時評估通知型訊息(實作前先跟我確認再加)。
@@ -96,14 +98,14 @@
 2. TypeScript `strict`,不要用 `any` 逃避型別。
 3. 每個外部呼叫(Supabase / LINE / cron)都要有錯誤處理,不要讓未捕捉錯誤直接 500。
 4. SQL 函式(`get_available_slots` / `book_appointment` 等)放 `supabase/schema.sql`,改動 schema 要同步更新這個檔。
-5. 命名用英文、訊息對病患 / 櫃檯用繁體中文。
+5. 命名用英文、訊息對顧客 / 後台成員用繁體中文。
 6. 不要過度抽象。先能動、結構清楚,再談重構。
 
 ### 建議檔案結構
 ```
-app/book/            病患 LIFF 預約頁
+app/book/            顧客 LIFF 預約頁
 app/admin/           後台
-app/api/booking/     病患端訂位 / 查空檔(server, service role)
+app/api/booking/     顧客端訂位 / 查空檔(server, service role)
 app/api/cron/        提醒排程
 app/api/line/webhook webhook 回寫
 lib/supabase.ts      anon / service-role 兩種 client
@@ -124,8 +126,8 @@ supabase/schema.sql
 
 ## 完成定義(Definition of Done)
 - `next build` 與 type-check 通過。
-- 用 anon key 無法讀到任何病患資料(RLS 已生效)。
-- 多時段門診、容量、初複診、取消改期都能正確運作。
+- 用 anon key 無法讀到任何顧客資料(RLS 已生效)。
+- 多服務時段、容量、首次／再次服務、取消改期都能正確運作。
 - 同日新增的預約也會收到提醒,且不重複發。
 - 預約與活動報名、候補、QR 報到、標準金流回呼與付款冪等驗收通過。
 - CRM Lite 分眾、互動時間軸、三種規則式自動化、opt-in 與投遞去重驗收通過。

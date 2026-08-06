@@ -7,8 +7,8 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 /**
  * anon client(公開金鑰)。
- * 僅用於後台 Supabase Auth 流程;anon 無任何資料表 policy,讀不到病患資料。
- * 病患端「絕不」使用此 client 直接讀寫 DB。
+ * 僅用於後台 Supabase Auth 流程;anon 無任何資料表 policy,讀不到顧客資料。
+ * 顧客端「絕不」使用此 client 直接讀寫 DB。
  */
 export function createAnonClient(): SupabaseClient {
   if (!url || !anonKey) {

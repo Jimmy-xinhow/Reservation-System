@@ -17,7 +17,10 @@ interface Service {
   id: string;
   name: string;
   description: string | null;
+  booking_target: "provider_required" | "provider_optional" | "resource_only";
+  booking_fields: BookingField[];
 }
+interface BookingField { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox"; required: boolean; options: string[]; }
 interface Config {
   clinic_name: string | null;
   booking_mode: "time" | "number";
@@ -110,11 +113,12 @@ export default function BookPage() {
   const [birthday, setBirthday] = useState("");
   const [email, setEmail] = useState("");
   const [membershipCode, setMembershipCode] = useState("");
+  const [bookingAnswers, setBookingAnswers] = useState<Record<string, unknown>>({});
   const [visitType, setVisitType] = useState<"first" | "return">("return");
 
-  // 綁定:此 LINE 身分已綁定的病患(null = 載入中)
+  // 綁定:此 LINE 身分已綁定的顧客(null = 載入中)
   const [bound, setBound] = useState<BoundPatient[] | null>(null);
-  const [selectedPatientId, setSelectedPatientId] = useState(""); // 病患 id 或 "__new__"
+  const [selectedPatientId, setSelectedPatientId] = useState(""); // 顧客 id 或 "__new__"
   const [forWhom, setForWhom] = useState<"" | "self" | "other">(""); // 為自己 / 幫別人
 
   const [submitting, setSubmitting] = useState(false);
@@ -138,7 +142,7 @@ export default function BookPage() {
       .catch((e) => setLoadErr(e instanceof Error ? e.message : "載入失敗"));
   }, []);
 
-  // 取得此 LINE 身分已綁定的病患
+  // 取得此 LINE 身分已綁定的顧客
   const loadBound = useCallback(async () => {
     if (!idToken) return;
     try {
@@ -172,14 +176,23 @@ export default function BookPage() {
     [config],
   );
 
-  // 單一醫師診所:只有一位醫師時自動選取,不顯示選單
+  const selectedService = config?.services.find((service) => service.id === serviceId) ?? null;
+  const providerRequired = !selectedService || selectedService.booking_target === "provider_required";
+
+  // 需要指定人員的服務自動帶入唯一人員；資源型服務不強迫選人員。
   const singleDoctor = config?.doctors.length === 1 ? config.doctors[0] : null;
   useEffect(() => {
-    if (singleDoctor && doctorId !== singleDoctor.id) setDoctorId(singleDoctor.id);
-  }, [singleDoctor, doctorId]);
+    if (!selectedService) return;
+    if (providerRequired) {
+      if (singleDoctor && doctorId !== singleDoctor.id) setDoctorId(singleDoctor.id);
+    } else if (doctorId) {
+      setDoctorId("");
+    }
+    setBookingAnswers({});
+  }, [selectedService, providerRequired, singleDoctor, doctorId]);
 
   const loadAvailability = useCallback(async () => {
-    if (!config || !doctorId || !date) return;
+    if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
     setAvailLoading(true);
     setAvailMsg(null);
     setSlots([]);
@@ -189,27 +202,27 @@ export default function BookPage() {
     try {
       if (config.booking_mode === "time") {
         const data = await api<{ slots: Slot[] }>(
-          `/api/booking/availability?doctor_id=${doctorId}&date=${date}&visit_type=${visitType}&service_id=${encodeURIComponent(serviceId || "")}`,
+          `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, visit_type: visitType, ...(serviceId ? { service_id: serviceId } : {}) }).toString()}`,
         );
         setSlots(data.slots);
         if (data.slots.length === 0) setAvailMsg("這天沒有可預約的時段(休診或已額滿)");
       } else {
         const data = await api<{ sessions: Session[] }>(
-          `/api/booking/availability?doctor_id=${doctorId}&date=${date}&service_id=${encodeURIComponent(serviceId || "")}`,
+          `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, ...(serviceId ? { service_id: serviceId } : {}) }).toString()}`,
         );
         setSessions(data.sessions);
-        if (data.sessions.length === 0) setAvailMsg("這天沒有可掛號的診次(休診或已額滿)");
+        if (data.sessions.length === 0) setAvailMsg("這天沒有可預約的場次（未開放或已額滿）");
       }
     } catch (e) {
       setAvailMsg(e instanceof Error ? e.message : "查詢失敗");
     } finally {
       setAvailLoading(false);
     }
-  }, [config, doctorId, date, visitType, serviceId]);
+  }, [config, doctorId, date, visitType, serviceId, providerRequired]);
 
   useEffect(() => {
-    if (doctorId && date) loadAvailability();
-  }, [doctorId, date, loadAvailability]);
+    if (date && (!providerRequired || doctorId)) loadAvailability();
+  }, [doctorId, date, loadAvailability, providerRequired]);
 
   const slotPicked = config?.booking_mode === "time" ? !!pickedStart : !!pickedTemplate;
   const addingNew = selectedPatientId === "__new__";
@@ -220,14 +233,15 @@ export default function BookPage() {
     ? !!name.trim() && !!phone.trim() && /^\d{4}-\d{2}-\d{2}$/.test(birthday)
     : !!selectedPatientId && !selectedBlocked;
   const serviceReady = config ? config.services.length === 0 || !!serviceId : false;
-  const canSubmit = ready && patientReady && serviceReady && slotPicked && !submitting;
+  const fieldsReady = bookingFieldsReady(selectedService?.booking_fields ?? [], bookingAnswers);
+  const canSubmit = ready && patientReady && serviceReady && fieldsReady && slotPicked && !submitting;
 
   async function handleSubmit() {
     if (!config || !idToken) return;
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      // 已綁定病患直接用其 id;選「新增就診者」才建立新病患
+      // 已綁定顧客直接用其 id;選「新增同行者」才建立新顧客
       let patient_id = selectedPatientId;
       if (addingNew) {
         const created = await api<{ patient_id: string }>("/api/booking/patient", {
@@ -241,12 +255,13 @@ export default function BookPage() {
       const payload: Record<string, unknown> = {
         idToken,
         patient_id,
-        doctor_id: doctorId,
+        doctor_id: doctorId || undefined,
         service_id: serviceId || undefined,
         visit_type: visitType,
         is_self_pay: false,
         email: email.trim() || undefined,
         membership_code: membershipCode.trim().toUpperCase() || undefined,
+        booking_answers: bookingAnswers,
       };
       if (config.booking_mode === "time") {
         payload.start_at = pickedStart;
@@ -336,7 +351,7 @@ export default function BookPage() {
               </svg>
             </div>
             <h1 className="text-xl font-bold">{result.deposit_status === "pending" ? "預約已建立，待付款" : "預約成功"}</h1>
-            <p className="mt-1 text-sm text-white/80">看診前會以 LINE 提醒您</p>
+            <p className="mt-1 text-sm text-white/80">服務開始前會以 LINE 提醒您</p>
           </div>
 
           <div className="space-y-4 p-6 text-center">
@@ -373,7 +388,7 @@ export default function BookPage() {
               />
             )}
             <p className="rounded-xl bg-red-50 p-3 text-left text-xs leading-relaxed text-red-700">
-              ⚠️ 提醒:無法前來請務必提前取消。<strong>累計三次未提前取消而未到,將暫停一個月的線上預約資格。</strong>
+              ⚠️ 提醒:無法前來請務必提前取消。<strong>累計三次未提前取消而未出席,將暫停一個月的線上預約資格。</strong>
             </p>
             <button onClick={bookAnother} className="btn btn-secondary w-full">
               再預約一筆
@@ -384,14 +399,14 @@ export default function BookPage() {
     );
   }
 
-  const stepDone = { doctor: !!doctorId, date: !!date, slot: slotPicked };
+  const stepDone = { doctor: !providerRequired || !!doctorId, date: !!date, slot: slotPicked };
 
   return (
     <Shell clinicName={config.clinic_name}>
       {/* 分頁:預約 / 我的預約 / 線上客服 */}
       <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
         <TabButton active={tab === "book"} onClick={() => setTab("book")}>
-          預約看診
+          預約服務
         </TabButton>
         <TabButton active={tab === "my"} onClick={() => setTab("my")}>
           我的預約
@@ -443,10 +458,10 @@ export default function BookPage() {
       ) : (
       <>
       <div className="space-y-4">
-        {/* 步驟 1:就診者資料 */}
+        {/* 步驟 1:顧客資料 */}
         <section className="card p-5">
           <div className="mb-2 flex items-center justify-between">
-            <SectionTitle n={1} title="就診者資料" done={patientReady} />
+            <SectionTitle n={1} title="顧客資料" done={patientReady} />
             <button
               type="button"
               onClick={() => setForWhom("")}
@@ -457,7 +472,7 @@ export default function BookPage() {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="label">為誰預約</label>
+              <label className="label">預約對象</label>
               <select
                 className="input"
                 value={selectedPatientId}
@@ -470,13 +485,13 @@ export default function BookPage() {
                 ))}
                 {config.allow_multi_patient_per_phone &&
                   (bound?.length ?? 0) < config.max_patients_per_phone && (
-                    <option value="__new__">+ 新增就診者</option>
+                    <option value="__new__">+ 新增顧客</option>
                   )}
               </select>
             </div>
             {selectedBlocked && (
               <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-                此就診者目前暫停線上預約,請洽櫃檯。
+                此顧客目前暫停線上預約,請洽服務人員。
               </p>
             )}
             <div>
@@ -499,7 +514,7 @@ export default function BookPage() {
                     className="input"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="就診者姓名"
+                    placeholder="顧客姓名"
                   />
                 </div>
                 <div>
@@ -532,9 +547,9 @@ export default function BookPage() {
           <p className="text-xs leading-5 text-slate-500">符合方案時會在成功預約後扣除一堂額度；套票限本人電話綁定的會員使用。</p>
         </section>
 
-        {/* 步驟 2:看診服務與類型 */}
+        {/* 步驟 2:服務與預約類型 */}
         <section className="card p-5">
-          <SectionTitle n={2} title="看診服務" done={serviceReady} />
+          <SectionTitle n={2} title="服務項目" done={serviceReady} />
           <div className="space-y-4">
             {config.services.length > 0 && (
               <div>
@@ -554,36 +569,37 @@ export default function BookPage() {
               </div>
             )}
             <div>
-              <label className="label">看診類型(請確認)</label>
+              <label className="label">預約類型(請確認)</label>
               <div className="grid grid-cols-2 gap-2">
                 <TypeToggle active={visitType === "return"} onClick={() => setVisitType("return")}>
-                  複診
+                  再次服務
                 </TypeToggle>
                 <TypeToggle active={visitType === "first"} onClick={() => setVisitType("first")}>
-                  初診
+                  首次服務
                 </TypeToggle>
               </div>
               {visitType === "first" && (
                 <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
-                  🕒 初診需較完整的問診與評估,看診時間會比複診長,請預留充足時間前來。
+                  🕒 首次服務可能需要較完整的資料確認,所需時間可能比再次服務長,請預留充足時間。
                 </p>
               )}
             </div>
+            <BookingFields fields={selectedService?.booking_fields ?? []} answers={bookingAnswers} onChange={(key, value) => setBookingAnswers((current) => ({ ...current, [key]: value }))} />
           </div>
         </section>
 
-        {/* 步驟 3:選醫師、日期與時段(資料填妥後) */}
+        {/* 步驟 3:選服務提供者、日期與時段(資料填妥後) */}
         <section className={`card p-5 ${!patientReady || !serviceReady ? "pointer-events-none opacity-50" : ""}`}>
           <SectionTitle n={3} title="選擇時間" done={stepDone.slot} />
           {(!patientReady || !serviceReady) && (
-            <p className="mb-3 text-sm text-slate-400">請先完成上方就診者資料與服務,再選擇時間。</p>
+            <p className="mb-3 text-sm text-slate-400">請先完成上方顧客資料與服務,再選擇時間。</p>
           )}
           <div className="space-y-4">
-            {!singleDoctor && (
+            {(providerRequired || selectedService?.booking_target === "provider_optional") && (
               <div>
-                <label className="label">醫師</label>
+                <label className="label">服務提供者</label>
                 <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-                  <option value="">請選擇醫師</option>
+                  <option value="">{selectedService?.booking_target === "provider_optional" ? "不指定,由系統安排" : "請選擇服務提供者"}</option>
                   {config.doctors.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
@@ -593,6 +609,7 @@ export default function BookPage() {
                 </select>
               </div>
             )}
+            {selectedService?.booking_target === "resource_only" && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">此服務依場地／設備容量安排，不需要指定服務提供者。</p>}
             <div>
               <label className="label">日期</label>
               <input
@@ -605,9 +622,9 @@ export default function BookPage() {
               />
             </div>
 
-            {doctorId && date && (
+            {date && (!providerRequired || !!doctorId) && (
               <div>
-                <p className="label">{config.booking_mode === "time" ? "時段" : "診次"}</p>
+                <p className="label">{config.booking_mode === "time" ? "時段" : "場次"}</p>
                 {availLoading && <p className="text-sm text-slate-400">查詢中…</p>}
                 {availMsg && (
                   <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">{availMsg}</p>
@@ -788,7 +805,7 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
     <div className="space-y-4">
       <div className="flex items-center justify-between px-1">
         <p className="text-sm font-medium text-slate-600">
-          {progress.length > 0 ? "今日看診進度" : "我的預約"}
+          {progress.length > 0 ? "今日服務進度" : "我的預約"}
         </p>
         <button
           type="button"
@@ -802,7 +819,7 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
         </button>
       </div>
 
-      {/* 今日看診進度 */}
+      {/* 今日服務進度 */}
       {progress.length > 0 && (
         <div className="space-y-2">
           {progress.map((pr, i) => (
@@ -817,7 +834,7 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
                 </div>
               </div>
               <div className="text-center">
-                <div className="text-xs text-white/80">目前看診號</div>
+                <div className="text-xs text-white/80">目前服務號次</div>
                 <div className="text-3xl font-bold">{pr.current || "—"}</div>
               </div>
             </div>
@@ -861,6 +878,18 @@ function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time
       )}
     </div>
   );
+}
+
+function bookingFieldsReady(fields: BookingField[], answers: Record<string, unknown>): boolean {
+  return fields.every((field) => {
+    const value = answers[field.key];
+    return !field.required || (field.type === "checkbox" ? value === true : typeof value === "string" && value.trim().length > 0);
+  });
+}
+
+function BookingFields({ fields, answers, onChange }: { fields: BookingField[]; answers: Record<string, unknown>; onChange: (key: string, value: unknown) => void }) {
+  if (fields.length === 0) return null;
+  return <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-sm font-medium text-slate-800">預約前資料</p>{fields.map((field) => { const label = `${field.label}${field.required ? " *" : ""}`; const value = answers[field.key]; if (field.type === "checkbox") return <label key={field.key} className="flex items-start gap-2 text-sm text-slate-600"><input type="checkbox" className="mt-1" checked={value === true} onChange={(event) => onChange(field.key, event.target.checked)} />{label}</label>; if (field.type === "textarea") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><textarea className="input" rows={3} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; if (field.type === "select") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><select className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)}><option value="">請選擇</option>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>; return <label key={field.key} className="block text-sm"><span className="label">{label}</span><input type={field.type === "date" ? "date" : "text"} className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; })}</div>;
 }
 
 function Shell({ children, clinicName }: { children: React.ReactNode; clinicName?: string | null }) {
@@ -919,11 +948,11 @@ function CalendarButtons({
   clinicName: string | null;
 }) {
   const endIso = end && end !== start ? end : new Date(new Date(start).getTime() + 30 * 60000).toISOString();
-  const details = [doctor ? `醫師:${doctor}` : "", service ? `服務:${service}` : "", "看診前請提前抵達;無法前來請提前取消。"]
+  const details = [doctor ? `服務提供者:${doctor}` : "", service ? `服務:${service}` : "", "服務開始前請提前準備;無法前來請提前取消。"]
     .filter(Boolean)
     .join("\n");
   const displayName = clinicName?.trim() || "預約與報名平台";
-  const ev: CalEvent = { title: `${displayName} 看診`, startIso: start, endIso, details, location: displayName };
+  const ev: CalEvent = { title: `${displayName} 預約`, startIso: start, endIso, details, location: displayName };
 
   // 在 LINE 內建瀏覽器,直接開連結(blob 下載常失效);有 LIFF 就用外部瀏覽器開
   function openUrl(url: string) {
@@ -942,7 +971,7 @@ function CalendarButtons({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs text-slate-400">加入行事曆,手機會在看診前自動提醒您</p>
+      <p className="text-xs text-slate-400">加入行事曆,手機會在服務開始前自動提醒您</p>
       <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={() => openUrl(googleCalendarUrl(ev))} className="btn btn-secondary text-sm">
           Google 日曆

@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 
 function translateBrowserPatientError(message: string): string {
   if (message.includes("patient limit")) return "此電話可登記人數已達上限";
-  if (message.includes("phone already")) return "此電話已登記其他病患，請洽櫃檯";
+  if (message.includes("phone already")) return "此電話已登記其他顧客，請洽服務人員";
   if (message.includes("public booking")) return "目前暫停線上預約";
   return "建立瀏覽器預約身分失敗，請稍後再試";
 }

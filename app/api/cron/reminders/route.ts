@@ -19,7 +19,7 @@ interface ApptRow {
 
 /**
  * GET /api/cron/reminders
- * 「看診前 N 小時」邏輯:撈進入提醒視窗、status=booked、尚無 line reminder_log 的約診,
+ * 「預約前 N 小時」邏輯:撈進入提醒視窗、status=booked、尚無 line reminder_log 的預約,
  * 有 line_user_id 就發 Flex,成功後寫 reminder_logs(unique 防重複)。
  * 因每次執行都掃整個視窗,當天才新增的預約也會被涵蓋。
  */
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 
 async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise<{ line: number; lineFailed: number; email: number; emailFailed: number; scanned: number }> {
   const settings = await getClinicSettings(svc, clinicId);
-  if (!settings) throw new Error("查無診所設定");
+  if (!settings) throw new Error("查無品牌設定");
   const { data: clinic, error: clinicError } = await svc
     .from("clinics")
     .select("name, line_destination")
@@ -114,7 +114,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
       const claim = await claimReminder(svc, appointment.id, "email");
       if (!claim) continue;
       try {
-        await sendEmail(emailConfig, to, "看診提醒", buildReminderHtml(appointment, settings.booking_mode, clinic?.name as string | null));
+        await sendEmail(emailConfig, to, "預約提醒", buildReminderHtml(appointment, settings.booking_mode, clinic?.name as string | null));
         await finishReminder(svc, claim, "sent");
         email += 1;
       } catch (error) {
@@ -165,13 +165,13 @@ function escapeHtml(value: string): string {
 }
 
 function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
-  const doctor = a.doctors?.name ?? "醫師";
+  const doctor = a.doctors?.name ?? "服務提供者";
   const patient = a.patients?.name ?? "";
   const when =
     mode === "time"
       ? formatDateTime(a.start_at)
       : `${formatDateSession(a.start_at)} 第 ${a.queue_number ?? "?"} 號`;
-  const altText = `看診提醒:${when} ${doctor}`;
+  const altText = `預約提醒:${when} ${doctor}`;
 
   return {
     type: "flex",
@@ -183,10 +183,10 @@ function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
         layout: "vertical",
         spacing: "md",
         contents: [
-          { type: "text", text: "看診提醒", weight: "bold", size: "lg", color: "#1d4ed8" },
+          { type: "text", text: "預約提醒", weight: "bold", size: "lg", color: "#1d4ed8" },
           { type: "text", text: when, wrap: true, size: "md", weight: "bold" },
-          { type: "text", text: `醫師:${doctor}`, size: "sm", color: "#555555" },
-          ...(patient ? [{ type: "text", text: `就診者:${patient}`, size: "sm", color: "#555555" }] : []),
+          { type: "text", text: `服務提供者:${doctor}`, size: "sm", color: "#555555" },
+          ...(patient ? [{ type: "text", text: `顧客:${patient}`, size: "sm", color: "#555555" }] : []),
           { type: "text", text: "無法前來請點下方取消。", size: "sm", color: "#888888", margin: "md" },
         ],
       },
@@ -217,7 +217,7 @@ function buildReminderHtml(a: ApptRow, mode: "time" | "number", clinicName: stri
 }
 
 function buildReminderHtmlUnsafe(a: ApptRow, mode: "time" | "number", clinicName: string | null): string {
-  const doctor = a.doctors?.name ?? "醫師";
+  const doctor = a.doctors?.name ?? "服務提供者";
   const patient = a.patients?.name ?? "";
   const when =
     mode === "time"
@@ -226,12 +226,12 @@ function buildReminderHtmlUnsafe(a: ApptRow, mode: "time" | "number", clinicName
   const displayName = escapeHtml(clinicName?.trim() || "預約與報名平台");
   return `
     <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px">
-      <h2 style="color:#1d4ed8;margin:0 0 12px">看診提醒</h2>
+      <h2 style="color:#1d4ed8;margin:0 0 12px">預約提醒</h2>
       <p style="font-size:18px;font-weight:bold;margin:0 0 8px">${when}</p>
-      <p style="color:#555;margin:0 0 4px">醫師:${doctor}</p>
-      ${patient ? `<p style="color:#555;margin:0 0 4px">就診者:${patient}</p>` : ""}
+      <p style="color:#555;margin:0 0 4px">服務提供者:${doctor}</p>
+      ${patient ? `<p style="color:#555;margin:0 0 4px">顧客:${patient}</p>` : ""}
       <p style="color:#888;margin:12px 0 0;font-size:14px">
-        無法前來請務必提前取消。累計三次未提前取消而未到,將暫停一個月線上預約資格。
+        無法前來請務必提前取消。累計三次未提前取消而未出席,將暫停一個月線上預約資格。
       </p>
       <p style="color:#aaa;margin:16px 0 0;font-size:12px">${displayName}</p>
     </div>`;

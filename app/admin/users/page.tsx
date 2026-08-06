@@ -89,9 +89,9 @@ export default async function UsersPage() {
                   {m.role === "provider" && (
                     <form action={setDoctorAssignmentsAction} className="mt-2 space-y-1.5 rounded-lg bg-slate-50 p-2">
                       <input type="hidden" name="user_id" value={m.userId} />
-                      <div className="text-[11px] font-medium text-slate-500">可查看的醫師</div>
+                      <div className="text-[11px] font-medium text-slate-500">可查看的服務提供者</div>
                       {doctors.length === 0 ? (
-                        <div className="text-[11px] text-slate-400">尚未建立醫師</div>
+                        <div className="text-[11px] text-slate-400">尚未建立服務提供者</div>
                       ) : (
                         <div className="grid gap-1 sm:grid-cols-2">
                           {doctors.map((doctor) => (
@@ -141,7 +141,7 @@ export default async function UsersPage() {
         </table>
       </div>
       <p className="text-xs text-slate-400">
-        「移除權限」僅取消該帳號存取本診所後台的權限,不會刪除其登入帳號。系統至少保留一位管理員,無法把最後一位管理員降級或移除。
+        「移除權限」僅取消該帳號存取本品牌後台的權限,不會刪除其登入帳號。系統至少保留一位管理員,無法把最後一位管理員降級或移除。
       </p>
     </div>
   );

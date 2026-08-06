@@ -19,7 +19,7 @@ const ACTION_LABEL: Record<string, string> = {
   message: "回覆訊息素材",
   booking: "開啟預約",
   query: "查詢預約",
-  progress: "看診進度",
+  progress: "服務進度",
 };
 
 export default function RepliesEditor({
@@ -78,7 +78,7 @@ export default function RepliesEditor({
               required
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              placeholder="例:進度, 叫號, 看診號"
+              placeholder="例:進度, 報到, 號次"
               className="input"
             />
           </label>
@@ -101,7 +101,7 @@ export default function RepliesEditor({
               rows={2}
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              placeholder="病患輸入關鍵字時回覆的內容"
+              placeholder="顧客輸入關鍵字時回覆的內容"
               className="input"
             />
           </label>

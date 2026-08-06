@@ -158,7 +158,7 @@ export default async function SettingsPage() {
               rows={2}
               className="input"
               defaultValue={clinic?.intro ?? ""}
-              placeholder="例:看診時間、特色療程等"
+              placeholder="例:服務時間、特色方案等"
             />
           </div>
         </div>
@@ -172,19 +172,19 @@ export default async function SettingsPage() {
             模式
             <select name="booking_mode" defaultValue={s.booking_mode} className="input mt-1">
               <option value="time">時間制(選確切時段)</option>
-              <option value="number">號次制(選診次給號)</option>
+              <option value="number">場次制(選服務場次給號)</option>
             </select>
           </label>
         </Section>
 
-        {/* 2. 初診延長 */}
-        <Section title="初診延長(時間制)">
+        {/* 2. 首次服務延長 */}
+        <Section title="首次服務延長(時間制)">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" className="h-4 w-4 accent-brand-600" name="first_visit_extends" defaultChecked={s.first_visit_extends} />
-            初診佔較長時段
+            首次服務佔較長時段
           </label>
           <label className="text-sm">
-            初診時長(分,留空=沿用每格)
+            首次服務時長(分,留空=沿用每格)
             <input
               type="number"
               name="first_visit_minutes"
@@ -194,7 +194,7 @@ export default async function SettingsPage() {
           </label>
         </Section>
 
-        {/* 3. 一電話多病患 */}
+        {/* 3. 一電話多顧客 */}
         <Section title="一電話多顧客">
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -305,7 +305,7 @@ export default async function SettingsPage() {
       {/* Email 提醒(選用,需自備 Resend 金鑰)*/}
       <form action={updateEmailSettingsAction} className="card space-y-4 p-5">
         <div>
-          <h2 className="font-semibold text-slate-900">Email 看診提醒(選用)</h2>
+          <h2 className="font-semibold text-slate-900">Email 預約提醒(選用)</h2>
            <p className="mt-1 text-xs text-slate-400">
              Resend 金鑰與寄件人由部署環境管理；請設定該品牌的 server-side 環境變數，此頁只保存啟用狀態。
            </p>
@@ -326,7 +326,7 @@ export default async function SettingsPage() {
           <SubmitButton className="btn btn-primary">儲存 Email 設定</SubmitButton>
         </div>
         <p className="text-xs text-slate-400">
-          寄件人網域需先在 Resend 完成驗證;病患需在「病患查詢」建檔留有 Email 才會收到。
+              寄件人網域需先在 Resend 完成驗證;顧客需在「顧客查詢」建檔留有 Email 才會收到。
         </p>
       </form>
     </div>

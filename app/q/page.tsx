@@ -4,10 +4,11 @@ import { headers } from "next/headers";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { Brand } from "@/components/Brand";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { isLegacyProgressEnabled } from "@/lib/legacy-progress";
 
 export const dynamic = "force-dynamic";
 
-// 公開叫號頁(候診區螢幕 / 病患手機)。只顯示醫師、時段、目前看診號,不顯示病患姓名。
+// 公開進度頁(現場螢幕 / 顧客手機)。只顯示服務提供者、時段、目前號次,不顯示顧客姓名。
 export default async function QueueBoard({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const today = taipeiToday();
   let sessions: Awaited<ReturnType<typeof getQueueForDate>> = [];
@@ -21,6 +22,7 @@ export default async function QueueBoard({ searchParams }: { searchParams?: Prom
       host: requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"),
     });
     if (!clinicId) return <Centered message="尚未設定公開品牌" />;
+    if (!(await isLegacyProgressEnabled(svc, clinicId))) return <Centered message="此品牌目前未開放服務進度頁" />;
     const { data: settings } = await svc
       .from("clinic_settings")
       .select("booking_mode")
@@ -36,12 +38,12 @@ export default async function QueueBoard({ searchParams }: { searchParams?: Prom
     <main className="mx-auto max-w-2xl p-4 sm:p-6 lg:max-w-4xl">
       <AutoRefresh seconds={20} />
       <header className="mb-5 flex flex-wrap items-center justify-between gap-2">
-        <Brand subtitle="看診進度" />
+        <Brand subtitle="服務進度" />
         <span className="text-sm text-slate-400">{today}</span>
       </header>
 
       {sessions.length === 0 ? (
-        <p className="card p-8 text-center text-slate-400">今日尚無看診資料。</p>
+        <p className="card p-8 text-center text-slate-400">今日尚無服務進度資料。</p>
       ) : (
         <div className="space-y-3">
           {sessions.map((s) => (

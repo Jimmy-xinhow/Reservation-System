@@ -10,9 +10,14 @@ interface Doctor {
   id: string;
   name: string;
 }
+interface Service {
+  id: string;
+  name: string;
+}
 interface Template {
   id: string;
-  doctor_id: string;
+  doctor_id: string | null;
+  service_id: string | null;
   weekday: number;
   start_time: string;
   end_time: string;
@@ -22,7 +27,8 @@ interface Template {
 }
 interface Exception {
   id: string;
-  doctor_id: string;
+  doctor_id: string | null;
+  service_id: string | null;
   date: string;
   is_closed: boolean;
   start_time: string | null;
@@ -33,32 +39,38 @@ interface Exception {
 export default async function ExceptionsPage() {
 const { clinicId } = await requireNonProvider();
   const supabase = await createSupabaseServer();
-  const [{ data: doctors }, { data: templates }, { data: exceptions }] = await Promise.all([
+  const [{ data: doctors }, { data: services }, { data: templates }, { data: exceptions }] = await Promise.all([
     supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
+    supabase.from("services").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
     supabase
       .from("schedule_templates")
-      .select("id, doctor_id, weekday, start_time, end_time, slot_minutes, capacity, active")
+      .select("id, doctor_id, service_id, weekday, start_time, end_time, slot_minutes, capacity, active")
       .eq("clinic_id", clinicId)
       .order("weekday"),
     supabase
       .from("schedule_exceptions")
-      .select("id, doctor_id, date, is_closed, start_time, end_time, capacity")
+      .select("id, doctor_id, service_id, date, is_closed, start_time, end_time, capacity")
       .eq("clinic_id", clinicId)
       .order("date", { ascending: false }),
   ]);
 
   const docs = (doctors ?? []) as Doctor[];
+  const svcs = (services ?? []) as Service[];
   const tpls = (templates ?? []) as Template[];
   const rows = (exceptions ?? []) as Exception[];
-  const docName = (id: string) => docs.find((d) => d.id === id)?.name ?? "—";
+  const targetName = (row: Pick<Exception, "doctor_id" | "service_id">) => {
+    const provider = row.doctor_id ? docs.find((d) => d.id === row.doctor_id)?.name : null;
+    const service = row.service_id ? svcs.find((s) => s.id === row.service_id)?.name : null;
+    return [provider, service].filter(Boolean).join(" · ") || "未指定";
+  };
 
   return (
     <div className="space-y-6">
       <h1 className="text-xl font-bold text-slate-900">服務例外日期</h1>
 
-      <ExceptionForm doctors={docs} templates={tpls} createAction={createExceptionAction} />
+      <ExceptionForm doctors={docs} services={svcs} templates={tpls} createAction={createExceptionAction} />
       <p className="text-xs text-slate-400">
-        加診可從「套用門診段」挑既有時段帶入(再微調),或直接輸入;休診為整天,選休診即可。
+        加開場次可從「套用服務時段」挑既有時段帶入(再微調),或直接輸入;停用可選整天或單一場次。
       </p>
 
       <div className="card overflow-x-auto">
@@ -66,7 +78,7 @@ const { clinicId } = await requireNonProvider();
           <thead>
             <tr>
               <th>日期</th>
-              <th>服務提供者</th>
+              <th>服務提供者／服務</th>
               <th>類型</th>
               <th>時間</th>
               <th>容量</th>
@@ -84,7 +96,7 @@ const { clinicId } = await requireNonProvider();
             {rows.map((e) => (
               <tr key={e.id}>
                 <td className="font-medium text-slate-800">{e.date}</td>
-                <td>{docName(e.doctor_id)}</td>
+                <td>{targetName(e)}</td>
                 <td>
                   <span className={`badge ${e.is_closed ? "bg-red-50 text-red-600" : "bg-accent-500/10 text-accent-600"}`}>
                     {e.is_closed ? "關閉服務" : "加開服務"}

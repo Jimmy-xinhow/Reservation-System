@@ -17,7 +17,7 @@ export interface ChatMsg {
   created_at: string;
 }
 
-/** 對話串列表:依 line_user_id 聚合最近訊息、未讀數,並帶入病患姓名。 */
+/** 對話串列表:依 line_user_id 聚合最近訊息、未讀數,並帶入顧客姓名。 */
 export async function buildThreads(
   supabase: SupabaseClient,
   clinicId: string,
@@ -106,7 +106,7 @@ export async function setChatBlock(
   }
 }
 
-/** 讀取某對話串訊息(由舊到新),並把病患未讀訊息標記為櫃檯已讀。 */
+/** 讀取某對話串訊息(由舊到新),並把顧客未讀訊息標記為服務人員已讀。 */
 export async function getThreadMessages(
   supabase: SupabaseClient,
   clinicId: string,
@@ -132,7 +132,7 @@ export async function getThreadMessages(
   return (data ?? []) as ChatMsg[];
 }
 
-/** 尚未被櫃檯讀取的病患訊息數。資料表未建時回 0。 */
+/** 尚未被服務人員讀取的顧客訊息數。資料表未建時回 0。 */
 export async function unreadCount(supabase: SupabaseClient, clinicId: string): Promise<number> {
   const { count, error } = await supabase
     .from("chat_messages")

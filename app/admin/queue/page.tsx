@@ -60,9 +60,9 @@ export default async function QueuePage({
         </div>
         {(doctors ?? []).length > 1 && (
           <div>
-            <label className="label">醫師</label>
+            <label className="label">服務提供者</label>
             <select name="doctor" defaultValue={doctorId ?? ""} className="input">
-              <option value="">全部醫師</option>
+              <option value="">全部服務提供者</option>
               {(doctors ?? []).map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -76,11 +76,11 @@ export default async function QueuePage({
 
       <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-xs leading-relaxed text-slate-500">
         線上與現場各自一組號碼,互不影響。可分別「叫下一位」;或開啟自動穿插(每 N 位線上插 1 位現場),
-        按「自動下一位」即依規則輪流叫號,現場病患不會被排到最後。
+        按「自動下一位」即依規則輪流安排,現場顧客不會被排到最後。
       </p>
 
       {sessions.length === 0 && (
-        <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-slate-400">本日無約診。</p>
+        <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-slate-400">本日無預約。</p>
       )}
 
       <div className="space-y-4">
@@ -196,7 +196,7 @@ function StreamPanel({
     <div className={`p-5 ${bordered ? "border-t border-slate-100 sm:border-l sm:border-t-0" : ""}`}>
       <div className="mb-3 text-sm font-semibold text-slate-700">{title}</div>
       <div className={`mb-3 rounded-xl ${bg} p-4 text-center`}>
-        <div className="text-xs text-slate-500">現在看診</div>
+        <div className="text-xs text-slate-500">目前服務</div>
         <div className={`text-4xl font-bold ${color}`}>{current || "—"}</div>
         <div className="mt-0.5 truncate text-sm text-slate-600">
           {curAppt ? curAppt.name : current ? "(此號略過)" : "尚未開始"}

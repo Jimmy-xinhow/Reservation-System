@@ -4,6 +4,7 @@ import { ok, fail, getClinicSettings, rateLimitResponse } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { getPatientQueueToday, taipeiToday } from "@/lib/queue";
 import { resolvePublicClinicId } from "@/lib/public-brand";
+import { isLegacyProgressEnabled } from "@/lib/legacy-progress";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +41,9 @@ export async function POST(req: NextRequest) {
 
     const settings = await getClinicSettings(svc, clinicId);
     const mode = settings?.booking_mode ?? "time";
-    const progress = await getPatientQueueToday(svc, clinicId, lineUserId, mode);
+    const progress = (await isLegacyProgressEnabled(svc, clinicId))
+      ? await getPatientQueueToday(svc, clinicId, lineUserId, mode)
+      : [];
 
     // 以「今天開始」為界(而非現在),避免號次制當天已到時段但仍候診的預約被漏掉
     const todayStartIso = new Date(`${taipeiToday()}T00:00:00+08:00`).toISOString();

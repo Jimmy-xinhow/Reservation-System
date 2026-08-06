@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     svc
       .from("clinic_settings")
       .select(
-        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url",
+        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url, legacy_progress_enabled",
       )
       .eq("clinic_id", clinicId)
       .maybeSingle(),
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
     title: cs?.line_menu_title || null,
     booking: cs?.line_menu_btn_booking ?? true,
     query: cs?.line_menu_btn_query ?? true,
-    progress: cs?.line_menu_btn_progress ?? true,
+    progress: cs?.legacy_progress_enabled === true && cs?.line_menu_btn_progress !== false,
     info: cs?.line_menu_btn_info ?? true,
     linkLabel: cs?.line_menu_link_label || null,
     linkUrl: cs?.line_menu_link_url || null,
@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
             .filter(Boolean)
             .some((k) => text.includes(k)),
         );
-        if (rule?.action === "progress") {
+        if (rule?.action === "progress" && menuCfg.progress) {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (rule?.action === "query") {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
@@ -133,8 +133,10 @@ export async function POST(req: NextRequest) {
         const action = params.get("action");
         if (action === "my") {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
-        } else if (action === "progress") {
+        } else if (action === "progress" && menuCfg.progress) {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
+        } else if (action === "progress") {
+          await safeReply(ev.replyToken, "此品牌目前未開放服務進度查詢。", lineAccessToken);
         } else if (action === "booking") {
           await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, clinicSlug, clinicName)], lineAccessToken);
         } else if (action === "msg") {
@@ -191,7 +193,7 @@ interface MenuConfig {
 // 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
 function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig, clinicSlug?: string | null): LineMessage {
   const liff = liffUrl(clinicSlug);
-  const c = cfg ?? { title: null, booking: true, query: true, progress: true, info: true, linkLabel: null, linkUrl: null };
+  const c = cfg ?? { title: null, booking: true, query: true, progress: false, info: true, linkLabel: null, linkUrl: null };
   const buttons: LineMessage[] = [];
   if (c.booking) {
     buttons.push({
@@ -217,7 +219,7 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
       type: "button",
       style: "secondary",
       height: "sm",
-      action: { type: "postback", label: "看診進度", data: "action=progress", displayText: "看診進度" },
+      action: { type: "postback", label: "服務進度", data: "action=progress", displayText: "服務進度" },
     });
   }
   if (c.info && baseUrl) {
@@ -225,7 +227,7 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
       type: "button",
       style: "link",
       height: "sm",
-      action: { type: "uri", label: "診所資訊", uri: baseUrl },
+      action: { type: "uri", label: "品牌資訊", uri: baseUrl },
     });
   }
   if (c.linkLabel && c.linkUrl) {
@@ -258,7 +260,7 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
 function welcomeMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
   return menuBubble(
     cfg?.title || `歡迎加入${clinicName} 🌿`,
-    custom || "您可以在這裡線上預約、查詢或取消看診。請點下方按鈕開始。",
+    custom || "您可以在這裡線上預約、查詢或取消預約。請點下方按鈕開始。",
     baseUrl,
     cfg,
     clinicSlug,
@@ -301,8 +303,8 @@ function bookingPrompt(baseUrl: string, clinicSlug?: string | null, clinicName =
           spacing: "md",
           contents: [
             { type: "text", text: "預約前請留意", size: "sm", weight: "bold", color: "#0f172a" },
-            rule("請依實際看診者資料預約,一位就診者同一天限預約一筆。"),
-            rule("初診需較完整問診,看診時間較長,請預留充足時間。"),
+            rule("請依實際顧客資料預約,一位顧客同一天限預約一筆。"),
+            rule("首次服務可能需要較完整資料,所需時間可能較長,請預留充足時間。"),
             rule("無法前來請務必提前取消,以免影響他人。"),
             {
               type: "box",
@@ -411,7 +413,7 @@ async function replyMyAppointments(
         paddingAll: "md",
         margin: "md",
         contents: [
-          { type: "text", text: "看診號碼", size: "xxs", color: "#d1fae5", align: "center" },
+          { type: "text", text: "服務號次", size: "xxs", color: "#d1fae5", align: "center" },
           { type: "text", text: `${r.queue_number ?? "?"}`, size: "3xl", weight: "bold", color: "#ffffff", align: "center" },
         ],
       });
@@ -452,10 +454,10 @@ async function replyMyAppointments(
             spacing: "md",
             margin: "lg",
             contents: [
-              infoRow("就診者", r.patients?.name ?? "—"),
-              infoRow("醫師", r.doctors?.name ?? "—"),
-              infoRow("服務", r.services?.name ?? "一般看診"),
-              infoRow("類型", r.visit_type === "first" ? "初診" : "複診"),
+              infoRow("顧客", r.patients?.name ?? "—"),
+              infoRow("服務提供者", r.doctors?.name ?? "—"),
+              infoRow("服務", r.services?.name ?? "一般服務"),
+              infoRow("類型", r.visit_type === "first" ? "首次服務" : "再次服務"),
             ],
           },
           {
@@ -522,7 +524,7 @@ function infoRow(label: string, value: string): LineMessage {
   };
 }
 
-// ── 看診進度 ────────────────────────────────────────────────
+// ── 服務進度(相容舊版號次流程) ─────────────────────────────
 async function replyProgress(
   replyToken: string,
   lineUserId: string | undefined,
@@ -539,7 +541,7 @@ async function replyProgress(
   const allSessions = await getQueueForDate(svc, clinicId, taipeiToday(), mode);
   const mine = await getPatientQueueToday(svc, clinicId, lineUserId, mode);
 
-  // 只保留:病患有號碼、且診次尚未結束的診次(過診次後不再顯示)
+  // 只保留:顧客有號碼、且場次尚未結束的場次(過場次後不再顯示)
   const nowMs = Date.now();
   const sessions = allSessions.filter((s) => {
     const notEnded = !s.sessionEnd || new Date(s.sessionEnd).getTime() > nowMs;
@@ -549,24 +551,24 @@ async function replyProgress(
 
   if (sessions.length === 0) {
     await replyMessages(replyToken, [
-      { type: "text", text: "您目前沒有進行中的看診。若已看診完成或診次已結束,恕不再顯示進度。" },
+      { type: "text", text: "您目前沒有進行中的服務。若服務已完成或場次已結束,恕不再顯示進度。" },
     ], lineAccessToken);
     return;
   }
 
-  // 每個門診段一張卡:色塊分類、內容置中
+  // 每個服務時段一張卡:色塊分類、內容置中
   const bubbles = sessions.map((s) => {
     const myItems = mine.filter((m) => m.doctorName === s.doctorName && m.label === s.label);
     const myBlocks = myItems.map((m) => {
-      // 狀態:過號 / 看診中 / 即將(前2位內)/ 候診
+      // 狀態:過號 / 服務中 / 即將(前2位內)/ 等候中
       const passed = m.current > 0 && m.current > m.yourNumber;
       const serving = m.current > 0 && m.current === m.yourNumber;
       const near = m.current > 0 && m.yourNumber - m.current > 0 && m.yourNumber - m.current <= 2;
       const waiting = m.current ? Math.max(0, m.yourNumber - m.current) : m.yourNumber;
       const statusText = passed
-        ? "您的號碼已過,如仍需看診請洽櫃檯"
+        ? "您的號碼已過,如仍需服務請洽服務人員"
         : serving
-          ? "輪到您看診了,請就位"
+          ? "輪到您了,請依現場指示"
           : near
             ? "即將輪到您,請就位"
             : `尚有約 ${waiting} 位候診`;
@@ -610,7 +612,7 @@ async function replyProgress(
         backgroundColor: "#0d9488",
         paddingAll: "sm",
         contents: [
-          { type: "text", text: "看診進度", size: "md", weight: "bold", color: "#ffffff", align: "center" },
+          { type: "text", text: "服務進度", size: "md", weight: "bold", color: "#ffffff", align: "center" },
         ],
       },
       body: {
@@ -636,7 +638,7 @@ async function replyProgress(
   });
 
   await replyMessages(replyToken, [
-    { type: "flex", altText: "今日看診進度", contents: { type: "carousel", contents: bubbles } },
+    { type: "flex", altText: "今日服務進度", contents: { type: "carousel", contents: bubbles } },
   ], lineAccessToken);
 }
 

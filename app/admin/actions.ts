@@ -34,6 +34,25 @@ function intOr(fd: FormData, k: string, dflt: number): number {
   const n = Number(str(fd, k));
   return Number.isFinite(n) ? n : dflt;
 }
+type ServiceBookingField = { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox"; required: boolean; options: string[] };
+function parseServiceBookingFields(fd: FormData): ServiceBookingField[] {
+  const raw = str(fd, "booking_fields");
+  if (!raw) return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error("預約表單 JSON 格式錯誤"); }
+  if (!Array.isArray(parsed) || parsed.length > 20) throw new Error("預約表單最多 20 個欄位");
+  return parsed.map((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("預約表單欄位格式錯誤");
+    const row = value as Record<string, unknown>;
+    const key = typeof row.key === "string" ? row.key.trim() : "";
+    const label = typeof row.label === "string" ? row.label.trim() : "";
+    const type = row.type;
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key) || !label || !["text", "textarea", "date", "select", "checkbox"].includes(String(type))) throw new Error("預約表單欄位設定錯誤");
+    const options = Array.isArray(row.options) ? row.options.filter((option): option is string => typeof option === "string").map((option) => option.trim()).filter(Boolean).slice(0, 30) : [];
+    if (type === "select" && options.length === 0) throw new Error(`${label}需要至少一個選項`);
+    return { key, label, type: type as ServiceBookingField["type"], required: row.required === true, options };
+  });
+}
 export async function setActiveClinicAction(fd: FormData): Promise<void> {
   const context = await requireMember();
   const clinicId = str(fd, "clinic_id");
@@ -90,7 +109,7 @@ export async function createBrandAction(fd: FormData): Promise<void> {
 }
 
 // ── 使用者(後台帳號)管理 ─────────────────────────────────
-// 角色:admin=管理員(可管理使用者與 LINE 設定)、staff=櫃檯(日常看診作業)。
+// 角色:admin=管理員(可管理使用者與 LINE 設定)、staff=櫃檯(日常預約作業)。
 export interface StaffMember {
   userId: string;
   email: string;
@@ -236,7 +255,7 @@ export async function setDoctorAssignmentsAction(fd: FormData) {
     .eq("clinic_id", clinicId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (target?.role !== "provider") throw new Error("只有服務提供者可設定醫師指派");
+  if (target?.role !== "provider") throw new Error("只有服務提供者可設定人員指派");
   const { data: doctors, error: doctorError } = await svc
     .from("doctors")
     .select("id")
@@ -377,6 +396,12 @@ export async function setStatusAction(fd: FormData) {
   if (error) throw new Error(error.message);
   if (!changed) throw new Error("查無預約或沒有此預約的操作權限");
 
+  if (status === "confirmed") {
+    await notifyAppointmentStatus(createServiceClient(), id, "confirmed").catch((notificationError: unknown) => {
+      console.error("Appointment confirmation notification failed", notificationError);
+    });
+  }
+
   // 未到自動停權:每累計滿 3 次未到 → 停權 1 個月
   if (status === "no_show" && role !== "provider") {
     const { data: appt } = await supabase
@@ -429,7 +454,7 @@ export async function advanceServingAction(fd: FormData) {
     .eq("active", true)
     .maybeSingle();
   if (doctorError) throw new Error(doctorError.message);
-  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
+  if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
   if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
 
   const { data: cur } = await supabase
@@ -551,7 +576,7 @@ export async function setQueueAutoAction(fd: FormData) {
     .eq("active", true)
     .maybeSingle();
   if (doctorError) throw new Error(doctorError.message);
-  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
+  if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
   if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
   const autoEvery = Math.max(0, intOr(fd, "auto_every", 0));
 
@@ -574,7 +599,7 @@ export async function setQueueAutoAction(fd: FormData) {
 export async function setPatientBlockAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
-  if (!id) throw new Error("缺少病患");
+  if (!id) throw new Error("缺少顧客");
   const block = str(fd, "block") === "1";
   let blockedUntil: string | null = null;
   if (block) {
@@ -644,7 +669,7 @@ async function getOrCreatePatient(clinicId: string, name: string, phone: string,
   });
   if (error) throw new Error(error.message);
   const row = Array.isArray(data) ? data[0] : data;
-  if (!row?.patient_id) throw new Error("建立病患失敗");
+  if (!row?.patient_id) throw new Error("建立顧客失敗");
   return row.patient_id as string;
 }
 
@@ -662,10 +687,11 @@ async function book(opts: {
 }): Promise<string> {
   const svc = createServiceClient();
   let selectedServiceId: string | null = null;
+  let selectedServiceTarget: "provider_required" | "provider_optional" | "resource_only" | null = null;
   if (opts.serviceId) {
     const { data: service, error: serviceError } = await svc
       .from("services")
-      .select("id")
+      .select("id, booking_target")
       .eq("id", opts.serviceId)
       .eq("clinic_id", opts.clinicId)
       .eq("active", true)
@@ -673,33 +699,57 @@ async function book(opts: {
     if (serviceError) throw new Error(serviceError.message);
     if (!service) throw new Error("服務不存在或已停用");
     selectedServiceId = String(service.id);
+    selectedServiceTarget = service.booking_target as "provider_required" | "provider_optional" | "resource_only";
   }
+  if (!opts.doctorId && !selectedServiceId) throw new Error("請指定服務提供者或服務");
+  if (!opts.doctorId && selectedServiceTarget === "provider_required") throw new Error("此服務需要指定服務提供者");
   let apptId: string | null = null;
   if (opts.mode === "time") {
     if (!opts.startAt) throw new Error("缺少時間");
-    const { data, error } = await svc.rpc("book_time_slot", {
-      p_clinic_id: opts.clinicId,
-      p_doctor_id: opts.doctorId,
-      p_patient_id: opts.patientId,
-      p_start_at: opts.startAt,
-      p_visit_type: opts.visitType,
-      p_is_self_pay: opts.isSelfPay,
-      p_service_id: selectedServiceId,
-    });
+    const { data, error } = opts.doctorId
+      ? await svc.rpc("book_time_slot", {
+          p_clinic_id: opts.clinicId,
+          p_doctor_id: opts.doctorId,
+          p_patient_id: opts.patientId,
+          p_start_at: opts.startAt,
+          p_visit_type: opts.visitType,
+          p_is_self_pay: opts.isSelfPay,
+          p_service_id: selectedServiceId,
+        })
+      : await svc.rpc("book_service_slot", {
+          p_clinic_id: opts.clinicId,
+          p_service_id: selectedServiceId,
+          p_patient_id: opts.patientId,
+          p_start_at: opts.startAt,
+          p_visit_type: opts.visitType,
+          p_is_self_pay: opts.isSelfPay,
+          p_booking_answers: {},
+        });
     if (error) throw new Error(error.message);
     apptId = data as string;
   } else {
-    if (!opts.templateId || !opts.date) throw new Error("缺少診次或日期");
-    const { data, error } = await svc.rpc("book_number", {
-      p_clinic_id: opts.clinicId,
-      p_doctor_id: opts.doctorId,
-      p_patient_id: opts.patientId,
-      p_template_id: opts.templateId,
-      p_date: opts.date,
-      p_visit_type: opts.visitType,
-      p_is_self_pay: opts.isSelfPay,
-      p_service_id: selectedServiceId,
-    });
+    if (!opts.templateId || !opts.date) throw new Error("缺少服務場次或日期");
+    const { data, error } = opts.doctorId
+      ? await svc.rpc("book_number", {
+          p_clinic_id: opts.clinicId,
+          p_doctor_id: opts.doctorId,
+          p_patient_id: opts.patientId,
+          p_template_id: opts.templateId,
+          p_date: opts.date,
+          p_visit_type: opts.visitType,
+          p_is_self_pay: opts.isSelfPay,
+          p_service_id: selectedServiceId,
+        })
+      : await svc.rpc("book_service_session", {
+          p_clinic_id: opts.clinicId,
+          p_service_id: selectedServiceId,
+          p_patient_id: opts.patientId,
+          p_template_id: opts.templateId,
+          p_date: opts.date,
+          p_visit_type: opts.visitType,
+          p_is_self_pay: opts.isSelfPay,
+          p_booking_answers: {},
+        });
     if (error) throw new Error(error.message);
     const row = Array.isArray(data) ? data[0] : data;
     apptId = (row?.appointment_id as string) ?? null;
@@ -731,7 +781,8 @@ export async function createAppointmentAction(fd: FormData) {
   const name = str(fd, "name");
   const phone = str(fd, "phone");
   const birthday = str(fd, "birthday");
-  if (!doctorId || !name || !phone) throw new Error("請填寫醫師、姓名、電話");
+  const serviceId = str(fd, "service_id");
+  if ((!doctorId && !serviceId) || !name || !phone) throw new Error("請填寫服務提供者或服務、姓名、電話");
   const visitType = str(fd, "visit_type") === "first" ? "first" : "return";
   const isSelfPay = bool(fd, "is_self_pay");
 
@@ -760,7 +811,7 @@ export async function createAppointmentAction(fd: FormData) {
     startAt: str(fd, "start_at") || undefined,
     templateId: str(fd, "template_id") || undefined,
     date: str(fd, "date") || undefined,
-    serviceId: str(fd, "service_id") || undefined,
+    serviceId: serviceId || undefined,
   });
   revalidatePath("/admin");
 }
@@ -770,7 +821,7 @@ export async function rescheduleAppointmentAction(fd: FormData) {
   const oldId = str(fd, "old_id");
   const mode = str(fd, "mode") === "number" ? "number" : "time";
   const doctorId = str(fd, "doctor_id");
-  if (!oldId || !doctorId) throw new Error("缺少必要參數");
+  if (!oldId) throw new Error("缺少必要參數");
 
   // 先取得原約診的病患
   const { data: old, error: oErr } = await supabase
@@ -779,17 +830,19 @@ export async function rescheduleAppointmentAction(fd: FormData) {
     .eq("id", oldId)
     .eq("clinic_id", clinicId)
     .single();
-  if (oErr || !old) throw new Error("查無原約診");
+  if (oErr || !old) throw new Error("查無原預約");
 
-  const { data: newAppointmentId, error: rescheduleError } = await createServiceClient().rpc("reschedule_appointment", {
+  const serviceId = (old.service_id as string | null) ?? null;
+  if (!doctorId && !serviceId) throw new Error("原預約缺少服務或服務提供者，無法改期");
+  const { data: newAppointmentId, error: rescheduleError } = await createServiceClient().rpc("reschedule_service_appointment", {
     p_clinic_id: clinicId,
     p_old_appointment_id: oldId,
     p_mode: mode,
-    p_doctor_id: doctorId,
+    p_doctor_id: doctorId || null,
+    p_service_id: serviceId,
     p_start_at: str(fd, "start_at") || null,
     p_template_id: str(fd, "template_id") || null,
     p_date: str(fd, "date") || null,
-    p_service_id: (old.service_id as string | null) ?? null,
   });
   if (rescheduleError || typeof newAppointmentId !== "string") {
     throw new Error(rescheduleError?.message ?? "改期失敗");
@@ -808,22 +861,32 @@ export async function rescheduleAppointmentAction(fd: FormData) {
   revalidatePath("/admin");
 }
 
-// ── 門診表 schedule_templates ──────────────────────────────
+// ── 服務排程 schedule_templates ────────────────────────────
 export async function createTemplateAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const doctorId = str(fd, "doctor_id");
-  const { data: doctor, error: doctorError } = await supabase
-    .from("doctors")
-    .select("id")
-    .eq("id", doctorId)
-    .eq("clinic_id", clinicId)
-    .eq("active", true)
-    .maybeSingle();
-  if (doctorError) throw new Error(doctorError.message);
-  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
+  const serviceId = str(fd, "service_id");
+  if (!doctorId && !serviceId) throw new Error("請指定服務提供者或服務");
+  if (doctorId) {
+    const { data: doctor, error: doctorError } = await supabase
+      .from("doctors")
+      .select("id")
+      .eq("id", doctorId)
+      .eq("clinic_id", clinicId)
+      .eq("active", true)
+      .maybeSingle();
+    if (doctorError) throw new Error(doctorError.message);
+    if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
+  }
+  if (serviceId) {
+    const { data: service, error: serviceError } = await supabase.from("services").select("id").eq("id", serviceId).eq("clinic_id", clinicId).eq("active", true).maybeSingle();
+    if (serviceError) throw new Error(serviceError.message);
+    if (!service) throw new Error("服務不屬於目前品牌或已停用");
+  }
   const { error } = await supabase.from("schedule_templates").insert({
     clinic_id: clinicId,
-    doctor_id: doctorId,
+    doctor_id: doctorId || null,
+    service_id: serviceId || null,
     weekday: intOr(fd, "weekday", 1),
     start_time: str(fd, "start_time"),
     end_time: str(fd, "end_time"),
@@ -839,20 +902,30 @@ export async function updateTemplateAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const doctorId = str(fd, "doctor_id");
-  const { data: doctor, error: doctorError } = await supabase
-    .from("doctors")
-    .select("id")
-    .eq("id", doctorId)
-    .eq("clinic_id", clinicId)
-    .eq("active", true)
-    .maybeSingle();
-  if (doctorError) throw new Error(doctorError.message);
-  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
+  const serviceId = str(fd, "service_id");
+  if (!doctorId && !serviceId) throw new Error("請指定服務提供者或服務");
+  if (doctorId) {
+    const { data: doctor, error: doctorError } = await supabase
+      .from("doctors")
+      .select("id")
+      .eq("id", doctorId)
+      .eq("clinic_id", clinicId)
+      .eq("active", true)
+      .maybeSingle();
+    if (doctorError) throw new Error(doctorError.message);
+    if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
+  }
+  if (serviceId) {
+    const { data: service, error: serviceError } = await supabase.from("services").select("id").eq("id", serviceId).eq("clinic_id", clinicId).eq("active", true).maybeSingle();
+    if (serviceError) throw new Error(serviceError.message);
+    if (!service) throw new Error("服務不屬於目前品牌或已停用");
+  }
   if (!id) throw new Error("缺少 id");
   const { error } = await supabase
     .from("schedule_templates")
     .update({
-      doctor_id: doctorId,
+      doctor_id: doctorId || null,
+      service_id: serviceId || null,
       weekday: intOr(fd, "weekday", 1),
       start_time: str(fd, "start_time"),
       end_time: str(fd, "end_time"),
@@ -886,7 +959,7 @@ export async function deleteTemplateAction(fd: FormData) {
     .delete()
     .eq("id", id)
     .eq("clinic_id", clinicId);
-  if (error) throw new Error("此門診段已有約診,無法刪除,請改為停用。");
+  if (error) throw new Error("此服務時段已有預約,無法刪除,請改為停用。");
   revalidatePath("/admin/schedules");
 }
 
@@ -914,19 +987,35 @@ export async function createExceptionAction(fd: FormData) {
   if (!date) throw new Error("請選擇日期");
 
   const doctorId = str(fd, "doctor_id");
-  const { data: doctor, error: doctorError } = await supabase
-    .from("doctors")
-    .select("id")
-    .eq("id", doctorId)
-    .eq("clinic_id", clinicId)
-    .eq("active", true)
-    .maybeSingle();
-  if (doctorError) throw new Error(doctorError.message);
-  if (!doctor) throw new Error("醫師不屬於目前品牌或已停用");
+  const serviceId = str(fd, "service_id");
+  if (!doctorId && !serviceId) throw new Error("請指定服務提供者或服務");
+  if (doctorId) {
+    const { data: doctor, error: doctorError } = await supabase
+      .from("doctors")
+      .select("id")
+      .eq("id", doctorId)
+      .eq("clinic_id", clinicId)
+      .eq("active", true)
+      .maybeSingle();
+    if (doctorError) throw new Error(doctorError.message);
+    if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
+  }
+  if (serviceId) {
+    const { data: service, error: serviceError } = await supabase
+      .from("services")
+      .select("id")
+      .eq("id", serviceId)
+      .eq("clinic_id", clinicId)
+      .eq("active", true)
+      .maybeSingle();
+    if (serviceError) throw new Error(serviceError.message);
+    if (!service) throw new Error("服務不屬於目前品牌或已停用");
+  }
 
   const row: Record<string, unknown> = {
     clinic_id: clinicId,
-    doctor_id: doctorId,
+    doctor_id: doctorId || null,
+    service_id: serviceId || null,
     date,
     is_closed: isClosed,
   };
@@ -959,7 +1048,7 @@ export async function deleteExceptionAction(fd: FormData) {
   revalidatePath("/admin/exceptions");
 }
 
-// ── 醫師(門診表需要)────────────────────────────────────
+// ── 服務提供者(服務排程可選)────────────────────────────────
 export async function createDoctorAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const { error } = await supabase.from("doctors").insert({
@@ -976,7 +1065,7 @@ export async function updateDoctorAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const name = str(fd, "name");
-  if (!id || !name) throw new Error("缺少醫師或姓名");
+  if (!id || !name) throw new Error("缺少服務提供者或姓名");
   const { error } = await supabase
     .from("doctors")
     .update({ name, specialty: str(fd, "specialty") || null })
@@ -999,14 +1088,14 @@ export async function toggleDoctorAction(fd: FormData) {
   revalidatePath("/admin/schedules");
 }
 
-// ── 病患建檔/記錄 patients ───────────────────────────────
-// 修正病患自行填錯的基本資料(姓名 / 電話)。櫃檯即可操作。
+// ── 顧客建檔/記錄 patients ────────────────────────────────
+// 修正顧客自行填錯的基本資料(姓名 / 電話)。櫃檯即可操作。
 export async function updatePatientBasicAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   const name = str(fd, "name");
   const phone = str(fd, "phone");
-  if (!id) throw new Error("缺少病患");
+  if (!id) throw new Error("缺少顧客");
   if (!name) throw new Error("請填姓名");
   if (!phone) throw new Error("請填電話");
   const { error } = await supabase
@@ -1025,7 +1114,7 @@ export async function updatePatientBasicAction(fd: FormData) {
 export async function deletePatientAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
-  if (!id) throw new Error("缺少病患");
+  if (!id) throw new Error("缺少顧客");
   const [{ count: appointmentCount }, { count: recordCount }, { count: interactionCount }, { count: membershipCount }, { count: segmentCount }, { count: discountCount }] = await Promise.all([
     supabase.from("appointments").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
     supabase.from("patient_records").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
@@ -1049,7 +1138,7 @@ export async function deletePatientAction(fd: FormData) {
       .delete()
       .eq("id", id)
       .eq("clinic_id", clinicId);
-    if (error) throw new Error("刪除失敗:此病患可能已有關聯資料。");
+  if (error) throw new Error("刪除失敗:此顧客可能已有關聯資料。");
   }
   revalidatePath("/admin/patients");
 }
@@ -1057,7 +1146,7 @@ export async function deletePatientAction(fd: FormData) {
 export async function updatePatientAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
-  if (!id) throw new Error("缺少病患");
+  if (!id) throw new Error("缺少顧客");
   const { error } = await supabase
     .from("patients")
     .update({
@@ -1078,7 +1167,7 @@ export async function addPatientRecordAction(fd: FormData) {
   const { supabase, clinicId, user } = await requireOperator();
   const patientId = str(fd, "patient_id");
   const content = str(fd, "content");
-  if (!patientId) throw new Error("缺少病患");
+  if (!patientId) throw new Error("缺少顧客");
   if (!content) throw new Error("請填寫病況內容");
   const { error } = await supabase.from("patient_records").insert({
     clinic_id: clinicId,
@@ -1124,6 +1213,8 @@ export async function createServiceAction(fd: FormData) {
     description: str(fd, "description") || null,
     duration_minutes: Math.max(1, intOr(fd, "duration_minutes", 30)),
     buffer_minutes: Math.max(0, intOr(fd, "buffer_minutes", 0)),
+    booking_target: ["provider_required", "provider_optional", "resource_only"].includes(str(fd, "booking_target")) ? str(fd, "booking_target") : "provider_required",
+    booking_fields: parseServiceBookingFields(fd),
     active: true,
   });
   if (error) throw new Error(error.message);
@@ -1143,6 +1234,8 @@ export async function updateServiceAction(fd: FormData) {
       description: str(fd, "description") || null,
       duration_minutes: Math.max(1, intOr(fd, "duration_minutes", 30)),
       buffer_minutes: Math.max(0, intOr(fd, "buffer_minutes", 0)),
+      booking_target: ["provider_required", "provider_optional", "resource_only"].includes(str(fd, "booking_target")) ? str(fd, "booking_target") : "provider_required",
+      booking_fields: parseServiceBookingFields(fd),
     })
     .eq("id", id)
     .eq("clinic_id", clinicId);
@@ -1171,7 +1264,7 @@ export async function deleteServiceAction(fd: FormData) {
     .delete()
     .eq("id", id)
     .eq("clinic_id", clinicId);
-  if (error) throw new Error("此服務已被約診使用,無法刪除,請改為停用。");
+  if (error) throw new Error("此服務已有預約使用,無法刪除,請改為停用。");
   revalidatePath("/admin/services");
 }
 
@@ -1552,7 +1645,7 @@ export async function verifyClinicDomainAction(fd: FormData) {
 export async function updateClinicProfileAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const name = str(fd, "name");
-  if (!name) throw new Error("請填診所名稱");
+  if (!name) throw new Error("請填品牌名稱");
   let lineId = str(fd, "line_basic_id");
   if (lineId && !lineId.startsWith("@")) lineId = "@" + lineId; // 自動補 @
   const lineDestination = str(fd, "line_destination");

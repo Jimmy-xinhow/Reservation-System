@@ -9,7 +9,7 @@ import { formatDateSession, formatTime } from "@/lib/slots";
 interface PortalData {
   patient: { name: string };
   appointments: Array<{ id: string; start_at: string; end_at: string | null; status: string; visit_type: "first" | "return"; queue_number: number | null; doctors: { name: string } | null; services: { name: string } | null }>;
-  registrations: Array<{ registration_no: string; status: string; payment_status: string; amount: number; created_at: string; events: { title: string } | { title: string }[] | null; event_sessions: { name: string; start_at: string; end_at: string } | { name: string; start_at: string; end_at: string }[] | null }>;
+  registrations: Array<{ id: string; registration_no: string; status: string; payment_status: string; amount: number; created_at: string; events: { title: string } | { title: string }[] | null; event_sessions: { name: string; start_at: string; end_at: string } | { name: string; start_at: string; end_at: string }[] | null }>;
   memberships: Array<{ membership_code: string; status: string; credits_total: number; credits_remaining: number; starts_at: string; expires_at: string | null; membership_plans: { name: string; description: string | null; usage_scope: string } | { name: string; description: string | null; usage_scope: string }[] | null }>;
 }
 
@@ -50,6 +50,8 @@ export default function MyCustomerPage() {
   const [data, setData] = useState<PortalData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
 
   const load = useCallback(async (browserToken: string) => {
     setLoading(true);
@@ -74,6 +76,20 @@ export default function MyCustomerPage() {
     else setLoading(false);
   }, [load]);
 
+  async function cancelRegistration(registrationId: string) {
+    const token = storedToken();
+    if (!token) { setActionError("顧客身分已過期，請重新驗證"); return; }
+    if (!window.confirm("確定要取消這筆活動報名嗎？")) return;
+    setActing(registrationId); setActionError(null);
+    try {
+      const response = await fetch(`/api/customer/registration-action${scopeSuffix()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ browser_token: token, registration_id: registrationId, action: "cancel" }) });
+      const body = await response.json() as { ok?: boolean; error?: string };
+      if (!response.ok || !body.ok) throw new Error(body.error ?? "取消報名失敗");
+      await load(token);
+    } catch (caught) { setActionError(caught instanceof Error ? caught.message : "取消報名失敗"); }
+    finally { setActing(null); }
+  }
+
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-6 flex items-center justify-between gap-3">
@@ -92,8 +108,11 @@ export default function MyCustomerPage() {
         <div className="space-y-6">
           <section className="rounded-2xl bg-gradient-to-br from-brand-600 to-accent-600 p-6 text-white"><p className="text-sm text-white/75">歡迎回來</p><h1 className="mt-1 text-2xl font-bold">{data.patient.name}</h1><p className="mt-2 text-sm text-white/80">預約、活動報名與套票都集中在這裡。</p></section>
           <section className="grid gap-3 sm:grid-cols-3"><Summary label="未來預約" value={data.appointments.filter((item) => ["booked", "confirmed"].includes(item.status)).length} /><Summary label="活動報名" value={data.registrations.length} /><Summary label="使用中套票" value={data.memberships.filter((item) => item.status === "active").length} /></section>
-          <section className="card space-y-3 p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的預約</h2><Link href={`/book/browser${scopeSuffix()}`} className="text-sm text-brand-700">新增預約</Link></div>{data.appointments.length === 0 ? <Empty text="目前沒有預約紀錄。" /> : <div className="space-y-2">{data.appointments.slice(0, 8).map((item) => <div key={item.id} className="flex flex-col gap-2 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-900">{formatDateSession(item.start_at)} {formatTime(item.start_at)}</p><p className="mt-1 text-sm text-slate-500">{item.services?.name ?? "服務"} · {item.doctors?.name ?? "服務提供者"} · {item.visit_type === "first" ? "初次" : "回訪"}</p></div><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span></div>)}</div>}</section>
-          <section className="card space-y-3 p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的活動報名</h2><Link href={`/register${scopeSuffix()}`} className="text-sm text-brand-700">查看活動</Link></div>{data.registrations.length === 0 ? <Empty text="目前沒有活動報名。" /> : <div className="space-y-2">{data.registrations.slice(0, 8).map((item) => { const event = one(item.events); const session = one(item.event_sessions); return <div key={item.registration_no} className="flex flex-col gap-2 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-900">{event?.title ?? "活動"}</p><p className="mt-1 text-sm text-slate-500">{session ? `${session.name} · ${formatEventDate(session.start_at)}` : item.registration_no} · {statusLabel(item.payment_status)}</p></div><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span></div>; })}</div>}</section>
+          <section className="card space-y-3 p-5">
+            <div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的預約</h2><Link href={`/book/browser${scopeSuffix()}`} className="text-sm text-brand-700">新增預約</Link></div>
+            {data.appointments.length === 0 ? <Empty text="目前沒有預約紀錄。" /> : <div className="space-y-2">{data.appointments.slice(0, 8).map((item) => <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-900">{formatDateSession(item.start_at)} {formatTime(item.start_at)}</p><p className="mt-1 text-sm text-slate-500">{item.services?.name ?? "服務"} · {item.doctors?.name ?? "服務提供者"} · {item.visit_type === "first" ? "首次服務" : "再次服務"}</p></div><div className="flex shrink-0 items-center gap-2"><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span>{["booked", "confirmed"].includes(item.status) && <Link href={`/book/browser/my${scopeSuffix()}`} className="btn btn-secondary px-3 py-1.5 text-xs">管理預約</Link>}</div></div>)}</div>}
+          </section>
+          <section className="card space-y-3 p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的活動報名</h2><Link href={`/register${scopeSuffix()}`} className="text-sm text-brand-700">查看活動</Link></div>{actionError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}{data.registrations.length === 0 ? <Empty text="目前沒有活動報名。" /> : <div className="space-y-2">{data.registrations.slice(0, 8).map((item) => { const event = one(item.events); const session = one(item.event_sessions); const cancellable = ["pending", "confirmed", "waitlisted"].includes(item.status); return <div key={item.registration_no} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-900">{event?.title ?? "活動"}</p><p className="mt-1 text-sm text-slate-500">{session ? `${session.name} · ${formatEventDate(session.start_at)}` : item.registration_no} · {statusLabel(item.payment_status)}</p></div><div className="flex shrink-0 items-center gap-2"><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span>{item.payment_status === "pending" && <Link href={`/register/pay?registration_id=${encodeURIComponent(item.id)}${scopeSuffix().replace("?", "&")}`} className="btn btn-primary px-3 py-1.5 text-xs">前往付款</Link>}{cancellable && <button type="button" onClick={() => void cancelRegistration(item.id)} disabled={acting === item.id} className="btn btn-secondary px-3 py-1.5 text-xs">{acting === item.id ? "處理中…" : "取消報名"}</button>}</div></div>; })}</div>}</section>
           <section className="card space-y-3 p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的套票</h2><Link href={`/membership${scopeSuffix()}`} className="text-sm text-brand-700">購買套票</Link></div>{data.memberships.length === 0 ? <Empty text="目前沒有套票。" /> : <div className="space-y-2">{data.memberships.slice(0, 8).map((item) => { const plan = one(item.membership_plans); return <div key={item.membership_code} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"><div><p className="font-medium text-slate-900">{plan?.name ?? "會員方案"}</p><p className="mt-1 text-sm text-slate-500">剩餘 {item.credits_remaining}／{item.credits_total} 堂{item.expires_at ? ` · 到期 ${new Date(item.expires_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}` : ""}</p></div><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span></div>; })}</div>}</section>
         </div>
       )}

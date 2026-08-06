@@ -71,7 +71,7 @@ export function slotAction(
     case "query":
       return withLabel({ type: "postback", data: "action=my", displayText: "查詢預約" });
     case "progress":
-      return withLabel({ type: "postback", data: "action=progress", displayText: "看診進度" });
+      return withLabel({ type: "postback", data: "action=progress", displayText: "服務進度" });
     case "info":
       return baseUrl ? withLabel({ type: "uri", uri: baseUrl }) : null;
     case "uri":
@@ -87,8 +87,8 @@ export function slotAction(
 export const ACTION_OPTIONS: { value: Slot["action"]; label: string }[] = [
   { value: "booking", label: "立即預約" },
   { value: "query", label: "查詢預約" },
-  { value: "progress", label: "看診進度" },
-  { value: "info", label: "診所資訊" },
+  { value: "progress", label: "服務進度（舊版）" },
+  { value: "info", label: "品牌資訊" },
   { value: "uri", label: "自訂連結" },
   { value: "message", label: "回覆訊息素材" },
   { value: "none", label: "(不設定)" },

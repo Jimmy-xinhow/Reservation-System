@@ -38,7 +38,7 @@ export default async function RepliesPage() {
       <div>
         <h1 className="text-xl font-bold text-slate-900">LINE 回覆指令</h1>
         <p className="text-sm text-slate-400">
-          設定病患在官方帳號輸入文字時的自動回覆。全部走 LINE 免費回覆,不計入推播額度。
+          設定顧客在官方帳號輸入文字時的自動回覆。全部走 LINE 免費回覆,不計入推播額度。
         </p>
       </div>
 
@@ -76,8 +76,8 @@ export default async function RepliesPage() {
             {[
               ["line_menu_btn_booking", "立即預約"],
               ["line_menu_btn_query", "查詢預約"],
-              ["line_menu_btn_progress", "看診進度"],
-              ["line_menu_btn_info", "診所資訊"],
+              ["line_menu_btn_progress", "服務進度"],
+              ["line_menu_btn_info", "品牌資訊"],
             ].map(([name, label]) => (
               <label key={name} className="flex items-center gap-2">
                 <input

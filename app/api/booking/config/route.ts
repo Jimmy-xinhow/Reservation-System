@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const settings = await getClinicSettings(svc, clinicId);
     if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);
-    if (!settings) return fail("查無診所設定", 500);
+    if (!settings) return fail("查無品牌設定", 500);
 
     const [{ data: clinic, error: clinicError }, { data: doctors, error }] = await Promise.all([
       svc.from("clinics").select("name").eq("id", clinicId).maybeSingle(),
@@ -33,12 +33,13 @@ export async function GET(req: NextRequest) {
     ]);
     if (clinicError || error) return fail(clinicError?.message ?? error?.message ?? "無法載入公開品牌", 500);
 
-    const { data: services } = await svc
+    const { data: services, error: servicesError } = await svc
       .from("services")
-      .select("id, name, description")
+      .select("id, name, description, booking_target, booking_fields")
       .eq("clinic_id", clinicId)
       .eq("active", true)
       .order("created_at");
+    if (servicesError) return fail(servicesError.message, 500);
 
     return ok({
       clinic_name: clinic?.name ?? null,

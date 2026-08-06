@@ -21,6 +21,7 @@ interface ReserveBody {
   visit_type?: "first" | "return";
   is_self_pay?: boolean;
   membership_code?: string;
+  booking_answers?: Record<string, unknown>;
   email?: string;
   // time 模式
   start_at?: string;
@@ -44,8 +45,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as ReserveBody | null;
     if (!body) return fail("請求格式錯誤");
     if (!body.idToken && !body.browser_token) return fail("缺少預約身分驗證");
-    if (!body.patient_id && !body.browser_token) return fail("缺少病患");
-    if (!body.doctor_id) return fail("缺少醫師");
+    if (!body.patient_id && !body.browser_token) return fail("缺少顧客");
 
     const visitType: "first" | "return" = body.visit_type === "first" ? "first" : "return";
     const isSelfPay = body.is_self_pay === true;
@@ -73,9 +73,9 @@ export async function POST(req: NextRequest) {
     if (!clinicId) return fail("缺少品牌設定", 500);
     if (browserIdentity && browserIdentity.clinicId !== clinicId) return fail("品牌身分不符", 403);
     const patientId = browserIdentity?.patientId ?? body.patient_id;
-    if (!patientId) return fail("缺少病患", 400);
+    if (!patientId) return fail("缺少顧客", 400);
 
-    // 確認病患屬於本診所且為此 LINE 身分
+    // 確認顧客屬於本品牌且為此 LINE 身分
     const { data: patient, error: pErr } = await svc
       .from("patients")
       .select("id, clinic_id, line_user_id, blocked_until")
@@ -83,26 +83,26 @@ export async function POST(req: NextRequest) {
       .eq("active", true)
       .maybeSingle();
     if (pErr) return fail(pErr.message, 500);
-    if (!patient || patient.clinic_id !== clinicId) return fail("查無病患", 404);
+    if (!patient || patient.clinic_id !== clinicId) return fail("查無顧客", 404);
     if (browserIdentity) {
       if (patient.id !== browserIdentity.patientId) return fail("瀏覽器預約身分不符", 403);
     } else if (!patient.line_user_id || patient.line_user_id !== lineUserId) {
-      return fail("病患與目前 LINE 身分不符", 403);
+      return fail("顧客與目前 LINE 身分不符", 403);
     }
     // 黑名單:停權期間不可預約
     if (patient.blocked_until && new Date(patient.blocked_until) > new Date()) {
-      return fail(`此就診者預約資格暫停至 ${formatDateTime(patient.blocked_until)},請洽櫃檯。`, 403);
+      return fail(`此顧客預約資格暫停至 ${formatDateTime(patient.blocked_until)},請洽服務人員。`, 403);
     }
 
     const settings = await getClinicSettings(svc, clinicId);
     if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);
-    if (!settings) return fail("查無診所設定", 500);
+    if (!settings) return fail("查無品牌設定", 500);
 
     let selectedServiceId: string | null = null;
     if (body.service_id) {
       const { data: service, error: serviceError } = await svc
         .from("services")
-        .select("id")
+        .select("id, booking_target, booking_fields")
         .eq("id", body.service_id)
         .eq("clinic_id", clinicId)
         .eq("active", true)
@@ -110,9 +110,14 @@ export async function POST(req: NextRequest) {
       if (serviceError) return fail(serviceError.message, 500);
       if (!service) return fail("服務不存在或已停用", 400);
       selectedServiceId = String(service.id);
+      if (!body.doctor_id && service.booking_target === "provider_required") return fail("此服務需要選擇服務提供者", 400);
+      const answersError = validateBookingAnswers(service.booking_fields, body.booking_answers ?? {});
+      if (answersError) return fail(answersError, 400);
+    } else if (!body.doctor_id) {
+      return fail("請選擇服務或服務提供者", 400);
     }
 
-    // 同一就診者同一天不可重複預約
+    // 同一顧客同一天不可重複預約
     const targetDate =
       settings.booking_mode === "time" && body.start_at
         ? taipeiDateString(body.start_at)
@@ -130,7 +135,7 @@ export async function POST(req: NextRequest) {
         .lte("start_at", dayEnd)
         .limit(1);
       if ((dup ?? []).length > 0) {
-        return fail("此就診者當天已有預約,無法重複預約。", 409);
+        return fail("此顧客當天已有預約,無法重複預約。", 409);
       }
     }
 
@@ -139,43 +144,81 @@ export async function POST(req: NextRequest) {
 
     if (settings.booking_mode === "time") {
       if (!body.start_at) return fail("缺少預約時間");
-      const { data, error } = await svc.rpc(membershipCode ? "book_time_slot_with_membership_for_service" : "book_time_slot_for_service", {
-        p_clinic_id: clinicId,
-        p_doctor_id: body.doctor_id,
-        p_patient_id: patientId,
-        p_start_at: body.start_at,
-        p_visit_type: visitType,
-        p_is_self_pay: isSelfPay,
-        ...(!membershipCode ? { p_service_id: selectedServiceId } : {}),
-        ...(membershipCode ? { p_membership_code: membershipCode, p_service_id: body.service_id || null } : {}),
-      });
+      const generic = !body.doctor_id && selectedServiceId;
+      const { data, error } = await svc.rpc(
+        generic
+          ? membershipCode ? "book_service_slot_with_membership" : "book_service_slot"
+          : membershipCode ? "book_time_slot_with_membership_for_service" : "book_time_slot_for_service",
+        generic
+          ? {
+              p_clinic_id: clinicId,
+              p_service_id: selectedServiceId,
+              p_patient_id: patientId,
+              p_start_at: body.start_at,
+              p_visit_type: visitType,
+              p_is_self_pay: isSelfPay,
+              ...(membershipCode ? { p_membership_code: membershipCode } : {}),
+              p_booking_answers: body.booking_answers ?? {},
+            }
+          : {
+              p_clinic_id: clinicId,
+              p_doctor_id: body.doctor_id,
+              p_patient_id: patientId,
+              p_start_at: body.start_at,
+              p_visit_type: visitType,
+              p_is_self_pay: isSelfPay,
+              ...(!membershipCode ? { p_service_id: selectedServiceId, } : {}),
+              ...(membershipCode ? { p_membership_code: membershipCode, p_service_id: body.service_id || null } : {}),
+            },
+      );
       if (error) return fail(translateDbError(error.message));
       appointmentId = data as string;
     } else {
-      if (!body.template_id) return fail("缺少門診段");
+      if (!body.template_id) return fail("缺少服務場次");
       if (!body.date || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return fail("date 格式須為 YYYY-MM-DD");
-      const { data, error } = await svc.rpc(membershipCode ? (selectedServiceId ? "book_number_with_membership_for_service" : "book_number_with_membership") : (selectedServiceId ? "book_number_for_service" : "book_number"), {
-        p_clinic_id: clinicId,
-        p_doctor_id: body.doctor_id,
-        p_patient_id: patientId,
-        p_template_id: body.template_id,
-        p_date: body.date,
-        p_visit_type: visitType,
-        p_is_self_pay: isSelfPay,
-        ...(!membershipCode ? { p_service_id: selectedServiceId } : {}),
-        ...(membershipCode ? { p_membership_code: membershipCode, p_service_id: body.service_id || null } : {}),
-      });
+      const generic = !body.doctor_id && selectedServiceId;
+      const { data, error } = await svc.rpc(
+        generic
+          ? membershipCode ? "book_service_session_with_membership" : "book_service_session"
+          : membershipCode
+            ? (selectedServiceId ? "book_number_with_membership_for_service" : "book_number_with_membership")
+            : (selectedServiceId ? "book_number_for_service" : "book_number"),
+        generic
+          ? {
+              p_clinic_id: clinicId,
+              p_service_id: selectedServiceId,
+              p_patient_id: patientId,
+              p_template_id: body.template_id,
+              p_date: body.date,
+              p_visit_type: visitType,
+              p_is_self_pay: isSelfPay,
+              ...(membershipCode ? { p_membership_code: membershipCode } : {}),
+              p_booking_answers: body.booking_answers ?? {},
+            }
+          : {
+              p_clinic_id: clinicId,
+              p_doctor_id: body.doctor_id,
+              p_patient_id: patientId,
+              p_template_id: body.template_id,
+              p_date: body.date,
+              p_visit_type: visitType,
+              p_is_self_pay: isSelfPay,
+              ...(!membershipCode ? { p_service_id: selectedServiceId } : {}),
+              ...(membershipCode ? { p_membership_code: membershipCode, p_service_id: body.service_id || null } : {}),
+            },
+      );
       if (error) return fail(translateDbError(error.message));
       const row = Array.isArray(data) ? data[0] : data;
-      if (!row) return fail("掛號失敗", 500);
+      if (!row) return fail("預約失敗", 500);
       appointmentId = row.appointment_id as string;
       queueNumber = row.queue_number as number;
     }
 
     // RPC 成功後一次綁定來源與服務；失敗時取消剛建立的約診，避免留下無法回傳的活躍預約。
-    const metadataPatch: { source: "online"; service_id?: string } = { source: "online" };
+    const metadataPatch: { source: "online"; service_id?: string; booking_answers?: Record<string, unknown> } = { source: "online" };
     // 套票 RPC 已在同一交易中綁定方案服務；沒有新服務值時不可用 null 覆蓋它。
     if (selectedServiceId) metadataPatch.service_id = selectedServiceId;
+    if (body.booking_answers && selectedServiceId) metadataPatch.booking_answers = body.booking_answers;
     const { error: bindingError } = await svc
       .from("appointments")
       .update(metadataPatch)
@@ -260,12 +303,36 @@ function translateDbError(msg: string): string {
     "時段已額滿",
     "本診已額滿",
     "已超過可預約時間",
-    "此時段非門診時間",
-    "查無此門診段",
+    "此時段非服務時間",
+    "查無此服務場次",
     "本診已休診",
     "此時段已休診",
     "本診已結束",
   ];
   const hit = known.find((k) => msg.includes(k));
   return hit ?? "此時段無法預約,請重新選擇";
+}
+
+function validateBookingAnswers(rawFields: unknown, answers: Record<string, unknown>): string | null {
+  if (!Array.isArray(rawFields)) return null;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return "預約資料格式錯誤";
+  for (const rawField of rawFields) {
+    if (!rawField || typeof rawField !== "object" || Array.isArray(rawField)) return "服務表單設定錯誤";
+    const field = rawField as { key?: unknown; label?: unknown; type?: unknown; required?: unknown; options?: unknown };
+    const key = typeof field.key === "string" ? field.key.trim() : "";
+    const label = typeof field.label === "string" && field.label.trim() ? field.label.trim() : key;
+    const type = typeof field.type === "string" ? field.type : "text";
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key) || !["text", "textarea", "date", "select", "checkbox"].includes(type)) return "服務表單設定錯誤";
+    const value = answers[key];
+    const missing = value === undefined || value === null || value === "" || (type === "checkbox" && value !== true);
+    if (field.required === true && missing) return `請填寫${label}`;
+    if (missing) continue;
+    if (["text", "textarea", "date", "select"].includes(type) && typeof value !== "string") return `${label}格式不正確`;
+    if (type === "date" && typeof value === "string" && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return `${label}格式不正確`;
+    if (type === "select") {
+      const options = Array.isArray(field.options) ? field.options.filter((option): option is string => typeof option === "string") : [];
+      if (!options.includes(String(value))) return `${label}選項無效`;
+    }
+  }
+  return null;
 }

@@ -16,6 +16,7 @@ interface Service {
   id: string;
   name: string;
   description: string | null;
+  booking_target?: "provider_required" | "provider_optional" | "resource_only";
 }
 
 interface Config {
@@ -44,7 +45,7 @@ interface Appointment {
   end_at: string | null;
   queue_number: number | null;
   status: string;
-  doctor_id: string;
+  doctor_id: string | null;
   service_id: string | null;
   visit_type: "first" | "return";
   doctors: { name: string } | null;
@@ -147,7 +148,7 @@ export default function ReschedulePage() {
         const current = appointments.find((item) => item.id === appointmentId) ?? null;
         if (!current) throw new Error("找不到可改期的預約，請重新從我的預約進入");
         setAppointment(current);
-        setDoctorId(current.doctor_id);
+        setDoctorId(current.doctor_id ?? "");
         setServiceId(current.service_id ?? "");
         setDate(taipeiDate(current.start_at));
         setVisitType(current.visit_type);
@@ -157,9 +158,22 @@ export default function ReschedulePage() {
   }, [appointmentId, idToken, ready]);
 
   const maxDate = useMemo(() => todayStr(config?.max_advance_days ?? 30), [config?.max_advance_days]);
+  const selectedService = useMemo(() => config?.services.find((service) => service.id === serviceId) ?? null, [config?.services, serviceId]);
+  const providerRequired = !selectedService || selectedService.booking_target === "provider_required";
+  const providerOptional = selectedService?.booking_target === "provider_optional";
+
+  useEffect(() => {
+    if (!config || !appointment) return;
+    if (selectedService && !providerRequired) setDoctorId("");
+  }, [appointment, config, providerRequired, selectedService]);
+
+  useEffect(() => {
+    if (!config || !appointment || !providerRequired || doctorId) return;
+    setDoctorId(config.doctors[0]?.id ?? "");
+  }, [appointment, config, doctorId, providerRequired]);
 
   const loadAvailability = useCallback(async () => {
-    if (!config || !doctorId || !date) return;
+    if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
     setAvailabilityLoading(true);
     setError(null);
     setSlots([]);
@@ -167,8 +181,8 @@ export default function ReschedulePage() {
     setPickedStart("");
     setPickedTemplate("");
     try {
-      const query = new URLSearchParams({ doctor_id: doctorId, date });
-      if (config.booking_mode === "time") query.set("visit_type", visitType);
+      const query = new URLSearchParams({ date, visit_type: visitType });
+      if (doctorId) query.set("doctor_id", doctorId);
       if (serviceId) query.set("service_id", serviceId);
       const data = await api<{ slots?: Slot[]; sessions?: Session[] }>(
         `/api/booking/availability?${query.toString()}`,
@@ -180,20 +194,20 @@ export default function ReschedulePage() {
     } finally {
       setAvailabilityLoading(false);
     }
-  }, [config, date, doctorId, serviceId, visitType]);
+  }, [config, date, doctorId, providerRequired, serviceId, visitType]);
 
   useEffect(() => {
-    if (appointment && config && doctorId && date) void loadAvailability();
-  }, [appointment, config, date, doctorId, loadAvailability]);
+    if (appointment && config && date && (!providerRequired || doctorId)) void loadAvailability();
+  }, [appointment, config, date, doctorId, loadAvailability, providerRequired]);
 
   async function submit() {
-    if (!idToken || !appointment || !config || !doctorId) return;
+    if (!idToken || !appointment || !config || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
     if (config.booking_mode === "time" && !pickedStart) {
       setError("請選擇新的時段");
       return;
     }
     if (config.booking_mode === "number" && !pickedTemplate) {
-      setError("請選擇新的看診時段");
+      setError("請選擇新的預約時段");
       return;
     }
     setSubmitting(true);
@@ -202,7 +216,7 @@ export default function ReschedulePage() {
       const body: Record<string, unknown> = {
         idToken,
         appointment_id: appointment.id,
-        doctor_id: doctorId,
+        doctor_id: doctorId || undefined,
         service_id: serviceId || undefined,
       };
       if (config.booking_mode === "time") body.start_at = pickedStart;
@@ -293,7 +307,7 @@ export default function ReschedulePage() {
         <div>
           <p className="eyebrow">我的預約</p>
           <h1 className="text-2xl font-bold text-slate-900">預約改期</h1>
-          <p className="mt-1 text-sm text-slate-500">請選擇新的醫師、日期與可用時段。</p>
+          <p className="mt-1 text-sm text-slate-500">請選擇新的服務提供者、日期與可用時段。</p>
         </div>
         <Link href={`/book${brandSuffix}`} className="text-sm text-brand-700">返回</Link>
       </div>
@@ -305,8 +319,8 @@ export default function ReschedulePage() {
       </div>
 
       <div className="card space-y-4 p-5">
-        <label className="block text-sm"><span className="label">醫師</span><select className="input" value={doctorId} onChange={(event) => setDoctorId(event.target.value)}>{config.doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.name}{doctor.specialty ? `・${doctor.specialty}` : ""}</option>)}</select></label>
-        {config.services.length > 0 && <label className="block text-sm"><span className="label">服務項目</span><select className="input" value={serviceId} onChange={(event) => setServiceId(event.target.value)}><option value="">沿用原服務</option>{config.services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>}
+        {(providerRequired || providerOptional) && <label className="block text-sm"><span className="label">服務提供者{providerOptional ? "（可不指定）" : ""}</span><select className="input" value={doctorId} onChange={(event) => setDoctorId(event.target.value)} required={providerRequired}><option value="">{providerRequired ? "請選擇" : "由系統安排"}</option>{config.doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.name}{doctor.specialty ? `・${doctor.specialty}` : ""}</option>)}</select></label>}
+        {config.services.length > 0 && <label className="block text-sm"><span className="label">服務項目</span><select className="input" value={serviceId} onChange={(event) => setServiceId(event.target.value)} required><option value="">請選擇服務</option>{config.services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>}
         <label className="block text-sm"><span className="label">日期</span><input type="date" className="input" min={todayStr()} max={maxDate} value={date} onChange={(event) => setDate(event.target.value)} /></label>
         <div>
           <span className="label">新的可預約時段</span>
@@ -315,7 +329,7 @@ export default function ReschedulePage() {
           ) : (
             <div className="grid grid-cols-1 gap-2">{sessions.map((session) => <button type="button" key={session.template_id} onClick={() => setPickedTemplate(session.template_id)} className={`rounded-xl border p-3 text-left text-sm ${pickedTemplate === session.template_id ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs text-slate-400">剩餘 {session.remaining}</span></button>)}</div>
           )}
-          {!availabilityLoading && (config.booking_mode === "time" ? slots.length === 0 : sessions.length === 0) && <p className="mt-2 text-sm text-slate-400">這天沒有可用時段，請更換日期或醫師。</p>}
+          {!availabilityLoading && (config.booking_mode === "time" ? slots.length === 0 : sessions.length === 0) && <p className="mt-2 text-sm text-slate-400">這天沒有可用時段，請更換日期或服務。</p>}
         </div>
         {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
         <button type="button" className="btn btn-primary w-full" disabled={submitting || availabilityLoading} onClick={() => void submit()}>{submitting ? "改期處理中…" : "確認改期"}</button>

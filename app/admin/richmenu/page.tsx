@@ -104,7 +104,7 @@ export default async function RichMenuPage({
 
       {publishedId && (
         <form action={unpublishRichMenuAction} className="card p-5">
-          <p className="mb-3 text-sm text-slate-600">移除後,病患聊天室下方將不再顯示圖文選單。</p>
+          <p className="mb-3 text-sm text-slate-600">移除後,顧客聊天室下方將不再顯示圖文選單。</p>
           <SubmitButton className="btn btn-danger">移除圖文選單</SubmitButton>
         </form>
       )}

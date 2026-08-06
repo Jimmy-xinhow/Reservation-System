@@ -10,10 +10,21 @@ interface Doctor {
 interface Service {
   id: string;
   name: string;
+  booking_target?: "provider_required" | "provider_optional" | "resource_only";
+  booking_fields?: BookingField[];
 }
 interface ApptOption {
   id: string;
   label: string;
+  doctor_id: string | null;
+  service_id: string | null;
+}
+interface BookingField {
+  key: string;
+  label: string;
+  type: "text" | "textarea" | "date" | "select" | "checkbox";
+  required?: boolean;
+  options?: string[];
 }
 interface Slot {
   slot_start: string;
@@ -44,8 +55,7 @@ function timeOf(iso: string) {
   }).format(new Date(iso));
 }
 function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 }
 
 export default function BookingForm({
@@ -68,13 +78,15 @@ export default function BookingForm({
   const singleDoctor = doctors.length === 1 ? doctors[0] : null;
   const [targetId, setTargetId] = useState(""); // 空=新增,有值=改期
   const [doctorId, setDoctorId] = useState(singleDoctor?.id ?? "");
+  const [serviceId, setServiceId] = useState(services.length === 1 ? services[0].id : "");
+  const [visitType, setVisitType] = useState<"first" | "return">("return");
   const [date, setDate] = useState(defaultDate ?? todayStr());
   const [slots, setSlots] = useState<Slot[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [picked, setPicked] = useState(""); // start_at 或 template_id
   const [msg, setMsg] = useState<string | null>(null);
 
-  // 就診者:可搜尋既有病患套入,或手動輸入新病患
+  // 顧客:可搜尋既有顧客套入,或手動輸入新顧客
   const [patientId, setPatientId] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -82,8 +94,31 @@ export default function BookingForm({
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<PatientHit[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const selectedService = services.find((service) => service.id === serviceId) ?? null;
+  const providerRequired = !selectedService || selectedService.booking_target === "provider_required";
+  const providerOptional = selectedService?.booking_target === "provider_optional";
 
-  // 依姓名/電話/生日搜尋既有病患(debounce 250ms)
+  useEffect(() => {
+    if (selectedService && !providerRequired) setDoctorId("");
+  }, [providerRequired, selectedService]);
+
+  useEffect(() => {
+    if (!providerRequired || doctorId) return;
+    setDoctorId(singleDoctor?.id ?? "");
+  }, [doctorId, providerRequired, singleDoctor?.id]);
+
+  useEffect(() => {
+    const current = appointments.find((appointment) => appointment.id === targetId);
+    if (current) {
+      setDoctorId(current.doctor_id ?? "");
+      setServiceId(current.service_id ?? "");
+    } else if (!targetId) {
+      setDoctorId(singleDoctor?.id ?? "");
+      if (services.length !== 1) setServiceId("");
+    }
+  }, [appointments, services.length, singleDoctor?.id, targetId]);
+
+  // 依姓名/電話/生日搜尋既有顧客(debounce 250ms)
   useEffect(() => {
     const q = search.trim();
     if (!q) {
@@ -115,7 +150,7 @@ export default function BookingForm({
     setShowResults(false);
   }
   function clearSelection() {
-    // 一旦手動改欄位,視為新病患(不再綁定既有 id)
+    // 一旦手動改欄位,視為新顧客(不再綁定既有 id)
     if (patientId) setPatientId("");
   }
 
@@ -124,9 +159,12 @@ export default function BookingForm({
     setSessions([]);
     setPicked("");
     setMsg(null);
-    if (!doctorId || !date) return;
+    if (!date || (providerRequired && !doctorId) || (services.length > 0 && !serviceId)) return;
     try {
-      const res = await fetch(`/api/booking/availability?doctor_id=${doctorId}&date=${date}`);
+      const params = new URLSearchParams({ date, visit_type: visitType });
+      if (doctorId) params.set("doctor_id", doctorId);
+      if (serviceId) params.set("service_id", serviceId);
+      const res = await fetch(`/api/booking/availability?${params.toString()}`);
       const json = await res.json();
       if (!json.ok) {
         setMsg(json.error);
@@ -137,7 +175,7 @@ export default function BookingForm({
     } catch {
       setMsg("查詢空檔失敗");
     }
-  }, [doctorId, date, mode]);
+  }, [doctorId, date, mode, providerRequired, serviceId, services.length, visitType]);
 
   useEffect(() => {
     loadAvail();
@@ -174,19 +212,19 @@ export default function BookingForm({
       {isReschedule && <input type="hidden" name="old_id" value={targetId} />}
       <input type="hidden" name={mode === "time" ? "start_at" : "template_id"} value={picked} />
       {mode === "number" && <input type="hidden" name="date" value={date} />}
-      {singleDoctor && <input type="hidden" name="doctor_id" value={singleDoctor.id} />}
+      <input type="hidden" name="doctor_id" value={doctorId} />
 
       <div className="space-y-5 p-5">
-        {/* 主要:就診者 */}
+        {/* 主要:顧客 */}
         {!isReschedule && (
           <section>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">就診者</p>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">顧客</p>
 
-            {/* 搜尋既有病患(姓名/電話/生日)→ 直接套入 */}
+            {/* 搜尋既有顧客(姓名/電話/生日)→ 直接套入 */}
             <div className="relative mb-3">
               <input
                 className="input"
-                placeholder="🔍 搜尋既有病患(姓名 / 電話 / 生日 MMDD)…"
+                placeholder="🔍 搜尋既有顧客(姓名 / 電話 / 生日 MMDD)…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onFocus={() => results.length > 0 && setShowResults(true)}
@@ -214,7 +252,7 @@ export default function BookingForm({
                 </>
               )}
               {patientId && (
-                <p className="mt-1 text-xs text-accent-600">已套入既有病患資料,可直接建立預約。</p>
+                <p className="mt-1 text-xs text-accent-600">已套入既有顧客資料,可直接建立預約。</p>
               )}
             </div>
 
@@ -225,7 +263,7 @@ export default function BookingForm({
                 <input
                   name="name"
                   className="input mt-1"
-                  placeholder="就診者姓名"
+                  placeholder="顧客姓名"
                   value={name}
                   onChange={(e) => {
                     setName(e.target.value);
@@ -269,19 +307,18 @@ export default function BookingForm({
 
         {/* 主要:時間 */}
         <section>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">看診時間</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">預約時間</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {!singleDoctor && (
+            {(providerRequired || providerOptional) && (
               <label className="block text-sm font-medium text-slate-600">
-                醫師
+                服務提供者{providerOptional ? "（可不指定）" : ""}
                 <select
-                  name="doctor_id"
                   className="input mt-1"
                   value={doctorId}
                   onChange={(e) => setDoctorId(e.target.value)}
-                  required
+                  required={providerRequired}
                 >
-                  <option value="">請選擇</option>
+                  <option value="">{providerRequired ? "請選擇" : "由系統安排"}</option>
                   {doctors.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
@@ -301,11 +338,20 @@ export default function BookingForm({
                 required
               />
             </label>
+            {services.length > 0 && (
+              <label className="block text-sm font-medium text-slate-600">
+                服務項目
+                <select name="service_id" className="input mt-1" value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
+                  <option value="">請選擇服務</option>
+                  {services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
+                </select>
+              </label>
+            )}
           </div>
 
-          {doctorId && date && (
+          {date && (!providerRequired || doctorId) && (
             <div className="mt-3 rounded-xl bg-slate-50 p-3">
-              <p className="mb-2 text-xs text-slate-500">{mode === "time" ? "選擇時段" : "選擇診次"}</p>
+              <p className="mb-2 text-xs text-slate-500">{mode === "time" ? "選擇時段" : "選擇服務場次"}</p>
               {msg && <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">{msg}</p>}
               <div className="flex flex-wrap gap-2">
                 {mode === "time" &&
@@ -334,37 +380,24 @@ export default function BookingForm({
                   <p className="text-sm text-slate-400">此日無可用時段</p>
                 )}
                 {mode === "number" && sessions.length === 0 && !msg && (
-                  <p className="text-sm text-slate-400">此日無可掛診次</p>
+                  <p className="text-sm text-slate-400">此日無可預約場次</p>
                 )}
               </div>
             </div>
           )}
         </section>
 
-        {/* 次要:看診細節 */}
+        {/* 次要:預約細節 */}
         <section>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">看診細節</p>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">預約細節</p>
           <div className="flex flex-wrap items-end gap-3">
             <label className="block text-sm font-medium text-slate-600">
-              初/複診
-              <select name="visit_type" className="input mt-1">
-                <option value="return">複診</option>
-                <option value="first">初診</option>
+              預約類型
+              <select name="visit_type" className="input mt-1" value={visitType} onChange={(event) => setVisitType(event.target.value as "first" | "return")}>
+                <option value="return">再次服務</option>
+                <option value="first">首次服務</option>
               </select>
             </label>
-            {services.length > 0 && (
-              <label className="block text-sm font-medium text-slate-600">
-                看診服務
-                <select name="service_id" className="input mt-1">
-                  <option value="">不指定</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
             <label className="flex items-center gap-2 self-end rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
               <input type="checkbox" name="is_self_pay" className="h-4 w-4 accent-brand-600" /> 自費
             </label>
@@ -377,7 +410,7 @@ export default function BookingForm({
         <span className="text-xs text-slate-400">
           {picked ? "已選擇時段" : "請先選擇日期與時段"}
         </span>
-        <SubmitButton disabled={!picked || !doctorId} className="btn btn-primary">
+        <SubmitButton disabled={!picked || (providerRequired && !doctorId) || (services.length > 0 && !serviceId)} className="btn btn-primary">
           {isReschedule ? "確認改期" : "建立預約"}
         </SubmitButton>
       </div>

@@ -329,14 +329,14 @@ function buildMessage(appointment: AppointmentRecord, kind: AppointmentNotificat
     `${appointment.clinic_name}｜${labels[kind]}`,
     `預約人：${appointment.patient_name}`,
     `時間：${date}`,
-    `醫師：${appointment.doctor_name}`,
+    `服務提供者：${appointment.doctor_name}`,
     appointment.service_name ? `服務：${appointment.service_name}` : "",
     appointment.queue_number ? `號碼：${appointment.queue_number}` : "",
     appointment.deposit_status === "pending" && appointment.deposit_amount > 0 ? `訂金：${appointment.deposit_amount} 元（待付款）` : "",
   ].filter(Boolean);
   if (kind === "pending") lines.push("請依付款頁完成訂金付款，付款完成後才會正式確認預約。");
   if (kind === "cancelled") lines.push("此預約已取消，若需再次預約請重新選擇可用時段。");
-  if (kind === "rescheduled") lines.push("原預約已改為以上時間，請依新時間前往。");
+  if (kind === "rescheduled") lines.push("原預約已改為以上時間，請依新時間安排。");
   const text = lines.join("\n");
   const subject = `${appointment.clinic_name}｜${labels[kind]}`;
   const html = `<div style="font-family:sans-serif;line-height:1.8;max-width:560px"><h2>${escapeHtml(subject)}</h2><p>${lines.map(escapeHtml).join("<br>")}</p></div>`;

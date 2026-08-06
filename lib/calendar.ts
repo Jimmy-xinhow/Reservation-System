@@ -1,4 +1,4 @@
-// 產生「加入行事曆」用的連結(零成本提醒:靠病患手機行事曆自動通知)。
+// 產生「加入行事曆」用的連結(零成本提醒:靠顧客手機行事曆自動通知)。
 
 function toUtcStamp(iso: string): string {
   // → 20260701T053000Z
@@ -46,11 +46,11 @@ export function icsContent(e: CalEvent): string {
     `SUMMARY:${esc(e.title)}`,
     e.details ? `DESCRIPTION:${esc(e.details)}` : "",
     e.location ? `LOCATION:${esc(e.location)}` : "",
-    // 看診前 2 小時提醒(由病患裝置觸發,零成本)
+    // 預約前 2 小時提醒(由顧客裝置觸發,零成本)
     "BEGIN:VALARM",
     "TRIGGER:-PT2H",
     "ACTION:DISPLAY",
-    "DESCRIPTION:看診提醒",
+    "DESCRIPTION:預約提醒",
     "END:VALARM",
     "END:VEVENT",
     "END:VCALENDAR",

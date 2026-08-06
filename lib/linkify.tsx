@@ -7,7 +7,7 @@ const TRAILING_RE = /[)\]}.,!?;:，。！?、」』]+$/;
 
 /**
  * 把純文字中的網址轉成可點擊連結(其餘保持原字串)。
- * 用於聊天訊息:病患/櫃檯貼的連結可直接點開。
+ * 用於聊天訊息:顧客/服務人員貼的連結可直接點開。
  */
 export function linkify(text: string): ReactNode[] {
   const out: ReactNode[] = [];

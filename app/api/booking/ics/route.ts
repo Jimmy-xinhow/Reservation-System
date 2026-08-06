@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/booking/ics?start=ISO&end=ISO&title=&details=&location=
- * 回傳 .ics 檔(含看診前 2 小時提醒),供病患加入手機行事曆。
+ * 回傳 .ics 檔(含預約前 2 小時提醒),供顧客加入手機行事曆。
  */
 export async function GET(req: NextRequest) {
   const limited = rateLimitResponse(req, "booking:ics", 30);
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams;
   const startIso = sp.get("start") ?? "";
   const endIso = sp.get("end") ?? startIso;
-  const title = (sp.get("title") ?? "看診預約").slice(0, 200);
+  const title = (sp.get("title") ?? "服務預約").slice(0, 200);
   const details = sp.get("details")?.slice(0, 2000) ?? undefined;
   const location = sp.get("location")?.slice(0, 500) ?? undefined;
   if (!startIso) return new Response("missing start", { status: 400 });

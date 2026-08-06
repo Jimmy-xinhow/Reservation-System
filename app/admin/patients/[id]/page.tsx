@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 const STATUS_LABEL: Record<string, string> = {
   booked: "已預約",
-  confirmed: "已預約",
+  confirmed: "已確認",
   cancelled: "已取消",
   done: "完成",
   no_show: "未到",
@@ -78,9 +78,9 @@ export default async function PatientDetailPage({
     return (
       <div className="space-y-3">
         <Link href="/admin/patients" className="text-sm text-brand-600 hover:underline">
-          ← 返回病患查詢
+          ← 返回顧客查詢
         </Link>
-        <p className="text-slate-500">查無此病患。</p>
+        <p className="text-slate-500">查無此顧客。</p>
       </div>
     );
   }
@@ -115,7 +115,7 @@ export default async function PatientDetailPage({
   return (
     <div className="space-y-5">
       <Link href="/admin/patients" className="text-sm text-brand-600 hover:underline">
-        ← 返回病患查詢
+        ← 返回顧客查詢
       </Link>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -129,11 +129,11 @@ export default async function PatientDetailPage({
         <span className="text-sm text-slate-400">未到 {noShow} 次</span>
       </div>
 
-      {/* 基本資料(修正病患自填錯誤) */}
+      {/* 基本資料(修正顧客自填錯誤) */}
       <form action={updatePatientBasicAction} className="card space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">基本資料</h2>
-          <p className="text-xs text-slate-400">病患一開始填錯時可在此更正姓名或電話。</p>
+          <p className="text-xs text-slate-400">顧客一開始填錯時可在此更正姓名或電話。</p>
         </div>
         <input type="hidden" name="id" value={p.id} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -152,7 +152,7 @@ export default async function PatientDetailPage({
       {/* 黑名單 */}
       <section className="card flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="text-sm text-slate-600">
-          黑名單(停權即無法線上預約)。三次未到會自動停權一個月,也可在此手動調整。
+          預約限制(啟用後將無法線上預約)。三次未出席會自動限制一個月,也可在此手動調整。
         </div>
         <form action={setPatientBlockAction}>
           <input type="hidden" name="id" value={p.id} />
@@ -189,7 +189,7 @@ export default async function PatientDetailPage({
           </label>
           <label className="text-sm">
             <span className="mb-1 block font-medium text-slate-600">標籤(逗號分隔)</span>
-            <input name="tags" defaultValue={p.tags ?? ""} placeholder="VIP, 慢性, 初診優惠" className="input" />
+            <input name="tags" defaultValue={p.tags ?? ""} placeholder="VIP, 會員, 待回訪" className="input" />
           </label>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -204,27 +204,27 @@ export default async function PatientDetailPage({
         <SubmitButton className="btn btn-primary">儲存建檔</SubmitButton>
       </form>
 
-      {/* 新增病況紀錄(輸入欄放此,列表在右欄) */}
+      {/* 新增服務備註(輸入欄放此,列表在右欄) */}
       <form action={addPatientRecordAction} className="card space-y-2 p-5">
-        <h2 className="font-semibold text-slate-900">新增病況紀錄</h2>
+        <h2 className="font-semibold text-slate-900">新增服務備註</h2>
         <input type="hidden" name="patient_id" value={p.id} />
         <textarea
           name="content"
           rows={2}
           required
-          placeholder="輸入病況、醫囑或處置,送出即新增一筆…"
+          placeholder="輸入服務備註、顧客需求或處理內容,送出即新增一筆…"
           className="input"
         />
-        <SubmitButton className="btn btn-primary">新增病況紀錄</SubmitButton>
+        <SubmitButton className="btn btn-primary">新增服務備註</SubmitButton>
       </form>
 
-      {/* 約診歷史(左)+ 病況紀錄(右)雙欄 */}
+      {/* 預約歷史(左)+ 服務備註(右)雙欄 */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {/* 約診歷史 */}
+        {/* 預約歷史 */}
         <section className="card p-5">
-          <h2 className="mb-3 font-semibold text-slate-900">約診歷史</h2>
+          <h2 className="mb-3 font-semibold text-slate-900">預約歷史</h2>
           {history.length === 0 ? (
-            <p className="text-sm text-slate-400">無約診紀錄</p>
+            <p className="text-sm text-slate-400">無預約紀錄</p>
           ) : (
             <ul className="divide-y divide-slate-100 text-sm">
               {history.map((a) => (
@@ -246,11 +246,11 @@ export default async function PatientDetailPage({
           )}
         </section>
 
-        {/* 病況紀錄(列表) */}
+        {/* 服務備註(列表) */}
         <section className="card p-5">
-          <h2 className="mb-3 font-semibold text-slate-900">病況紀錄</h2>
+          <h2 className="mb-3 font-semibold text-slate-900">服務備註</h2>
           {records.length === 0 ? (
-            <p className="text-sm text-slate-400">尚無病況紀錄</p>
+            <p className="text-sm text-slate-400">尚無服務備註</p>
           ) : (
             <ul className="space-y-3">
               {records.map((rec) => (

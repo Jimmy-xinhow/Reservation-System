@@ -12,7 +12,8 @@ interface Doctor {
 }
 interface Template {
   id: string;
-  doctor_id: string;
+  doctor_id: string | null;
+  service_id: string | null;
   weekday: number;
   start_time: string;
   end_time: string;
@@ -20,6 +21,7 @@ interface Template {
   capacity: number;
   active: boolean;
 }
+interface Service { id: string; name: string; active: boolean; }
 type ServerAction = (fd: FormData) => Promise<void>;
 
 function hhmm(t: string): string {
@@ -28,6 +30,7 @@ function hhmm(t: string): string {
 
 export default function ScheduleEditor({
   doctors,
+  services,
   templates,
   createAction,
   updateAction,
@@ -35,6 +38,7 @@ export default function ScheduleEditor({
   deleteAction,
 }: {
   doctors: Doctor[];
+  services: Service[];
   templates: Template[];
   createAction: ServerAction;
   updateAction: ServerAction;
@@ -42,12 +46,13 @@ export default function ScheduleEditor({
   deleteAction: ServerAction;
 }) {
   const activeDocs = doctors.filter((d) => d.active);
+  const activeServices = services.filter((s) => s.active);
   const docName = (id: string) => doctors.find((d) => d.id === id)?.name ?? "—";
 
-  const singleDoctor = activeDocs.length === 1 ? activeDocs[0] : null;
   // 受控表單。editingId 有值 = 編輯既有列;null = 新增。
   const [editingId, setEditingId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState(activeDocs[0]?.id ?? "");
+  const [serviceId, setServiceId] = useState("");
   const [weekday, setWeekday] = useState("1");
   const [start, setStart] = useState("09:00");
   const [end, setEnd] = useState("12:00");
@@ -55,7 +60,8 @@ export default function ScheduleEditor({
   const [cap, setCap] = useState("1");
 
   function fill(t: Template) {
-    setDoctorId(t.doctor_id);
+    setDoctorId(t.doctor_id ?? "");
+    setServiceId(t.service_id ?? "");
     setWeekday(String(t.weekday));
     setStart(hhmm(t.start_time));
     setEnd(hhmm(t.end_time));
@@ -77,29 +83,34 @@ export default function ScheduleEditor({
 
   return (
     <section className="space-y-3">
-      <h2 className="font-semibold text-slate-900">門診段(同醫師同一天可多診次)</h2>
+      <h2 className="font-semibold text-slate-900">服務時段(同一服務提供者同一天可多場次)</h2>
 
       <form
         action={editingId ? updateAction : createAction}
         className={`card flex flex-wrap items-end gap-3 p-4 ${editingId ? "ring-2 ring-brand-200" : ""}`}
       >
         {editingId && <input type="hidden" name="id" value={editingId} />}
-        {singleDoctor && <input type="hidden" name="doctor_id" value={singleDoctor.id} />}
-        <label className={`block text-sm font-medium text-slate-600 ${singleDoctor ? "hidden" : ""}`}>
-          醫師
+        <label className="block min-w-44 text-sm font-medium text-slate-600">
+          服務提供者
           <select
-            name={singleDoctor ? undefined : "doctor_id"}
-            required={!singleDoctor}
+            name="doctor_id"
             value={doctorId}
             onChange={(e) => setDoctorId(e.target.value)}
             className="input mt-1"
           >
-            <option value="">選擇</option>
+            <option value="">不指定</option>
             {activeDocs.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="block min-w-44 text-sm font-medium text-slate-600">
+          對應服務
+          <select name="service_id" value={serviceId} onChange={(e) => setServiceId(e.target.value)} className="input mt-1">
+            <option value="">共用服務提供者排程</option>
+            {activeServices.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
           </select>
         </label>
         <label className="block text-sm font-medium text-slate-600">
@@ -163,7 +174,7 @@ export default function ScheduleEditor({
             className="input mt-1 w-20"
           />
         </label>
-        <SubmitButton className="btn btn-primary">{editingId ? "儲存修改" : "新增門診段"}</SubmitButton>
+        <SubmitButton className="btn btn-primary">{editingId ? "儲存修改" : "新增服務時段"}</SubmitButton>
         {editingId && (
           <button type="button" onClick={cancelEdit} className="btn btn-secondary">
             取消編輯
@@ -173,7 +184,7 @@ export default function ScheduleEditor({
       <p className="text-xs text-slate-400">
         {editingId
           ? "編輯中:修改上方欄位後按「儲存修改」更新這一列;或按「取消編輯」。"
-          : "時間直接輸入(例 09:00)。下方每列可「編輯」就地修改、「複製」帶入後新增一筆;送出後表單會保留方便連續新增。"}
+          : "時間直接輸入(例 09:00)。可只指定服務而不指定人員，適合場地／設備型預約；下方每列可「編輯」或「複製」。"}
       </p>
 
       <div className="card overflow-x-auto">
@@ -181,7 +192,7 @@ export default function ScheduleEditor({
           <thead>
             <tr>
               <th>星期</th>
-              <th>醫師</th>
+              <th>服務提供者／服務</th>
               <th>時間</th>
               <th>每格</th>
               <th>容量/總號</th>
@@ -193,14 +204,14 @@ export default function ScheduleEditor({
             {templates.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-8 text-center text-slate-400">
-                  尚無門診段
+                  尚無服務時段
                 </td>
               </tr>
             )}
             {templates.map((t) => (
               <tr key={t.id} className={editingId === t.id ? "bg-brand-50/60" : ""}>
                 <td>週{WD[t.weekday]}</td>
-                <td>{docName(t.doctor_id)}</td>
+                <td>{t.service_id ? services.find((service) => service.id === t.service_id)?.name ?? "服務" : docName(t.doctor_id ?? "")}</td>
                 <td>
                   {hhmm(t.start_time)}–{hhmm(t.end_time)}
                 </td>

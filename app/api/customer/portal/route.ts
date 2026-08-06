@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const [{ data: patient, error: patientError }, { data: appointments, error: appointmentsError }, { data: registrations, error: registrationsError }, { data: memberships, error: membershipsError }] = await Promise.all([
       service.from("patients").select("name").eq("clinic_id", clinicId).eq("id", identity.patientId).eq("active", true).maybeSingle(),
       service.from("appointments").select("id, start_at, end_at, status, visit_type, queue_number, doctors(name), services(name)").eq("clinic_id", clinicId).eq("patient_id", identity.patientId).gte("start_at", new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()).order("start_at", { ascending: false }).limit(50),
-      service.from("registrations").select("registration_no, status, payment_status, amount, created_at, events(title), event_sessions(name, start_at, end_at)").eq("clinic_id", clinicId).eq("patient_id", identity.patientId).order("created_at", { ascending: false }).limit(50),
+      service.from("registrations").select("id, registration_no, status, payment_status, amount, created_at, events(title), event_sessions(name, start_at, end_at)").eq("clinic_id", clinicId).eq("patient_id", identity.patientId).order("created_at", { ascending: false }).limit(50),
       service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, membership_plans(name, description, usage_scope)").eq("clinic_id", clinicId).eq("patient_id", identity.patientId).order("created_at", { ascending: false }).limit(30),
     ]);
 

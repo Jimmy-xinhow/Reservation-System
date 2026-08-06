@@ -23,6 +23,10 @@ const migrationSaasCoreGaps = read("supabase/migration_saas_core_gaps.sql");
 const migrationCustomerPortal = read("supabase/migrations/202608060001_customer_portal_identity.sql");
 const migrationFunnel = read("supabase/migrations/202608060002_funnel_events.sql");
 const migrationRegistrationPatient = read("supabase/migrations/202608060003_registration_patient_transaction.sql");
+const migrationCrossIndustry = read("supabase/migrations/202608060004_cross_industry_booking_foundation.sql");
+const migrationLegacyProgress = read("supabase/migrations/202608060005_isolate_legacy_progress.sql");
+const migrationServiceReschedule = read("supabase/migrations/202608060006_service_reschedule_transaction.sql");
+const migrationSameDayReschedule = read("supabase/migrations/202608060007_reschedule_same_day_fix.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 
@@ -39,6 +43,10 @@ const checks = [
   ["platform admin layer exists", ["supabase/migration_saas_platform.sql|create table if not exists public.platform_admins", "supabase/migration_saas_platform.sql|create table if not exists public.brand_entitlements", "lib/platform.ts|requirePlatformAdmin", "app/admin/platform/page.tsx", "app/admin/platform/actions.ts"]],
   ["core SaaS gap migration and customer surfaces exist", ["supabase/migration_saas_core_gaps.sql|membership_notification_logs", "supabase/migration_saas_core_gaps.sql|service_resources_available", "supabase/migration_saas_core_gaps.sql|get_available_sessions_for_service", "app/api/cron/membership/route.ts|MEMBERSHIP_EXPIRY_NOTICE_DAYS", "app/api/membership/portal/route.ts", "app/api/registration/my/route.ts", "app/api/registration/checkin-live/route.ts", "app/admin/audit/page.tsx"]],
   ["unified customer portal migration and funnel tracking exist", ["app/api/customer/portal/route.ts", "app/my/page.tsx", "components/FunnelTracker.tsx", "lib/funnel-client.ts", "app/api/analytics/funnel/route.ts"]],
+  ["cross-industry service targets and customer actions exist", ["supabase/migrations/202608060004_cross_industry_booking_foundation.sql|booking_target", "supabase/migrations/202608060004_cross_industry_booking_foundation.sql|book_service_slot", "app/admin/_components/ExceptionForm.tsx|service_id", "app/api/customer/registration-action/route.ts|cancel_registration_for_customer"]],
+  ["legacy progress is isolated behind an explicit opt-in", ["supabase/migrations/202608060005_isolate_legacy_progress.sql|legacy_progress_enabled", "lib/legacy-progress.ts|isLegacyProgressEnabled", "app/q/page.tsx|未開放服務進度頁", "app/api/line/webhook/route.ts|cs?.legacy_progress_enabled === true"]],
+  ["service-only reschedule stays atomic", ["supabase/migrations/202608060006_service_reschedule_transaction.sql|reschedule_service_appointment", "supabase/migrations/202608060006_service_reschedule_transaction.sql|restore_membership_credit", "supabase/migrations/202608060006_service_reschedule_transaction.sql|status = 'cancelled'"]],
+  ["same-day reschedule releases the old booking inside one transaction", ["supabase/migrations/202608060007_reschedule_same_day_fix.sql|same-day reschedule", "supabase/migrations/202608060007_reschedule_same_day_fix.sql|update public.appointments set status = 'cancelled'"]],
 ];
 
 const failures = [];
@@ -49,7 +57,7 @@ for (const [label, snippets] of checks) {
       const needle = needleParts.join("|");
       return exists(file) && (!needle || read(file).includes(needle));
     }
-    return schema.includes(snippet) || migrationRegistration.includes(snippet) || migrationHardening.includes(snippet) || migrationBenefits.includes(snippet) || migrationSaasPlatform.includes(snippet) || migrationSaasCoreGaps.includes(snippet) || migrationCustomerPortal.includes(snippet) || migrationFunnel.includes(snippet);
+    return schema.includes(snippet) || migrationRegistration.includes(snippet) || migrationHardening.includes(snippet) || migrationBenefits.includes(snippet) || migrationSaasPlatform.includes(snippet) || migrationSaasCoreGaps.includes(snippet) || migrationCustomerPortal.includes(snippet) || migrationFunnel.includes(snippet) || migrationCrossIndustry.includes(snippet) || migrationLegacyProgress.includes(snippet) || migrationServiceReschedule.includes(snippet) || migrationSameDayReschedule.includes(snippet);
   });
   if (ok) console.log(`[PASS] ${label}`);
   else failures.push(label);
@@ -208,7 +216,7 @@ invariant(
     timeBooking.includes("v_end > ((v_date + s.end_time) at time zone 'Asia/Taipei')") &&
     migrationHardening.includes("v_end > ((v_date + s.end_time) at time zone 'Asia/Taipei')") &&
     read("app/api/booking/availability/route.ts").includes("p_visit_type: visitType") &&
-    read("app/book/page.tsx").includes("visit_type=${visitType}") &&
+    read("app/book/page.tsx").includes("visit_type: visitType") &&
     read("app/book/browser/page.tsx").includes("setVisitType(\"first\")"),
 );
 invariant(
@@ -236,7 +244,7 @@ invariant(
   "booking service binding is tenant-validated and failures do not leave active appointments",
   bookingReserveApi.includes('.eq("clinic_id", clinicId)') &&
     bookingReserveApi.includes('.eq("active", true)') &&
-    bookingReserveApi.includes('const metadataPatch: { source: "online"; service_id?: string }') &&
+    bookingReserveApi.includes('const metadataPatch: { source: "online"; service_id?: string; booking_answers?: Record<string, unknown> }') &&
     bookingReserveApi.includes('if (selectedServiceId) metadataPatch.service_id = selectedServiceId') &&
     bookingReserveApi.includes('rpc("cancel_appointment"') &&
     adminActions.includes('.eq("clinic_id", opts.clinicId)') &&
@@ -425,7 +433,7 @@ invariant(
   "customer appointment reschedule is available from LINE and browser fallback",
   bookingRescheduleApi.includes('verifyLiffIdToken') &&
     bookingRescheduleApi.includes('verifyBrowserBookingToken') &&
-    bookingRescheduleApi.includes('rpc("reschedule_appointment"') &&
+    bookingRescheduleApi.includes('rpc("reschedule_service_appointment"') &&
     bookingRescheduleApi.includes('notifyAppointmentStatus') &&
     bookingRescheduleApi.includes('recordCrmInteraction') &&
     bookingPage.includes("openReschedule") &&
@@ -437,6 +445,13 @@ invariant(
     browserMyPage.includes('/api/booking/browser/my') &&
     browserMyPage.includes('/book/browser/reschedule') &&
     browserReschedulePage.includes('browser_token: token'),
+);
+invariant(
+  "customer reschedule supports service-only bookings",
+  bookingRescheduleApi.includes('rpc("reschedule_service_appointment"') &&
+    bookingRescheduleApi.includes("if (!body.doctor_id && !serviceId)") &&
+    browserReschedulePage.includes("providerRequired") &&
+    reschedulePage.includes("providerRequired"),
 );
 invariant(
   "public brand identity is not hardcoded to the legacy clinic",
@@ -818,7 +833,7 @@ invariant(
     migrationBenefits.includes("create or replace function reschedule_appointment") &&
     schema.includes("restore_membership_credit") &&
     schema.includes("consume_membership_credit") &&
-    adminActions.includes('rpc("reschedule_appointment"'),
+    adminActions.includes('rpc("reschedule_service_appointment"'),
 );
 invariant(
   "appointment cancellation restores benefits atomically across entry points",

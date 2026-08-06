@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = (await req.json().catch(() => null)) as RescheduleBody | null;
-    if (!body?.appointment_id || !body.doctor_id) return fail("缺少改期預約與醫師");
+    if (!body?.appointment_id) return fail("缺少改期預約");
     if (!body.idToken && !body.browser_token) return fail("缺少身分驗證", 401);
 
     let lineUserId: string | null = null;
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const { data: appointment, error: appointmentError } = await svc
       .from("appointments")
-      .select("id, clinic_id, patient_id, status, start_at, patients(line_user_id)")
+      .select("id, clinic_id, patient_id, status, start_at, doctor_id, service_id, patients(line_user_id)")
       .eq("id", body.appointment_id)
       .eq("clinic_id", clinicId)
       .maybeSingle();
@@ -79,14 +79,14 @@ export async function POST(req: NextRequest) {
     if (!settings || !settings.public_booking_enabled) return fail("目前未開放線上預約", 403);
     if (new Date(appointment.start_at).getTime() < Date.now() + settings.reschedule_lead_minutes * 60_000) return fail("已超過可改期的提前時間，請聯絡品牌客服", 409);
     if (settings.booking_mode === "time" && !body.start_at) return fail("缺少新時段");
-    if (settings.booking_mode === "number" && (!body.template_id || !body.date)) return fail("缺少新診次與日期");
+    if (settings.booking_mode === "number" && (!body.template_id || !body.date)) return fail("缺少新場次與日期");
 
-    let serviceId: string | null = null;
-    if (body.service_id) {
+    let serviceId: string | null = body.service_id || (appointment.service_id as string | null) || null;
+    if (serviceId) {
       const { data: service, error: serviceError } = await svc
         .from("services")
         .select("id")
-        .eq("id", body.service_id)
+        .eq("id", serviceId)
         .eq("clinic_id", clinicId)
         .eq("active", true)
         .maybeSingle();
@@ -94,16 +94,17 @@ export async function POST(req: NextRequest) {
       if (!service) return fail("服務不存在或已停用", 400);
       serviceId = String(service.id);
     }
+    if (!body.doctor_id && !serviceId) return fail("缺少服務提供者或服務");
 
-    const { data: newAppointmentId, error: rescheduleError } = await svc.rpc("reschedule_appointment", {
+    const { data: newAppointmentId, error: rescheduleError } = await svc.rpc("reschedule_service_appointment", {
       p_clinic_id: clinicId,
       p_old_appointment_id: appointment.id,
       p_mode: settings.booking_mode,
-      p_doctor_id: body.doctor_id,
+      p_doctor_id: body.doctor_id || null,
+      p_service_id: serviceId,
       p_start_at: body.start_at ?? null,
       p_template_id: body.template_id ?? null,
       p_date: body.date ?? null,
-      p_service_id: serviceId,
     });
     if (rescheduleError || typeof newAppointmentId !== "string") {
       return fail(translateRescheduleError(rescheduleError?.message ?? ""), 409);
@@ -150,6 +151,6 @@ export async function POST(req: NextRequest) {
 function translateRescheduleError(message: string): string {
   if (message.includes("appointment cannot be rescheduled")) return "此預約目前無法改期";
   if (message.includes("slot") || message.includes("session") || message.includes("capacity")) return "新時段已額滿或不可預約";
-  if (message.includes("doctor")) return "新醫師不可預約";
+  if (message.includes("doctor")) return "新服務提供者不可預約";
   return message || "改期失敗，請稍後再試";
 }
