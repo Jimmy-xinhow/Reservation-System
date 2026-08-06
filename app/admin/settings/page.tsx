@@ -89,7 +89,7 @@ export default async function SettingsPage() {
       <div>
         <p className="eyebrow">目前位置：品牌後台</p>
         <h1 className="mt-1 text-xl font-bold text-slate-900">品牌與系統設定</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">這裡只管理目前選取的品牌。若要協助其他使用者開通新的品牌，請由平台管理員進入「品牌總管理」建立品牌並寄送登入邀請；不要在這裡替對方建立帳號。</p>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">這裡只管理目前選取的品牌。若要協助其他使用者開通新的品牌，請由系統擁有者進入「XINHOW PLATFORM → 品牌租戶」建立品牌並寄送登入邀請；不要在這裡替對方建立帳號。</p>
       </div>
 
       <form action={createBrandAction} className="card space-y-4 border-brand-100 bg-brand-50/40 p-5">

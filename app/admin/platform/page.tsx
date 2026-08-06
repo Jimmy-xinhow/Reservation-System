@@ -53,9 +53,9 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
     <div className="space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">SaaS platform</p>
-          <h1 className="mt-1 text-2xl font-bold text-slate-950">品牌總管理後台</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">這裡負責建立品牌與交接開通；品牌負責人登入後，日常預約、報名與設定都在自己的品牌後台完成。</p>
+          <p className="eyebrow">System owner console</p>
+          <h1 className="mt-1 text-2xl font-bold text-slate-950">系統擁有者控制台</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">這裡管理 XINHOW SaaS 的品牌租戶、開通交付與平台政策；品牌服務、預約、顧客與通知設定，必須由各品牌進入自己的品牌後台管理。</p>
         </div>
         {params.created === "1" && <span className="badge bg-emerald-50 px-3 py-1.5 text-emerald-700">品牌已建立，請通知負責人查收登入資訊</span>}
       </header>
@@ -90,7 +90,7 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
 
       <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">品牌開通進度</h2>
+          <h2 className="text-lg font-bold text-slate-900">品牌租戶與交付狀態</h2>
           <p className="mt-1 text-sm text-slate-500">平台層只負責租戶與交接；每個品牌的服務、排程、入口與通知，由品牌 owner 在品牌後台完成。</p>
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">70 項標準功能保持開放；七項加購只記錄合作狀態，不會自動隱藏功能或代表功能已交付。</p>
         </div>

@@ -10,6 +10,7 @@ interface Item {
   label: string;
   icon: IconName;
   adminOnly?: boolean;
+  exact?: boolean;
 }
 
 interface Group {
@@ -101,9 +102,12 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    label: "平台管理",
+    label: "平台營運",
     platformOnly: true,
-    items: [{ href: "/admin/platform", label: "品牌總管理", icon: "platform" }],
+    items: [
+      { href: "/admin/platform", label: "品牌租戶", icon: "platform", exact: true },
+      { href: "/admin/platform/settings", label: "平台設定", icon: "settings" },
+    ],
   },
   {
     label: "治理與稽核",
@@ -111,8 +115,8 @@ const GROUPS: Group[] = [
   },
 ];
 
-function isActive(pathname: string, href: string): boolean {
-  return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+function isActive(pathname: string, href: string, exact = false): boolean {
+  return href === "/admin" || exact ? pathname === href : pathname.startsWith(href);
 }
 
 function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
@@ -162,7 +166,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
 function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; unread: number; close: () => void; mode: "brand" | "platform" }) {
   const pathname = usePathname();
   const navId = useId().replace(/:/g, "");
-  const activeGroupLabel = groups.find((group) => group.items.some((item) => isActive(pathname, item.href)))?.label ?? null;
+  const activeGroupLabel = groups.find((group) => group.items.some((item) => isActive(pathname, item.href, item.exact)))?.label ?? null;
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroupLabel);
 
   useEffect(() => {
@@ -171,12 +175,12 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#071c2e] text-white">
-      <div className="border-b border-white/10 px-5 py-5">
+      <div className={`border-b border-white/10 px-5 py-5 ${mode === "platform" ? "bg-[#18245b]" : "bg-[#071c2e]"}`}>
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1f79d1] text-sm font-bold tracking-wide">XH</div>
+          <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold tracking-wide ${mode === "platform" ? "bg-white text-[#18245b]" : "bg-[#1f79d1] text-white"}`}>{mode === "platform" ? "XP" : "XH"}</div>
           <div>
-            <div className="text-sm font-semibold tracking-wide">XINHOW</div>
-            <div className="mt-0.5 text-[11px] text-slate-400">BOOKING CONSOLE</div>
+            <div className="text-sm font-semibold tracking-wide">{mode === "platform" ? "XINHOW PLATFORM" : "XINHOW"}</div>
+            <div className="mt-0.5 text-[11px] text-slate-400">{mode === "platform" ? "SYSTEM OWNER CONSOLE" : "BOOKING CONSOLE"}</div>
           </div>
         </div>
       </div>
@@ -211,7 +215,7 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
 }
 
 function NavItem({ item, pathname, unread, close }: { item: Item; pathname: string; unread: number; close: () => void }) {
-  const active = isActive(pathname, item.href);
+  const active = isActive(pathname, item.href, item.exact);
   const showBadge = item.href === "/admin/chat" && unread > 0;
   return (
     <Link
@@ -298,7 +302,7 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, hasBra
       {mobileOpen && (
         <>
           <button type="button" aria-label="關閉後台選單" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" />
-          <aside role="dialog" aria-modal="true" aria-label={mode === "platform" ? "平台管理選單" : "品牌營運選單"} className="fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] shadow-2xl lg:hidden">
+          <aside role="dialog" aria-modal="true" aria-label={mode === "platform" ? "系統擁有者平台選單" : "品牌營運選單"} className="fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] shadow-2xl lg:hidden">
             <NavigationContent groups={groups} unread={unread} close={() => setMobileOpen(false)} mode={mode} />
           </aside>
         </>

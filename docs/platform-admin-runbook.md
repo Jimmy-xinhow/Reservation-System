@@ -4,6 +4,16 @@
 
 `platform_admins` 是平台級權限表，RLS 開啟且不提供 `anon` 或一般 `authenticated` policy。平台總後台所有跨品牌讀寫都由 server-only service role 執行；品牌成員仍只透過 `clinic_members` 讀寫自己的品牌資料。
 
+## 平台控制台與品牌後台邊界
+
+平台管理員使用獨立的 XINHOW PLATFORM 系統擁有者控制台：
+
+- `/admin/platform`：品牌租戶、開通交付與方案狀態。
+- `/admin/platform/settings`：平台層級規則與部署能力狀態。
+- `/admin` 及 `/admin/settings`：目前品牌的日常營運與品牌設定，不屬於平台控制台。
+
+同一登入帳號即使同時擁有平台與品牌權限，進入 `/admin/platform` 時也必須看到平台外框與平台選單；只有返回 `/admin` 後才切換為品牌後台。
+
 ## 品牌開通流程
 
 平台管理員與品牌負責人是兩個不同角色，請依以下順序操作：
@@ -12,7 +22,7 @@
 2. 系統建立品牌、預設設定與 owner 權限；新帳號會收到 Supabase 登入邀請。
 3. 將 `/admin/login` 交給品牌負責人，由負責人完成登入。
 4. 品牌負責人進入自己的 `/admin`，依序完成品牌公開資訊、服務與服務排程；若需要活動，再建立活動、場次與票種。
-5. 平台管理員回到品牌總管理查看開通檢查；品牌資料與其他品牌維持隔離。
+5. 平台管理員回到「XINHOW PLATFORM → 品牌租戶」查看開通檢查；品牌資料與其他品牌維持隔離。
 
 品牌後台的「新增品牌」只適合同一登入帳號管理多個品牌；替其他使用者開通品牌，必須使用平台總管理流程。
 
@@ -28,7 +38,7 @@ values ('<auth_user_id>', 'owner')
 on conflict (user_id) do update set role = excluded.role, active = true;
 ```
 
-4. 重新登入後，左側選單會出現「SaaS 平台 → 品牌總管理」。
+4. 重新登入後，左側選單會出現「XINHOW PLATFORM → 品牌租戶」。
 
 也可在 Railway server environment 設定 `PLATFORM_ADMIN_USER_IDS`（逗號分隔 UUID）作為緊急 bootstrap；不可使用 `NEXT_PUBLIC_` 前綴。
 

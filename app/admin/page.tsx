@@ -1,6 +1,8 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase";
-import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, requireMember } from "@/lib/admin";
+import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, getOptionalMember } from "@/lib/admin";
+import { getOptionalPlatformAdmin } from "@/lib/platform";
+import { redirect } from "next/navigation";
 import { formatTime } from "@/lib/slots";
 import BookingForm from "./_components/BookingForm";
 import {
@@ -69,7 +71,9 @@ export default async function TodayPage({
   const fDoctor = sp.doctor ?? "";
   const fStatus = sp.status ?? "";
 
-  const member = await requireMember();
+  const [member, platformAdmin] = await Promise.all([getOptionalMember(), getOptionalPlatformAdmin()]);
+  if (!member && platformAdmin) redirect("/admin/platform");
+  if (!member) throw new Error("找不到目前品牌成員權限，請重新登入或聯絡系統擁有者。");
   const { clinicId, role } = member;
   const supabase = await createSupabaseServer();
   const assignedDoctorIds = await getAssignedDoctorIds(member);

@@ -3,7 +3,9 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 /** 刷新 session 並擋下未登入者進入 /admin(/admin/login 例外)。 */
 export async function middleware(req: NextRequest) {
-  let res = NextResponse.next({ request: req });
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-admin-path", req.nextUrl.pathname);
+  let res = NextResponse.next({ request: { headers: requestHeaders } });
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) {
@@ -21,7 +23,7 @@ export async function middleware(req: NextRequest) {
         },
         setAll(list: { name: string; value: string; options: CookieOptions }[]) {
           for (const { name, value } of list) req.cookies.set(name, value);
-          res = NextResponse.next({ request: req });
+          res = NextResponse.next({ request: { headers: requestHeaders } });
           for (const { name, value, options } of list) res.cookies.set({ name, value, ...options });
         },
       },

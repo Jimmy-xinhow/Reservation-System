@@ -1,5 +1,6 @@
 import { getOptionalMember } from "@/lib/admin";
 import { getOptionalPlatformAdmin } from "@/lib/platform";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { signOutAction, setActiveClinicAction } from "./actions";
 import { Brand } from "@/components/Brand";
@@ -10,17 +11,19 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [member, platformAdmin] = await Promise.all([getOptionalMember(), getOptionalPlatformAdmin()]);
+  const currentPath = (await headers()).get("x-admin-path") ?? "";
+  const isPlatformShell = Boolean(platformAdmin && currentPath.startsWith("/admin/platform"));
   if (!member && !platformAdmin) return <>{children}</>;
 
-  if (!member && platformAdmin) {
+  if (platformAdmin && (isPlatformShell || !member)) {
     return (
-      <div className="min-h-screen bg-[#f5f8fb]">
+      <div className="min-h-screen bg-[#f1f4ff]">
         <AdminNav role="owner" isPlatformAdmin hasBrandContext={false} />
         <div className="min-h-screen lg:pl-72">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
+          <header className="sticky top-0 z-20 border-b border-indigo-100 bg-white/95 backdrop-blur">
             <div className="mx-auto flex min-h-[68px] max-w-[1440px] items-center gap-3 px-4 pl-16 sm:px-6 sm:pl-16 lg:px-8 lg:pl-8">
-              <Brand name="XINHOW SaaS" subtitle="總管理後台" />
-              <div className="ml-auto flex items-center gap-2"><span className="hidden text-xs text-slate-400 sm:inline">{platformAdmin.role}</span><form action={signOutAction}><SubmitButton className="btn btn-ghost px-3 py-1.5 text-sm">登出</SubmitButton></form></div>
+              <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#18245b] text-sm font-bold tracking-wide text-white shadow-sm">XP</div><div><div className="font-bold tracking-tight text-slate-950">XINHOW PLATFORM</div><div className="text-xs text-indigo-700">系統擁有者控制台 · 跨品牌租戶管理</div></div></div>
+              <div className="ml-auto flex items-center gap-2"><span className="badge hidden bg-indigo-50 text-indigo-700 sm:inline">平台 {platformAdmin.role}</span>{member && <Link href="/admin" className="btn btn-secondary hidden px-3 py-1.5 text-xs sm:inline">返回品牌後台</Link>}<form action={signOutAction}><SubmitButton className="btn btn-ghost px-3 py-1.5 text-sm">登出</SubmitButton></form></div>
             </div>
           </header>
           <main className="mx-auto w-full max-w-[1440px] p-4 sm:p-6 lg:p-8">{children}</main>
