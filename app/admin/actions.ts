@@ -362,6 +362,7 @@ export async function setStatusAction(fd: FormData) {
     if (cancelError) throw new Error(cancelError.message);
     if (typeof cancelled !== "string") throw new Error("預約取消失敗");
     revalidatePath("/admin");
+    revalidatePath("/admin/calendar");
     revalidatePath("/admin/queue");
     return;
   }
@@ -405,6 +406,7 @@ export async function setStatusAction(fd: FormData) {
     revalidatePath("/admin/patients");
   }
   revalidatePath("/admin");
+  revalidatePath("/admin/calendar");
   revalidatePath("/admin/queue");
 }
 
@@ -611,6 +613,7 @@ export async function cancelAppointmentAction(fd: FormData) {
     });
   }
   revalidatePath("/admin");
+  revalidatePath("/admin/calendar");
 }
 
 const DEPOSIT_STATUSES = ["none", "pending", "paid", "waived", "refunded"] as const;

@@ -30,7 +30,7 @@ const checks = [
   ["server-only secret boundaries exist", ["lib/email.ts|import \"server-only\"", "lib/payment.ts|import \"server-only\"", "lib/registration-notifications.ts|import \"server-only\"", "lib/appointment-notifications.ts|import \"server-only\"", "lib/browser-booking.ts|import \"server-only\""]],
   ["public tenant resolver is present", ["lib/public-brand.ts|resolvePublicClinicId"]],
   ["public and fallback routes exist", ["app/register/page.tsx", "app/book/browser/page.tsx", "app/book/browser/my/page.tsx", "app/book/browser/reschedule/page.tsx", "app/book/reschedule/page.tsx", "app/api/booking/browser/start/route.ts", "app/api/booking/browser/my/route.ts", "app/api/booking/reschedule/route.ts", "app/embed/register/page.tsx"]],
-  ["admin SaaS modules exist", ["app/admin/crm/page.tsx", "app/admin/reports/page.tsx", "app/admin/registrations/page.tsx", "app/admin/checkin/page.tsx"]],
+  ["admin SaaS modules exist", ["app/admin/crm/page.tsx", "app/admin/reports/page.tsx", "app/admin/registrations/page.tsx", "app/admin/checkin/page.tsx", "app/admin/calendar/page.tsx", "app/api/registration/checkin-search/route.ts"]],
 ];
 
 const failures = [];
@@ -138,6 +138,15 @@ const benefitRegistrationFunction = between(schema, "create or replace function 
 const registrationApi = read("app/api/registration/register/route.ts");
 const registrationEventsApi = read("app/api/registration/events/route.ts");
 const bookingReserveApi = read("app/api/booking/reserve/route.ts");
+const checkinSearchApi = read("app/api/registration/checkin-search/route.ts");
+const adminNav = read("components/AdminNav.tsx");
+invariant(
+  "manual check-in is operator-only and tenant-scoped",
+  checkinSearchApi.includes("requireOperator()") &&
+    checkinSearchApi.includes('.eq("clinic_id", member.clinicId)') &&
+    checkinSearchApi.includes('from("checkins")') &&
+    adminNav.includes('href: "/admin/calendar"'),
+);
 const registrationDetailApi = read("app/api/registration/events/[id]/route.ts");
 const registrationAdminApi = read("app/api/admin/registrations/route.ts");
 const registrationAdminActions = read("app/admin/registrations/actions.ts");
