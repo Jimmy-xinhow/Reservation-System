@@ -44,6 +44,13 @@ flowchart LR
 4. API 呼叫受保護的 SQL transaction／RPC 完成名額與狀態變更。
 5. 回傳最小必要結果；付款、通知與報到憑證使用不可猜測識別。
 
+### 顧客紀錄與行銷漏斗
+
+1. 預約、報名與會員入口成功後，使用品牌綁定的瀏覽器顧客 token 進入 `/my`。
+2. `/api/customer/portal` 只接受 server 產生的 token，回傳目前顧客必要的預約、報名與會員摘要。
+3. 公開入口可記錄匿名 `funnel_events`，只用於品牌內群體轉換趨勢，不保存顧客 PII 或可回推的 customer id。
+4. CRM Lite 使用顧客同意、規則式分眾與去重投遞紀錄；LINE／Email 失敗不應阻斷另一渠道。
+
 ### 後台
 
 1. Supabase Auth 取得 session。
@@ -64,4 +71,4 @@ flowchart LR
 - 顧客端手機優先；表單與互動控制項至少 44px 觸控區域。
 - 預設時區 `Asia/Taipei`；資料庫使用 `timestamptz`。
 - build、typecheck、migration replay、核心 API smoke path 與 Playwright UI path 必須通過後才能宣稱完成。
-
+- 正式環境的 migration、LINE／Email／金流、DNS 與備份均需以外部系統證據驗收，不以本地 build 代替。

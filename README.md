@@ -219,6 +219,7 @@ Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders`
 
 ```
 app/book/                 病患 LIFF 預約頁(依 booking_mode 渲染兩套 UI)
+app/my/                   統一顧客紀錄中心(預約／報名／會員)
 app/admin/                後台(今日約診/門診表/休診加診/病患查詢/診所設定)
 app/api/booking/          病患端 config/availability/patient/reserve(server, service role)
 app/api/cron/reminders/   提醒排程(CRON_SECRET 驗證)
@@ -230,6 +231,8 @@ lib/slots.ts              台北時區時間格式化
 supabase/schema.sql       表 / RPC / RLS / 權限
 middleware.ts             後台未登入攔截
 scripts/trigger-reminders.mjs  Railway cron 服務用:依序打提醒、報名與行銷 endpoint 後退出
+docs/product-optimization-acceptance.md 產品流程與優化驗收基準
+docs/operations-observability.md 維運、觀測與復原手冊
 railway.json              Railway web 服務 build/start 設定
 vercel.json               (僅 Vercel 用;Railway 不讀)
 ```
@@ -245,5 +248,8 @@ vercel.json               (僅 Vercel 用;Railway 不讀)
 6. `supabase/migration_security_advisor_hardening.sql`
 7. `supabase/migration_registration_credentials.sql`
 8. `supabase/migration_marketing_opt_in_sync.sql`
+9. `supabase/migrations/202608060001_customer_portal_identity.sql`
+10. `supabase/migrations/202608060002_funnel_events.sql`
+11. `supabase/migrations/202608060003_registration_patient_transaction.sql`
 
-每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `npm test`、`npm run typecheck` 與 `npm run build`。
+每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣，`202608060001_customer_portal_identity.sql` 會把活動報名接到統一顧客入口，`202608060002_funnel_events.sql` 只保存匿名漏斗事件，`202608060003_registration_patient_transaction.sql` 讓報名與顧客關聯在同一個 DB transaction 完成。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `npm test`、`npm run typecheck` 與 `npm run build`。

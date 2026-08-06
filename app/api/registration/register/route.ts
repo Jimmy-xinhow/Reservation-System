@@ -8,6 +8,7 @@ import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/regis
 import { encryptRegistrationToken } from "@/lib/registration-credentials";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
+import { createBrowserBookingToken } from "@/lib/browser-booking";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -127,6 +128,17 @@ export async function POST(req: NextRequest) {
       if (field.field_type === "checkbox" && typeof value !== "boolean") return fail("表單勾選格式無效", 400);
     }
     if (JSON.stringify(answers).length > 20000) return fail("表單資料過大");
+    const { data: patientData, error: patientError } = await svc.rpc("create_or_get_public_patient_with_marketing_opt_in", {
+      p_clinic_id: event.clinic_id,
+      p_name: name,
+      p_phone: phone,
+      p_birthday: null,
+      p_line_user_id: lineUserId,
+      p_marketing_opt_in: body.marketing_opt_in === true,
+    });
+    if (patientError) return fail(patientError.message, 409);
+    const patientRow = Array.isArray(patientData) ? patientData[0] : patientData;
+    if (!patientRow?.patient_id) return fail("顧客身分建立失敗", 500);
     const { data, error } = await svc.rpc("register_for_event_with_terms", {
       p_clinic_id: event.clinic_id,
       p_event_id: body.event_id,
@@ -145,22 +157,12 @@ export async function POST(req: NextRequest) {
       p_form_version: form?.version ?? null,
       p_terms_version: event.terms_text ? event.terms_version : null,
       p_terms_accepted_at: event.terms_text ? new Date().toISOString() : null,
+      p_patient_id: patientRow.patient_id,
     });
     if (error) return fail(translateRegistrationError(error.message), 409);
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) return fail("報名失敗", 500);
-    const { data: patientData, error: patientError } = await svc.rpc("create_or_get_public_patient_with_marketing_opt_in", {
-      p_clinic_id: event.clinic_id,
-      p_name: name,
-      p_phone: phone,
-      p_birthday: null,
-      p_line_user_id: lineUserId,
-      p_marketing_opt_in: body.marketing_opt_in === true,
-    });
-    const patientRow = Array.isArray(patientData) ? patientData[0] : patientData;
-    if (patientError) {
-      console.error("CRM registration patient link failed", patientError.message);
-    } else if (patientRow?.patient_id) {
+    if (patientRow?.patient_id) {
       await recordCrmInteraction(svc, {
         clinicId: event.clinic_id,
         patientId: patientRow.patient_id as string,
@@ -191,6 +193,7 @@ export async function POST(req: NextRequest) {
       payment_status: row.payment_status,
       amount: row.amount,
       checkin_token: row.checkin_token,
+      browser_token: createBrowserBookingToken(event.clinic_id, String(patientRow.patient_id)),
     });
   } catch (error) {
     return fail(error instanceof Error ? error.message : "報名失敗", 500);

@@ -49,11 +49,11 @@ const { clinicId } = await requireNonProvider();
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-bold text-slate-900">門診表</h1>
+      <h1 className="text-xl font-bold text-slate-900">服務排程</h1>
 
-      {/* 醫師 */}
+        {/* 服務提供者 */}
       <EntityManager
-        title="醫師"
+        title="服務提供者"
         nameLabel="姓名"
         secondaryLabel="專長"
         secondaryField="specialty"
@@ -63,7 +63,7 @@ const { clinicId } = await requireNonProvider();
         toggleAction={toggleDoctorAction}
       />
 
-      {/* 門診段 */}
+        {/* 服務時段 */}
       <ScheduleEditor
         doctors={docs}
         templates={tpls}

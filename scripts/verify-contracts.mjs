@@ -20,6 +20,9 @@ const migrationRoleMatrix = read("supabase/migration_role_matrix_v4.sql");
 const migrationMarketingOptIn = read("supabase/migration_marketing_opt_in_sync.sql");
 const migrationSaasPlatform = read("supabase/migration_saas_platform.sql");
 const migrationSaasCoreGaps = read("supabase/migration_saas_core_gaps.sql");
+const migrationCustomerPortal = read("supabase/migrations/202608060001_customer_portal_identity.sql");
+const migrationFunnel = read("supabase/migrations/202608060002_funnel_events.sql");
+const migrationRegistrationPatient = read("supabase/migrations/202608060003_registration_patient_transaction.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 
@@ -35,6 +38,7 @@ const checks = [
   ["admin SaaS modules exist", ["app/admin/crm/page.tsx", "app/admin/reports/page.tsx", "app/admin/registrations/page.tsx", "app/admin/checkin/page.tsx", "app/admin/calendar/page.tsx", "app/api/registration/checkin-search/route.ts"]],
   ["platform admin layer exists", ["supabase/migration_saas_platform.sql|create table if not exists public.platform_admins", "supabase/migration_saas_platform.sql|create table if not exists public.brand_entitlements", "lib/platform.ts|requirePlatformAdmin", "app/admin/platform/page.tsx", "app/admin/platform/actions.ts"]],
   ["core SaaS gap migration and customer surfaces exist", ["supabase/migration_saas_core_gaps.sql|membership_notification_logs", "supabase/migration_saas_core_gaps.sql|service_resources_available", "supabase/migration_saas_core_gaps.sql|get_available_sessions_for_service", "app/api/cron/membership/route.ts|MEMBERSHIP_EXPIRY_NOTICE_DAYS", "app/api/membership/portal/route.ts", "app/api/registration/my/route.ts", "app/api/registration/checkin-live/route.ts", "app/admin/audit/page.tsx"]],
+  ["unified customer portal migration and funnel tracking exist", ["app/api/customer/portal/route.ts", "app/my/page.tsx", "components/FunnelTracker.tsx", "lib/funnel-client.ts", "app/api/analytics/funnel/route.ts"]],
 ];
 
 const failures = [];
@@ -45,7 +49,7 @@ for (const [label, snippets] of checks) {
       const needle = needleParts.join("|");
       return exists(file) && (!needle || read(file).includes(needle));
     }
-    return schema.includes(snippet) || migrationRegistration.includes(snippet) || migrationHardening.includes(snippet) || migrationBenefits.includes(snippet) || migrationSaasPlatform.includes(snippet) || migrationSaasCoreGaps.includes(snippet);
+    return schema.includes(snippet) || migrationRegistration.includes(snippet) || migrationHardening.includes(snippet) || migrationBenefits.includes(snippet) || migrationSaasPlatform.includes(snippet) || migrationSaasCoreGaps.includes(snippet) || migrationCustomerPortal.includes(snippet) || migrationFunnel.includes(snippet);
   });
   if (ok) console.log(`[PASS] ${label}`);
   else failures.push(label);
@@ -241,6 +245,16 @@ invariant(
 invariant(
   "registration has concurrency lock and answer snapshot",
   registrationFunction.includes("pg_advisory_xact_lock") && registrationFunction.includes("insert into registration_answers"),
+);
+invariant(
+  "registration links the customer identity transactionally",
+  schema.includes("p_patient_id uuid default null") &&
+    schema.includes("set terms_version = p_terms_version") &&
+    schema.includes("patient_id = p_patient_id") &&
+    migrationRegistrationPatient.includes("patient_id = p_patient_id") &&
+    migrationRegistrationPatient.includes("grant execute on function public.register_for_event_with_terms") &&
+    registrationApi.includes("p_patient_id: patientRow.patient_id") &&
+    !registrationApi.includes("patientLinkError"),
 );
 invariant(
   "registration SQL qualifies identifiers and supports current date-sized sequence numbers",
@@ -559,6 +573,14 @@ invariant(
   read("app/admin/crm/page.tsx").includes("segment_id=") &&
     read("app/admin/patients/page.tsx").includes("crm_segment_members") &&
     read("app/admin/patients/page.tsx").includes('.eq("clinic_id", clinicId)')
+);
+invariant(
+  "funnel events are anonymous and tenant-scoped",
+  migrationFunnel.includes("anonymous_id text not null") &&
+    migrationFunnel.includes("clinic_id uuid not null references public.clinics") &&
+    migrationFunnel.includes("revoke all on table public.funnel_events") &&
+    read("app/api/analytics/funnel/route.ts").includes("metadata") &&
+    read("app/admin/reports/page.tsx").includes("顧客漏斗事件"),
 );
 invariant(
   "marketing automation paginates large tenant datasets",

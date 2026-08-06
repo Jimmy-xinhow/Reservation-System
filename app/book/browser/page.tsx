@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { formatTime, formatDateSession } from "@/lib/slots";
+import { trackFunnelEvent } from "@/lib/funnel-client";
 
 interface Config {
   clinic_name: string | null;
@@ -52,6 +53,17 @@ function browserTokenKey(): string {
   return `booking_browser_token:${source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default"}`;
 }
 
+function customerTokenKey(): string {
+  if (typeof window === "undefined") return "customer_browser_token";
+  const source = new URLSearchParams(window.location.search);
+  return `customer_browser_token:${source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default"}`;
+}
+
+function rememberBrowserToken(value: string): void {
+  window.localStorage.setItem(browserTokenKey(), value);
+  window.localStorage.setItem(customerTokenKey(), value);
+}
+
 function todayStr(offset = 0): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(Date.now() + offset * 24 * 60 * 60 * 1000));
 }
@@ -80,6 +92,7 @@ export default function BrowserBookingPage() {
   const maxDate = useMemo(() => todayStr(config?.max_advance_days ?? 30), [config?.max_advance_days]);
 
   useEffect(() => {
+    trackFunnelEvent("booking_view");
     void api<Config>("/api/booking/config").then((value) => {
       setConfig(value);
       setDoctorId(value.doctors[0]?.id ?? "");
@@ -88,7 +101,12 @@ export default function BrowserBookingPage() {
   }, []);
 
   useEffect(() => {
-    const storedToken = window.localStorage.getItem(browserTokenKey());
+    const source = new URLSearchParams(window.location.search);
+    const scope = source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default";
+    const storedToken = window.localStorage.getItem(customerTokenKey())
+      || window.localStorage.getItem(browserTokenKey())
+      || window.localStorage.getItem(`booking_browser_token:${scope}`)
+      || window.localStorage.getItem("membership_browser_token");
     if (storedToken) setToken(storedToken);
     const value = new URLSearchParams(window.location.search).get("membership_code");
     if (value) setMembershipCode(value.trim().toUpperCase());
@@ -108,14 +126,16 @@ export default function BrowserBookingPage() {
       return;
     }
     setLoading(true); setError(null);
+    trackFunnelEvent("booking_start", { booking_mode: config.booking_mode });
     try {
       const browserToken = token ?? (await api<{ browser_token: string }>("/api/booking/browser/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, phone, birthday }) })).browser_token;
       setToken(browserToken);
-      window.localStorage.setItem(browserTokenKey(), browserToken);
+      rememberBrowserToken(browserToken);
       const body: Record<string, unknown> = { browser_token: browserToken, doctor_id: doctorId, service_id: serviceId || undefined, visit_type: visitType, is_self_pay: false, email: email.trim() || undefined, membership_code: membershipCode.trim().toUpperCase() || undefined };
       if (config.booking_mode === "time") body.start_at = pickedStart;
       else { body.template_id = pickedTemplate; body.date = date; }
       setResult(await api<Result>("/api/booking/reserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+      trackFunnelEvent("booking_success", { booking_mode: config.booking_mode });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "預約失敗");
     } finally { setLoading(false); }

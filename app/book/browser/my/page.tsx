@@ -57,6 +57,12 @@ function tokenKey(): string {
   return `booking_browser_token:${source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default"}`;
 }
 
+function customerTokenKey(): string {
+  if (typeof window === "undefined") return "customer_browser_token";
+  const source = new URLSearchParams(window.location.search);
+  return `customer_browser_token:${source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default"}`;
+}
+
 export default function BrowserMyAppointmentsPage() {
   const [token, setToken] = useState<string | null>(null);
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
@@ -86,7 +92,12 @@ export default function BrowserMyAppointmentsPage() {
   }, []);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(tokenKey());
+    const source = new URLSearchParams(window.location.search);
+    const scope = source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default";
+    const stored = window.localStorage.getItem(customerTokenKey())
+      || window.localStorage.getItem(tokenKey())
+      || window.localStorage.getItem(`booking_browser_token:${scope}`)
+      || window.localStorage.getItem("membership_browser_token");
     if (stored) {
       setToken(stored);
       void load(stored);
@@ -107,6 +118,7 @@ export default function BrowserMyAppointmentsPage() {
         body: JSON.stringify({ name: name.trim(), phone: phone.trim(), birthday }),
       });
       window.localStorage.setItem(tokenKey(), data.browser_token);
+      window.localStorage.setItem(customerTokenKey(), data.browser_token);
       setToken(data.browser_token);
       await load(data.browser_token);
     } catch (identifyError) {
@@ -159,5 +171,5 @@ export default function BrowserMyAppointmentsPage() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-6 sm:px-6 sm:py-10"><header className="mb-6"><Brand subtitle="我的預約" /></header>{children}</main>;
+  return <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-6 sm:px-6 sm:py-10"><header className="mb-6 flex items-center justify-between gap-3"><Brand subtitle="我的預約" /><Link href={scopePage("/my")} className="text-sm text-brand-700">我的紀錄</Link></header>{children}</main>;
 }

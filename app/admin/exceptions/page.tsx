@@ -54,7 +54,7 @@ const { clinicId } = await requireNonProvider();
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900">休診 / 加診</h1>
+      <h1 className="text-xl font-bold text-slate-900">服務例外日期</h1>
 
       <ExceptionForm doctors={docs} templates={tpls} createAction={createExceptionAction} />
       <p className="text-xs text-slate-400">
@@ -66,7 +66,7 @@ const { clinicId } = await requireNonProvider();
           <thead>
             <tr>
               <th>日期</th>
-              <th>醫師</th>
+              <th>服務提供者</th>
               <th>類型</th>
               <th>時間</th>
               <th>容量</th>
@@ -87,7 +87,7 @@ const { clinicId } = await requireNonProvider();
                 <td>{docName(e.doctor_id)}</td>
                 <td>
                   <span className={`badge ${e.is_closed ? "bg-red-50 text-red-600" : "bg-accent-500/10 text-accent-600"}`}>
-                    {e.is_closed ? "休診" : "加診"}
+                    {e.is_closed ? "關閉服務" : "加開服務"}
                   </span>
                 </td>
                 <td>

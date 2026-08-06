@@ -127,7 +127,7 @@ export default async function PatientsPage({
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-slate-900">{segmentName ? `分眾顧客：${segmentName}` : "病患查詢"}</h1>
+        <h1 className="text-xl font-bold text-slate-900">{segmentName ? `分眾顧客：${segmentName}` : "顧客查詢"}</h1>
         {segmentId && <Link href="/admin/patients" className="btn btn-ghost text-sm">清除分眾篩選</Link>}
       </div>
 
@@ -159,7 +159,7 @@ export default async function PatientsPage({
             {patients.length === 0 && (
               <tr>
                 <td colSpan={7} className="py-8 text-center text-slate-400">
-                  {segmentId && !segmentName ? "找不到指定分眾" : keyword ? "查無符合的病患" : segmentId ? "此分眾目前沒有顧客" : "尚無病患"}
+                  {segmentId && !segmentName ? "找不到指定分眾" : keyword ? "查無符合的顧客" : segmentId ? "此分眾目前沒有顧客" : "尚無顧客"}
                 </td>
               </tr>
             )}

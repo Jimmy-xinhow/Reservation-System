@@ -15,6 +15,7 @@ const publicRoutes = [
   "/book/reschedule",
   "/register/cancel",
   "/membership",
+  "/my",
   "/payment/result",
   "/embed/register",
   "/admin/login",

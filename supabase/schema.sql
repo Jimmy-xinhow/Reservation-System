@@ -1262,6 +1262,25 @@ create table if not exists clinic_domains (
 );
 create index if not exists clinic_domains_clinic_idx on clinic_domains (clinic_id, active);
 
+-- Privacy-safe public funnel events: no name, phone, LINE id or patient id is stored.
+create table if not exists funnel_events (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references clinics(id) on delete cascade,
+  event_name text not null check (event_name in (
+    'portal_view', 'booking_view', 'booking_start', 'booking_success',
+    'registration_view', 'registration_start', 'registration_success',
+    'membership_view', 'membership_lookup', 'membership_purchase_start'
+  )),
+  anonymous_id text not null,
+  source text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists funnel_events_clinic_time_idx on funnel_events (clinic_id, created_at desc);
+create index if not exists funnel_events_clinic_name_idx on funnel_events (clinic_id, event_name, created_at desc);
+alter table funnel_events enable row level security;
+revoke all on table funnel_events from public, anon, authenticated;
+
 create table if not exists events (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references clinics(id) on delete cascade,
@@ -1337,6 +1356,7 @@ create table if not exists registration_form_fields (
 create table if not exists registrations (
   id uuid primary key default gen_random_uuid(),
   clinic_id uuid not null references clinics(id) on delete cascade,
+  patient_id uuid references patients(id) on delete restrict,
   event_id uuid not null references events(id) on delete restrict,
   session_id uuid not null references event_sessions(id) on delete restrict,
   ticket_type_id uuid references event_ticket_types(id) on delete restrict,
@@ -1361,6 +1381,8 @@ create table if not exists registrations (
 );
 create index if not exists registrations_event_idx on registrations (clinic_id, event_id, session_id, status);
 create index if not exists registrations_contact_idx on registrations (clinic_id, phone, created_at desc);
+alter table registrations add column if not exists patient_id uuid references patients(id) on delete restrict;
+create index if not exists registrations_patient_idx on registrations (clinic_id, patient_id, created_at desc);
 
 alter table crm_interactions add column if not exists registration_id uuid references registrations(id) on delete set null;
 alter table crm_interactions drop constraint if exists crm_interactions_kind_check;
@@ -3660,6 +3682,46 @@ begin
 end;
 $$;
 
+-- Customer portal variant: link the verified browser/LINE patient inside the
+-- same transaction as the registration and benefit reservation.
+create or replace function public.register_for_event_with_terms(
+  p_clinic_id uuid, p_event_id uuid, p_session_id uuid, p_ticket_type_id uuid, p_name text, p_phone text,
+  p_email text default null, p_line_user_id text default null, p_marketing_opt_in boolean default false,
+  p_answers jsonb default '{}'::jsonb, p_access_token text default null, p_discount_code text default null,
+  p_membership_code text default null, p_form_id uuid default null, p_form_version integer default null,
+  p_terms_version integer default null, p_terms_accepted_at timestamptz default null, p_patient_id uuid default null
+)
+returns table (registration_id uuid, registration_no text, registration_status text, payment_status text, amount integer, discount_amount integer, membership_applied boolean, checkin_token text)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  r record;
+begin
+  if p_patient_id is not null and not exists (
+    select 1 from public.patients
+     where id = p_patient_id and clinic_id = p_clinic_id and active
+  ) then
+    raise exception 'patient is not valid for this brand';
+  end if;
+
+  select * into r from public.register_for_event_with_benefits(
+    p_clinic_id, p_event_id, p_session_id, p_ticket_type_id, p_name, p_phone, p_email, p_line_user_id,
+    p_marketing_opt_in, p_answers, p_access_token, p_discount_code, p_membership_code, p_form_id, p_form_version
+  );
+  update public.registrations
+     set terms_version = p_terms_version,
+         terms_accepted_at = p_terms_accepted_at,
+         patient_id = p_patient_id
+   where id = r.registration_id and clinic_id = p_clinic_id;
+  update public.discount_redemptions
+     set patient_id = p_patient_id
+   where clinic_id = p_clinic_id and registration_id = r.registration_id;
+  return query select r.registration_id, r.registration_no, r.registration_status, r.payment_status, r.amount, r.discount_amount, r.membership_applied, r.checkin_token;
+end;
+$$;
+
 create or replace function public.service_booking_minutes(
   p_clinic_id uuid,
   p_service_id uuid,
@@ -3819,6 +3881,8 @@ grant execute on function public.book_time_slot_for_service(uuid, uuid, uuid, ti
 grant execute on function public.book_time_slot_with_membership_for_service(uuid, uuid, uuid, timestamptz, text, boolean, text, uuid) to service_role;
 revoke all on function public.register_for_event_with_terms(uuid, uuid, uuid, uuid, text, text, text, text, boolean, jsonb, text, text, text, uuid, integer, integer, timestamptz) from public, anon, authenticated;
 grant execute on function public.register_for_event_with_terms(uuid, uuid, uuid, uuid, text, text, text, text, boolean, jsonb, text, text, text, uuid, integer, integer, timestamptz) to service_role;
+revoke all on function public.register_for_event_with_terms(uuid, uuid, uuid, uuid, text, text, text, text, boolean, jsonb, text, text, text, uuid, integer, integer, timestamptz, uuid) from public, anon, authenticated;
+grant execute on function public.register_for_event_with_terms(uuid, uuid, uuid, uuid, text, text, text, text, boolean, jsonb, text, text, text, uuid, integer, integer, timestamptz, uuid) to service_role;
 
 -- Membership reminders are service-role only. The unique window prevents a
 -- repeated cron run from sending the same low-balance or expiry notice twice.

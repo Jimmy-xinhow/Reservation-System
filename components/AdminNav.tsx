@@ -47,16 +47,15 @@ const GROUPS: Group[] = [
       { href: "/admin/dashboard", label: "總覽", icon: "dashboard" },
       { href: "/admin/calendar", label: "預約日曆", icon: "calendar" },
       { href: "/admin", label: "預約列表", icon: "list" },
-      { href: "/admin/queue", label: "報到／叫號", icon: "queue" },
     ],
   },
   {
     label: "排程與服務",
     items: [
-      { href: "/admin/schedules", label: "門診排程", icon: "schedule" },
-      { href: "/admin/exceptions", label: "休診／加診", icon: "calendar" },
-      { href: "/admin/services", label: "看診服務", icon: "service" },
-      { href: "/admin/resources", label: "場地與設備", icon: "service" },
+      { href: "/admin/schedules", label: "服務排程", icon: "schedule" },
+      { href: "/admin/exceptions", label: "例外日期", icon: "calendar" },
+      { href: "/admin/services", label: "服務與方案", icon: "service" },
+      { href: "/admin/resources", label: "資源配置", icon: "service" },
     ],
   },
   {
@@ -81,7 +80,7 @@ const GROUPS: Group[] = [
     items: [{ href: "/admin/chat", label: "LINE 客服對話", icon: "chat" }],
   },
   {
-    label: "分析",
+    label: "報表與分析",
     items: [{ href: "/admin/reports", label: "營運報表", icon: "report" }],
   },
   {
@@ -102,7 +101,7 @@ const GROUPS: Group[] = [
     ],
   },
   {
-    label: "SaaS 平台",
+    label: "平台管理",
     platformOnly: true,
     items: [{ href: "/admin/platform", label: "品牌總管理", icon: "platform" }],
   },
@@ -160,7 +159,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
   }
 }
 
-function NavigationContent({ groups, unread, close }: { groups: Group[]; unread: number; close: () => void }) {
+function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; unread: number; close: () => void; mode: "brand" | "platform" }) {
   const pathname = usePathname();
   return (
     <div className="flex min-h-full flex-col bg-[#071c2e] text-white">
@@ -201,18 +200,19 @@ function NavigationContent({ groups, unread, close }: { groups: Group[]; unread:
           </div>
         ))}
       </div>
-      <div className="border-t border-white/10 px-5 py-4 text-[11px] leading-5 text-slate-500">工程後台 · 多品牌資料隔離</div>
+      <div className="border-t border-white/10 px-5 py-4 text-[11px] leading-5 text-slate-500">{mode === "platform" ? "平台總控台 · 跨品牌管理" : "營運後台 · 品牌資料隔離"}</div>
     </div>
   );
 }
 
-export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean }) {
+export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, hasBrandContext = true }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean; hasBrandContext?: boolean }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(chatUnread);
   const isAdmin = role === "owner" || role === "admin";
-  const providerAllowed = new Set(["/admin/dashboard", "/admin/calendar", "/admin", "/admin/queue"]);
-  const groups = GROUPS.filter((group) => (isAdmin || !group.adminOnly) && (isPlatformAdmin || !group.platformOnly))
+  const mode: "brand" | "platform" = isPlatformAdmin && (!hasBrandContext || pathname.startsWith("/admin/platform")) ? "platform" : "brand";
+  const providerAllowed = new Set(["/admin/dashboard", "/admin/calendar", "/admin"]);
+  const groups = GROUPS.filter((group) => (isAdmin || !group.adminOnly) && (mode === "platform" ? group.platformOnly === true : !group.platformOnly))
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => isAdmin || (!item.adminOnly && (role !== "provider" || providerAllowed.has(item.href)))),
@@ -220,6 +220,7 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false }: { ro
     .filter((group) => group.items.length > 0);
 
   useEffect(() => {
+    if (mode !== "brand") return;
     let alive = true;
     const tick = async () => {
       try {
@@ -231,16 +232,30 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false }: { ro
       }
     };
     void tick();
-    const timer = window.setInterval(() => void tick(), 5000);
+    const timer = window.setInterval(() => void tick(), 15000);
     return () => {
       alive = false;
       window.clearInterval(timer);
     };
-  }, []);
+  }, [mode]);
 
   useEffect(() => {
     if (pathname.startsWith("/admin/chat")) setUnread(0);
   }, [pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileOpen]);
 
   return (
     <>
@@ -254,13 +269,13 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false }: { ro
         <Icon name="menu" />
       </button>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 shadow-xl lg:block">
-        <NavigationContent groups={groups} unread={unread} close={() => undefined} />
+        <NavigationContent groups={groups} unread={unread} close={() => undefined} mode={mode} />
       </aside>
       {mobileOpen && (
         <>
           <button type="button" aria-label="關閉後台選單" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" />
-          <aside className="fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] shadow-2xl lg:hidden">
-            <NavigationContent groups={groups} unread={unread} close={() => setMobileOpen(false)} />
+          <aside role="dialog" aria-modal="true" aria-label={mode === "platform" ? "平台管理選單" : "品牌營運選單"} className="fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] shadow-2xl lg:hidden">
+            <NavigationContent groups={groups} unread={unread} close={() => setMobileOpen(false)} mode={mode} />
           </aside>
         </>
       )}

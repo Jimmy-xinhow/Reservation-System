@@ -3,6 +3,7 @@ import { Brand } from "@/components/Brand";
 import { createServiceClient } from "@/lib/supabase";
 import { headers } from "next/headers";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
+import { FunnelTracker } from "@/components/FunnelTracker";
 
 export const dynamic = "force-dynamic";
 
@@ -63,11 +64,12 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6">
-      <Brand name={clinic?.name} align="center" size="lg" subtitle="線上預約" />
+      <FunnelTracker eventName="portal_view" />
+      <Brand name={clinic?.name} align="center" size="lg" subtitle="預約與活動服務" />
 
       <div className="card w-full overflow-hidden">
         <div className="bg-gradient-to-br from-brand-500 to-accent-600 p-6 text-center text-white">
-          <h1 className="text-xl font-bold">{clinic?.name ?? "預約與報名平台"}</h1>
+          <h1 className="text-xl font-bold">選擇您要使用的服務</h1>
           {clinic?.intro && <p className="mt-2 text-sm text-white/85">{clinic.intro}</p>}
         </div>
 
@@ -99,12 +101,10 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
               rel="noreferrer"
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#06C755] px-4 py-3 font-medium text-white transition-opacity hover:opacity-90"
             >
-              <span className="text-lg">💬</span> 加入 LINE · 線上預約
+              <span className="text-lg">💬</span> 加入 LINE，開始預約
             </a>
           ) : (
-            <p className="rounded-xl bg-slate-50 p-3 text-center text-sm text-slate-400">
-              尚未設定 LINE 官方帳號 ID(可至後台「品牌與系統設定 → 公開品牌資訊」填入)。
-            </p>
+            <p className="rounded-xl bg-slate-50 p-3 text-center text-sm text-slate-500">目前提供瀏覽器預約，選擇下方服務即可開始。</p>
           )}
 
           {liffUrl && (
@@ -113,18 +113,15 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
             </a>
           )}
 
-          <Link href={browserBookingUrl} className="btn btn-secondary w-full">
-            瀏覽器備援預約
+          <Link href={browserBookingUrl} className={`btn w-full ${lineAddUrl ? "btn-secondary" : "btn-primary"}`}>
+            瀏覽器預約
           </Link>
-          <Link href={registrationUrl} className="btn btn-secondary w-full">
-            查看課程與活動報名
-          </Link>
-          <Link href={membershipUrl} className="btn btn-secondary w-full">
-            會員與套票
-          </Link>
-          <Link href={`/register/cancel${clinicScopeSuffix}`} className="text-center text-sm text-slate-400 hover:text-brand-600">
-            取消既有活動報名
-          </Link>
+          <div className="grid grid-cols-2 gap-2">
+            <Link href={registrationUrl} className="btn btn-secondary w-full">活動與課程</Link>
+            <Link href={membershipUrl} className="btn btn-secondary w-full">會員與套票</Link>
+          </div>
+          <Link href={`/my${clinicScopeSuffix}`} className="btn btn-ghost w-full">查看我的紀錄</Link>
+          <Link href={`/register/cancel${clinicScopeSuffix}`} className="text-center text-sm text-slate-400 hover:text-brand-600">取消既有活動報名</Link>
 
           {basicId && (
             <p className="text-center text-xs text-slate-400">LINE ID:{basicId}</p>
@@ -132,9 +129,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
         </div>
       </div>
 
-      <Link href="/admin" className="text-sm text-slate-400 hover:text-brand-600">
-        櫃檯人員登入後台 →
-      </Link>
+      <Link href="/admin" className="text-xs text-slate-400 hover:text-brand-600">工作人員登入</Link>
     </main>
   );
 }

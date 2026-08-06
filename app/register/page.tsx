@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Brand } from "@/components/Brand";
 import { formatAmount, formatEventDate, type PublicEvent } from "@/lib/registration";
 import { createQrSvg } from "@/lib/qr";
+import { trackFunnelEvent } from "@/lib/funnel-client";
 
 interface EventSummary {
   id: string;
@@ -23,6 +24,7 @@ interface RegistrationResult {
   payment_status: string;
   amount: number;
   checkin_token: string;
+  browser_token: string;
 }
 
 async function readApi<T>(url: string, init?: RequestInit): Promise<T> {
@@ -48,6 +50,7 @@ export default function RegisterPage() {
     const requestedClinicSlug = query.get("clinic_slug");
     const requestedClinicId = query.get("clinic_id");
     const requestedAccessToken = query.get("access_token");
+    trackFunnelEvent("registration_view");
     setClinicSlug(requestedClinicSlug);
     setClinicId(requestedClinicId);
     setAccessToken(requestedAccessToken);
@@ -124,6 +127,7 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, onSuccess 
       return;
     }
     setSubmitting(true);
+    trackFunnelEvent("registration_start", { event_id: event.id });
     setError(null);
     try {
       const registerUrl = clinicSlug
@@ -132,6 +136,7 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, onSuccess 
           ? "/api/registration/register?clinic_id=" + encodeURIComponent(clinicId)
           : "/api/registration/register";
       const data = await readApi<RegistrationResult>(registerUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: event.id, session_id: sessionId, ticket_type_id: ticketId || null, name, phone, email, marketing_opt_in: marketingOptIn, terms_accepted: termsAccepted, answers, access_token: accessToken || undefined, discount_code: discountCode || undefined, membership_code: membershipCode || undefined }) });
+      trackFunnelEvent("registration_success", { event_id: event.id });
       onSuccess(data);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "報名失敗");
@@ -193,10 +198,13 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken }: { result: Re
         registration_no: result.registration_no,
         checkin_token: result.checkin_token,
       }));
+      const scope = clinicSlug || clinicId || "default";
+      window.localStorage.setItem(`customer_browser_token:${scope}`, result.browser_token);
+      window.localStorage.setItem("membership_browser_token", result.browser_token);
     } catch {
       // 私密瀏覽或瀏覽器禁用儲存時，仍可使用目前頁面完成後續流程。
     }
-  }, [result]);
+  }, [result, clinicSlug, clinicId]);
 
   async function pay() {
     setPaying(true);
@@ -233,7 +241,8 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken }: { result: Re
 
   const brandHref = clinicSlug ? "/register?clinic_slug=" + encodeURIComponent(clinicSlug) : clinicId ? "/register?clinic_id=" + encodeURIComponent(clinicId) : "/register";
   const backHref = brandHref + (accessToken ? (brandHref.includes("?") ? "&" : "?") + "access_token=" + encodeURIComponent(accessToken) : "");
-  return <div className="card overflow-hidden"><div className="bg-gradient-to-br from-brand-600 to-brand-800 p-7 text-center text-white"><div className="text-3xl">✓</div><h1 className="mt-2 text-xl font-bold">報名資料已送出</h1><p className="mt-1 text-sm text-white/80">請保存以下報名編號與報到憑證。</p></div><div className="space-y-4 p-6 text-center"><div className="rounded-xl bg-slate-50 p-4"><div className="text-xs text-slate-500">報名編號</div><div className="mt-1 font-mono text-xl font-bold text-slate-900">{result.registration_no}</div></div>{result.registration_status !== "waitlisted" && result.payment_status !== "pending" && <div className="mx-auto w-52 rounded-xl border border-slate-200 bg-white p-3" dangerouslySetInnerHTML={{ __html: qrSvg }} />}{result.registration_status !== "waitlisted" && <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50 p-4 text-left"><div className="text-xs text-brand-700">報到憑證（請勿轉傳）</div><code className="mt-2 block break-all text-xs text-slate-700">{result.checkin_token}</code></div>}{result.payment_status === "pending" && <div className="space-y-2"><button type="button" onClick={() => void pay()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（${formatAmount(result.amount)}）`}</button>{error && <p className="rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}</div>}<p className="text-sm text-slate-500">目前狀態：{result.registration_status === "waitlisted" ? "候補中" : result.payment_status === "pending" ? "待付款" : "已確認"}</p><Link href={backHref} className="btn btn-secondary w-full">返回活動列表</Link></div></div>;
+  const myHref = clinicSlug ? "/my?clinic_slug=" + encodeURIComponent(clinicSlug) : clinicId ? "/my?clinic_id=" + encodeURIComponent(clinicId) : "/my";
+  return <div className="card overflow-hidden"><div className="bg-gradient-to-br from-brand-600 to-brand-800 p-7 text-center text-white"><div className="text-3xl">✓</div><h1 className="mt-2 text-xl font-bold">報名資料已送出</h1><p className="mt-1 text-sm text-white/80">報名編號與報到憑證已建立，也可在「我的紀錄」查看。</p></div><div className="space-y-4 p-6 text-center"><div className="rounded-xl bg-slate-50 p-4"><div className="text-xs text-slate-500">報名編號</div><div className="mt-1 font-mono text-xl font-bold text-slate-900">{result.registration_no}</div></div>{result.registration_status !== "waitlisted" && result.payment_status !== "pending" && <div className="mx-auto w-52 rounded-xl border border-slate-200 bg-white p-3" dangerouslySetInnerHTML={{ __html: qrSvg }} />}{result.registration_status !== "waitlisted" && <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50 p-4 text-left"><div className="text-xs text-brand-700">報到憑證（請勿轉傳）</div><code className="mt-2 block break-all text-xs text-slate-700">{result.checkin_token}</code></div>}{result.payment_status === "pending" && <div className="space-y-2"><button type="button" onClick={() => void pay()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（${formatAmount(result.amount)}）`}</button>{error && <p className="rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}</div>}<p className="text-sm text-slate-500">目前狀態：{result.registration_status === "waitlisted" ? "候補中" : result.payment_status === "pending" ? "待付款" : "已確認"}</p><Link href={myHref} className="btn btn-primary w-full">查看我的紀錄</Link><Link href={backHref} className="btn btn-secondary w-full">返回活動列表</Link></div></div>;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

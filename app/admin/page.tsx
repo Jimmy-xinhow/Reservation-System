@@ -170,9 +170,9 @@ export default async function TodayPage({
         </div>
       ) : (doctors ?? []).length === 0 ? (
         <div className="card flex flex-col items-start gap-2 p-5">
-          <p className="text-sm text-slate-600">尚未建立任何醫師,病患無法預約。</p>
+          <p className="text-sm text-slate-600">尚未建立服務提供者，顧客目前無法預約。</p>
           <a href="/admin/schedules" className="btn btn-primary">
-            前往門診表新增醫師
+            前往服務排程新增服務提供者
           </a>
         </div>
       ) : (
@@ -195,9 +195,9 @@ export default async function TodayPage({
         </div>
         {(doctors ?? []).length > 1 && (
           <div>
-            <label className="label">醫師</label>
+            <label className="label">服務提供者</label>
             <select name="doctor" defaultValue={fDoctor} className="input">
-              <option value="">全部醫師</option>
+              <option value="">全部服務提供者</option>
               {(doctors ?? []).map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.name}
@@ -231,8 +231,8 @@ export default async function TodayPage({
           <thead>
             <tr>
               <th>{mode === "time" ? "時間" : "號次"}</th>
-              <th>醫師</th>
-              <th>病患</th>
+              <th>服務提供者</th>
+              <th>顧客</th>
               <th>服務</th>
               <th>初/複</th>
               <th>狀態</th>

@@ -5,8 +5,8 @@ export function BrandMark({ className = "h-9 w-9" }: { className?: string }) {
       aria-hidden
     >
       <svg viewBox="0 0 24 24" fill="none" className="h-1/2 w-1/2">
-        <path d="M12 20s-6.5-4.2-9-8.4C1.4 8.9 2.6 5.5 5.8 5.1c1.9-.2 3.3.9 4.2 2.2.9-1.3 2.3-2.4 4.2-2.2 3.2.4 4.4 3.8 2.8 6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M9 13h2l1.2-2.2L14 15l1.3-2h3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 7.5A2.5 2.5 0 0 1 7.5 5h9A2.5 2.5 0 0 1 19 7.5v9a2.5 2.5 0 0 1-2.5 2.5h-9A2.5 2.5 0 0 1 5 16.5z" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     </span>
   );

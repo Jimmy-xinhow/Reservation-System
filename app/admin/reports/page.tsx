@@ -30,6 +30,7 @@ interface RegistrationRow {
 
 interface PaymentRow { status: string; amount: number; }
 interface DeliveryRow { status: string; }
+interface FunnelRow { event_name: string; }
 
 function one<T>(value: Relation<T>): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -94,11 +95,12 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
   const normalizedFrom = from <= to ? from : to;
   const normalizedTo = from <= to ? to : from;
   const range = rangeIso(normalizedFrom, normalizedTo);
-  const [appointments, registrations, payments, deliveries, waitlistResult, promotedResult] = await Promise.all([
+  const [appointments, registrations, payments, deliveries, funnelRows, waitlistResult, promotedResult] = await Promise.all([
     fetchAllSupabasePages((from, to) => supabase.from("appointments").select("start_at, status, membership_id, source, doctors(name), services(name)").eq("clinic_id", clinicId).gte("start_at", range.start).lte("start_at", range.end).order("start_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("registrations").select("created_at, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("funnel_events").select("event_name").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("status", "promoted").gte("updated_at", range.start).lte("updated_at", range.end),
   ]);
@@ -109,6 +111,7 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
   const registrationRows = registrations as RegistrationRow[];
   const paymentRows = payments as PaymentRow[];
   const deliveryRows = deliveries as DeliveryRow[];
+  const funnelEventRows = funnelRows as FunnelRow[];
   const validAppointmentRows = appointmentRows.filter((row) => ["booked", "confirmed", "done", "no_show"].includes(row.status));
   const validRegistrationRows = registrationRows.filter((row) => ["confirmed", "attended", "no_show"].includes(row.status));
   const appointmentNoShow = validAppointmentRows.filter((row) => row.status === "no_show").length;
@@ -124,6 +127,8 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
   const registrationBreakdownRows = registrationBreakdown(registrationRows);
   const exportHref = `/api/admin/reports?from=${encodeURIComponent(normalizedFrom)}&to=${encodeURIComponent(normalizedTo)}`;
   const generatedAt = formatDateTime(new Date().toISOString());
+  const funnelCounts = new Map<string, number>();
+  for (const row of funnelEventRows) funnelCounts.set(row.event_name, (funnelCounts.get(row.event_name) ?? 0) + 1);
 
   return (
     <div className="space-y-6">
@@ -155,6 +160,8 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
         <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="付款成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="付款失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
       </div>
 
+      <section className="card space-y-3 p-5"><div><h2 className="font-semibold text-slate-900">顧客漏斗事件</h2><p className="mt-1 text-sm text-slate-500">僅統計匿名事件，不含姓名、電話、LINE ID 或顧客識別碼。</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-5"><FunnelMetric label="入口瀏覽" value={funnelCounts.get("portal_view") ?? 0} /><FunnelMetric label="開始預約" value={funnelCounts.get("booking_start") ?? 0} /><FunnelMetric label="預約成功" value={funnelCounts.get("booking_success") ?? 0} /><FunnelMetric label="開始報名" value={funnelCounts.get("registration_start") ?? 0} /><FunnelMetric label="報名成功" value={funnelCounts.get("registration_success") ?? 0} /></div></section>
+
       <BreakdownTable title="預約明細分組（日期／服務提供者／服務／狀態／來源）" headers={["日期", "服務提供者", "服務", "狀態", "來源", "筆數"]} rows={bookingRows.map((row) => [row.day, row.provider, row.service, row.status, row.source, String(row.count)])} />
       <BreakdownTable title="報名明細分組（活動／場次／票種／狀態）" headers={["活動", "場次", "票種", "狀態", "筆數"]} rows={registrationBreakdownRows.map((row) => [row.event, row.session, row.ticket, row.status, String(row.count)])} />
       <p className="text-xs leading-5 text-slate-400">報表所有查詢均限制在目前品牌與日期範圍；CSV 套用相同品牌與角色權限，服務提供者不會取得顧客電話等不必要個資。無資料時以 0 或「—」呈現，不把取消資料誤算為有效名額。</p>
@@ -163,6 +170,7 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) { return <div className="card p-4"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-2xl font-bold text-slate-900">{value}</div></div>; }
+function FunnelMetric({ label, value }: { label: string; value: number }) { return <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-xl font-bold text-slate-900">{value}</div></div>; }
 function Line({ label, value }: { label: string; value: number | string }) { return <div className="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0"><span className="text-slate-500">{label}</span><span className="font-medium text-slate-800">{value}</span></div>; }
 function BreakdownTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) {
   return <section className="card overflow-hidden"><div className="border-b border-slate-100 px-5 py-4"><h2 className="font-semibold text-slate-900">{title}</h2></div>{rows.length === 0 ? <p className="px-5 py-6 text-sm text-slate-400">此範圍沒有資料。</p> : <div className="overflow-x-auto"><table className="tbl"><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.join("-")}-${index}`}>{row.map((cell, cellIndex) => <td key={`${index}-${cellIndex}`}>{cell}</td>)}</tr>)}</tbody></table></div>}</section>;
