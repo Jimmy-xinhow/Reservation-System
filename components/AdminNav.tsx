@@ -162,7 +162,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
 function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; unread: number; close: () => void; mode: "brand" | "platform" }) {
   const pathname = usePathname();
   return (
-    <div className="flex min-h-full flex-col bg-[#071c2e] text-white">
+    <div className="flex h-full min-h-0 flex-col bg-[#071c2e] text-white">
       <div className="border-b border-white/10 px-5 py-5">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#1f79d1] text-sm font-bold tracking-wide">XH</div>
@@ -172,7 +172,7 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
           </div>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5">
         {groups.map((group) => (
           <div key={group.label} className="mb-6 last:mb-0">
             <div className="mb-2 px-3 text-[11px] font-semibold tracking-[0.16em] text-slate-500">{group.label}</div>
