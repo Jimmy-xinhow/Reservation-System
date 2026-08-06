@@ -23,7 +23,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     const accessTokenHash = accessToken ? createHash("sha256").update(accessToken).digest("hex") : "";
     const { data: publicEvent, error: publicEventError } = await svc
       .from("events")
-      .select("id, clinic_id, slug, title, description, cover_url, registration_open_at, registration_close_at")
+      .select("id, clinic_id, slug, title, description, cover_url, registration_open_at, registration_close_at, terms_version, terms_text")
       .eq("id", id)
       .eq("clinic_id", clinicId)
       .eq("status", "published")
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     if (!event && accessTokenHash) {
       const { data: privateEvent, error: privateEventError } = await svc
         .from("events")
-        .select("id, clinic_id, slug, title, description, cover_url, registration_open_at, registration_close_at")
+        .select("id, clinic_id, slug, title, description, cover_url, registration_open_at, registration_close_at, terms_version, terms_text")
         .eq("id", id)
         .eq("clinic_id", clinicId)
         .eq("status", "published")
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       await Promise.all([
         svc.from("clinics").select("name").eq("id", event.clinic_id).maybeSingle(),
         svc.from("event_sessions").select("id, name, start_at, end_at, venue, capacity, waitlist_enabled").eq("event_id", id).eq("clinic_id", event.clinic_id).eq("active", true).order("start_at"),
-        svc.from("event_ticket_types").select("id, name, price, capacity").eq("event_id", id).eq("clinic_id", event.clinic_id).eq("active", true).order("price"),
+        svc.from("event_ticket_types").select("id, name, price, capacity, sale_start_at, sale_end_at").eq("event_id", id).eq("clinic_id", event.clinic_id).eq("active", true).order("price"),
         svc.from("registration_forms").select("id, version").eq("event_id", id).eq("clinic_id", event.clinic_id).eq("status", "published").order("version", { ascending: false }).limit(1).maybeSingle(),
       ]);
     if (clinicError || sessionsError || ticketsError || formError) {
@@ -60,12 +60,14 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       ? await svc.from("registration_form_fields").select("id, field_key, label, field_type, required, options, sort_order").eq("form_id", form.id).eq("clinic_id", event.clinic_id).order("sort_order")
       : { data: [], error: null };
     if (fieldsError) return fail(fieldsError.message, 500);
+    const now = Date.now();
+    const visibleTickets = (ticketTypes ?? []).filter((ticket) => (!ticket.sale_start_at || new Date(ticket.sale_start_at).getTime() <= now) && (!ticket.sale_end_at || new Date(ticket.sale_end_at).getTime() > now));
     return ok({
       event: {
         ...event,
         clinic_name: clinic?.name ?? "",
         sessions: sessions ?? [],
-        ticket_types: ticketTypes ?? [],
+        ticket_types: visibleTickets,
         form: form ?? null,
         fields: (fields ?? []).map((field) => ({ ...field, options: Array.isArray(field.options) ? field.options : [] })),
       },

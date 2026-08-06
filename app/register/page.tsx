@@ -103,6 +103,7 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, onSuccess 
   const [email, setEmail] = useState("");
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [discountCode, setDiscountCode] = useState("");
   const [membershipCode, setMembershipCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -118,6 +119,10 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, onSuccess 
       setError(`請填寫${missing.label}`);
       return;
     }
+    if (event.terms_text && !termsAccepted) {
+      setError("請先閱讀並同意活動條款");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -126,7 +131,7 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, onSuccess 
         : clinicId
           ? "/api/registration/register?clinic_id=" + encodeURIComponent(clinicId)
           : "/api/registration/register";
-      const data = await readApi<RegistrationResult>(registerUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: event.id, session_id: sessionId, ticket_type_id: ticketId || null, name, phone, email, marketing_opt_in: marketingOptIn, answers, access_token: accessToken || undefined, discount_code: discountCode || undefined, membership_code: membershipCode || undefined }) });
+      const data = await readApi<RegistrationResult>(registerUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_id: event.id, session_id: sessionId, ticket_type_id: ticketId || null, name, phone, email, marketing_opt_in: marketingOptIn, terms_accepted: termsAccepted, answers, access_token: accessToken || undefined, discount_code: discountCode || undefined, membership_code: membershipCode || undefined }) });
       onSuccess(data);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "報名失敗");
@@ -153,6 +158,7 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, onSuccess 
             </div>
             {(discountCode || membershipCode) && <p className="rounded-xl bg-brand-50 p-3 text-xs leading-5 text-brand-800">套票序號會扣除一堂額度；優惠碼會依活動票種規則折抵，兩者不可同時使用。</p>}
             {event.fields.map((field) => <RegistrationField key={field.id} field={field} value={answers[field.field_key]} onChange={(value) => setAnswers((current) => ({ ...current, [field.field_key]: value }))} />)}
+            {event.terms_text && <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600"><p className="font-medium text-slate-900">活動條款 v{event.terms_version}</p><p className="mt-2 whitespace-pre-wrap">{event.terms_text}</p><label className="mt-3 flex items-start gap-2"><input type="checkbox" className="mt-1.5" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />我已閱讀並同意活動條款</label></div>}
             <label className="flex items-start gap-2 text-sm leading-6 text-slate-600"><input type="checkbox" className="mt-1.5" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} />同意接收品牌的活動與回訪訊息</label>
             {selectedTicket && selectedTicket.price > 0 && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">本票種需付款 {formatAmount(selectedTicket.price)}；送出報名後將進入標準金流付款。</p>}
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}

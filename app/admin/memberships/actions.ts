@@ -86,3 +86,55 @@ export async function toggleDiscountCodeAction(fd: FormData): Promise<void> {
   if (error) throw new Error(error.message);
   refresh();
 }
+
+export async function createMembershipLevelAction(fd: FormData): Promise<void> {
+  const { clinicId } = await requireAdmin();
+  const code = text(fd, "code").toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  const name = text(fd, "name");
+  const sortOrder = Math.max(0, integer(fd, "sort_order", 0));
+  const discountPercent = Math.max(0, Math.min(100, integer(fd, "discount_percent", 0)));
+  if (!code || !name) throw new Error("請輸入會員等級代碼與名稱");
+  const { error } = await createServiceClient().from("membership_levels").insert({ clinic_id: clinicId, code, name: name.slice(0, 80), sort_order: sortOrder, discount_percent: discountPercent, active: true });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/membership-levels");
+}
+
+export async function toggleMembershipLevelAction(fd: FormData): Promise<void> {
+  const { clinicId } = await requireAdmin();
+  const id = text(fd, "id");
+  const active = text(fd, "active") === "true";
+  const { error } = await createServiceClient().from("membership_levels").update({ active: !active }).eq("id", id).eq("clinic_id", clinicId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/membership-levels");
+}
+
+export async function saveMembershipPlanLevelPriceAction(fd: FormData): Promise<void> {
+  const { clinicId } = await requireAdmin();
+  const planId = text(fd, "plan_id");
+  const levelId = text(fd, "level_id");
+  const price = Math.max(0, integer(fd, "price", 0));
+  if (!planId || !levelId) throw new Error("請選擇會員方案與等級");
+  const svc = createServiceClient();
+  const [{ data: plan }, { data: level }] = await Promise.all([
+    svc.from("membership_plans").select("id").eq("id", planId).eq("clinic_id", clinicId).maybeSingle(),
+    svc.from("membership_levels").select("id").eq("id", levelId).eq("clinic_id", clinicId).maybeSingle(),
+  ]);
+  if (!plan || !level) throw new Error("會員方案或等級不屬於目前品牌");
+  const { error } = await svc.from("membership_plan_level_prices").upsert({ clinic_id: clinicId, plan_id: planId, level_id: levelId, price }, { onConflict: "plan_id,level_id" });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/membership-levels");
+}
+
+export async function assignPatientMembershipLevelAction(fd: FormData): Promise<void> {
+  const { clinicId } = await requireAdmin();
+  const patientId = text(fd, "patient_id");
+  const levelId = text(fd, "level_id") || null;
+  const svc = createServiceClient();
+  if (levelId) {
+    const { data: level } = await svc.from("membership_levels").select("id").eq("id", levelId).eq("clinic_id", clinicId).eq("active", true).maybeSingle();
+    if (!level) throw new Error("會員等級不屬於目前品牌或已停用");
+  }
+  const { error } = await svc.from("patients").update({ membership_level_id: levelId }).eq("id", patientId).eq("clinic_id", clinicId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/membership-levels");
+}

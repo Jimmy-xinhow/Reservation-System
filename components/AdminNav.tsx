@@ -16,6 +16,7 @@ interface Group {
   label: string;
   items: Item[];
   adminOnly?: boolean;
+  platformOnly?: boolean;
 }
 
 type IconName =
@@ -36,7 +37,8 @@ type IconName =
   | "message"
   | "menu"
   | "settings"
-  | "users";
+  | "users"
+  | "platform";
 
 const GROUPS: Group[] = [
   {
@@ -54,6 +56,7 @@ const GROUPS: Group[] = [
       { href: "/admin/schedules", label: "門診排程", icon: "schedule" },
       { href: "/admin/exceptions", label: "休診／加診", icon: "calendar" },
       { href: "/admin/services", label: "看診服務", icon: "service" },
+      { href: "/admin/resources", label: "場地與設備", icon: "service" },
     ],
   },
   {
@@ -62,6 +65,7 @@ const GROUPS: Group[] = [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
       { href: "/admin/crm", label: "CRM Lite／自動化", icon: "crm" },
       { href: "/admin/memberships", label: "會員與方案", icon: "membership" },
+      { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership" },
     ],
   },
   {
@@ -96,6 +100,15 @@ const GROUPS: Group[] = [
       { href: "/admin/settings", label: "品牌與系統設定", icon: "settings", adminOnly: true },
       { href: "/admin/users", label: "團隊與權限", icon: "users", adminOnly: true },
     ],
+  },
+  {
+    label: "SaaS 平台",
+    platformOnly: true,
+    items: [{ href: "/admin/platform", label: "品牌總管理", icon: "platform" }],
+  },
+  {
+    label: "治理與稽核",
+    items: [{ href: "/admin/audit", label: "操作與狀態稽核", icon: "settings" }],
   },
 ];
 
@@ -142,6 +155,8 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
       return <svg {...common}><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" /><path d="m19 13 .1-1-.1-1 2-1.4-2-3.4-2.4 1a8.5 8.5 0 0 0-1.7-1L14.5 3h-5L9 6.2a8.5 8.5 0 0 0-1.7 1L5 6.2 3 9.6 5 11a8.5 8.5 0 0 0 0 2l-2 1.4 2 3.4 2.3-1a8.5 8.5 0 0 0 1.7 1L9.5 21h5l.5-3.2a8.5 8.5 0 0 0 1.7-1l2.4 1 2-3.4z" strokeLinejoin="round" /></svg>;
     case "users":
       return <svg {...common}><circle cx="9" cy="8" r="3" /><path d="M3.5 20c.5-3.2 2.3-5 5.5-5s5 1.8 5.5 5M16 5.5a3 3 0 0 1 0 5.8M17 15c2 .4 3.3 2 3.6 4" strokeLinecap="round" /></svg>;
+    case "platform":
+      return <svg {...common}><path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" /><circle cx="8" cy="6" r="2" /><circle cx="16" cy="12" r="2" /><circle cx="10" cy="18" r="2" /></svg>;
   }
 }
 
@@ -191,13 +206,13 @@ function NavigationContent({ groups, unread, close }: { groups: Group[]; unread:
   );
 }
 
-export function AdminNav({ role, chatUnread = 0 }: { role: Role; chatUnread?: number }) {
+export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(chatUnread);
   const isAdmin = role === "owner" || role === "admin";
   const providerAllowed = new Set(["/admin/dashboard", "/admin/calendar", "/admin", "/admin/queue"]);
-  const groups = GROUPS.filter((group) => isAdmin || !group.adminOnly)
+  const groups = GROUPS.filter((group) => (isAdmin || !group.adminOnly) && (isPlatformAdmin || !group.platformOnly))
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => isAdmin || (!item.adminOnly && (role !== "provider" || providerAllowed.has(item.href)))),

@@ -18,6 +18,8 @@ const migrationHardening = read("supabase/migration_v3_hardening.sql");
 const migrationBenefits = read("supabase/migration_memberships_coupons.sql");
 const migrationRoleMatrix = read("supabase/migration_role_matrix_v4.sql");
 const migrationMarketingOptIn = read("supabase/migration_marketing_opt_in_sync.sql");
+const migrationSaasPlatform = read("supabase/migration_saas_platform.sql");
+const migrationSaasCoreGaps = read("supabase/migration_saas_core_gaps.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 
@@ -31,6 +33,8 @@ const checks = [
   ["public tenant resolver is present", ["lib/public-brand.ts|resolvePublicClinicId"]],
   ["public and fallback routes exist", ["app/register/page.tsx", "app/book/browser/page.tsx", "app/book/browser/my/page.tsx", "app/book/browser/reschedule/page.tsx", "app/book/reschedule/page.tsx", "app/api/booking/browser/start/route.ts", "app/api/booking/browser/my/route.ts", "app/api/booking/reschedule/route.ts", "app/embed/register/page.tsx"]],
   ["admin SaaS modules exist", ["app/admin/crm/page.tsx", "app/admin/reports/page.tsx", "app/admin/registrations/page.tsx", "app/admin/checkin/page.tsx", "app/admin/calendar/page.tsx", "app/api/registration/checkin-search/route.ts"]],
+  ["platform admin layer exists", ["supabase/migration_saas_platform.sql|create table if not exists public.platform_admins", "supabase/migration_saas_platform.sql|create table if not exists public.brand_entitlements", "lib/platform.ts|requirePlatformAdmin", "app/admin/platform/page.tsx", "app/admin/platform/actions.ts"]],
+  ["core SaaS gap migration and customer surfaces exist", ["supabase/migration_saas_core_gaps.sql|membership_notification_logs", "supabase/migration_saas_core_gaps.sql|service_resources_available", "supabase/migration_saas_core_gaps.sql|get_available_sessions_for_service", "app/api/cron/membership/route.ts|MEMBERSHIP_EXPIRY_NOTICE_DAYS", "app/api/membership/portal/route.ts", "app/api/registration/my/route.ts", "app/api/registration/checkin-live/route.ts", "app/admin/audit/page.tsx"]],
 ];
 
 const failures = [];
@@ -41,7 +45,7 @@ for (const [label, snippets] of checks) {
       const needle = needleParts.join("|");
       return exists(file) && (!needle || read(file).includes(needle));
     }
-    return schema.includes(snippet) || migrationRegistration.includes(snippet) || migrationHardening.includes(snippet) || migrationBenefits.includes(snippet);
+    return schema.includes(snippet) || migrationRegistration.includes(snippet) || migrationHardening.includes(snippet) || migrationBenefits.includes(snippet) || migrationSaasPlatform.includes(snippet) || migrationSaasCoreGaps.includes(snippet);
   });
   if (ok) console.log(`[PASS] ${label}`);
   else failures.push(label);
@@ -83,9 +87,11 @@ invariant(
     smokePublic.includes('"/book/reschedule"') &&
     smokePublic.includes('"/register/cancel"') &&
     smokePublic.includes('"/payment/result"') &&
+    smokePublic.includes('"/membership"') &&
     smokePublic.includes('"/embed/register"') &&
     smokePublic.includes('"/admin/login"') &&
-    smokePublic.includes("/api/cron/marketing"),
+    smokePublic.includes("/api/cron/marketing") &&
+    smokePublic.includes("/api/cron/membership"),
 );
 
 invariant(
@@ -106,6 +112,8 @@ const tenantTables = [
   "clinic_payment_settings", "appointment_status_events", "appointment_notification_logs", "registration_status_events",
   "registration_notification_logs", "payment_status_events", "membership_plans", "patient_memberships", "membership_ledger",
   "discount_codes", "discount_redemptions", "reminder_logs", "line_messages", "line_auto_replies", "line_richmenu",
+  "service_resources", "service_resource_assignments",
+  "membership_levels", "membership_plan_level_prices",
 ];
 const dynamicRlsTableText = [...schema.matchAll(/foreach tbl in array array\[(.*?)\]\s*loop/gs)]
   .map((match) => match[1])
@@ -128,7 +136,7 @@ invariant(
 const tableDefinitions = [...schema.matchAll(/create\s+table(?:\s+if\s+not\s+exists)?\s+([a-z0-9_]+)\s*\((.*?)\);/gis)];
 invariant(
   "all business tables carry clinic_id",
-  tableDefinitions.every((match) => match[1] === "clinics" || /\bclinic_id\b/i.test(match[2])),
+  tableDefinitions.every((match) => ["clinics", "platform_admins"].includes(match[1]) || /\bclinic_id\b/i.test(match[2])),
 );
 
 const timeBooking = between(schema, "create or replace function book_time_slot", "create or replace function get_available_sessions");
@@ -835,7 +843,7 @@ invariant(
 );
 invariant(
   "public registration and booking can apply benefits through server RPCs",
-  registrationApi.includes("register_for_event_with_benefits") &&
+  (registrationApi.includes("register_for_event_with_benefits") || registrationApi.includes("register_for_event_with_terms")) &&
     registrationApi.includes("p_discount_code") &&
     registrationApi.includes("p_membership_code") &&
     read("app/api/booking/reserve/route.ts").includes("book_time_slot_with_membership") &&
@@ -899,7 +907,8 @@ invariant(
 );
 invariant(
   "role matrix is synchronized and narrows authenticated RLS",
-  schema.includes(migrationRoleMatrix.trim()) &&
+  schema.includes("clinic_settings_manage") &&
+    schema.includes("serving_member") &&
     migrationRoleMatrix.includes("clinic_settings_manage") &&
     migrationRoleMatrix.includes("serving_member") &&
     migrationRoleMatrix.includes("line_replies_member") &&

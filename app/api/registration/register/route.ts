@@ -25,6 +25,7 @@ interface Body {
   access_token?: string;
   discount_code?: string;
   membership_code?: string;
+  terms_accepted?: boolean;
 }
 
 export async function POST(req: NextRequest) {
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
     const accessTokenHash = accessToken ? createHash("sha256").update(accessToken).digest("hex") : "";
     const { data: publicEvent, error: publicEventError } = await svc
       .from("events")
-      .select("id, clinic_id, access_mode")
+      .select("id, clinic_id, access_mode, terms_version, terms_text")
       .eq("id", body.event_id)
       .eq("clinic_id", clinicId)
       .eq("status", "published")
@@ -81,7 +82,7 @@ export async function POST(req: NextRequest) {
     if (!event && accessTokenHash) {
       const { data: privateEvent, error: privateEventError } = await svc
         .from("events")
-        .select("id, clinic_id, access_mode")
+        .select("id, clinic_id, access_mode, terms_version, terms_text")
         .eq("id", body.event_id)
         .eq("clinic_id", clinicId)
         .eq("status", "published")
@@ -92,6 +93,14 @@ export async function POST(req: NextRequest) {
       event = privateEvent;
     }
     if (!event) return fail("活動不存在或尚未公開", 404);
+
+    if (event.terms_text && body.terms_accepted !== true) return fail("請先閱讀並同意活動條款", 400);
+    if (body.ticket_type_id) {
+      const { data: ticket, error: ticketError } = await svc.from("event_ticket_types").select("id, sale_start_at, sale_end_at, active").eq("id", body.ticket_type_id).eq("event_id", event.id).eq("clinic_id", event.clinic_id).maybeSingle();
+      if (ticketError) return fail(ticketError.message, 500);
+      const now = Date.now();
+      if (!ticket?.active || (ticket.sale_start_at && new Date(ticket.sale_start_at).getTime() > now) || (ticket.sale_end_at && new Date(ticket.sale_end_at).getTime() <= now)) return fail("此票種目前不在銷售期間", 409);
+    }
 
     const { data: form } = await svc
       .from("registration_forms")
@@ -118,7 +127,7 @@ export async function POST(req: NextRequest) {
       if (field.field_type === "checkbox" && typeof value !== "boolean") return fail("表單勾選格式無效", 400);
     }
     if (JSON.stringify(answers).length > 20000) return fail("表單資料過大");
-    const { data, error } = await svc.rpc("register_for_event_with_benefits", {
+    const { data, error } = await svc.rpc("register_for_event_with_terms", {
       p_clinic_id: event.clinic_id,
       p_event_id: body.event_id,
       p_session_id: body.session_id,
@@ -134,6 +143,8 @@ export async function POST(req: NextRequest) {
       p_membership_code: membershipCode,
       p_form_id: form?.id ?? null,
       p_form_version: form?.version ?? null,
+      p_terms_version: event.terms_text ? event.terms_version : null,
+      p_terms_accepted_at: event.terms_text ? new Date().toISOString() : null,
     });
     if (error) return fail(translateRegistrationError(error.message), 409);
     const row = Array.isArray(data) ? data[0] : data;

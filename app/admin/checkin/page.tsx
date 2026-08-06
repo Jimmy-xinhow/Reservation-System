@@ -19,6 +19,7 @@ interface SearchRow {
   events: { title: string } | { title: string }[] | null;
   event_sessions: { name: string; start_at: string } | { name: string; start_at: string }[] | null;
 }
+type LiveRow = SearchRow;
 
 function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -35,9 +36,24 @@ export default function CheckinPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [liveRows, setLiveRows] = useState<LiveRow[]>([]);
   const [scanning, setScanning] = useState(false);
 
   useEffect(() => () => stopScanner(), []);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const response = await fetch("/api/registration/checkin-live", { cache: "no-store" });
+        const body = await response.json() as { ok: boolean; data?: LiveRow[] };
+        if (alive && body.ok) setLiveRows(body.data ?? []);
+      } catch { /* live panel is supplementary */ }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 10000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, []);
 
   function stopScanner() {
     if (scanTimerRef.current !== null) window.clearTimeout(scanTimerRef.current);
@@ -154,6 +170,8 @@ export default function CheckinPage() {
           <div className="space-y-2">{searchRows.length === 0 ? <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">輸入關鍵字後顯示可報到名單</p> : searchRows.map((row) => { const event = one(row.events); const session = one(row.event_sessions); const alreadyChecked = row.status === "attended"; return <div key={row.id} className="rounded-xl border border-slate-200 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold text-slate-900">{row.name}</div><div className="mt-1 text-xs text-slate-500">{row.registration_no} · {row.phone}</div></div><span className={`badge ${alreadyChecked ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"}`}>{alreadyChecked ? "已報到" : "可報到"}</span></div><div className="mt-2 text-sm text-slate-600">{event?.title ?? "活動"}{session ? ` · ${session.name}` : ""}</div><div className="mt-3 flex justify-end">{alreadyChecked ? <span className="text-xs text-slate-400">已完成報到</span> : <button type="button" disabled={loading} onClick={() => void checkinById(row.id)} className="btn btn-primary px-3 py-1.5 text-xs">確認報到</button>}</div></div>; })}</div>
         </section>
       </div>
+
+      <section className="card space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold text-slate-900">今日報到工作台</h2><p className="mt-1 text-xs text-slate-500">每 10 秒更新，供櫃檯掌握當日活動報到進度。</p></div><span className="badge bg-slate-100 text-slate-600">{liveRows.filter((row) => row.status === "attended").length} / {liveRows.length} 已報到</span></div>{liveRows.length === 0 ? <p className="rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-400">今日沒有可報到的活動名單。</p> : <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">{liveRows.map((row) => { const event = one(row.events); const session = one(row.event_sessions); return <div key={row.id} className="rounded-xl border border-slate-200 p-3"><div className="flex items-center justify-between gap-2"><span className="font-medium text-slate-800">{row.name}</span><span className={`badge ${row.status === "attended" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{row.status === "attended" ? "已報到" : "待報到"}</span></div><p className="mt-1 text-xs text-slate-500">{row.registration_no} · {event?.title ?? "活動"}</p><p className="mt-1 text-xs text-slate-400">{session?.name ?? "場次"} · {session?.start_at ? new Date(session.start_at).toLocaleTimeString("zh-TW", { hour: "2-digit", minute: "2-digit" }) : ""}</p></div>; })}</div>}</section>
 
       {error && <p className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
       {result && <div className={`rounded-xl p-4 text-sm ${result.result === "duplicate" ? "bg-amber-50 text-amber-800" : "bg-emerald-50 text-emerald-800"}`}><strong>{result.result === "duplicate" ? "此報名已完成報到" : "報到成功"}</strong><p className="mt-1 text-xs">狀態：{result.registration_status} · {new Date(result.checked_in_at).toLocaleString("zh-TW")}</p></div>}

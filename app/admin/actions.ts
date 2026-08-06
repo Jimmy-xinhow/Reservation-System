@@ -1120,7 +1120,10 @@ export async function createServiceAction(fd: FormData) {
   const { error } = await supabase.from("services").insert({
     clinic_id: clinicId,
     name,
+    category: str(fd, "category") || null,
     description: str(fd, "description") || null,
+    duration_minutes: Math.max(1, intOr(fd, "duration_minutes", 30)),
+    buffer_minutes: Math.max(0, intOr(fd, "buffer_minutes", 0)),
     active: true,
   });
   if (error) throw new Error(error.message);
@@ -1134,7 +1137,13 @@ export async function updateServiceAction(fd: FormData) {
   if (!id || !name) throw new Error("缺少服務或名稱");
   const { error } = await supabase
     .from("services")
-    .update({ name, description: str(fd, "description") || null })
+    .update({
+      name,
+      category: str(fd, "category") || null,
+      description: str(fd, "description") || null,
+      duration_minutes: Math.max(1, intOr(fd, "duration_minutes", 30)),
+      buffer_minutes: Math.max(0, intOr(fd, "buffer_minutes", 0)),
+    })
     .eq("id", id)
     .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
@@ -1591,6 +1600,8 @@ export async function updateSettingsAction(fd: FormData) {
       deposit_scope,
       min_lead_minutes: Math.max(0, intOr(fd, "min_lead_minutes", 30)),
       max_advance_days: Math.max(1, intOr(fd, "max_advance_days", 30)),
+      cancel_lead_minutes: Math.max(0, intOr(fd, "cancel_lead_minutes", 120)),
+      reschedule_lead_minutes: Math.max(0, intOr(fd, "reschedule_lead_minutes", 120)),
       public_booking_enabled: bool(fd, "public_booking_enabled"),
       public_registration_enabled: bool(fd, "public_registration_enabled"),
     })

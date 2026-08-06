@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
 
     if (settings.booking_mode === "time") {
       if (!body.start_at) return fail("缺少預約時間");
-      const { data, error } = await svc.rpc(membershipCode ? "book_time_slot_with_membership" : "book_time_slot", {
+      const { data, error } = await svc.rpc(membershipCode ? "book_time_slot_with_membership_for_service" : "book_time_slot_for_service", {
         p_clinic_id: clinicId,
         p_doctor_id: body.doctor_id,
         p_patient_id: patientId,
@@ -154,7 +154,7 @@ export async function POST(req: NextRequest) {
     } else {
       if (!body.template_id) return fail("缺少門診段");
       if (!body.date || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return fail("date 格式須為 YYYY-MM-DD");
-      const { data, error } = await svc.rpc(membershipCode ? "book_number_with_membership" : "book_number", {
+      const { data, error } = await svc.rpc(membershipCode ? (selectedServiceId ? "book_number_with_membership_for_service" : "book_number_with_membership") : (selectedServiceId ? "book_number_for_service" : "book_number"), {
         p_clinic_id: clinicId,
         p_doctor_id: body.doctor_id,
         p_patient_id: patientId,

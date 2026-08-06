@@ -189,13 +189,13 @@ export default function BookPage() {
     try {
       if (config.booking_mode === "time") {
         const data = await api<{ slots: Slot[] }>(
-          `/api/booking/availability?doctor_id=${doctorId}&date=${date}&visit_type=${visitType}`,
+          `/api/booking/availability?doctor_id=${doctorId}&date=${date}&visit_type=${visitType}&service_id=${encodeURIComponent(serviceId || "")}`,
         );
         setSlots(data.slots);
         if (data.slots.length === 0) setAvailMsg("這天沒有可預約的時段(休診或已額滿)");
       } else {
         const data = await api<{ sessions: Session[] }>(
-          `/api/booking/availability?doctor_id=${doctorId}&date=${date}`,
+          `/api/booking/availability?doctor_id=${doctorId}&date=${date}&service_id=${encodeURIComponent(serviceId || "")}`,
         );
         setSessions(data.sessions);
         if (data.sessions.length === 0) setAvailMsg("這天沒有可掛號的診次(休診或已額滿)");
@@ -205,7 +205,7 @@ export default function BookPage() {
     } finally {
       setAvailLoading(false);
     }
-  }, [config, doctorId, date, visitType]);
+  }, [config, doctorId, date, visitType, serviceId]);
 
   useEffect(() => {
     if (doctorId && date) loadAvailability();

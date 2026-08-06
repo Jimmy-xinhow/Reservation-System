@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { ok, fail } from "@/lib/http";
+import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyLiffIdToken } from "@/lib/line";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { verifyBrowserBookingToken, type BrowserBookingIdentity } from "@/lib/browser-booking";
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     // 取約診 + 其病患的 line_user_id,確認擁有權
     const { data: appt, error } = await svc
       .from("appointments")
-      .select("id, status, clinic_id, patient_id, membership_id, patients(line_user_id)")
+      .select("id, status, clinic_id, patient_id, membership_id, start_at, patients(line_user_id)")
       .eq("id", body.appointment_id)
       .maybeSingle();
     if (error) return fail(error.message, 500);
@@ -68,6 +68,12 @@ export async function POST(req: NextRequest) {
 
     if (appt.status !== "booked" && appt.status !== "confirmed") {
       return fail("此預約已無法取消,請洽櫃檯。");
+    }
+
+    const settings = await getClinicSettings(svc, clinicId);
+    if (!settings) return fail("品牌預約設定不存在", 503);
+    if (new Date(appt.start_at).getTime() < Date.now() + settings.cancel_lead_minutes * 60_000) {
+      return fail("已超過可取消的提前時間，請聯絡品牌客服", 409);
     }
 
     const { error: cancelError } = await svc.rpc("cancel_appointment", {

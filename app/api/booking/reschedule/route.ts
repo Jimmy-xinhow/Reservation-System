@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const { data: appointment, error: appointmentError } = await svc
       .from("appointments")
-      .select("id, clinic_id, patient_id, status, patients(line_user_id)")
+      .select("id, clinic_id, patient_id, status, start_at, patients(line_user_id)")
       .eq("id", body.appointment_id)
       .eq("clinic_id", clinicId)
       .maybeSingle();
@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
 
     const settings = await getClinicSettings(svc, clinicId);
     if (!settings || !settings.public_booking_enabled) return fail("目前未開放線上預約", 403);
+    if (new Date(appointment.start_at).getTime() < Date.now() + settings.reschedule_lead_minutes * 60_000) return fail("已超過可改期的提前時間，請聯絡品牌客服", 409);
     if (settings.booking_mode === "time" && !body.start_at) return fail("缺少新時段");
     if (settings.booking_mode === "number" && (!body.template_id || !body.date)) return fail("缺少新診次與日期");
 

@@ -48,7 +48,7 @@ export default function AdminLoginPage() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="input mb-4"
-          placeholder="you@clinic.com"
+          placeholder="you@example.com"
         />
         <label className="label">密碼</label>
         <input

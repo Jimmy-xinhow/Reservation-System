@@ -110,11 +110,12 @@ export default function BrowserReschedulePage() {
     try {
       const query = new URLSearchParams({ doctor_id: doctorId, date });
       if (config.booking_mode === "time") query.set("visit_type", appointment.visit_type);
+      if (serviceId) query.set("service_id", serviceId);
       const data = await api<{ slots?: Slot[]; sessions?: Session[] }>(`/api/booking/availability?${query.toString()}`);
       setSlots(data.slots ?? []); setSessions(data.sessions ?? []);
     } catch (loadError) { setError(loadError instanceof Error ? loadError.message : "載入時段失敗"); }
     finally { setAvailabilityLoading(false); }
-  }, [appointment, config, date, doctorId]);
+  }, [appointment, config, date, doctorId, serviceId]);
 
   useEffect(() => { if (config && appointment && doctorId && date) void loadAvailability(); }, [appointment, config, date, doctorId, loadAvailability]);
 

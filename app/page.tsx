@@ -59,6 +59,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
     : null;
   const browserBookingUrl = `/book/browser${clinicScopeSuffix}`;
   const registrationUrl = `/register${clinicScopeSuffix}`;
+  const membershipUrl = `/membership${clinicScopeSuffix}`;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6">
@@ -102,7 +103,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
             </a>
           ) : (
             <p className="rounded-xl bg-slate-50 p-3 text-center text-sm text-slate-400">
-              尚未設定 LINE 官方帳號 ID(可至後台「診所設定 → 公開診所資訊」填入)。
+              尚未設定 LINE 官方帳號 ID(可至後台「品牌與系統設定 → 公開品牌資訊」填入)。
             </p>
           )}
 
@@ -117,6 +118,9 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
           </Link>
           <Link href={registrationUrl} className="btn btn-secondary w-full">
             查看課程與活動報名
+          </Link>
+          <Link href={membershipUrl} className="btn btn-secondary w-full">
+            會員與套票
           </Link>
           <Link href={`/register/cancel${clinicScopeSuffix}`} className="text-center text-sm text-slate-400 hover:text-brand-600">
             取消既有活動報名

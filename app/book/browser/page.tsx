@@ -97,10 +97,10 @@ export default function BrowserBookingPage() {
   useEffect(() => {
     if (!config || !doctorId || !date) return;
     setSlots([]); setSessions([]); setPickedStart(""); setPickedTemplate("");
-    void api<{ slots?: Slot[]; sessions?: Session[] }>(`/api/booking/availability?doctor_id=${encodeURIComponent(doctorId)}&date=${encodeURIComponent(date)}&visit_type=${visitType}`)
+    void api<{ slots?: Slot[]; sessions?: Session[] }>(`/api/booking/availability?doctor_id=${encodeURIComponent(doctorId)}&date=${encodeURIComponent(date)}&visit_type=${visitType}&service_id=${encodeURIComponent(serviceId || "")}`)
       .then((value) => { setSlots(value.slots ?? []); setSessions(value.sessions ?? []); })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "查詢時段失敗"));
-  }, [config, doctorId, date, visitType]);
+  }, [config, doctorId, date, visitType, serviceId]);
 
   async function submit() {
     if (!config || !doctorId || !date || (!pickedStart && !pickedTemplate) || !name.trim() || !phone.trim() || !birthday) {

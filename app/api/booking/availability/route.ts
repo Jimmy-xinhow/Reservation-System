@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     if (!clinicId) return fail("缺少品牌設定", 500);
     const sp = req.nextUrl.searchParams;
     const doctorId = sp.get("doctor_id");
+    const serviceId = sp.get("service_id")?.trim() || null;
     const date = sp.get("date");
     const visitType = sp.get("visit_type") === "first" ? "first" : "return";
     if (!doctorId) return fail("缺少 doctor_id");
@@ -38,6 +39,11 @@ export async function GET(req: NextRequest) {
     if (doctorError) return fail(doctorError.message, 500);
     if (!doctor) return fail("醫師不存在或已停用", 404);
 
+    if (serviceId) {
+      const { data: service, error: serviceError } = await svc.from("services").select("id").eq("id", serviceId).eq("clinic_id", clinicId).eq("active", true).maybeSingle();
+      if (serviceError) return fail(serviceError.message, 500);
+      if (!service) return fail("服務項目不存在或已停用", 400);
+    }
     const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     const maxDateValue = new Date(`${today}T00:00:00+08:00`);
     maxDateValue.setUTCDate(maxDateValue.getUTCDate() + settings.max_advance_days);
@@ -45,19 +51,21 @@ export async function GET(req: NextRequest) {
     if (date < today || date > maxDate) return fail("預約日期超出可預約範圍", 400);
 
     if (settings.booking_mode === "time") {
-      const { data, error } = await svc.rpc("get_available_slots", {
+      const { data, error } = await svc.rpc(serviceId ? "get_available_slots_for_service" : "get_available_slots", {
         p_clinic_id: clinicId,
         p_doctor_id: doctorId,
         p_date: date,
         p_visit_type: visitType,
+        ...(serviceId ? { p_service_id: serviceId } : {}),
       });
       if (error) return fail(error.message, 500);
       return ok({ mode: "time", slots: data ?? [] });
     } else {
-      const { data, error } = await svc.rpc("get_available_sessions", {
+      const { data, error } = await svc.rpc(serviceId ? "get_available_sessions_for_service" : "get_available_sessions", {
         p_clinic_id: clinicId,
         p_doctor_id: doctorId,
         p_date: date,
+        ...(serviceId ? { p_service_id: serviceId } : {}),
       });
       if (error) return fail(error.message, 500);
       return ok({ mode: "number", sessions: data ?? [] });

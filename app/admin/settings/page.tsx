@@ -28,6 +28,8 @@ interface Settings {
   deposit_scope: "all" | "self_pay" | "none";
   min_lead_minutes: number;
   max_advance_days: number;
+  cancel_lead_minutes: number;
+  reschedule_lead_minutes: number;
   public_booking_enabled: boolean;
   public_registration_enabled: boolean;
   email_enabled: boolean;
@@ -47,7 +49,7 @@ export default async function SettingsPage() {
   const [{ data }, { data: clinicData }, { data: paymentData }, { data: domainData }] = await Promise.all([
     supabase
       .from("clinic_settings")
-      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, public_booking_enabled, public_registration_enabled, email_enabled")
+      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     supabase
@@ -72,10 +74,10 @@ export default async function SettingsPage() {
   if (!s) {
     return (
       <div className="space-y-2 text-sm text-red-600">
-        <p>讀不到此診所設定。常見原因(資料其實存在時多半是後兩者):</p>
+        <p>讀不到此品牌設定。常見原因(資料其實存在時多半是後兩者):</p>
         <ol className="ml-5 list-decimal space-y-1">
-          <li>尚未建立此診所的 clinic_settings(請見 README 第一節)。</li>
-          <li>此登入帳號尚未對應到本診所(clinic_members 缺一筆 → RLS 讀不到)。</li>
+          <li>尚未建立此品牌的 clinic_settings(請見 README 第一節)。</li>
+          <li>此登入帳號尚未對應到本品牌(clinic_members 缺一筆 → RLS 讀不到)。</li>
           <li>clinic_settings 的 authenticated SELECT policy 未套用到資料庫。</li>
         </ol>
       </div>
@@ -84,7 +86,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900">診所設定</h1>
+      <h1 className="text-xl font-bold text-slate-900">品牌與系統設定</h1>
 
       <form action={createBrandAction} className="card space-y-4 border-brand-100 bg-brand-50/40 p-5">
         <div>
@@ -112,13 +114,13 @@ export default async function SettingsPage() {
         <div><SubmitButton className="btn btn-primary">建立品牌並切換</SubmitButton></div>
       </form>
 
-      {/* 公開診所資訊(顯示於公開資訊頁) */}
+      {/* 公開品牌資訊(顯示於公開資訊頁) */}
       <form action={updateClinicProfileAction} className="card space-y-4 p-5">
-        <h2 className="font-semibold text-slate-900">公開診所資訊</h2>
-        <p className="-mt-2 text-xs text-slate-400">顯示於公開資訊頁,病患看得到。</p>
+        <h2 className="font-semibold text-slate-900">公開品牌資訊</h2>
+        <p className="-mt-2 text-xs text-slate-400">顯示於公開資訊頁,顧客看得到。</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="label">診所名稱</label>
+            <label className="label">品牌名稱</label>
             <input name="name" className="input" defaultValue={clinic?.name ?? ""} required />
           </div>
           <div>
@@ -193,7 +195,7 @@ export default async function SettingsPage() {
         </Section>
 
         {/* 3. 一電話多病患 */}
-        <Section title="一電話多病患">
+        <Section title="一電話多顧客">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -201,7 +203,7 @@ export default async function SettingsPage() {
               className="h-4 w-4 accent-brand-600"
               defaultChecked={s.allow_multi_patient_per_phone}
             />
-            允許同一電話登記多名病患
+            允許同一電話登記多名顧客
           </label>
           <label className="text-sm">
             每支電話上限人數
@@ -263,6 +265,8 @@ export default async function SettingsPage() {
               className="input mt-1 w-28"
             />
           </label>
+          <label className="text-sm">最晚取消提前分鐘<input type="number" name="cancel_lead_minutes" min={0} defaultValue={s.cancel_lead_minutes} className="input mt-1 w-28" /></label>
+          <label className="text-sm">最晚改期提前分鐘<input type="number" name="reschedule_lead_minutes" min={0} defaultValue={s.reschedule_lead_minutes} className="input mt-1 w-28" /></label>
         </Section>
 
         <Section title="公開入口">

@@ -169,6 +169,7 @@ export default function ReschedulePage() {
     try {
       const query = new URLSearchParams({ doctor_id: doctorId, date });
       if (config.booking_mode === "time") query.set("visit_type", visitType);
+      if (serviceId) query.set("service_id", serviceId);
       const data = await api<{ slots?: Slot[]; sessions?: Session[] }>(
         `/api/booking/availability?${query.toString()}`,
       );
@@ -179,7 +180,7 @@ export default function ReschedulePage() {
     } finally {
       setAvailabilityLoading(false);
     }
-  }, [config, date, doctorId, visitType]);
+  }, [config, date, doctorId, serviceId, visitType]);
 
   useEffect(() => {
     if (appointment && config && doctorId && date) void loadAvailability();

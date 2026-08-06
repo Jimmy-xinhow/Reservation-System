@@ -40,6 +40,8 @@ export async function createEventAction(fd: FormData): Promise<void> {
     access_token_hash: privateToken ? createHash("sha256").update(privateToken).digest("hex") : null,
     registration_open_at: openAt,
     registration_close_at: closeAt,
+    terms_version: 1,
+    terms_text: text(fd, "terms_text") || null,
     created_by: user.id,
   }).select("id").single();
   const event = eventRow as { id: string } | null;
@@ -109,7 +111,10 @@ export async function createTicketTypeAction(fd: FormData): Promise<void> {
   const price = integer(fd, "price", 0);
   const capacityText = text(fd, "capacity");
   const capacity = capacityText ? integer(fd, "capacity", 0) : null;
+  const saleStartAt = text(fd, "sale_start_at") ? localTaipeiIso(text(fd, "sale_start_at")) : null;
+  const saleEndAt = text(fd, "sale_end_at") ? localTaipeiIso(text(fd, "sale_end_at")) : null;
   const membershipPlanId = text(fd, "membership_plan_id") || null;
+  if (saleStartAt && saleEndAt && new Date(saleEndAt) <= new Date(saleStartAt)) throw new Error("票種銷售期間不正確");
   if (!eventId || !name || price < 0 || (capacity !== null && capacity < 1)) throw new Error("票種資料不正確");
   const { data: event } = await supabase.from("events").select("id").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle();
   if (!event) throw new Error("找不到活動");
@@ -123,6 +128,8 @@ export async function createTicketTypeAction(fd: FormData): Promise<void> {
     name: name.slice(0, 100),
     price,
     capacity,
+    sale_start_at: saleStartAt,
+    sale_end_at: saleEndAt,
     membership_plan_id: membershipPlanId,
     active: true,
   });

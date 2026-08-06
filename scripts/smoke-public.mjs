@@ -14,11 +14,12 @@ const publicRoutes = [
   "/book/browser/reschedule",
   "/book/reschedule",
   "/register/cancel",
+  "/membership",
   "/payment/result",
   "/embed/register",
   "/admin/login",
 ];
-const cronRoutes = ["/api/cron/reminders", "/api/cron/registration", "/api/cron/marketing"];
+const cronRoutes = ["/api/cron/reminders", "/api/cron/registration", "/api/cron/marketing", "/api/cron/membership"];
 
 async function fetchWithTimeout(path) {
   const controller = new AbortController();

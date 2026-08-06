@@ -38,11 +38,11 @@ npm run smoke:public
 1. 建立 Supabase 專案。
 2. SQL Editor 貼上並執行 **`supabase/schema.sql`**(建表、RPC、RLS、權限)。
    - 套用前先設定 `.env.local`／部署環境中的 Email 與金流 server secrets；schema 會清除並移除舊版資料庫內的 legacy 密鑰欄位。
-3. 建立一間診所與其預設設定,並建立後台帳號對應:
+3. 建立一個品牌租戶與其預設設定,並建立後台帳號對應:
 
 ```sql
--- 1) 診所
-insert into clinics (name) values ('示範診所') returning id;
+-- 1) 品牌租戶
+insert into clinics (name) values ('示範品牌') returning id;
 -- 記下回傳的 clinic id,以下用 :clinic_id 代表
 
 -- 2) 預設 clinic_settings(出廠即可用)
@@ -50,7 +50,7 @@ insert into clinic_settings (clinic_id) values ('<clinic_id>');
 -- 其餘欄位皆有預設值:time 模式、不延長初診、一電話一人、不收訂金、前置30分、可約30天
 
 -- 3) 後台帳號:先在 Authentication → Users 以 email/密碼建立一名使用者,取得其 user id,
---    再建立其與診所的對應(後台 RLS 以此判斷可存取哪間診所)
+--    再建立其與品牌的對應(後台 RLS 以此判斷可存取哪個品牌)
 insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_user_id>');
 
 -- 4)(選用)新增醫師、門診段,亦可改由後台「門診表」頁建立
@@ -58,9 +58,9 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 
 4. 相容單品牌部署時，把預設品牌 id 填進 `NEXT_PUBLIC_CLINIC_ID`；SaaS 模式不可只依賴此變數，必須使用登入後的品牌 context。
 
-5. 第一個品牌與後台 owner 建立後，可在後台「診所設定 → 建立新品牌」建立其他品牌。建立流程會在資料庫內原子建立品牌、預設 `clinic_settings` 與目前帳號的 owner 成員資格，完成後自動切換到新品牌。
+5. 第一個品牌與後台 owner 建立後，平台管理員可在後台「SaaS 平台 → 品牌總管理」建立其他品牌；品牌 owner 仍可在「品牌與系統設定」管理自己可存取的品牌。建立流程會在資料庫內原子建立品牌、預設 `clinic_settings` 與 owner 成員資格。
 
-> `clinic_members` 是本系統為實作「後台只能存取自己診所」所需的最小新增(規格未定義 auth↔clinic 對應)。一筆代表某 auth 使用者可管理某診所。
+> `clinic_members` 是本系統為實作「後台只能存取自己品牌」所需的租戶成員表。一筆代表某 auth 使用者可管理某品牌。
 
 ---
 
@@ -86,8 +86,11 @@ insert into clinic_members (clinic_id, user_id) values ('<clinic_id>', '<auth_us
 | `REGISTRATION_TOKEN_ENCRYPTION_KEY` | 報名通知重試用 AES-GCM 加密金鑰（至少 32 字元）；僅 server environment，不寫入資料庫 |
 | `LINE_LOGIN_CHANNEL_ID` | LIFF 所屬 channel id(驗 ID token 用) |
 | `NEXT_PUBLIC_LIFF_ID` | 病患端 LIFF ID |
+| `PLATFORM_ADMIN_USER_IDS` | 平台總後台 bootstrap 管理員 UUID（逗號分隔；僅 server environment） |
 | `CRON_SECRET` | Vercel／Railway Cron 呼叫提醒、報名逾時與行銷 endpoint 的密鑰(長亂數) |
 | `REMINDER_HOURS_BEFORE` | 看診前幾小時發提醒(預設 24) |
+| `MEMBERSHIP_LOW_BALANCE_THRESHOLD` | 會員餘額提醒門檻（預設 1 堂） |
+| `MEMBERSHIP_EXPIRY_NOTICE_DAYS` | 會員到期前提醒天數（預設 7 天） |
 | `APP_URL` | 公開 canonical URL；付款回呼／回跳與 Railway Cron 都使用此 server-side 網址 |
 | `CRON_TARGET_URL` | 可選，覆寫提醒 endpoint 的完整 URL |
 | `CRON_MARKETING_TARGET_URL` | 可選，覆寫 CRM Lite 行銷 endpoint 的完整 URL |

@@ -26,6 +26,8 @@ export interface PublicTicketType {
   name: string;
   price: number;
   capacity: number | null;
+  sale_start_at: string | null;
+  sale_end_at: string | null;
 }
 
 export interface PublicRegistrationField {
@@ -48,6 +50,8 @@ export interface PublicEvent {
   cover_url: string | null;
   registration_open_at: string | null;
   registration_close_at: string | null;
+  terms_version: number;
+  terms_text: string | null;
   sessions: PublicEventSession[];
   ticket_types: PublicTicketType[];
   form: { id: string; version: number } | null;
