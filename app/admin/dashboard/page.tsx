@@ -50,6 +50,20 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const member = await requireMember();
   const { clinicId, role } = member;
   const supabase = await createSupabaseServer();
+  const setupReads = role === "owner" || role === "admin"
+    ? await Promise.all([
+        supabase.from("clinics").select("name, slug").eq("id", clinicId).maybeSingle(),
+        supabase.from("clinic_settings").select("public_booking_enabled, public_registration_enabled").eq("clinic_id", clinicId).maybeSingle(),
+        supabase.from("services").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("active", true),
+        supabase.from("schedule_templates").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("active", true),
+      ])
+    : null;
+  if (setupReads?.some((result) => result.error)) throw new Error(setupReads.find((result) => result.error)?.error?.message ?? "品牌開通資料載入失敗");
+  const setupItems = setupReads ? [
+    { label: "完成品牌基本資料與公開入口", href: "/admin/settings", done: Boolean(setupReads[0].data?.name && setupReads[0].data?.slug && (setupReads[1].data?.public_booking_enabled || setupReads[1].data?.public_registration_enabled)) },
+    { label: "建立至少一項服務", href: "/admin/services", done: (setupReads[2].count ?? 0) > 0 },
+    { label: "建立至少一段服務排程", href: "/admin/schedules", done: (setupReads[3].count ?? 0) > 0 },
+  ] : [];
   const assignedDoctorIds = await getAssignedDoctorIds(member);
   const today = taipeiToday();
   const winStart = shiftDate(today, -6);
@@ -108,6 +122,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <AutoRefresh seconds={30} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="eyebrow">Operations</p><h1 className="text-2xl font-bold text-slate-900">營運總覽</h1><p className="mt-1 text-sm text-slate-500">先處理今天需要行動的事項，再查看預約、報名與通知趨勢。</p></div><div className="flex gap-2"><Link href="/admin/calendar" className="btn btn-secondary">查看日曆</Link><Link href="/admin/reports" className="btn btn-primary">查看報表</Link></div></div>
 
+      {setupItems.length > 0 && setupItems.some((item) => !item.done) && <BrandSetupGuide items={setupItems} />}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5"><Stat label="今日預約" value={todayAppointments.length} accent /><Stat label="今日活動報名" value={todayRegistrations.length} /><Stat label="待確認" value={waitingConfirmation} tone={waitingConfirmation ? "warning" : undefined} /><Stat label="待付款" value={pendingPayments} tone={pendingPayments ? "warning" : undefined} /><Stat label="未來 7 日預約" value={upcomingAppointments.length} /></div>
 
       <section className="card space-y-4 p-5"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-slate-900">今日待處理</h2><p className="mt-1 text-sm text-slate-500">把需要人工確認或補救的工作集中在這裡。</p></div><span className="text-xs text-slate-400">每 30 秒更新</span></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4"><ActionCard href="/admin" label="待確認預約" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認預約"} tone={waitingConfirmation ? "warning" : "neutral"} /><ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款"} tone={pendingPayments ? "warning" : "neutral"} /><ActionCard href="/admin/reports" label="通知失敗" value={failedDeliveries} description={failedDeliveries ? "查看投遞紀錄" : "近期沒有失敗"} tone={failedDeliveries ? "danger" : "neutral"} /><ActionCard href="/admin/reports" label="近期未到" value={noShows} description={noShows ? "可檢查回訪與分眾" : "近期沒有未到"} tone={noShows ? "warning" : "neutral"} /></div></section>
@@ -122,4 +138,5 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 function Stat({ label, value, accent, tone }: { label: string; value: number | string; accent?: boolean; tone?: "warning" }) { return <div className={`card p-4 ${accent ? "bg-gradient-to-br from-brand-500 to-accent-600 text-white" : tone === "warning" ? "border-amber-200 bg-amber-50" : ""}`}><div className={`text-xs ${accent ? "text-white/80" : "text-slate-500"}`}>{label}</div><div className={`mt-1 text-2xl font-bold ${accent ? "text-white" : tone === "warning" ? "text-amber-700" : "text-slate-900"}`}>{value}</div></div>; }
 function ActionCard({ href, label, value, description, tone }: { href: string; label: string; value: number; description: string; tone: "warning" | "danger" | "neutral" }) { return <Link href={href} className={`rounded-xl border p-4 transition hover:-translate-y-0.5 ${tone === "danger" ? "border-red-200 bg-red-50" : tone === "warning" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}><div className="flex items-center justify-between gap-2"><span className="text-sm font-medium text-slate-700">{label}</span><span className={`text-2xl font-bold ${tone === "danger" ? "text-red-700" : tone === "warning" ? "text-amber-700" : "text-slate-900"}`}>{value}</span></div><p className="mt-2 text-xs leading-5 text-slate-500">{description}</p></Link>; }
 function SummaryLine({ label, value }: { label: string; value: string }) { return <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0"><span className="text-slate-500">{label}</span><span className="font-medium text-slate-800">{value}</span></div>; }
+function BrandSetupGuide({ items }: { items: Array<{ label: string; href: string; done: boolean }> }) { const next = items.find((item) => !item.done); return <section className="card space-y-4 border-brand-100 bg-brand-50/40 p-5"><div><p className="eyebrow">品牌首次開通</p><h2 className="mt-1 font-semibold text-slate-900">完成這 3 步，品牌就能開始接單</h2><p className="mt-1 text-sm leading-6 text-slate-500">這是目前品牌自己的後台。依序完成品牌資料、服務與排程；平台管理員只負責建立品牌與寄送邀請。</p></div><div className="grid gap-3 md:grid-cols-3">{items.map((item, index) => <Link key={item.label} href={item.href} className={`rounded-xl border p-4 transition hover:-translate-y-0.5 ${item.done ? "border-emerald-200 bg-emerald-50" : "border-brand-200 bg-white"}`}><div className="flex items-center justify-between gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand-600 text-xs font-bold text-white">{item.done ? "✓" : index + 1}</span><span className="text-xs font-medium text-brand-700">{item.done ? "已完成" : "前往設定 →"}</span></div><p className="mt-3 text-sm font-medium text-slate-800">{item.label}</p></Link>)}</div>{next && <p className="text-xs text-brand-800">建議先處理：{next.label}</p>}</section>; }
 function countBy<T>(items: T[], getKey: (item: T) => string): Record<string, number> { return items.reduce<Record<string, number>>((result, item) => { const key = getKey(item); result[key] = (result[key] ?? 0) + 1; return result; }, {}); }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { Role } from "@/lib/admin";
 
 interface Item {
@@ -161,6 +161,14 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
 
 function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; unread: number; close: () => void; mode: "brand" | "platform" }) {
   const pathname = usePathname();
+  const navId = useId().replace(/:/g, "");
+  const activeGroupLabel = groups.find((group) => group.items.some((item) => isActive(pathname, item.href)))?.label ?? null;
+  const [openGroup, setOpenGroup] = useState<string | null>(activeGroupLabel);
+
+  useEffect(() => {
+    if (activeGroupLabel) setOpenGroup(activeGroupLabel);
+  }, [activeGroupLabel]);
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[#071c2e] text-white">
       <div className="border-b border-white/10 px-5 py-5">
@@ -173,35 +181,51 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
         </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5">
-        {groups.map((group) => (
-          <div key={group.label} className="mb-6 last:mb-0">
-            <div className="mb-2 px-3 text-[11px] font-semibold tracking-[0.16em] text-slate-500">{group.label}</div>
-            <div className="space-y-1">
-              {group.items.map((item) => {
-                const active = isActive(pathname, item.href);
-                const showBadge = item.href === "/admin/chat" && unread > 0;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={close}
-                    aria-current={active ? "page" : undefined}
-                    className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors ${
-                      active ? "bg-[#1f79d1] font-semibold text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    {showBadge && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold leading-5 text-white">{unread > 99 ? "99+" : unread}</span>}
-                  </Link>
-                );
-              })}
+        {groups.map((group, index) => {
+          const groupOpen = openGroup === group.label;
+          const groupId = `${navId}-group-${index}`;
+          if (group.items.length === 1) {
+            return <div key={group.label} className="mb-2 last:mb-0"><NavItem item={group.items[0]} pathname={pathname} unread={unread} close={close} /></div>;
+          }
+          return (
+            <div key={group.label} className="mb-3 last:mb-0">
+              <button
+                type="button"
+                aria-expanded={groupOpen}
+                aria-controls={groupId}
+                onClick={() => setOpenGroup(groupOpen ? null : group.label)}
+                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[11px] font-semibold tracking-[0.16em] text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+              >
+                <span className={`transition-transform ${groupOpen ? "rotate-90" : ""}`} aria-hidden="true">›</span>
+                <span className="flex-1">{group.label}</span>
+                <span className="text-[10px] font-normal tracking-normal text-slate-500">{group.items.length}</span>
+              </button>
+              {groupOpen && <div id={groupId} className="mt-1 space-y-1">{group.items.map((item) => <NavItem key={item.href} item={item} pathname={pathname} unread={unread} close={close} />)}</div>}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="border-t border-white/10 px-5 py-4 text-[11px] leading-5 text-slate-500">{mode === "platform" ? "平台總控台 · 跨品牌管理" : "營運後台 · 品牌資料隔離"}</div>
     </div>
+  );
+}
+
+function NavItem({ item, pathname, unread, close }: { item: Item; pathname: string; unread: number; close: () => void }) {
+  const active = isActive(pathname, item.href);
+  const showBadge = item.href === "/admin/chat" && unread > 0;
+  return (
+    <Link
+      href={item.href}
+      onClick={close}
+      aria-current={active ? "page" : undefined}
+      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400 ${
+        active ? "bg-[#1f79d1] font-semibold text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"
+      }`}
+    >
+      <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {showBadge && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold leading-5 text-white">{unread > 99 ? "99+" : unread}</span>}
+    </Link>
   );
 }
 

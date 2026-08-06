@@ -86,12 +86,17 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-900">品牌與系統設定</h1>
+      <div>
+        <p className="eyebrow">目前位置：品牌後台</p>
+        <h1 className="mt-1 text-xl font-bold text-slate-900">品牌與系統設定</h1>
+        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">這裡只管理目前選取的品牌。若要協助其他使用者開通新的品牌，請由平台管理員進入「品牌總管理」建立品牌並寄送登入邀請；不要在這裡替對方建立帳號。</p>
+      </div>
 
       <form action={createBrandAction} className="card space-y-4 border-brand-100 bg-brand-50/40 p-5">
         <div>
-          <h2 className="font-semibold text-slate-900">建立新品牌</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">建立後會自動建立預設設定，並將目前帳號加入新品牌為擁有者；品牌資料與目前品牌分開管理。</p>
+          <p className="eyebrow">同一帳號的進階操作</p>
+          <h2 className="mt-1 font-semibold text-slate-900">為目前帳號新增可管理品牌</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">這個功能適合同一位負責人管理多個品牌。建立後會自動建立預設設定，並將目前帳號加入新品牌為擁有者；若是替其他使用者開通，請回到平台層流程。</p>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
