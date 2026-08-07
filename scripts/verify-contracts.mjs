@@ -508,6 +508,19 @@ invariant(
     marketingLayout.includes("OnboardingStep"),
 );
 invariant(
+  "marketing pages include real scene photography",
+  marketingHome.includes("/marketing/hero-service-counter.png") &&
+    productPage.includes("/marketing/product-schedule-team.png") &&
+    solutionsPage.includes("/marketing/solutions-event-checkin.png") &&
+    pricingPage.includes("/marketing/pricing-scope-planning.png") &&
+    contactPage.includes("/marketing/contact-onboarding.png") &&
+    exists("public/marketing/hero-service-counter.png") &&
+    exists("public/marketing/product-schedule-team.png") &&
+    exists("public/marketing/solutions-event-checkin.png") &&
+    exists("public/marketing/pricing-scope-planning.png") &&
+    exists("public/marketing/contact-onboarding.png"),
+);
+invariant(
   "multi-page branded marketing site exists",
   marketingLayout.includes("/brand/xinhao-horizontal.png") &&
     marketingLayout.includes("/brand/xinhao-gold-dark.png") &&
