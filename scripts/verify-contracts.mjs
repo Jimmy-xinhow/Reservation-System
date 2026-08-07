@@ -481,6 +481,7 @@ invariant(
     marketingHome.includes("LINE Rich Menu → LIFF") &&
     marketingHome.includes("CRM Lite") &&
     marketingHome.includes("多品牌完全隔離") &&
+    marketingHome.includes("70 項標準功能完整開放") &&
     marketingHome.includes("07-9721612#888"),
 );
 invariant(
