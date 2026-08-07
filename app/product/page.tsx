@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, CapabilityCard, JourneyDiagram, MarketingShell, PageIntro, PageIntroVisual, SectionHeading } from "@/components/MarketingLayout";
+import { Callout, CapabilityCard, DashboardMockup, JourneyDiagram, MarketingShell, PageIntro, PageIntroVisual, SectionHeading, SignalStrip, WorkflowRail } from "@/components/MarketingLayout";
 
 const modules = [
   ["預約引擎", "時間制與場次制", "可指定服務提供者，也可使用場地、設備或共用資源。"],
@@ -16,9 +16,13 @@ export default function ProductPage() {
 
     <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="grid gap-10 lg:grid-cols-[.8fr_1.2fr] lg:gap-20"><div><SectionHeading eyebrow="One system, two layers" title="平台與品牌各自管理，彼此不混淆。" description="這是多品牌 SaaS 的核心：系統擁有者負責租戶與平台治理；品牌團隊負責自己的服務與顧客營運。" /></div><div className="grid gap-4 sm:grid-cols-2"><LayerCard number="01" title="平台層" subtitle="System owner console" items={["建立與開通品牌租戶", "管理平台 owner／admin", "查看跨品牌聚合報表", "監控健康與平台稽核"]} dark /><LayerCard number="02" title="品牌層" subtitle="Brand operations console" items={["服務、排程與例外日期", "預約、活動報名與報到", "顧客、CRM Lite 與通知", "品牌自己的報表與設定"]} /></div></div></section>
 
+    <section className="bg-[#193b43] px-5 py-16 text-white sm:px-8 sm:py-20 lg:px-10"><div className="mx-auto max-w-7xl"><div className="grid gap-10 lg:grid-cols-[.68fr_1.32fr] lg:items-center lg:gap-16"><div><p className="eyebrow !text-[#e2b644]">A visible operating layer</p><h2 className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl">先看狀態，再決定下一個動作。</h2><p className="mt-4 max-w-xl text-base leading-7 text-[#c9dcda]">平台層處理品牌與健康度，品牌層處理每天的預約、報名、顧客與通知；管理者不需要從一長串文字猜目前發生什麼事。</p></div><DashboardMockup variant="customer" /></div><div className="mt-10"><SignalStrip dark items={[{ label: "Platform", value: "品牌開通", detail: "租戶與權限" }, { label: "Brand", value: "服務作業", detail: "排程與顧客" }, { label: "CRM Lite", value: "互動脈絡", detail: "分眾與回訪" }, { label: "Reports", value: "資料回看", detail: "營運與稽核" }]} /></div></div></section>
+
     <section className="bg-[#eef3ef] px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="mx-auto max-w-7xl"><SectionHeading eyebrow="Modules" title="每個模組，都對應一個實際工作場景。" description="不把功能堆在同一頁，而是讓團隊依照工作順序找到正確工具。" /><div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{modules.map(([eyebrow, title, description], index) => <CapabilityCard key={eyebrow} number={String(index + 1).padStart(2, "0")} title={`${eyebrow}｜${title}`} description={description} />)}</div></div></section>
 
     <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="grid gap-10 lg:grid-cols-[1fr_.8fr] lg:items-center lg:gap-20"><div><p className="eyebrow !text-[#b08116]">A connected journey</p><h2 className="text-3xl font-bold leading-tight tracking-tight text-[#193b43] sm:text-4xl">從第一次點擊，到下一次回訪。</h2><div className="mt-8 space-y-3"><JourneyRow number="01" title="入口被看見" description="LINE Rich Menu、LIFF、瀏覽器與品牌網址承接顧客。" /><JourneyRow number="02" title="服務被完成" description="預約／報名、訂金／付款、取消／改期與報到保留完整狀態。" /><JourneyRow number="03" title="關係被延續" description="提醒、CRM Lite 分眾、互動紀錄與報表讓團隊知道下一步。" /></div></div><JourneyDiagram /></div></section>
+
+    <section className="mx-auto max-w-7xl px-5 pb-20 sm:px-8 sm:pb-24 lg:px-10"><WorkflowRail steps={[{ label: "入口", title: "顧客被接住", detail: "LINE、瀏覽器、品牌網址" }, { label: "流程", title: "服務有狀態", detail: "預約、報名、付款、報到" }, { label: "記錄", title: "互動可延續", detail: "顧客、通知、分眾" }, { label: "治理", title: "資料可回看", detail: "報表、權限、稽核" }]} /></section>
 
     <Callout title="想看自己的流程會怎麼落在系統裡？" description="導入前先釐清服務目標、資源、成員角色與顧客入口，再決定品牌需要開啟的設定。" label="預約導入諮詢" />
   </MarketingShell>;

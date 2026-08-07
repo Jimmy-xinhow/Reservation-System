@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, MarketingShell, PageIntro, PageIntroVisual, SectionHeading } from "@/components/MarketingLayout";
+import { Callout, MarketingShell, PageIntro, PageIntroVisual, PricingVisual, SectionHeading } from "@/components/MarketingLayout";
 
 const plans = [
   {
@@ -49,6 +49,8 @@ export default function PricingPage() {
     <PageIntro dark eyebrow="Plans & service boundary" title="費用透明，功能不拆散。" description="兩種付款方式的服務內容完全相同，70 項標準功能全數開放；差別只在付款方式與導入設定費的處理。清單外需求則先確認範圍，再另行報價。" visual={<PageIntroVisual variant="pricing" dark photoSrc="/marketing/pricing-scope-planning.png" photoAlt="團隊在桌上整理流程與導入範圍" photoCaption="實際工作情境：先把流程、範圍與驗收方式在桌面上對齊。" />}><a href="#plans" className="btn min-h-12 bg-[#e2b644] px-5 font-semibold text-[#193b43] hover:bg-[#f1ca5b]">查看付款方案 <span aria-hidden="true">↓</span></a><Link href="/contact" className="btn min-h-12 border border-white/20 bg-white/5 px-5 text-white hover:bg-white/10">詢問導入範圍</Link></PageIntro>
 
     <section id="plans" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><SectionHeading eyebrow="Choose the payment method" title="兩種付款方式，服務內容完全相同。" description="不分方案等級、不限預約筆數、不依使用人數加價；差別只在一次付清或按月支付。" /><div className="mt-10 grid gap-5 lg:grid-cols-2">{plans.map((plan) => <PlanCard key={plan.name} plan={plan} />)}</div><div className="mt-6 flex flex-col gap-2 rounded-2xl border border-[#ddd7ca] bg-[#fbfaf6] px-5 py-4 text-sm leading-6 text-[#6d7b76] sm:flex-row sm:items-center sm:justify-between"><span><strong className="text-[#193b43]">以上金額均為未稅價</strong>，開立發票另加 5% 營業稅。</span><span>LINE 官方帳號方案費與推播費由品牌方自行負擔。</span></div></section>
+
+    <section className="bg-[#fbfaf6] px-5 py-16 sm:px-8 sm:py-20 lg:px-10"><div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[.6fr_1.4fr] lg:items-center lg:gap-16"><div><p className="eyebrow !text-[#b08116]">The scope at a glance</p><h2 className="text-3xl font-bold leading-tight tracking-tight text-[#193b43] sm:text-4xl">買的是完整營運骨架，不是功能拼盤。</h2><p className="mt-4 text-base leading-7 text-[#5d6d6b]">標準功能先全開放；需要額外串接或特殊流程時，再以加購項目清楚確認。</p></div><PricingVisual /></div></section>
 
     <section id="features" className="bg-[#eef3ef] px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="mx-auto max-w-7xl"><SectionHeading eyebrow="70 included capabilities" title="詳細功能卡：從入口到回訪，一次看懂。" description="以下五大模組共同構成 70 項標準功能，全部開放，不需要為了使用某個功能升級方案。" /><div className="mt-10 grid gap-4 lg:grid-cols-2">{featureGroups.map((group) => <FeatureGroup key={group.number} group={group} />)}</div></div></section>
 
