@@ -31,16 +31,31 @@ async function getClinic(clinicId: string | null): Promise<ClinicInfo | null> {
   }
 }
 
+function isPlatformHost(host: string | null): boolean {
+  const normalized = (host ?? "").split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
+  if (!normalized || ["localhost", "127.0.0.1", "[::1]"].includes(normalized)) return true;
+  const configuredHosts = [process.env.PUBLIC_PLATFORM_HOSTS, process.env.RAILWAY_PUBLIC_DOMAIN, process.env.VERCEL_URL]
+    .flatMap((value) => (value ?? "").split(","))
+    .map((value) => value.trim().toLowerCase().replace(/:\d+$/, ""))
+    .filter(Boolean);
+  return configuredHosts.includes(normalized) || normalized.endsWith(".up.railway.app") || normalized.endsWith(".vercel.app");
+}
+
 export default async function HomePage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const params = (await searchParams) ?? {};
+  const clinicSlug = typeof params.clinic_slug === "string" ? params.clinic_slug : null;
+  const clinicIdParam = typeof params.clinic_id === "string" ? params.clinic_id : null;
+  const requestHeaders = await headers();
+  const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  if (!clinicSlug && !clinicIdParam && isPlatformHost(requestHost)) return <MarketingHome />;
+
   let clinicId: string | null = null;
   try {
-    const requestHeaders = await headers();
     const svc = createServiceClient();
     clinicId = await resolvePublicClinicIdFromScope(svc, {
-      clinicSlug: typeof params.clinic_slug === "string" ? params.clinic_slug : null,
-      clinicId: typeof params.clinic_id === "string" ? params.clinic_id : null,
-      host: requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"),
+      clinicSlug,
+      clinicId: clinicIdParam,
+      host: requestHost,
     });
   } catch {
     clinicId = null;
@@ -48,8 +63,6 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
   const clinic = await getClinic(clinicId);
   const basicId = clinic?.line_basic_id?.trim() || null;
   const lineAddUrl = basicId ? `https://line.me/R/ti/p/${encodeURIComponent(basicId)}` : null;
-  const clinicSlug = typeof params.clinic_slug === "string" ? params.clinic_slug : null;
-  const clinicIdParam = typeof params.clinic_id === "string" ? params.clinic_id : null;
   const clinicScopeSuffix = clinicSlug
     ? `?clinic_slug=${encodeURIComponent(clinicSlug)}`
     : clinicIdParam
