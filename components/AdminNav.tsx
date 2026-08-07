@@ -105,7 +105,11 @@ const GROUPS: Group[] = [
     label: "平台營運",
     platformOnly: true,
     items: [
-      { href: "/admin/platform", label: "品牌租戶", icon: "platform", exact: true },
+      { href: "/admin/platform", label: "平台總覽", icon: "dashboard", exact: true },
+      { href: "/admin/platform/admins", label: "平台管理員", icon: "users" },
+      { href: "/admin/platform/operations", label: "營運健康", icon: "schedule" },
+      { href: "/admin/platform/reports", label: "跨品牌報表", icon: "report" },
+      { href: "/admin/platform/audit", label: "平台稽核", icon: "settings" },
       { href: "/admin/platform/settings", label: "平台設定", icon: "settings" },
     ],
   },

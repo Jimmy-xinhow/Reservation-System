@@ -23,6 +23,10 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
     { data: settings, error: settingsError },
     { data: services, error: serviceError },
     { data: schedules, error: scheduleError },
+    { count: appointmentCount, error: appointmentCountError },
+    { count: registrationCount, error: registrationCountError },
+    { count: patientCount, error: patientCountError },
+    { count: failedDeliveryCount, error: failedDeliveryError },
   ] = await Promise.all([
     service.from("clinics").select("id, name, slug, line_basic_id, active, created_at").order("created_at", { ascending: false }),
     service.from("brand_entitlements").select("clinic_id, plan_code, feature_flags, note"),
@@ -30,6 +34,10 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
     service.from("clinic_settings").select("clinic_id, public_registration_enabled, public_booking_enabled, booking_mode"),
     service.from("services").select("clinic_id").eq("active", true),
     service.from("schedule_templates").select("clinic_id").eq("active", true),
+    service.from("appointments").select("id", { count: "exact", head: true }),
+    service.from("registrations").select("id", { count: "exact", head: true }),
+    service.from("patients").select("id", { count: "exact", head: true }),
+    service.from("crm_delivery_logs").select("id", { count: "exact", head: true }).eq("status", "failed"),
   ]);
   if (brandError) throw new Error(`讀取品牌清單失敗：${brandError.message}`);
   if (entitlementError) throw new Error(`讀取品牌方案失敗：${entitlementError.message}`);
@@ -37,6 +45,10 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
   if (settingsError) throw new Error(`讀取品牌設定失敗：${settingsError.message}`);
   if (serviceError) throw new Error(`讀取品牌服務失敗：${serviceError.message}`);
   if (scheduleError) throw new Error(`讀取品牌排程失敗：${scheduleError.message}`);
+  if (appointmentCountError) throw new Error(`讀取預約統計失敗：${appointmentCountError.message}`);
+  if (registrationCountError) throw new Error(`讀取報名統計失敗：${registrationCountError.message}`);
+  if (patientCountError) throw new Error(`讀取顧客統計失敗：${patientCountError.message}`);
+  if (failedDeliveryError) throw new Error(`讀取訊息失敗統計失敗：${failedDeliveryError.message}`);
 
   const brandRows = (brands ?? []) as BrandRow[];
   const entitlementRows = (entitlements ?? []) as EntitlementRow[];
@@ -62,12 +74,23 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
 
       <OnboardingGuide />
 
-      <div className="grid gap-4 sm:grid-cols-4">
-        <Metric label="品牌總數" value={brandRows.length} />
-        <Metric label="啟用品牌" value={brandRows.filter((brand) => brand.active).length} />
-        <Metric label="品牌成員" value={memberRows.length} />
-        <Metric label="已完成基本開通" value={readyCount} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Metric label="品牌總數" value={brandRows.length} detail={`${brandRows.filter((brand) => brand.active).length} 個啟用中`} />
+        <Metric label="品牌成員" value={memberRows.length} detail="跨品牌成員總數" />
+        <Metric label="累計預約" value={appointmentCount ?? 0} detail="所有品牌" />
+        <Metric label="累計報名" value={registrationCount ?? 0} detail="所有品牌" />
+        <Metric label="累計顧客" value={patientCount ?? 0} detail="品牌資料隔離統計" />
+        <Metric label="完成基本開通" value={readyCount} detail={`${brandRows.length === 0 ? 0 : Math.round((readyCount / brandRows.length) * 100)}% 品牌`} />
+        <Metric label="啟用服務" value={servicesByBrandTotal(servicesByBrand)} detail="跨品牌服務總數" />
+        <Metric label="投遞失敗" value={failedDeliveryCount ?? 0} detail="CRM 訊息需處理" tone="warning" />
       </div>
+
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <QuickLink href="/admin/platform/admins" eyebrow="Access" title="管理平台管理員" description="控管系統層級帳號與權限。" />
+        <QuickLink href="/admin/platform/operations" eyebrow="Health" title="檢查平台健康" description="查看通知、金流與部署能力。" />
+        <QuickLink href="/admin/platform/reports" eyebrow="Insights" title="查看跨品牌報表" description="比較品牌活躍度與使用量。" />
+        <QuickLink href="/admin/platform/audit" eyebrow="Governance" title="查看平台稽核" description="追蹤跨品牌狀態異動。" />
+      </section>
 
       <form action={createPlatformBrandAction} className="card space-y-5 border-brand-100 bg-brand-50/40 p-5">
         <div>
@@ -141,5 +164,7 @@ function countByClinic(rows: ClinicCountRow[]): Map<string, number> {
   return counts;
 }
 
-function Metric({ label, value }: { label: string; value: number }) { return <div className="card p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold text-slate-950">{value}</p></div>; }
+function servicesByBrandTotal(counts: Map<string, number>): number { let total = 0; for (const count of counts.values()) total += count; return total; }
+function Metric({ label, value, detail, tone = "default" }: { label: string; value: number; detail: string; tone?: "default" | "warning" }) { return <div className={`card p-4 ${tone === "warning" ? "border-amber-200 bg-amber-50/50" : ""}`}><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold text-slate-950">{value}</p><p className={`mt-1 text-xs ${tone === "warning" ? "text-amber-700" : "text-slate-400"}`}>{detail}</p></div>; }
+function QuickLink({ href, eyebrow, title, description }: { href: string; eyebrow: string; title: string; description: string }) { return <Link href={href} className="card group min-h-28 p-4 transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md"><p className="eyebrow text-indigo-600">{eyebrow}</p><p className="mt-2 font-semibold text-slate-900 group-hover:text-indigo-700">{title}</p><p className="mt-1 text-xs leading-5 text-slate-500">{description}</p></Link>; }
 function Field({ label, name, type = "text", required = false, pattern, placeholder, hint }: { label: string; name: string; type?: string; required?: boolean; pattern?: string; placeholder?: string; hint?: string }) { return <label className="text-sm"><span className="label">{label}</span><input name={name} type={type} required={required} pattern={pattern} className="input" placeholder={placeholder} />{hint && <span className="mt-1 block text-xs leading-5 text-slate-400">{hint}</span>}</label>; }

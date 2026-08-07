@@ -77,3 +77,8 @@ export async function requirePlatformAdmin(): Promise<PlatformContext> {
   return context;
 }
 
+export async function requirePlatformOwner(): Promise<PlatformContext> {
+  const context = await requirePlatformAdmin();
+  if (context.role !== "owner") redirect("/admin/platform");
+  return context;
+}

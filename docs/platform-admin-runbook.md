@@ -8,8 +8,12 @@
 
 平台管理員使用獨立的 XINHOW PLATFORM 系統擁有者控制台：
 
-- `/admin/platform`：品牌租戶、開通交付與方案狀態。
-- `/admin/platform/settings`：平台層級規則與部署能力狀態。
+- `/admin/platform`：平台總覽、品牌租戶、開通交付與方案狀態。
+- `/admin/platform/admins`：平台 owner 管理平台 owner／admin 帳號；品牌成員不在此管理。
+- `/admin/platform/operations`：平台營運健康、通知失敗、金流回呼與 server-only 部署能力狀態。
+- `/admin/platform/reports`：跨品牌聚合使用量；只顯示數字，不開放跨品牌顧客明細。
+- `/admin/platform/audit`：跨品牌預約、報名與付款狀態異動稽核。
+- `/admin/platform/settings`：平台層級規則與部署能力說明。
 - `/admin` 及 `/admin/settings`：目前品牌的日常營運與品牌設定，不屬於平台控制台。
 
 同一登入帳號即使同時擁有平台與品牌權限，進入 `/admin/platform` 時也必須看到平台外框與平台選單；只有返回 `/admin` 後才切換為品牌後台。
@@ -38,7 +42,7 @@ values ('<auth_user_id>', 'owner')
 on conflict (user_id) do update set role = excluded.role, active = true;
 ```
 
-4. 重新登入後，左側選單會出現「XINHOW PLATFORM → 品牌租戶」。
+4. 重新登入後，左側選單會出現「XINHOW PLATFORM」平台營運群組；品牌後台功能不會混入平台頁面。
 
 也可在 Railway server environment 設定 `PLATFORM_ADMIN_USER_IDS`（逗號分隔 UUID）作為緊急 bootstrap；不可使用 `NEXT_PUBLIC_` 前綴。
 
