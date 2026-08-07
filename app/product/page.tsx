@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BrandPlate, Callout, CapabilityCard, MarketingShell, PageIntro, SectionHeading } from "@/components/MarketingLayout";
+import { Callout, CapabilityCard, JourneyDiagram, MarketingShell, PageIntro, SectionHeading } from "@/components/MarketingLayout";
 
 const modules = [
   ["預約引擎", "時間制與場次制", "可指定服務提供者，也可使用場地、設備或共用資源。"],
@@ -18,7 +18,7 @@ export default function ProductPage() {
 
     <section className="bg-[#eef3ef] px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="mx-auto max-w-7xl"><SectionHeading eyebrow="Modules" title="每個模組，都對應一個實際工作場景。" description="不把功能堆在同一頁，而是讓團隊依照工作順序找到正確工具。" /><div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{modules.map(([eyebrow, title, description], index) => <CapabilityCard key={eyebrow} number={String(index + 1).padStart(2, "0")} title={`${eyebrow}｜${title}`} description={description} />)}</div></div></section>
 
-    <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="grid gap-10 lg:grid-cols-[1fr_.8fr] lg:items-center lg:gap-20"><div><p className="eyebrow !text-[#b08116]">A connected journey</p><h2 className="text-3xl font-bold leading-tight tracking-tight text-[#193b43] sm:text-4xl">從第一次點擊，到下一次回訪。</h2><div className="mt-8 space-y-3"><JourneyRow number="01" title="入口被看見" description="LINE Rich Menu、LIFF、瀏覽器與品牌網址承接顧客。" /><JourneyRow number="02" title="服務被完成" description="預約／報名、訂金／付款、取消／改期與報到保留完整狀態。" /><JourneyRow number="03" title="關係被延續" description="提醒、CRM Lite 分眾、互動紀錄與報表讓團隊知道下一步。" /></div></div><BrandPlate caption="從入口到回訪，流程可被管理" /></div></section>
+    <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="grid gap-10 lg:grid-cols-[1fr_.8fr] lg:items-center lg:gap-20"><div><p className="eyebrow !text-[#b08116]">A connected journey</p><h2 className="text-3xl font-bold leading-tight tracking-tight text-[#193b43] sm:text-4xl">從第一次點擊，到下一次回訪。</h2><div className="mt-8 space-y-3"><JourneyRow number="01" title="入口被看見" description="LINE Rich Menu、LIFF、瀏覽器與品牌網址承接顧客。" /><JourneyRow number="02" title="服務被完成" description="預約／報名、訂金／付款、取消／改期與報到保留完整狀態。" /><JourneyRow number="03" title="關係被延續" description="提醒、CRM Lite 分眾、互動紀錄與報表讓團隊知道下一步。" /></div></div><JourneyDiagram /></div></section>
 
     <Callout title="想看自己的流程會怎麼落在系統裡？" description="導入前先釐清服務目標、資源、成員角色與顧客入口，再決定品牌需要開啟的設定。" label="預約導入諮詢" />
   </MarketingShell>;

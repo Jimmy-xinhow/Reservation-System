@@ -202,6 +202,7 @@ const publicBrand = read("lib/public-brand.ts");
 const homePage = read("app/page.tsx");
 const marketingHome = read("components/MarketingHome.tsx");
 const marketingLayout = read("components/MarketingLayout.tsx");
+const productPage = read("app/product/page.tsx");
 const registrationPage = read("app/register/page.tsx");
 const registrationCancelApi = read("app/api/registration/cancel/route.ts");
 const registrationCancelPage = read("app/register/cancel/page.tsx");
@@ -485,6 +486,15 @@ invariant(
     marketingHome.includes("多品牌資料隔離") &&
     marketingHome.includes("70 項標準功能完整開放") &&
     marketingLayout.includes("07-9721612#888"),
+);
+invariant(
+  "marketing visuals use product diagrams instead of logo plates",
+  marketingHome.includes("PlatformPreview") &&
+    !marketingHome.includes("BrandPlate") &&
+    productPage.includes("JourneyDiagram") &&
+    !productPage.includes("BrandPlate") &&
+    marketingLayout.includes("export function PlatformPreview") &&
+    marketingLayout.includes("export function JourneyDiagram"),
 );
 invariant(
   "multi-page branded marketing site exists",
