@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "預約與報名平台",
-  description: "多品牌預約、活動報名、通知與後台管理平台",
+  title: "XINHOW｜預約與報名平台 SaaS",
+  description: "XINHOW 將預約、活動報名、標準金流、提醒、CRM Lite 與營運報表整合在同一個多品牌 SaaS 平台。",
 };
 
 export default function RootLayout({

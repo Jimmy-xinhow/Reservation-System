@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { headers } from "next/headers";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { FunnelTracker } from "@/components/FunnelTracker";
+import { MarketingHome } from "@/components/MarketingHome";
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +62,8 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
   const browserBookingUrl = `/book/browser${clinicScopeSuffix}`;
   const registrationUrl = `/register${clinicScopeSuffix}`;
   const membershipUrl = `/membership${clinicScopeSuffix}`;
+
+  if (!clinicId) return <MarketingHome />;
 
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-6 p-6">

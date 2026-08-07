@@ -200,6 +200,7 @@ const lineWebhook = read("app/api/line/webhook/route.ts");
 const bookingPageSource = read("app/book/page.tsx");
 const publicBrand = read("lib/public-brand.ts");
 const homePage = read("app/page.tsx");
+const marketingHome = read("components/MarketingHome.tsx");
 const registrationPage = read("app/register/page.tsx");
 const registrationCancelApi = read("app/api/registration/cancel/route.ts");
 const registrationCancelPage = read("app/register/cancel/page.tsx");
@@ -472,6 +473,15 @@ invariant(
     registrationPage.includes("clinicId={clinicId}") &&
     rootLayout.includes("預約與報名平台") &&
     ![rootLayout, reminderCron, lineWebhook, bookingPageSource, brandComponent].some((source) => source.includes("慈愛中醫診所")),
+);
+invariant(
+  "marketing homepage stays separate from branded customer portals",
+  homePage.includes("if (!clinicId) return <MarketingHome />") &&
+    homePage.includes("resolvePublicClinicIdFromScope") &&
+    marketingHome.includes("LINE Rich Menu → LIFF") &&
+    marketingHome.includes("CRM Lite") &&
+    marketingHome.includes("多品牌完全隔離") &&
+    marketingHome.includes("07-9721612#888"),
 );
 invariant(
   "public patient identity is birthday-bound and concurrency-safe",
