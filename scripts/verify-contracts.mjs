@@ -201,6 +201,7 @@ const bookingPageSource = read("app/book/page.tsx");
 const publicBrand = read("lib/public-brand.ts");
 const homePage = read("app/page.tsx");
 const marketingHome = read("components/MarketingHome.tsx");
+const marketingLayout = read("components/MarketingLayout.tsx");
 const registrationPage = read("app/register/page.tsx");
 const registrationCancelApi = read("app/api/registration/cancel/route.ts");
 const registrationCancelPage = read("app/register/cancel/page.tsx");
@@ -478,11 +479,25 @@ invariant(
   "marketing homepage stays separate from branded customer portals",
   homePage.includes("if (!clinicId) return <MarketingHome />") &&
     homePage.includes("resolvePublicClinicIdFromScope") &&
-    marketingHome.includes("LINE Rich Menu → LIFF") &&
+    marketingHome.includes("LINE Rich Menu") &&
+    marketingHome.includes("LIFF") &&
     marketingHome.includes("CRM Lite") &&
-    marketingHome.includes("多品牌完全隔離") &&
+    marketingHome.includes("多品牌資料隔離") &&
     marketingHome.includes("70 項標準功能完整開放") &&
-    marketingHome.includes("07-9721612#888"),
+    marketingLayout.includes("07-9721612#888"),
+);
+invariant(
+  "multi-page branded marketing site exists",
+  marketingLayout.includes("/brand/xinhao-horizontal.png") &&
+    marketingLayout.includes("/brand/xinhao-gold-dark.png") &&
+    exists("app/product/page.tsx") &&
+    exists("app/solutions/page.tsx") &&
+    exists("app/pricing/page.tsx") &&
+    exists("app/contact/page.tsx") &&
+    marketingLayout.includes("href=\"/product\"") &&
+    marketingLayout.includes("href=\"/solutions\"") &&
+    marketingLayout.includes("href=\"/pricing\"") &&
+    marketingLayout.includes("href=\"/contact\""),
 );
 invariant(
   "public patient identity is birthday-bound and concurrency-safe",
