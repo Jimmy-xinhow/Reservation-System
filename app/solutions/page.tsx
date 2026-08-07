@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, MarketingShell, PageIntro, SectionHeading } from "@/components/MarketingLayout";
+import { Callout, MarketingShell, PageIntro, PageIntroVisual, SectionHeading } from "@/components/MarketingLayout";
 
 const scenes = [
   { number: "01", title: "顧問、教練與一對一服務", situation: "每位顧客的服務時間不同，需要指定人員或依資源安排。", system: "設定服務時長、首次／再次服務、服務提供者與可預約區間；顧客從 LINE 或瀏覽器選擇可用時段。", result: "團隊看得到每日安排，顧客不用來回確認時間。" },
@@ -12,7 +12,7 @@ const scenes = [
 
 export default function SolutionsPage() {
   return <MarketingShell>
-    <PageIntro eyebrow="Scenes before features" title="不預設你是什麼產業，先理解你怎麼工作。" description="預約與報名不是同一種生意。XINHOW 以服務目標、資源配置、成員角色與顧客入口來設計流程，讓系統貼近場景，而不是要求團隊改成系統的樣子。"><Link href="/contact" className="btn min-h-12 bg-[#1f4550] px-5 text-white hover:bg-[#193b43]">討論你的場景 <span aria-hidden="true">↗</span></Link><Link href="/product" className="btn min-h-12 border border-[#1f4550]/20 bg-white/70 px-5 text-[#1f4550] hover:bg-white">回看產品能力</Link></PageIntro>
+    <PageIntro eyebrow="Scenes before features" title="不預設你是什麼產業，先理解你怎麼工作。" description="預約與報名不是同一種生意。XINHOW 以服務目標、資源配置、成員角色與顧客入口來設計流程，讓系統貼近場景，而不是要求團隊改成系統的樣子。" visual={<PageIntroVisual variant="solutions" />}><Link href="/contact" className="btn min-h-12 bg-[#1f4550] px-5 text-white hover:bg-[#193b43]">討論你的場景 <span aria-hidden="true">↗</span></Link><Link href="/product" className="btn min-h-12 border border-[#1f4550]/20 bg-white/70 px-5 text-[#1f4550] hover:bg-white">回看產品能力</Link></PageIntro>
 
     <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="max-w-2xl"><SectionHeading eyebrow="Real operating scenes" title="每個場景，都要回答三個問題。" description="顧客怎麼進來？團隊怎麼處理？完成後如何延續？以下用實際營運語言說明系統會怎麼接。" /></div><div className="mt-10 grid gap-5 lg:grid-cols-2">{scenes.map((scene) => <article key={scene.number} className="rounded-2xl border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] sm:p-6"><div className="flex items-start justify-between gap-4"><span className="text-sm font-mono font-semibold text-[#b08116]">{scene.number}</span><span className="rounded-full bg-[#edf2ef] px-3 py-1 text-xs font-medium text-[#1f4550]">場景說明</span></div><h2 className="mt-7 text-xl font-bold text-[#193b43]">{scene.title}</h2><div className="mt-5 grid gap-4 border-t border-[#eee9df] pt-5 text-sm leading-6"><SceneLine label="現場情況" text={scene.situation} /><SceneLine label="系統怎麼接" text={scene.system} /><SceneLine label="帶來的結果" text={scene.result} accent /></div></article>)}</div></section>
 

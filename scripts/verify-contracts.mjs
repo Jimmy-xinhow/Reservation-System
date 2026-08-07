@@ -203,6 +203,9 @@ const homePage = read("app/page.tsx");
 const marketingHome = read("components/MarketingHome.tsx");
 const marketingLayout = read("components/MarketingLayout.tsx");
 const productPage = read("app/product/page.tsx");
+const solutionsPage = read("app/solutions/page.tsx");
+const pricingPage = read("app/pricing/page.tsx");
+const contactPage = read("app/contact/page.tsx");
 const registrationPage = read("app/register/page.tsx");
 const registrationCancelApi = read("app/api/registration/cancel/route.ts");
 const registrationCancelPage = read("app/register/cancel/page.tsx");
@@ -495,6 +498,14 @@ invariant(
     !productPage.includes("BrandPlate") &&
     marketingLayout.includes("export function PlatformPreview") &&
     marketingLayout.includes("export function JourneyDiagram"),
+);
+invariant(
+  "marketing inner pages include relevant intro visuals",
+  [productPage, solutionsPage, pricingPage, contactPage].every((page) => page.includes("visual={<PageIntroVisual")) &&
+    marketingLayout.includes("type IntroVisualVariant") &&
+    marketingLayout.includes("variant === \"solutions\"") &&
+    marketingLayout.includes("variant === \"pricing\"") &&
+    marketingLayout.includes("OnboardingStep"),
 );
 invariant(
   "multi-page branded marketing site exists",
