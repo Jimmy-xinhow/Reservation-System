@@ -488,7 +488,12 @@ invariant(
     marketingHome.includes("CRM Lite") &&
     marketingHome.includes("多品牌資料隔離") &&
     marketingHome.includes("70 項標準功能完整開放") &&
-    marketingLayout.includes("07-9721612#888"),
+    marketingLayout.includes("07-9721612") &&
+    !marketingLayout.includes("07-9721612#888") &&
+    marketingLayout.includes("https://lin.ee/jnAfCBy") &&
+    marketingLayout.includes("@xinhow") &&
+    marketingLayout.includes("service@xinhow.com.tw") &&
+    contactPage.includes("service@xinhow.com.tw"),
 );
 invariant(
   "marketing visuals use product diagrams instead of logo plates",
@@ -519,6 +524,14 @@ invariant(
     exists("public/marketing/solutions-event-checkin.png") &&
     exists("public/marketing/pricing-scope-planning.png") &&
     exists("public/marketing/contact-onboarding.png"),
+);
+invariant(
+  "marketing pricing has confirmed plan and add-on prices",
+  pricingPage.includes("39,800") &&
+    pricingPage.includes("2,500") &&
+    pricingPage.includes("15,000 起") &&
+    pricingPage.includes("30,000 起") &&
+    pricingPage.includes("評估後報價"),
 );
 invariant(
   "multi-page branded marketing site exists",
