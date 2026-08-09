@@ -45,6 +45,23 @@ body {
     #f7f2e8;
 }
 
+.product-showcase {
+  border-radius: 1.25rem;
+}
+
+.product-showcase-compact {
+  border-radius: 0.9rem;
+  box-shadow: 0 12px 32px rgba(23, 63, 72, 0.08);
+}
+
+.module-card {
+  @apply border-y border-[#d8d2c5] bg-[#fffdf8] px-1 py-7 sm:px-3;
+}
+
+.module-card + .module-card {
+  @apply border-t-0;
+}
+
 /* ── 可重用元件樣式 ─────────────────────────────────────── */
 @layer components {
   .card {
