@@ -34,7 +34,7 @@ function featureGroupKind(number: string): ModuleKind {
 
 export default function PricingPage() {
   return <MarketingShell>
-    <PageIntro dark eyebrow="Plans & service boundary" title="費用透明 功能不拆散" description="兩種付款方式的服務內容完全相同，70 項標準功能全數開放；差別只在付款方式與導入設定費的處理。清單外需求則先確認範圍，再另行報價。" visual={<PageIntroVisual variant="pricing" dark photoSrc="/marketing/pricing-scope-planning.png" photoAlt="團隊在桌上整理流程與導入範圍" photoCaption="情境示意：先把流程、範圍與驗收方式在桌面上對齊。" />}>
+    <PageIntro dark backgroundSrc="/marketing/pricing-scope-planning.png" eyebrow="Plans & service boundary" title="費用透明 功能不拆散" description="兩種付款方式的服務內容完全相同，70 項標準功能全數開放；差別只在付款方式與導入設定費的處理。清單外需求則先確認範圍，再另行報價。" visual={<PageIntroVisual variant="pricing" dark photoSrc="/marketing/pricing-scope-planning.png" photoAlt="團隊在桌上整理流程與導入範圍" photoCaption="先把流程、範圍與驗收方式在桌面上對齊。" />}>
       <a href="#plans" className="btn min-h-12 rounded-full bg-[#e2b644] px-5 font-bold text-[#193b43] hover:bg-[#f1ca5b]">查看付款方案 <span aria-hidden="true">↓</span></a>
       <Link href="/contact" className="btn min-h-12 rounded-full border border-white/20 bg-white/5 px-5 font-bold text-white hover:bg-white/10">詢問導入範圍</Link>
     </PageIntro>

@@ -10,7 +10,7 @@ const modules = [
 
 export default function ProductPage() {
   return <MarketingShell>
-    <PageIntro dark eyebrow="Product architecture" title="一套可配置的服務營運系統" description="XINHOW 把顧客入口、服務排程、交易狀態、通知、CRM Lite 與品牌營運設定拆成清楚的模組，再組成每個產業真正需要的流程。" visual={<PageIntroVisual variant="product" dark photoSrc="/marketing/product-schedule-team.png" photoAlt="服務團隊共同檢視每日排程" photoCaption="情境示意：團隊共同檢視排程，再由系統分工執行。" />}>
+    <PageIntro dark backgroundSrc="/marketing/product-schedule-team.png" eyebrow="Product architecture" title="一套可配置的服務營運系統" description="XINHOW 把顧客入口、服務排程、交易狀態、通知、CRM Lite 與品牌營運設定拆成清楚的模組，再組成每個產業真正需要的流程。" visual={<PageIntroVisual variant="product" dark photoSrc="/marketing/product-schedule-team.png" photoAlt="服務團隊共同檢視每日排程" photoCaption="團隊共同檢視排程，再由系統分工執行。" />}>
       <Link href="/solutions" className="btn min-h-12 rounded-full bg-[#e2b644] px-5 font-bold text-[#193b43] hover:bg-[#f1ca5b]">看產業場景 <span aria-hidden="true">↗</span></Link>
       <Link href="/contact" className="btn min-h-12 rounded-full border border-white/20 bg-white/5 px-5 font-bold text-white hover:bg-white/10">討論導入方式</Link>
     </PageIntro>

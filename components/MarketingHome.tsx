@@ -16,7 +16,7 @@ const journey = [
 
 export function MarketingHome() {
   return <MarketingShell>
-    <PageIntro dark eyebrow="多品牌服務營運平台" title="讓預約報名與回訪回到同一條流程" description="星昊科技為服務型品牌打造多品牌預約與報名 SaaS，從顧客入口、團隊作業到日常經營，讓每個流程都能被看見、被交接、被持續優化。" visual={<ProductShowcase variant="overview" />}>
+    <PageIntro dark backgroundSrc="/marketing/hero-service-counter.png" eyebrow="多品牌服務營運平台" title="讓預約報名與回訪回到同一條流程" description="星昊科技為服務型品牌打造多品牌預約與報名 SaaS，從顧客入口、團隊作業到日常經營，讓每個流程都能被看見、被交接、被持續優化。" visual={<ProductShowcase variant="overview" />}>
       <Link href="/product" className="btn min-h-12 rounded-full bg-[#e2b644] px-5 font-bold text-[#193b43] hover:bg-[#f1ca5b]">看產品能力 <span aria-hidden="true">↗</span></Link>
       <Link href="/contact" className="btn min-h-12 rounded-full border border-white/25 bg-white/5 px-5 font-bold text-white hover:bg-white/10">預約導入</Link>
     </PageIntro>

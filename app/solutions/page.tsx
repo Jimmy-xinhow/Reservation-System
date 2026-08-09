@@ -19,9 +19,9 @@ function sceneKind(number: string): ModuleKind {
 
 export default function SolutionsPage() {
   return <MarketingShell>
-    <PageIntro eyebrow="Scenes before features" title="不預設你是什麼產業 先理解你怎麼工作" description="預約與報名不是同一種生意。XINHOW 以服務目標、資源配置、成員角色與顧客入口來設計流程，讓系統貼近場景，而不是要求團隊改成系統的樣子。" visual={<PageIntroVisual variant="solutions" photoSrc="/marketing/solutions-event-checkin.png" photoAlt="活動現場的報到與入場作業" photoCaption="情境示意：活動入口、報到資料與現場人流需要同時被接住。" />}>
-      <Link href="/contact" className="btn min-h-12 rounded-full bg-[#173f48] px-5 font-bold text-white hover:bg-[#2d6871]">討論你的場景 <span aria-hidden="true">↗</span></Link>
-      <Link href="/product" className="btn min-h-12 rounded-full border border-[#1f4550]/20 bg-white/70 px-5 font-bold text-[#173f48] hover:bg-white">回看產品能力</Link>
+    <PageIntro dark backgroundSrc="/marketing/solutions-event-checkin.png" eyebrow="Scenes before features" title="不預設你是什麼產業 先理解你怎麼工作" description="預約與報名不是同一種生意。XINHOW 以服務目標、資源配置、成員角色與顧客入口來設計流程，讓系統貼近場景，而不是要求團隊改成系統的樣子。" visual={<PageIntroVisual variant="solutions" dark photoSrc="/marketing/solutions-event-checkin.png" photoAlt="活動現場的報到與入場作業" photoCaption="活動入口、報到資料與現場人流需要同時被接住。" />}>
+      <Link href="/contact" className="btn min-h-12 rounded-full bg-[#e2b644] px-5 font-bold text-[#193b43] hover:bg-[#f1ca5b]">討論你的場景 <span aria-hidden="true">↗</span></Link>
+      <Link href="/product" className="btn min-h-12 rounded-full border border-white/25 bg-white/5 px-5 font-bold text-white hover:bg-white/10">回看產品能力</Link>
     </PageIntro>
 
     <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><SectionHeading eyebrow="Real operating scenes" title="每個場景都要回答三個問題" description="顧客怎麼進來？團隊怎麼處理？完成後如何延續？以下用實際營運語言說明系統會怎麼接。" /><div className="mt-12 divide-y divide-[#d8d2c5] border-y border-[#d8d2c5]">{scenes.slice(0, 3).map((scene) => <ScenePanel key={scene.number} scene={scene} />)}</div></section>

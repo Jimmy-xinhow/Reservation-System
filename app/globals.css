@@ -40,17 +40,62 @@ body {
 
 .marketing-shell {
   background:
-    radial-gradient(circle at 8% 12%, rgba(226, 182, 68, 0.11), transparent 26rem),
-    radial-gradient(circle at 92% 38%, rgba(91, 155, 217, 0.12), transparent 30rem),
-    #f7f2e8;
+    radial-gradient(circle at 8% 12%, rgba(226, 182, 68, 0.18), transparent 24rem),
+    radial-gradient(circle at 92% 38%, rgba(91, 155, 217, 0.14), transparent 28rem),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.38), transparent 28%),
+    repeating-linear-gradient(90deg, transparent 0 79px, rgba(25, 56, 69, 0.035) 80px, transparent 81px),
+    #f0ece4;
+}
+
+.marketing-hero {
+  min-height: 39rem;
+}
+
+.marketing-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.14;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.55) 0.6px, transparent 0.6px);
+  background-size: 6px 6px;
+  mix-blend-mode: soft-light;
+}
+
+.admin-preview {
+  border-radius: 0.8rem;
+  box-shadow: 0 28px 80px rgba(4, 23, 35, 0.28);
+}
+
+.admin-preview-compact {
+  border-radius: 0.6rem;
+  box-shadow: 0 14px 36px rgba(4, 23, 35, 0.15);
+}
+
+.admin-preview-shell {
+  background: #f5f8fb;
+}
+
+.admin-preview-sidebar {
+  background: #071c2e;
+}
+
+.admin-preview-main {
+  min-width: 0;
+  background: #f5f8fb;
+}
+
+.admin-preview-table {
+  min-height: 1.75rem;
+  border-bottom: 1px solid #e7edf1;
 }
 
 .product-showcase {
-  border-radius: 1.25rem;
+  border-radius: 0.8rem;
 }
 
 .product-showcase-compact {
-  border-radius: 0.9rem;
+  border-radius: 0.6rem;
   box-shadow: 0 12px 32px rgba(23, 63, 72, 0.08);
 }
 
@@ -60,6 +105,20 @@ body {
 
 .module-card + .module-card {
   @apply border-t-0;
+}
+
+.marketing-surface {
+  position: relative;
+  isolation: isolate;
+}
+
+.marketing-surface::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.62), transparent 32%, rgba(255, 255, 255, 0.22));
 }
 
 /* ── 可重用元件樣式 ─────────────────────────────────────── */
