@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, FeatureIcon, MarketingShell, ModuleInterface, PageIntro, PageIntroVisual, PricingVisual, SectionHeading, type ModuleKind } from "@/components/MarketingLayout";
+import { Callout, FeatureIcon, MarketingShell, ModuleInterface, PageIntro, PageIntroVisual, PhotoBand, PricingVisual, SectionHeading, type ModuleKind } from "@/components/MarketingLayout";
 
 const plans = [
   {
@@ -58,7 +58,9 @@ export default function PricingPage() {
 
     <section id="plans" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><SectionHeading eyebrow="Choose the payment method" title="兩種付款方式，服務內容完全相同。" description="不分方案等級、不限預約筆數、不依使用人數加價；差別只在一次付清或按月支付。" /><div className="mt-10 grid gap-5 lg:grid-cols-2">{plans.map((plan) => <PlanCard key={plan.name} plan={plan} />)}</div><div className="mt-6 flex flex-col gap-2 rounded-2xl border border-[#ddd7ca] bg-[#fbfaf6] px-5 py-4 text-sm leading-6 text-[#6d7b76] sm:flex-row sm:items-center sm:justify-between"><span><strong className="text-[#193b43]">以上金額均為未稅價</strong>，開立發票另加 5% 營業稅。</span><span>LINE 官方帳號方案費與推播費由品牌方自行負擔。</span></div></section>
 
-    <section className="bg-[#fbfaf6] px-5 py-16 sm:px-8 sm:py-20 lg:px-10"><div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[.6fr_1.4fr] lg:items-center lg:gap-16"><div><p className="eyebrow !text-[#b08116]">The scope at a glance</p><h2 className="text-[clamp(1.75rem,3.2vw,2.75rem)] font-bold leading-[1.12] tracking-[-0.04em] text-[#193b43]">買的是完整營運骨架，不是功能拼盤。</h2><p className="mt-4 text-base leading-7 text-[#5d6d6b]">標準功能先全開放；需要額外串接或特殊流程時，再以加購項目清楚確認。</p></div><PricingVisual /></div></section>
+    <section className="bg-[#fbfaf6] px-5 py-16 sm:px-8 sm:py-20 lg:px-10"><div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[.6fr_1.4fr] lg:items-center lg:gap-16"><div><p className="eyebrow !text-[#b08116]">The scope at a glance</p><h2 className="text-[clamp(1.75rem,3.2vw,2.75rem)] font-bold leading-[1.12] tracking-[-0.04em] text-[#193b43]">買的是完整營運骨架不是功能拼盤</h2><p className="mt-4 text-base leading-7 text-[#5d6d6b]">標準功能先全開放；需要額外串接或特殊流程時，再以加購項目清楚確認。</p></div><PricingVisual /></div></section>
+
+    <PhotoBand src="/marketing/pricing-scope-planning.png" alt="團隊在桌上整理流程與導入範圍" eyebrow="方案如何對應營運" title="先把範圍說清楚再決定付款方式" description="兩種付款方式服務內容相同，完整功能先開放；額外串接與特殊流程則以清楚的加購項目確認。" />
 
     <section id="features" className="bg-[#eef3ef] px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="mx-auto max-w-7xl"><SectionHeading eyebrow="70 included capabilities" title="詳細功能卡：從入口到回訪，一次看懂。" description="以下五大模組共同構成 70 項標準功能，全部開放，不需要為了使用某個功能升級方案。" /><div className="mt-10 grid gap-4 lg:grid-cols-2">{featureGroups.map((group) => <FeatureGroup key={group.number} group={group} />)}</div></div></section>
 
