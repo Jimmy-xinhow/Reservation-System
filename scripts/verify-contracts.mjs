@@ -496,12 +496,15 @@ invariant(
     contactPage.includes("service@xinhow.com.tw"),
 );
 invariant(
-  "marketing visuals use product diagrams instead of logo plates",
-  marketingHome.includes("PlatformPreview") &&
-    !marketingHome.includes("BrandPlate") &&
-    productPage.includes("JourneyDiagram") &&
-    !productPage.includes("BrandPlate") &&
-    marketingLayout.includes("export function PlatformPreview") &&
+  "marketing visuals show customer workflows rather than internal platform controls",
+    marketingHome.includes("DashboardMockup") &&
+    !marketingHome.includes("PlatformPreview") &&
+    !marketingHome.includes("平台與品牌分層") &&
+    !marketingHome.includes("平台擁有者") &&
+    !marketingHome.includes("平台層") &&
+    !productPage.includes("系統擁有者") &&
+    !productPage.includes("平台層") &&
+    marketingLayout.includes("export function ModuleInterface") &&
     marketingLayout.includes("export function JourneyDiagram"),
 );
 invariant(

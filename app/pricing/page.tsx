@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, FeatureIcon, MarketingShell, PageIntro, PageIntroVisual, PricingVisual, SectionHeading } from "@/components/MarketingLayout";
+import { Callout, FeatureIcon, MarketingShell, ModuleInterface, PageIntro, PageIntroVisual, PricingVisual, SectionHeading, type ModuleKind } from "@/components/MarketingLayout";
 
 const plans = [
   {
@@ -27,12 +27,20 @@ const plans = [
 ] as const;
 
 const featureGroups = [
-  { number: "01", title: "顧客入口與品牌", description: "讓顧客用熟悉的入口進來，同時讓多品牌資料與對外識別保持隔離。", features: ["LINE Rich Menu → LIFF 主要入口", "瀏覽器備援與品牌短網址", "自訂網址、嵌入元件與自訂網域", "平台擁有者／品牌後台分層", "多品牌、多人員與角色權限", "品牌資料隔離與平台稽核"] },
+  { number: "01", title: "顧客入口與品牌", description: "讓顧客用熟悉的入口進來，同時讓不同品牌的資料與對外識別保持隔離。", features: ["LINE Rich Menu → LIFF 主要入口", "瀏覽器備援與品牌短網址", "自訂網址、嵌入元件與自訂網域", "品牌團隊角色與權限", "多品牌、多人員與資料範圍", "品牌資料隔離與操作紀錄"] },
   { number: "02", title: "預約與活動報名", description: "時間制與場次制都能使用，依服務目標選擇人員、場地、設備或共用資源。", features: ["時間制預約與場次制預約", "服務時長、首次／再次服務設定", "服務提供者、場地與設備排程", "活動、場次、票種與自訂報名表單", "候補、QR 報到與報名狀態", "取消、改期與容量控管"] },
   { number: "03", title: "收款、方案與通知", description: "把付款狀態、名額與通知接在同一條流程上，減少人工對照。", features: ["綠界／藍新標準金流串接", "訂金、付款回呼與狀態追蹤", "會員方案、套票與堂數 ledger", "報名優惠碼與指定票種扣抵", "LINE／Email 行前提醒", "投遞去重、重試與錯誤紀錄"] },
   { number: "04", title: "CRM Lite 與行銷自動化", description: "完成服務後保留可用的顧客脈絡，讓團隊知道下一步，不宣稱完整 CRM。", features: ["顧客分眾與標籤", "互動時間軸與預約／報名來源", "行銷同意 opt-in 管理", "三種規則式行銷自動化", "LINE／Email 投遞紀錄", "排程、去重與阻擋名單"] },
-  { number: "05", title: "營運報表與治理", description: "讓品牌看自己的營運，讓系統擁有者看平台的交付與健康度。", features: ["預約、報名、付款與出席統計", "容量、候補、未到與取消分析", "CRM Lite 與行銷投遞結果", "品牌日期範圍查詢與匯出", "平台聚合、租戶開通與健康度", "權限、狀態異動與稽核追蹤"] },
+  { number: "05", title: "營運報表與品牌管理", description: "讓品牌看懂自己的營運狀態，依角色管理資料範圍與工作紀錄。", features: ["預約、報名、付款與出席統計", "容量、候補、未到與取消分析", "CRM Lite 與行銷投遞結果", "品牌日期範圍查詢與匯出", "角色權限與資料範圍", "品牌操作與狀態異動紀錄"] },
 ] as const;
+
+function featureGroupKind(number: string): ModuleKind {
+  if (number === "01") return "entrance";
+  if (number === "02") return "booking";
+  if (number === "03") return "registration";
+  if (number === "04") return "crm";
+  return "reports";
+}
 
 const addOns = [
   ["01", "指定金流商串接", "綠界、藍新以外之金流服務商", "NT$15,000 起"],
@@ -50,7 +58,7 @@ export default function PricingPage() {
 
     <section id="plans" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><SectionHeading eyebrow="Choose the payment method" title="兩種付款方式，服務內容完全相同。" description="不分方案等級、不限預約筆數、不依使用人數加價；差別只在一次付清或按月支付。" /><div className="mt-10 grid gap-5 lg:grid-cols-2">{plans.map((plan) => <PlanCard key={plan.name} plan={plan} />)}</div><div className="mt-6 flex flex-col gap-2 rounded-2xl border border-[#ddd7ca] bg-[#fbfaf6] px-5 py-4 text-sm leading-6 text-[#6d7b76] sm:flex-row sm:items-center sm:justify-between"><span><strong className="text-[#193b43]">以上金額均為未稅價</strong>，開立發票另加 5% 營業稅。</span><span>LINE 官方帳號方案費與推播費由品牌方自行負擔。</span></div></section>
 
-    <section className="bg-[#fbfaf6] px-5 py-16 sm:px-8 sm:py-20 lg:px-10"><div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[.6fr_1.4fr] lg:items-center lg:gap-16"><div><p className="eyebrow !text-[#b08116]">The scope at a glance</p><h2 className="text-3xl font-bold leading-tight tracking-tight text-[#193b43] sm:text-4xl">買的是完整營運骨架，不是功能拼盤。</h2><p className="mt-4 text-base leading-7 text-[#5d6d6b]">標準功能先全開放；需要額外串接或特殊流程時，再以加購項目清楚確認。</p></div><PricingVisual /></div></section>
+    <section className="bg-[#fbfaf6] px-5 py-16 sm:px-8 sm:py-20 lg:px-10"><div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[.6fr_1.4fr] lg:items-center lg:gap-16"><div><p className="eyebrow !text-[#b08116]">The scope at a glance</p><h2 className="text-[clamp(1.75rem,3.2vw,2.75rem)] font-bold leading-[1.12] tracking-[-0.04em] text-[#193b43]">買的是完整營運骨架，不是功能拼盤。</h2><p className="mt-4 text-base leading-7 text-[#5d6d6b]">標準功能先全開放；需要額外串接或特殊流程時，再以加購項目清楚確認。</p></div><PricingVisual /></div></section>
 
     <section id="features" className="bg-[#eef3ef] px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="mx-auto max-w-7xl"><SectionHeading eyebrow="70 included capabilities" title="詳細功能卡：從入口到回訪，一次看懂。" description="以下五大模組共同構成 70 項標準功能，全部開放，不需要為了使用某個功能升級方案。" /><div className="mt-10 grid gap-4 lg:grid-cols-2">{featureGroups.map((group) => <FeatureGroup key={group.number} group={group} />)}</div></div></section>
 
@@ -67,7 +75,7 @@ function PlanCard({ plan }: { plan: (typeof plans)[number] }) {
 }
 
 function FeatureGroup({ group }: { group: (typeof featureGroups)[number] }) {
-  return <article className="rounded-[1.35rem] border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] sm:p-6"><div className="flex items-start gap-4"><FeatureIcon name={group.number === "01" ? "line" : group.number === "02" ? "calendar" : group.number === "03" ? "ticket" : group.number === "04" ? "message" : "chart"} /><div><div className="flex items-center gap-3"><span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#b08116]">Module {group.number}</span></div><h3 className="mt-2 text-xl font-bold text-[#193b43]">{group.title}</h3><p className="mt-2 text-sm leading-6 text-[#6d7b76]">{group.description}</p></div></div><ul className="mt-6 grid gap-2 border-t border-[#eee9df] pt-5 sm:grid-cols-2">{group.features.map((feature) => <li key={feature} className="flex gap-2 text-sm leading-6 text-[#5d6d6b]"><span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#edf2ef] text-[10px] text-[#b08116]">✓</span>{feature}</li>)}</ul></article>;
+  return <article className="rounded-[1.35rem] border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] sm:p-6"><div className="flex items-start gap-4"><FeatureIcon name={group.number === "01" ? "line" : group.number === "02" ? "calendar" : group.number === "03" ? "ticket" : group.number === "04" ? "message" : "chart"} /><div><div className="flex items-center gap-3"><span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#b08116]">Module {group.number}</span></div><h3 className="mt-2 text-xl font-bold text-[#193b43]">{group.title}</h3><p className="mt-2 text-sm leading-6 text-[#6d7b76]">{group.description}</p></div></div><ul className="mt-6 grid gap-2 border-t border-[#eee9df] pt-5 sm:grid-cols-2">{group.features.map((feature) => <li key={feature} className="flex gap-2 text-sm leading-6 text-[#5d6d6b]"><span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#edf2ef] text-[10px] text-[#b08116]">✓</span>{feature}</li>)}</ul><ModuleInterface kind={featureGroupKind(group.number)} compact /></article>;
 }
 
 function AddonCard({ number, title, note, price }: { number: string; title: string; note: string; price: string }) {
