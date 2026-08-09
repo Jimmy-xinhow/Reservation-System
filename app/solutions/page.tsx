@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, MarketingShell, PageIntro, PageIntroVisual, ScenarioMatrix, SectionHeading, SignalStrip } from "@/components/MarketingLayout";
+import { Callout, FeatureIcon, MarketingShell, PageIntro, PageIntroVisual, ScenarioMatrix, SectionHeading, SignalStrip } from "@/components/MarketingLayout";
 
 const scenes = [
   { number: "01", title: "顧問、教練與一對一服務", situation: "每位顧客的服務時間不同，需要指定人員或依資源安排。", system: "設定服務時長、首次／再次服務、服務提供者與可預約區間；顧客從 LINE 或瀏覽器選擇可用時段。", result: "團隊看得到每日安排，顧客不用來回確認時間。" },
@@ -24,5 +24,5 @@ export default function SolutionsPage() {
   </MarketingShell>;
 }
 
-function SceneLine({ label, text, accent = false }: { label: string; text: string; accent?: boolean }) { return <div className="grid gap-1 sm:grid-cols-[88px_1fr] sm:gap-3"><span className={`text-xs font-semibold ${accent ? "text-[#b08116]" : "text-[#7a8782]"}`}>{label}</span><span className={accent ? "font-medium text-[#1f4550]" : "text-[#5d6d6b]"}>{text}</span></div>; }
-function ConfigPill({ title, value }: { title: string; value: string }) { return <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="text-xs text-[#a9c2be]">{title}</p><p className="mt-2 font-semibold text-white">{value}</p></div>; }
+function SceneLine({ label, text, accent = false }: { label: string; text: string; accent?: boolean }) { return <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:gap-3"><FeatureIcon name={label === "現場情況" ? "users" : label === "系統怎麼接" ? "settings" : "chart"} compact /><div><p className={`text-xs font-semibold ${accent ? "text-[#b08116]" : "text-[#7a8782]"}`}>{label}</p><p className={`mt-1 ${accent ? "font-medium text-[#1f4550]" : "text-[#5d6d6b]"}`}>{text}</p></div></div>; }
+function ConfigPill({ title, value }: { title: string; value: string }) { return <div className="flex gap-3 rounded-[1.15rem] border border-white/10 bg-white/5 p-4"><FeatureIcon name={title === "預約模式" ? "calendar" : title === "服務目標" ? "users" : title === "顧客入口" ? "line" : "layers"} dark compact /><div><p className="text-xs text-[#a9c2be]">{title}</p><p className="mt-2 font-semibold text-white">{value}</p></div></div>; }

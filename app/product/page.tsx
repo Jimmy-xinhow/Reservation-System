@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, CapabilityCard, DashboardMockup, JourneyDiagram, MarketingShell, PageIntro, PageIntroVisual, SectionHeading, SignalStrip, WorkflowRail } from "@/components/MarketingLayout";
+import { Callout, CapabilityCard, DashboardMockup, FeatureIcon, JourneyDiagram, MarketingShell, PageIntro, PageIntroVisual, SectionHeading, SignalStrip, WorkflowRail } from "@/components/MarketingLayout";
 
 const modules = [
   ["預約引擎", "時間制與場次制", "可指定服務提供者，也可使用場地、設備或共用資源。"],
@@ -29,9 +29,9 @@ export default function ProductPage() {
 }
 
 function LayerCard({ number, title, subtitle, items, dark = false }: { number: string; title: string; subtitle: string; items: readonly string[]; dark?: boolean }) {
-  return <article className={`rounded-2xl p-5 sm:p-6 ${dark ? "bg-[#1f4550] text-white" : "border border-[#ddd7ca] bg-white"}`}><span className={`text-sm font-mono font-semibold ${dark ? "text-[#e2b644]" : "text-[#b08116]"}`}>{number}</span><h3 className="mt-7 text-xl font-bold">{title}</h3><p className={`mt-1 text-xs ${dark ? "text-[#a9c2be]" : "text-[#7a8782]"}`}>{subtitle}</p><ul className={`mt-6 space-y-3 text-sm leading-6 ${dark ? "text-[#c9dcda]" : "text-[#5d6d6b]"}`}>{items.map((item) => <li key={item} className="flex gap-2"><span className={dark ? "text-[#e2b644]" : "text-[#b08116]"}>✓</span>{item}</li>)}</ul></article>;
+  return <article className={`rounded-[1.35rem] p-5 sm:p-6 ${dark ? "bg-[#1f4550] text-white" : "border border-[#ddd7ca] bg-white"}`}><div className="flex items-center justify-between"><FeatureIcon name={dark ? "layers" : "users"} dark={dark} compact /><span className={`text-sm font-mono font-semibold ${dark ? "text-[#e2b644]" : "text-[#b08116]"}`}>{number}</span></div><h3 className="mt-6 text-xl font-bold">{title}</h3><p className={`mt-1 text-xs ${dark ? "text-[#a9c2be]" : "text-[#7a8782]"}`}>{subtitle}</p><ul className={`mt-6 space-y-3 text-sm leading-6 ${dark ? "text-[#c9dcda]" : "text-[#5d6d6b]"}`}>{items.map((item) => <li key={item} className="flex gap-2"><span className={`mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${dark ? "bg-[#e2b644]/15 text-[#e2b644]" : "bg-[#edf2ef] text-[#b08116]"}`}><span className="text-[10px]">✓</span></span>{item}</li>)}</ul></article>;
 }
 
 function JourneyRow({ number, title, description }: { number: string; title: string; description: string }) {
-  return <div className="flex gap-4 rounded-xl border border-[#ddd7ca] bg-white p-4"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#edf2ef] text-xs font-bold text-[#1f4550]">{number}</span><div><p className="font-semibold text-[#193b43]">{title}</p><p className="mt-1 text-sm leading-6 text-[#6d7b76]">{description}</p></div></div>;
+  return <div className="flex gap-4 rounded-[1.15rem] border border-[#ddd7ca] bg-white p-4"><FeatureIcon name={number === "01" ? "line" : number === "02" ? "calendar" : "chart"} compact /><div><p className="font-semibold text-[#193b43]">{title}</p><p className="mt-1 text-sm leading-6 text-[#6d7b76]">{description}</p></div></div>;
 }

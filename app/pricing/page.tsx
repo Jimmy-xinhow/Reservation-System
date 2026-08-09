@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, MarketingShell, PageIntro, PageIntroVisual, PricingVisual, SectionHeading } from "@/components/MarketingLayout";
+import { Callout, FeatureIcon, MarketingShell, PageIntro, PageIntroVisual, PricingVisual, SectionHeading } from "@/components/MarketingLayout";
 
 const plans = [
   {
@@ -67,13 +67,13 @@ function PlanCard({ plan }: { plan: (typeof plans)[number] }) {
 }
 
 function FeatureGroup({ group }: { group: (typeof featureGroups)[number] }) {
-  return <article className="rounded-2xl border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] sm:p-6"><div className="flex items-start gap-4"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#193b43] text-xs font-bold text-[#e2b644]">{group.number}</span><div><h3 className="text-xl font-bold text-[#193b43]">{group.title}</h3><p className="mt-2 text-sm leading-6 text-[#6d7b76]">{group.description}</p></div></div><ul className="mt-6 grid gap-2 border-t border-[#eee9df] pt-5 sm:grid-cols-2">{group.features.map((feature) => <li key={feature} className="flex gap-2 text-sm leading-6 text-[#5d6d6b]"><span className="text-[#b08116]">✓</span>{feature}</li>)}</ul></article>;
+  return <article className="rounded-[1.35rem] border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] sm:p-6"><div className="flex items-start gap-4"><FeatureIcon name={group.number === "01" ? "line" : group.number === "02" ? "calendar" : group.number === "03" ? "ticket" : group.number === "04" ? "message" : "chart"} /><div><div className="flex items-center gap-3"><span className="text-[10px] font-semibold uppercase tracking-[.14em] text-[#b08116]">Module {group.number}</span></div><h3 className="mt-2 text-xl font-bold text-[#193b43]">{group.title}</h3><p className="mt-2 text-sm leading-6 text-[#6d7b76]">{group.description}</p></div></div><ul className="mt-6 grid gap-2 border-t border-[#eee9df] pt-5 sm:grid-cols-2">{group.features.map((feature) => <li key={feature} className="flex gap-2 text-sm leading-6 text-[#5d6d6b]"><span className="mt-1 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#edf2ef] text-[10px] text-[#b08116]">✓</span>{feature}</li>)}</ul></article>;
 }
 
 function AddonCard({ number, title, note, price }: { number: string; title: string; note: string; price: string }) {
-  return <article className="flex min-h-48 flex-col rounded-2xl border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] transition hover:-translate-y-1 hover:border-[#b08116] sm:p-6"><div className="flex items-start justify-between gap-3"><span className="text-xs font-bold text-[#b08116]">{number}</span><span className="rounded-full bg-[#fbf1d9] px-2.5 py-1 text-xs font-bold text-[#8a6816]">{price}</span></div><h3 className="mt-7 text-lg font-bold text-[#193b43]">{title}</h3><p className="mt-2 text-sm leading-6 text-[#6d7b76]">{note}</p></article>;
+  return <article className="flex min-h-48 flex-col rounded-[1.35rem] border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] transition hover:-translate-y-1 hover:border-[#b08116] sm:p-6"><div className="flex items-start justify-between gap-3"><FeatureIcon name={number === "03" ? "calendar" : number === "04" ? "layers" : number === "06" ? "globe" : "settings"} compact /><span className="rounded-full bg-[#fbf1d9] px-2.5 py-1 text-xs font-bold text-[#8a6816]">{price}</span></div><p className="mt-5 text-[10px] font-semibold uppercase tracking-[.14em] text-[#b08116]">Add-on {number}</p><h3 className="mt-2 text-lg font-bold text-[#193b43]">{title}</h3><p className="mt-2 text-sm leading-6 text-[#6d7b76]">{note}</p></article>;
 }
 
 function ScopeItem({ title, text }: { title: string; text: string }) {
-  return <article className="rounded-2xl border border-white/10 bg-white/5 p-5"><span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e2b644]">Included</span><h3 className="mt-4 font-bold text-white">{title}</h3><p className="mt-2 text-sm leading-6 text-[#c9dcda]">{text}</p></article>;
+  return <article className="rounded-[1.35rem] border border-white/10 bg-white/5 p-5"><FeatureIcon name={title.includes("功能") ? "layers" : title.includes("設定") ? "settings" : title.includes("維護") ? "check" : "users"} dark compact /><span className="mt-4 block text-xs font-semibold uppercase tracking-[0.16em] text-[#e2b644]">Included</span><h3 className="mt-2 font-bold text-white">{title}</h3><p className="mt-2 text-sm leading-6 text-[#c9dcda]">{text}</p></article>;
 }

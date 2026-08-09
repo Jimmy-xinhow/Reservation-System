@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Callout, MarketingShell, PageIntro, PageIntroVisual, SectionHeading, SignalStrip, WorkflowRail } from "@/components/MarketingLayout";
+import { Callout, FeatureIcon, MarketingShell, PageIntro, PageIntroVisual, SectionHeading, SignalStrip, WorkflowRail } from "@/components/MarketingLayout";
 
 const steps = [
   ["說明現況", "目前使用什麼入口、怎麼排程、如何收款與通知。"],
@@ -22,4 +22,4 @@ export default function ContactPage() {
   </MarketingShell>;
 }
 
-function PrepCard({ number, title }: { number: string; title: string }) { return <div className="rounded-2xl border border-[#ddd7ca] bg-white p-4 text-center"><span className="text-xs font-mono font-semibold text-[#b08116]">{number}</span><p className="mt-4 text-sm font-semibold text-[#193b43]">{title}</p></div>; }
+function PrepCard({ number, title }: { number: string; title: string }) { return <div className="rounded-[1.25rem] border border-[#ddd7ca] bg-white p-4 text-center"><FeatureIcon name={number === "01" ? "globe" : number === "02" ? "calendar" : number === "03" ? "line" : number === "04" ? "users" : "spark"} compact /><span className="mt-3 block text-xs font-mono font-semibold text-[#b08116]">{number}</span><p className="mt-2 text-sm font-semibold text-[#193b43]">{title}</p></div>; }

@@ -1,12 +1,48 @@
 import Image from "next/image";
 import Link from "next/link";
 
+export type IconName = "calendar" | "ticket" | "message" | "layers" | "chart" | "users" | "globe" | "spark" | "phone" | "mail" | "line" | "settings" | "check";
+
+const iconPaths: Record<IconName, React.ReactNode> = {
+  calendar: <><rect x="3" y="4" width="18" height="17" rx="3" /><path d="M8 2v4M16 2v4M3 9h18" /></>,
+  ticket: <><path d="M4 7a2 2 0 0 0 0 4v2a2 2 0 0 0 0 4h16v-3a2 2 0 0 1 0-4V7H4Z" /><path d="M12 8v8" /></>,
+  message: <><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.7 8.7 0 0 1-3.1-.6L4 20l1.6-3.5A7.3 7.3 0 0 1 4.5 12 7.5 7.5 0 0 1 12 4.5a7.5 7.5 0 0 1 8 7Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></>,
+  layers: <><path d="m12 3 8 4-8 4-8-4 8-4Z" /><path d="m4 12 8 4 8-4M4 17l8 4 8-4" /></>,
+  chart: <><path d="M4 19V5M4 19h17" /><path d="m7 15 4-4 3 2 5-6" /><circle cx="7" cy="15" r="1" /><circle cx="11" cy="11" r="1" /><circle cx="14" cy="13" r="1" /><circle cx="19" cy="7" r="1" /></>,
+  users: <><circle cx="9" cy="8" r="3" /><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 5.5a3 3 0 0 1 0 5.8M17 14a4.5 4.5 0 0 1 4 5" /></>,
+  globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
+  spark: <><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z" /><path d="m19 16 .6 2.4L22 19l-2.4.6L19 22l-.6-2.4L16 19l2.4-.6L19 16Z" /></>,
+  phone: <><path d="M7 3h3l1.5 4-2 1.5a14 14 0 0 0 5 5l1.5-2 4 1.5v3a2 2 0 0 1-2.2 2A15.5 15.5 0 0 1 4 5.2 2 2 0 0 1 7 3Z" /></>,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>,
+  line: <><path d="M20 11c0 4-4 7-9 7-.8 0-1.6-.1-2.3-.2L5 20l.9-2.6C4.1 16.2 3 13.8 3 11c0-4 3.6-7 8-7s9 3 9 7Z" /><path d="M7 11h.01M11 11h.01M15 11h.01" /></>,
+  settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.7 1.7-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-2.4v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1L8 17l.1-.1A1.7 1.7 0 0 0 8.4 15a1.7 1.7 0 0 0-1.5-1H6v-2.4h.2a1.7 1.7 0 0 0 1.5-1A1.7 1.7 0 0 0 7 8.7L7 8.6 8.7 7l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5v-.2h2.4v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 8l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2v2.4h-.2a1.7 1.7 0 0 0-1.5 1Z" /></>,
+  check: <><path d="m5 12 4 4L19 6" /></>,
+};
+
+function iconForLabel(label: string): IconName {
+  if (label.includes("入口") || label.includes("LINE")) return "line";
+  if (label.includes("安排") || label.includes("服務") || label.includes("流程")) return "calendar";
+  if (label.includes("報名") || label.includes("場次")) return "ticket";
+  if (label.includes("CRM") || label.includes("互動") || label.includes("聯絡")) return "message";
+  if (label.includes("治理") || label.includes("平台")) return "layers";
+  if (label.includes("回訪") || label.includes("資料") || label.includes("報表")) return "chart";
+  if (label.includes("品牌") || label.includes("多品牌")) return "globe";
+  if (label.includes("設定")) return "settings";
+  if (label.includes("電話")) return "phone";
+  if (label.includes("Email")) return "mail";
+  return "spark";
+}
+
+export function FeatureIcon({ name, dark = false, compact = false }: { name: IconName; dark?: boolean; compact?: boolean }) {
+  return <span className={`inline-flex shrink-0 items-center justify-center rounded-xl ${compact ? "h-9 w-9" : "h-11 w-11"} ${dark ? "bg-[#e2b644] text-[#193b43]" : "bg-[#edf2ef] text-[#1f4550]"}`} aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={compact ? "h-4 w-4" : "h-5 w-5"}>{iconPaths[name]}</svg></span>;
+}
+
 export function MarketingShell({ children }: { children: React.ReactNode }) {
   return <main className="min-h-screen overflow-hidden bg-[#f7f5ef] text-[#193b43]"><MarketingHeader />{children}<MarketingFooter /></main>;
 }
 
 export function MarketingHeader() {
-  return <header className="sticky top-0 z-30 border-b border-[#d8d2c5]/80 bg-[#f7f5ef]/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center gap-3 px-5 py-3 sm:gap-4 sm:px-8 lg:px-10"><Link href="/" className="flex min-h-11 shrink-0 items-center gap-2" aria-label="回到星昊科技首頁"><Image src="/brand/xinhao-horizontal.png" alt="星昊科技 XINHOW" width={2048} height={1024} className="h-12 w-24 object-contain" priority /><span className="hidden text-xs font-semibold tracking-[0.14em] text-[#1f4550] sm:block">星昊科技</span></Link><nav className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto text-xs font-medium text-[#5d6d6b] sm:gap-2 sm:text-sm" aria-label="行銷網站主選單"><NavLink href="/product">產品能力</NavLink><NavLink href="/solutions">產業場景</NavLink><NavLink href="/pricing">方案與服務</NavLink><NavLink href="/contact">聯絡導入</NavLink><a href="https://lin.ee/jnAfCBy" target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center rounded-lg px-2.5 font-semibold text-[#1f4550] transition hover:bg-[#e2b644]/20 sm:px-3">官方 LINE</a></nav><Link href="/admin/login" className="btn min-h-11 shrink-0 border border-[#1f4550]/20 bg-white/70 px-3 text-xs text-[#1f4550] hover:bg-white sm:px-4 sm:text-sm">後台登入</Link></div></header>;
+  return <header className="sticky top-0 z-30 border-b border-[#d8d2c5]/80 bg-[#f7f5ef]/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center gap-3 px-5 py-3 sm:gap-4 sm:px-8 lg:px-10"><Link href="/" className="flex min-h-11 shrink-0 items-center gap-2" aria-label="回到星昊科技首頁"><Image src="/brand/xinhao-horizontal.png" alt="星昊科技 XINHOW" width={2048} height={1024} className="h-12 w-24 object-contain" priority /><span className="hidden text-xs font-semibold tracking-[0.14em] text-[#1f4550] sm:block">星昊科技</span></Link><nav className="ml-auto flex min-w-0 items-center gap-1 overflow-x-auto text-xs font-medium text-[#5d6d6b] sm:gap-2 sm:text-sm" aria-label="行銷網站主選單"><NavLink href="/product">產品能力</NavLink><NavLink href="/solutions">產業場景</NavLink><NavLink href="/pricing">方案與服務</NavLink><NavLink href="/contact">聯絡導入</NavLink><a href="https://lin.ee/jnAfCBy" target="_blank" rel="noreferrer" className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-2.5 font-semibold text-[#1f4550] transition hover:bg-[#e2b644]/20 sm:px-3"><FeatureIcon name="line" compact />官方 LINE</a></nav><Link href="/admin/login" className="btn min-h-11 shrink-0 border border-[#1f4550]/20 bg-white/70 px-3 text-xs text-[#1f4550] hover:bg-white sm:px-4 sm:text-sm">後台登入</Link></div></header>;
 }
 
 function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
@@ -30,7 +66,7 @@ export function ArrowLink({ href, children, dark = false }: { href: string; chil
 }
 
 export function CapabilityCard({ number, title, description, href = "/product" }: { number: string; title: string; description: string; href?: string }) {
-  return <Link href={href} className="group block rounded-2xl border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] transition duration-200 hover:-translate-y-1 hover:border-[#c7a340] hover:shadow-[0_16px_35px_rgba(31,69,80,.1)]"><div className="flex items-start justify-between gap-3"><span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#edf2ef] text-xs font-bold text-[#1f4550]">{number}</span><span className="text-2xl text-[#d8d2c5] transition group-hover:text-[#c7a340]" aria-hidden="true">↗</span></div><h3 className="mt-7 font-bold text-[#193b43]">{title}</h3><p className="mt-2 text-sm leading-6 text-[#6d7b76]">{description}</p></Link>;
+  return <Link href={href} className="group relative block overflow-hidden rounded-[1.35rem] border border-[#ddd7ca] bg-white p-5 shadow-[0_8px_30px_rgba(31,69,80,.05)] transition duration-200 hover:-translate-y-1 hover:border-[#c7a340] hover:shadow-[0_16px_35px_rgba(31,69,80,.1)]"><div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#e2b644]/10 blur-2xl transition group-hover:bg-[#e2b644]/20" /><div className="relative flex items-start justify-between gap-3"><FeatureIcon name={iconForLabel(title)} /><span className="text-right text-[10px] font-semibold uppercase tracking-[.14em] text-[#a49f91]">Module {number}</span></div><div className="relative mt-6 flex items-end justify-between gap-3"><h3 className="font-bold text-[#193b43]">{title}</h3><span className="text-xl text-[#d8d2c5] transition group-hover:text-[#c7a340]" aria-hidden="true">↗</span></div><p className="relative mt-2 text-sm leading-6 text-[#6d7b76]">{description}</p><div className="relative mt-5 h-1 overflow-hidden rounded-full bg-[#edf2ef]"><span className="block h-full w-1/3 rounded-full bg-[#e2b644] transition-all duration-300 group-hover:w-2/3" /></div></Link>;
 }
 
 export function Callout({ title, description, href = "/contact", label = "開始規劃" }: { title: string; description: string; href?: string; label?: string }) {
@@ -52,7 +88,7 @@ export function JourneyDiagram() {
 type IntroVisualVariant = "product" | "solutions" | "pricing" | "contact";
 
 export function MarketingPhoto({ src, alt, caption, priority = false }: { src: string; alt: string; caption: string; priority?: boolean }) {
-  return <figure className="overflow-hidden rounded-2xl border border-[#ddd7ca] bg-white shadow-[0_12px_30px_rgba(31,69,80,.1)]"><div className="relative h-44 sm:h-52"><Image src={src} alt={alt} fill sizes="(max-width: 1024px) 100vw, 38vw" className="object-cover" priority={priority} /></div><figcaption className="border-t border-[#eee9df] bg-[#fbfaf6] px-4 py-3 text-xs leading-5 text-[#6d7b76]">{caption}</figcaption></figure>;
+  return <figure className="overflow-hidden rounded-[1.35rem] border border-[#ddd7ca] bg-white shadow-[0_12px_30px_rgba(31,69,80,.1)]"><div className="relative h-44 sm:h-52"><Image src={src} alt={alt} fill sizes="(max-width: 1024px) 100vw, 38vw" className="object-cover" priority={priority} /><span className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full border border-white/40 bg-[#193b43]/80 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[.14em] text-white backdrop-blur"><FeatureIcon name="spark" dark compact />Field note · XH</span><span className="absolute bottom-3 right-3 rounded-lg bg-white/85 px-2 py-1 text-[9px] font-semibold text-[#193b43]">實景紀錄</span></div><figcaption className="border-t border-[#eee9df] bg-[#fbfaf6] px-4 py-3 text-xs leading-5 text-[#6d7b76]">{caption}</figcaption></figure>;
 }
 
 export function PageIntroVisual({ variant, dark = false, photoSrc, photoAlt, photoCaption }: { variant: IntroVisualVariant; dark?: boolean; photoSrc?: string; photoAlt?: string; photoCaption?: string }) {
@@ -86,12 +122,12 @@ function FlowConnector({ label }: { label: string }) {
   return <div className="flex items-center gap-2 px-4 text-[10px] text-[#7a8782]"><span className="h-5 w-px bg-[#c9d1cd]" /><span>{label}</span></div>;
 }
 
-export function SignalStrip({ items, dark = false }: { items: ReadonlyArray<{ label: string; value: string; detail: string }>; dark?: boolean }) {
-  return <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${dark ? "text-white" : "text-[#193b43]"}`}>{items.map((item) => <div key={item.label} className={`rounded-2xl border p-4 ${dark ? "border-white/10 bg-white/5" : "border-[#ddd7ca] bg-white shadow-[0_8px_25px_rgba(31,69,80,.05)]"}`}><p className={`text-[11px] font-semibold uppercase tracking-[.15em] ${dark ? "text-[#e2b644]" : "text-[#b08116]"}`}>{item.label}</p><p className="mt-3 text-2xl font-bold tracking-tight">{item.value}</p><p className={`mt-1 text-xs leading-5 ${dark ? "text-[#c9dcda]" : "text-[#6d7b76]"}`}>{item.detail}</p></div>)}</div>;
+export function SignalStrip({ items, dark = false }: { items: ReadonlyArray<{ label: string; value: string; detail: string; icon?: IconName }>; dark?: boolean }) {
+  return <div className={`grid gap-3 sm:grid-cols-2 lg:grid-cols-4 ${dark ? "text-white" : "text-[#193b43]"}`}>{items.map((item) => <div key={item.label} className={`rounded-[1.35rem] border p-4 ${dark ? "border-white/10 bg-white/5" : "border-[#ddd7ca] bg-white shadow-[0_8px_25px_rgba(31,69,80,.05)]"}`}><div className="flex items-center justify-between gap-3"><FeatureIcon name={item.icon ?? iconForLabel(item.label)} dark={dark} compact /><p className={`text-[11px] font-semibold uppercase tracking-[.15em] ${dark ? "text-[#e2b644]" : "text-[#b08116]"}`}>{item.label}</p></div><p className="mt-4 break-words text-2xl font-bold tracking-tight">{item.value}</p><p className={`mt-1 text-xs leading-5 ${dark ? "text-[#c9dcda]" : "text-[#6d7b76]"}`}>{item.detail}</p></div>)}</div>;
 }
 
 export function WorkflowRail({ steps, dark = false }: { steps: ReadonlyArray<{ label: string; title: string; detail: string }>; dark?: boolean }) {
-  return <div className={`overflow-x-auto rounded-[1.75rem] border p-4 sm:p-6 ${dark ? "border-white/10 bg-white/5" : "border-[#ddd7ca] bg-white shadow-[0_14px_35px_rgba(31,69,80,.06)]"}`}><div className="grid min-w-[720px] grid-cols-4 gap-3">{steps.map((step, index) => <div key={step.label} className="relative"><div className={`flex min-h-40 flex-col rounded-2xl border p-4 ${dark ? "border-white/10 bg-[#193b43]" : "border-[#eee9df] bg-[#fbfaf6]"}`}><div className="flex items-center justify-between"><span className={`flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold ${index === steps.length - 1 ? "bg-[#e2b644] text-[#193b43]" : dark ? "bg-white/10 text-[#e2b644]" : "bg-[#193b43] text-white"}`}>{String(index + 1).padStart(2, "0")}</span><span className={`text-[10px] font-semibold uppercase tracking-[.12em] ${dark ? "text-[#a9c2be]" : "text-[#7a8782]"}`}>{step.label}</span></div><h3 className={`mt-7 text-base font-bold ${dark ? "text-white" : "text-[#193b43]"}`}>{step.title}</h3><p className={`mt-2 text-xs leading-5 ${dark ? "text-[#c9dcda]" : "text-[#6d7b76]"}`}>{step.detail}</p></div>{index < steps.length - 1 && <span className={`absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 text-xl sm:block ${dark ? "text-[#e2b644]" : "text-[#b08116]"}`} aria-hidden="true">→</span>}</div>)}</div></div>;
+  return <div className={`overflow-x-auto rounded-[1.75rem] border p-4 sm:p-6 ${dark ? "border-white/10 bg-white/5" : "border-[#ddd7ca] bg-white shadow-[0_14px_35px_rgba(31,69,80,.06)]"}`}><div className="grid min-w-[720px] grid-cols-4 gap-3">{steps.map((step, index) => <div key={step.label} className="relative"><div className={`flex min-h-40 flex-col rounded-[1.35rem] border p-4 ${dark ? "border-white/10 bg-[#193b43]" : "border-[#eee9df] bg-[#fbfaf6]"}`}><div className="flex items-center justify-between"><FeatureIcon name={iconForLabel(step.label)} dark={dark || index === steps.length - 1} compact /><span className={`text-[10px] font-semibold uppercase tracking-[.12em] ${dark ? "text-[#a9c2be]" : "text-[#7a8782]"}`}>{step.label}</span></div><h3 className={`mt-6 text-base font-bold ${dark ? "text-white" : "text-[#193b43]"}`}>{step.title}</h3><p className={`mt-2 text-xs leading-5 ${dark ? "text-[#c9dcda]" : "text-[#6d7b76]"}`}>{step.detail}</p></div>{index < steps.length - 1 && <span className={`absolute -right-3 top-1/2 z-10 hidden -translate-y-1/2 text-xl sm:block ${dark ? "text-[#e2b644]" : "text-[#b08116]"}`} aria-hidden="true">→</span>}</div>)}</div></div>;
 }
 
 export function DashboardMockup({ variant = "operations" }: { variant?: "operations" | "customer" | "marketing" }) {
