@@ -35,13 +35,13 @@ function icon(action: Slot["action"], x: number, y: number, size: number): strin
     case "query":
       return `<g ${common}><circle cx="${x + 50 * unit}" cy="${y + 50 * unit}" r="${35 * unit}"/><path d="M${x + 50 * unit} ${y + 29 * unit}v${23 * unit}l${17 * unit} ${10 * unit}M${x + 28 * unit} ${y + 82 * unit}l-${13 * unit} ${8 * unit}"/></g>`;
     case "events":
-      return `<g ${common}><path d="M${x + 15 * unit} ${y + 34 * unit}h${70 * unit}v${49 * unit}H${15 * unit}zM${x + 15 * unit} ${y + 47 * unit}h${70 * unit}M${x + 31 * unit} ${y + 19 * unit}v${20 * unit}M${x + 69 * unit} ${y + 19 * unit}v${20 * unit}"/><path d="M${x + 33 * unit} ${y + 62 * unit}h${13 * unit}M${x + 56 * unit} ${y + 62 * unit}h${13 * unit}"/></g>`;
+      return `<g ${common}><path d="M${x + 15 * unit} ${y + 34 * unit}h${70 * unit}v${49 * unit}H${x + 15 * unit}zM${x + 15 * unit} ${y + 47 * unit}h${70 * unit}M${x + 31 * unit} ${y + 19 * unit}v${20 * unit}M${x + 69 * unit} ${y + 19 * unit}v${20 * unit}"/><path d="M${x + 33 * unit} ${y + 62 * unit}h${13 * unit}M${x + 56 * unit} ${y + 62 * unit}h${13 * unit}"/></g>`;
     case "tickets":
-      return `<g ${common}><path d="M${x + 14 * unit} ${y + 31 * unit}h${72 * unit}v${18 * unit}a${12 * unit} ${12 * unit} 0 0 0 0 ${24 * unit}v${16 * unit}H${14 * unit}V${73 * unit}a${12 * unit} ${12 * unit} 0 0 0 0-${0} -${24 * unit}zM${x + 54 * unit} ${y + 31 * unit}v${9 * unit}m0 ${10 * unit}v${12 * unit}m0 ${10 * unit}v${17 * unit}"/></g>`;
+      return `<g ${common}><rect x="${x + 14 * unit}" y="${y + 27 * unit}" width="${72 * unit}" height="${58 * unit}" rx="${9 * unit}"/><path d="M${x + 57 * unit} ${y + 27 * unit}v${10 * unit}m0 ${10 * unit}v${12 * unit}m0 ${10 * unit}v${16 * unit}M${x + 28 * unit} ${y + 50 * unit}h${17 * unit}M${x + 28 * unit} ${y + 64 * unit}h${13 * unit}"/></g>`;
     case "membership":
-      return `<g ${common}><path d="M${x + 50 * unit} ${y + 87 * unit}s-${34 * unit}-${20 * unit}-${34 * unit}-${45 * unit}a${19 * unit} ${19 * unit} 0 0 1 ${34 * unit}-${12 * unit}A${19 * unit} ${19 * unit} 0 0 1 ${84 * unit} ${y + 42 * unit}c0 ${25 * unit}-${34 * unit} ${45 * unit}-${34 * unit} ${45 * unit}z"/></g>`;
+      return `<g ${common}><path d="M${x + 50 * unit} ${y + 86 * unit}C${x + 18 * unit} ${y + 68 * unit},${x + 12 * unit} ${y + 48 * unit},${x + 20 * unit} ${y + 32 * unit}C${x + 29 * unit} ${y + 15 * unit},${x + 47 * unit} ${y + 22 * unit},${x + 50 * unit} ${y + 35 * unit}C${x + 53 * unit} ${y + 22 * unit},${x + 71 * unit} ${y + 15 * unit},${x + 80 * unit} ${y + 32 * unit}C${x + 88 * unit} ${y + 48 * unit},${x + 82 * unit} ${y + 68 * unit},${x + 50 * unit} ${y + 86 * unit}z"/></g>`;
     case "support":
-      return `<g ${common}><path d="M${x + 16 * unit} ${y + 20 * unit}h${68 * unit}v${50 * unit}H${48 * unit}L${29 * unit} ${y + 86 * unit}l${4 * unit}-${16 * unit}H${16 * unit}z"/><path d="M${x + 34 * unit} ${y + 45 * unit}h${32 * unit}M${x + 34 * unit} ${y + 58 * unit}h${21 * unit}"/></g>`;
+      return `<g ${common}><path d="M${x + 16 * unit} ${y + 20 * unit}h${68 * unit}v${50 * unit}H${x + 48 * unit}L${x + 29 * unit} ${y + 86 * unit}l${4 * unit}-${16 * unit}H${x + 16 * unit}z"/><path d="M${x + 34 * unit} ${y + 45 * unit}h${32 * unit}M${x + 34 * unit} ${y + 58 * unit}h${21 * unit}"/></g>`;
     default:
       return `<g ${common}><circle cx="${x + 50 * unit}" cy="${y + 50 * unit}" r="${35 * unit}"/><path d="M${x + 50 * unit} ${y + 45 * unit}v${25 * unit}M${x + 50 * unit} ${y + 31 * unit}h.1"/></g>`;
   }
