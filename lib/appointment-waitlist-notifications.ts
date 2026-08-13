@@ -3,7 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
-import { clinicLiffUrl, getClinicLineChannelContext } from "@/lib/line-channel";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { buildWaitlistStatusFlex } from "@/lib/line-ui-templates";
+import { customerEntryUrl } from "@/lib/customer-entry";
 import { formatDateTime } from "@/lib/slots";
 
 interface ClaimedNotification {
@@ -59,8 +61,21 @@ export async function processAppointmentWaitlistNotificationQueue(
           continue;
         }
         const token = lineAccessTokenForDestination(row.line_destination ?? undefined);
-        const entryUrl = clinicLiffUrl(context, { view: "appointments" });
-        await pushMessages(row.line_user_id, [{ type: "text", text: waitlistText(row, entryUrl) }], token);
+        const entryUrl = customerEntryUrl("appointments", {
+          baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
+          clinicSlug: context.clinicSlug,
+          liffId: context.liffId,
+        });
+        const when = row.target_start_at ? formatDateTime(row.target_start_at) : row.requested_date;
+        const target = [when, row.service_name, row.doctor_name].filter(Boolean).join("・");
+        await pushMessages(row.line_user_id, [buildWaitlistStatusFlex({
+          kind: row.kind,
+          clinicName: row.clinic_name,
+          target,
+          position: row.position,
+          offerDeadline: row.offer_expires_at ? formatDateTime(row.offer_expires_at) : null,
+          manageUrl: entryUrl,
+        })], token);
       } else {
         if (!row.email) {
           await finish(service, row.log_id, "skipped", "customer has no email");

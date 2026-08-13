@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { customerEntryUrl, type CustomerEntryKey } from "@/lib/customer-entry";
-import { ACTION_OPTIONS, LAYOUTS, type Layout, type Slot } from "@/lib/richmenu";
+import { ACTION_OPTIONS, LAYOUTS, type Layout, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
 import { publishRichMenuAction } from "../actions";
 
 interface PublishFormProps {
@@ -15,6 +15,7 @@ interface PublishFormProps {
   clinicSlug: string | null;
   liffId: string | null;
   versionId: string | null;
+  templateKey: RichMenuTemplateKey;
   disabled?: boolean;
 }
 
@@ -61,12 +62,14 @@ export default function PublishForm({
   clinicSlug,
   liffId,
   versionId,
+  templateKey,
   disabled,
 }: PublishFormProps) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loadingTemplate, setLoadingTemplate] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const spec = LAYOUTS[layout];
   const previewSlots = useMemo(() => slots.slice(0, spec.slots).map((slot) => ({
@@ -84,6 +87,22 @@ export default function PublishForm({
     setFile(f);
     setErr(null);
     setPreview(f ? URL.createObjectURL(f) : null);
+  }
+
+  async function useBuiltInArtwork() {
+    if (templateKey === "custom") return;
+    setLoadingTemplate(true);
+    setErr(null);
+    try {
+      const response = await fetch(`/api/admin/richmenu-template?template=${encodeURIComponent(templateKey)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("內建圖稿產生失敗");
+      const blob = await response.blob();
+      pick(new File([blob], `richmenu-${templateKey}.png`, { type: "image/png" }));
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "內建圖稿產生失敗");
+    } finally {
+      setLoadingTemplate(false);
+    }
   }
 
   async function loadImage(f: File): Promise<HTMLImageElement> {
@@ -160,6 +179,20 @@ export default function PublishForm({
         系統會自動把圖片裁成 <strong>{width} × {height} px</strong>(等比填滿、置中裁切)並壓縮,
         你不必自己調尺寸;建議上傳解析度足夠、比例接近的圖較不失真。
       </p>
+      {templateKey !== "custom" && (
+        <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-emerald-900">可直接使用的品牌圖稿</p>
+            <p className="mt-0.5 text-xs leading-5 text-emerald-700">依目前模板與已啟用模組產生 LINE 規格 PNG，套用後仍可先預覽熱區。</p>
+          </div>
+          <div className="flex min-h-11 flex-wrap gap-2">
+            <button type="button" onClick={useBuiltInArtwork} disabled={loadingTemplate} className="btn btn-primary min-h-11 px-4">
+              {loadingTemplate ? "產生中…" : "套用內建圖稿"}
+            </button>
+            <a href={`/api/admin/richmenu-template?template=${encodeURIComponent(templateKey)}&download=1`} className="btn btn-secondary min-h-11 px-4">下載 PNG</a>
+          </div>
+        </div>
+      )}
       <input
         type="file"
         accept="image/png,image/jpeg,image/webp"

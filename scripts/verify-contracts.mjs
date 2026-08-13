@@ -1513,6 +1513,31 @@ invariant(
     read("supabase/schema.sql").includes("revoke all on function record_registration_status_event() from public, anon, authenticated") &&
     exists("supabase/migration_security_advisor_hardening.sql"),
 );
+invariant(
+  "LINE UI catalog covers the complete customer journey",
+  exists("app/admin/line-templates/page.tsx") &&
+    read("components/AdminNav.tsx").includes("/admin/line-templates") &&
+    ["welcome", "service_hub", "booking_confirmed", "payment_pending", "appointment_reminder", "appointment_changed", "waitlist_joined", "waitlist_offer", "quick_rebook", "registration_confirmed", "ticket_ready", "membership_balance", "campaign", "support_handoff"]
+      .every((key) => read("lib/line-ui-templates.ts").includes(`key: "${key}"`)),
+);
+invariant(
+  "Rich Menu built-in artwork is authenticated and produces LINE-sized PNG",
+  read("app/api/admin/richmenu-template/route.ts").includes("requireAdmin") &&
+    read("app/api/admin/richmenu-template/route.ts").includes("renderRichMenuPng") &&
+    read("lib/richmenu-art.ts").includes("sharp(Buffer.from(svg)).png") &&
+    read("lib/richmenu.ts").includes("width: 2500, height: 1686") &&
+    read("lib/richmenu.ts").includes("width: 2500, height: 843") &&
+    read("app/admin/richmenu/PublishForm.tsx").includes("套用內建圖稿") &&
+    read("app/admin/richmenu/PublishForm.tsx").includes("下載 PNG"),
+);
+invariant(
+  "appointment and waitlist LINE status notifications use task-focused Flex cards",
+  read("lib/appointment-notifications.ts").includes("buildAppointmentStatusFlex") &&
+    read("lib/appointment-waitlist-notifications.ts").includes("buildWaitlistStatusFlex") &&
+    read("lib/registration-notifications.ts").includes("buildRegistrationStatusFlex") &&
+    read("lib/line-ui-templates.ts").includes('type: "flex"') &&
+    read("lib/line-ui-templates.ts").includes('view: "appointments"') === false,
+);
 
 if (failures.length > 0) {
   console.error(`\nContract verification failed: ${failures.join("; ")}`);

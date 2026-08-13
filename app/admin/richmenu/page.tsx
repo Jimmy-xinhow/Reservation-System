@@ -243,6 +243,7 @@ export default async function RichMenuPage({
             clinicSlug={previewClinicSlug}
             liffId={previewLiffId}
             versionId={draft?.id ?? null}
+            templateKey={draft?.template_key ?? "mixed"}
             disabled={!lineReady || !draft}
           />
         </div>

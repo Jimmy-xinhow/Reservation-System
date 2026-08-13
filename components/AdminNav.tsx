@@ -90,6 +90,7 @@ const GROUPS: Group[] = [
       { href: "/admin/chat", label: "客服對話", icon: "chat", module: "line" },
       { href: "/admin/replies", label: "自動回覆", icon: "message", module: "line", adminOnly: true },
       { href: "/admin/messages", label: "訊息模板", icon: "message", module: "line", adminOnly: true },
+      { href: "/admin/line-templates", label: "LINE UI 模板", icon: "line", module: "line", adminOnly: true },
     ],
   },
   {

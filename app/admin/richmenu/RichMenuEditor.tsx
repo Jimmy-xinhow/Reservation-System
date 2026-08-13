@@ -86,17 +86,21 @@ export default function RichMenuEditor({
         <div className="rounded-xl bg-brand-50 p-3 text-sm text-brand-700">
           背景圖片尺寸需為 <strong>{spec.width} × {spec.height} px</strong>(共 {spec.slots} 格)。上傳時系統會自動裁成此尺寸。
         </div>
-        {/* 版面示意 */}
+        {/* 實際圖稿與版面示意 */}
         <div
-          className="grid gap-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-1"
+          className="relative isolate grid gap-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-1"
           style={{
             gridTemplateColumns: `repeat(${spec.cols}, 1fr)`,
             aspectRatio: `${spec.width} / ${spec.height}`,
           }}
         >
+          {template !== "custom" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={`/api/admin/richmenu-template?template=${encodeURIComponent(template)}`} alt={`${RICH_MENU_TEMPLATES[template].label}實際 PNG 圖稿`} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
+          )}
           {slots.map((s, i) => (
-            <div key={i} className="flex items-center justify-center rounded bg-white px-1 text-center text-xs text-slate-500">
-              {i + 1}. {ACTION_OPTIONS.find((o) => o.value === s.action)?.label ?? "(未設定)"}
+            <div key={i} className={`relative z-10 flex items-end justify-center rounded border border-white/80 px-1 pb-2 text-center text-[11px] font-semibold sm:text-xs ${template === "custom" ? "bg-white text-slate-500" : "bg-slate-950/5 text-slate-700"}`}>
+              <span className="rounded-full bg-white/90 px-2 py-1 shadow-sm">{i + 1}. {ACTION_OPTIONS.find((o) => o.value === s.action)?.label ?? "(未設定)"}</span>
             </div>
           ))}
         </div>
