@@ -1,6 +1,8 @@
 import { requireMember, canViewSensitiveCustomerData } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createDiscountCodeAction, createMembershipPlanAction, grantPatientMembershipAction, toggleDiscountCodeAction, toggleMembershipPlanAction } from "./actions";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,7 @@ interface MembershipRow { id: string; membership_code: string; status: string; c
 
 export default async function MembershipsPage() {
   const { supabase, clinicId, role, clinicName } = await requireMember();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "memberships"))) return <ModuleDisabled title="會員與套票" />;
   if (!canViewSensitiveCustomerData(role)) return <p className="card p-6 text-sm text-slate-500">目前角色無法查看顧客套票與聯絡資料。</p>;
   const [{ data: plans, error: plansError }, { data: services, error: servicesError }, { data: patients, error: patientsError }, { data: codes, error: codesError }, { data: memberships, error: membershipsError }] = await Promise.all([
     supabase.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),

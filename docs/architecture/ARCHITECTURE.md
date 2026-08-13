@@ -40,7 +40,7 @@ flowchart LR
 
 1. 顧客從 LIFF、瀏覽器或嵌入入口取得公開品牌／活動資料。
 2. API 以活動／品牌資料庫關聯決定實際 `clinic_id`，不採信任意前端租戶欄位。
-3. LINE 身分以 ID token 驗證；非 LINE 流程使用必要的顧客資料與一次性 token。
+3. LINE 身分以 ID token 驗證；非 LINE 流程使用必要的顧客資料與具品牌、顧客及期限簽章的 browser token。
 4. API 呼叫受保護的 SQL transaction／RPC 完成名額與狀態變更。
 5. 回傳最小必要結果；付款、通知與報到憑證使用不可猜測識別。
 

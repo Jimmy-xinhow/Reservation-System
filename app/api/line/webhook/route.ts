@@ -8,6 +8,7 @@ import { buildLineMessage, type MsgKind, type MsgData } from "@/lib/lineMessage"
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -62,6 +63,9 @@ export async function POST(req: NextRequest) {
   if (!clinicId) return new Response("brand not configured", { status: 500 });
   const clinicSlug = (destinationClinic?.slug as string | null) ?? null;
   const clinicName = (destinationClinic?.name as string | null)?.trim() || "預約與報名平台";
+  const lineContext = await getClinicLineChannelContext(svc, clinicId);
+  if (!lineContext.enabled) return new Response("brand LINE channel disabled", { status: 404 });
+  const liffId = lineContext.liffId;
   const lineAccessToken = lineAccessTokenForDestination(destination);
 
   // 讀取後台自訂的回覆規則與歡迎/預設文字
@@ -102,7 +106,7 @@ export async function POST(req: NextRequest) {
     if (!ev.replyToken) continue;
     try {
       if (ev.type === "follow") {
-         await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, clinicSlug, clinicName)], lineAccessToken);
+         await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName)], lineAccessToken);
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim();
         // 依後台規則(排序)找第一個命中的關鍵字
@@ -118,15 +122,15 @@ export async function POST(req: NextRequest) {
         } else if (rule?.action === "query") {
           await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (rule?.action === "booking") {
-          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, clinicSlug, clinicName)], lineAccessToken);
+          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, liffId, clinicSlug, clinicName)], lineAccessToken);
         } else if (rule?.action === "message" && rule.message_id) {
-          const msg = await buildMessageById(svc, rule.message_id, baseUrl, clinicId, clinicSlug);
+          const msg = await buildMessageById(svc, rule.message_id, baseUrl, clinicId, liffId, clinicSlug);
           if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
-          else await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, clinicSlug, clinicName)], lineAccessToken);
+          else await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName)], lineAccessToken);
         } else if (rule?.action === "text" && rule.reply_text) {
           await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }], lineAccessToken);
         } else {
-          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, clinicSlug, clinicName)], lineAccessToken);
+          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName)], lineAccessToken);
         }
       } else if (ev.type === "postback" && ev.postback?.data) {
         const params = new URLSearchParams(ev.postback.data);
@@ -138,10 +142,10 @@ export async function POST(req: NextRequest) {
         } else if (action === "progress") {
           await safeReply(ev.replyToken, "此品牌目前未開放服務進度查詢。", lineAccessToken);
         } else if (action === "booking") {
-          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, clinicSlug, clinicName)], lineAccessToken);
+          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, liffId, clinicSlug, clinicName)], lineAccessToken);
         } else if (action === "msg") {
           try {
-            const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl, clinicId, clinicSlug);
+            const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl, clinicId, liffId, clinicSlug);
             if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
             else
               await safeReply(
@@ -171,10 +175,9 @@ export async function POST(req: NextRequest) {
 }
 
 // ── 訊息樣板 ────────────────────────────────────────────────
-function liffUrl(clinicSlug?: string | null): string | null {
-  const id = process.env.NEXT_PUBLIC_LIFF_ID;
-  if (!id) return null;
-  const url = new URL(`https://liff.line.me/${id}`);
+function liffUrl(liffId: string | null, clinicSlug?: string | null): string | null {
+  if (!liffId) return null;
+  const url = new URL(`https://liff.line.me/${liffId}`);
   if (clinicSlug) url.searchParams.set("clinic_slug", clinicSlug);
   return url.toString();
 }
@@ -191,8 +194,8 @@ interface MenuConfig {
 }
 
 // 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
-function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig, clinicSlug?: string | null): LineMessage {
-  const liff = liffUrl(clinicSlug);
+function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig, liffId: string | null = null, clinicSlug?: string | null): LineMessage {
+  const liff = liffUrl(liffId, clinicSlug);
   const c = cfg ?? { title: null, booking: true, query: true, progress: false, info: true, linkLabel: null, linkUrl: null };
   const buttons: LineMessage[] = [];
   if (c.booking) {
@@ -257,22 +260,23 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
   };
 }
 
-function welcomeMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+function welcomeMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
   return menuBubble(
     cfg?.title || `歡迎加入${clinicName} 🌿`,
     custom || "您可以在這裡線上預約、查詢或取消預約。請點下方按鈕開始。",
     baseUrl,
     cfg,
+    liffId,
     clinicSlug,
   );
 }
 
-function menuMessage(baseUrl: string, custom?: string | null, cfg?: MenuConfig, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
-  return menuBubble(cfg?.title || clinicName, custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg, clinicSlug);
+function menuMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+  return menuBubble(cfg?.title || clinicName, custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg, liffId, clinicSlug);
 }
 
-function bookingPrompt(baseUrl: string, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
-  const liff = liffUrl(clinicSlug);
+function bookingPrompt(baseUrl: string, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+  const liff = liffUrl(liffId, clinicSlug);
   if (liff) {
     const rule = (text: string): LineMessage => ({
       type: "box",
@@ -340,7 +344,7 @@ function bookingPrompt(baseUrl: string, clinicSlug?: string | null, clinicName =
       },
     };
   }
-  return menuBubble(clinicName, "預約功能即將開放,請稍後或洽櫃檯。", baseUrl, undefined, clinicSlug);
+  return menuBubble(clinicName, "預約功能即將開放,請稍後或洽櫃檯。", baseUrl, undefined, liffId, clinicSlug);
 }
 
 // ── 查詢我的預約 ────────────────────────────────────────────
@@ -500,6 +504,7 @@ async function buildMessageById(
   messageId: string,
   baseUrl: string,
   clinicId: string,
+  liffId: string | null,
   clinicSlug: string | null,
 ): Promise<LineMessage | null> {
   const { data } = await svc
@@ -509,7 +514,7 @@ async function buildMessageById(
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (!data) return null;
-  return buildLineMessage(data.kind as MsgKind, data.data as MsgData, { liffUrl: liffUrl(clinicSlug), baseUrl }) as LineMessage | null;
+  return buildLineMessage(data.kind as MsgKind, data.data as MsgData, { liffUrl: liffUrl(liffId, clinicSlug), baseUrl }) as LineMessage | null;
 }
 
 // 分類資訊列:左標籤(圖示)+ 右內容

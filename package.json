@@ -12,6 +12,14 @@
     "test:contracts": "node scripts/verify-contracts.mjs",
     "verify:contracts": "node scripts/verify-contracts.mjs",
     "smoke:public": "node scripts/smoke-public.mjs",
+    "audit:staging-security": "node scripts/staging-security-audit.mjs",
+    "audit:staging-booking": "node scripts/staging-booking-audit.mjs",
+    "audit:staging-commerce": "node scripts/staging-commerce-audit.mjs",
+    "audit:staging-notifications": "node scripts/staging-notification-audit.mjs",
+    "audit:staging-browser-identity": "node scripts/staging-browser-identity-audit.mjs",
+    "audit:staging-core": "node scripts/staging-core-acceptance.mjs",
+    "audit:staging-growth": "node scripts/staging-growth-features-audit.mjs",
+    "fixture:staging-roles": "node scripts/staging-role-fixture.mjs",
     "reminders": "node scripts/trigger-reminders.mjs"
   },
   "engines": {

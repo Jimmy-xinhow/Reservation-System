@@ -2,6 +2,8 @@ import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import { SubmitButton } from "@/components/SubmitButton";
 import { assignPatientMembershipLevelAction, createMembershipLevelAction, saveMembershipPlanLevelPriceAction, toggleMembershipLevelAction } from "../memberships/actions";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +13,8 @@ interface Patient { id: string; name: string; phone: string; membership_level_id
 interface PriceRule { id: string; plan_id: string; level_id: string; price: number; }
 
 export default async function MembershipLevelsPage() {
-  const { clinicId } = await requireAdmin();
+  const { clinicId, supabase } = await requireAdmin();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "memberships"))) return <ModuleDisabled title="會員與套票" />;
   const service = createServiceClient();
   const [{ data: levels }, { data: plans }, { data: prices }, { data: patients }] = await Promise.all([
     service.from("membership_levels").select("id, code, name, sort_order, discount_percent, active").eq("clinic_id", clinicId).order("sort_order").order("name"),

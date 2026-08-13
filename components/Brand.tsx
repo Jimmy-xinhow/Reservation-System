@@ -24,10 +24,10 @@ export function Brand({
   size?: "md" | "lg";
 }) {
   return (
-    <div className={`flex items-center gap-3 ${align === "center" ? "flex-col text-center" : ""}`}>
-      <BrandMark className={size === "lg" ? "h-12 w-12" : "h-9 w-9"} />
-      <div>
-        <div className={`font-bold tracking-tight text-slate-900 ${size === "lg" ? "text-xl" : "text-base"}`}>
+    <div className={`flex min-w-0 items-center gap-3 ${align === "center" ? "flex-col text-center" : ""}`}>
+      <BrandMark className={`${size === "lg" ? "h-12 w-12" : "h-9 w-9"} shrink-0`} />
+      <div className="min-w-0">
+        <div className={`truncate font-bold tracking-tight text-slate-900 ${size === "lg" ? "text-xl" : "text-base"}`}>
           {name?.trim() || "預約與報名平台"}
         </div>
         {subtitle && <div className="text-sm text-slate-500">{subtitle}</div>}

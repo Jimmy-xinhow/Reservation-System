@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createHash } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, ok } from "@/lib/http";
-import { verifyLiffIdToken } from "@/lib/line";
+import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/registration-notifications";
 import { encryptRegistrationToken } from "@/lib/registration-credentials";
@@ -52,22 +52,23 @@ export async function POST(req: NextRequest) {
     if (membershipCode && membershipCode.length > 40) return fail("套票序號格式錯誤", 400);
     if (discountCode && membershipCode) return fail("套票序號與優惠碼不可同時使用", 400);
 
+    const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("尚未設定公開品牌", 500);
+
     let lineUserId: string | null = null;
     if (body.idToken) {
       try {
-        lineUserId = (await verifyLiffIdToken(body.idToken)).sub;
+        lineUserId = (await verifyClinicLiffIdToken(svc, clinicId, body.idToken)).sub;
       } catch {
         return fail("LINE 身分驗證失敗", 401);
       }
     }
 
-    const svc = createServiceClient();
-    const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("尚未設定公開品牌", 500);
-    const { data: settings, error: settingsError } = await svc.from("clinic_settings").select("public_registration_enabled").eq("clinic_id", clinicId).maybeSingle();
+    const { data: settings, error: settingsError } = await svc.from("clinic_settings").select("events_enabled, public_registration_enabled").eq("clinic_id", clinicId).maybeSingle();
     if (settingsError) return fail(settingsError.message, 500);
     if (!settings) return fail("公開報名設定尚未完成", 503);
-    if (settings.public_registration_enabled === false) return fail("目前暫停線上報名", 403);
+    if (settings.events_enabled !== true || settings.public_registration_enabled === false) return fail("目前暫停線上報名", 403);
     const accessToken = body.access_token?.trim() ?? "";
     const accessTokenHash = accessToken ? createHash("sha256").update(accessToken).digest("hex") : "";
     const { data: publicEvent, error: publicEventError } = await svc

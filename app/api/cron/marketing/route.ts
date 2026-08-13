@@ -94,6 +94,9 @@ export async function GET(req: NextRequest) {
 async function runClinic(svc: SupabaseClient, clinicId: string): Promise<{ scanned: number; sent: number; failed: number; skipped: number; duplicate: number; automations: number }> {
   const settings = await getClinicSettings(svc, clinicId);
   if (!settings) throw new Error("找不到品牌設定");
+  if (!settings.crm_automation_enabled) {
+    return { scanned: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0, automations: 0 };
+  }
   const [{ data: automations, error: automationError }, { data: clinic, error: clinicError }] = await Promise.all([
     svc.from("crm_automations").select("id, name, trigger_type, segment_id, channel, delay_minutes, trigger_days, cooldown_days, subject, body, active").eq("clinic_id", clinicId).eq("active", true).order("created_at", { ascending: true }),
     svc.from("clinics").select("name, line_destination").eq("id", clinicId).maybeSingle(),

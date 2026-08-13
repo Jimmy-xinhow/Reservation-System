@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, rateLimitResponse } from "@/lib/http";
-import { verifyLiffIdToken } from "@/lib/line";
+import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
@@ -18,16 +18,17 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as { idToken?: string } | null;
     if (!body?.idToken) return fail("缺少 LINE 身分驗證");
 
+    const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
+
     let lineUserId: string;
     try {
-      lineUserId = (await verifyLiffIdToken(body.idToken)).sub;
+      lineUserId = (await verifyClinicLiffIdToken(svc, clinicId, body.idToken)).sub;
     } catch (e) {
       return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟預約頁"), 401);
     }
 
-    const svc = createServiceClient();
-    const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
     const { data, error } = await svc
       .from("patients")
       .select("id, name, phone, email, blocked_until")

@@ -41,11 +41,8 @@ export async function middleware(req: NextRequest) {
     url.pathname = "/admin/login";
     return NextResponse.redirect(url);
   }
-  if (isLogin && user) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/admin";
-    return NextResponse.redirect(url);
-  }
+  // 登入頁不能只憑 session 判定工作區；有效帳號可能已被移除所有後台權限。
+  // 實際品牌／系統權限由登入後的 server route 與各頁 guard 驗證。
   return res;
 }
 

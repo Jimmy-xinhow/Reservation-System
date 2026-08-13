@@ -35,14 +35,17 @@ export interface LiffState {
   error: string | null;
 }
 
-/** 載入並初始化 LIFF,未登入則導向登入,完成後提供 idToken。 */
-export function useLiff(): LiffState {
+/**
+ * 載入並初始化指定品牌的 LIFF。undefined 代表品牌設定仍在載入；null
+ * 代表該品牌沒有可用的 LIFF，避免先用全域 ID 初始化到錯誤渠道。
+ */
+export function useLiff(liffId: string | null | undefined): LiffState {
   const [state, setState] = useState<LiffState>({ ready: false, idToken: null, error: null });
 
   useEffect(() => {
-    const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
+    if (liffId === undefined) return;
     if (!liffId) {
-      setState({ ready: false, idToken: null, error: "尚未設定 NEXT_PUBLIC_LIFF_ID" });
+      setState({ ready: false, idToken: null, error: "此品牌尚未完成 LIFF 設定" });
       return;
     }
     let cancelled = false;
@@ -70,7 +73,7 @@ export function useLiff(): LiffState {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [liffId]);
 
   return state;
 }

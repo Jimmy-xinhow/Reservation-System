@@ -6,6 +6,8 @@
 # next.js
 /.next/
 /out/
+/.next-codex-smoke/
+/output/
 next-env.d.ts
 
 # production
@@ -33,3 +35,11 @@ yarn-error.log*
 
 # vercel
 .vercel
+
+# local Supabase CLI state
+/supabase/.temp/
+
+# generated document lock and superseded local manual exports
+/docs/deliverables/~$*.docx
+/docs/deliverables/xinhowsaas-system-review-and-operation-manual-2026-08-13.docx
+/docs/deliverables/xinhowsaas-system-review-and-operation-manual-2026-08-13.pdf

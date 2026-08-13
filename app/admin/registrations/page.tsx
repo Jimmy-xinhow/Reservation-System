@@ -4,6 +4,8 @@ import { canOperate, canViewSensitiveCustomerData, requireNonProvider } from "@/
 import { formatAmount, formatEventDate } from "@/lib/registration";
 import { SubmitButton } from "@/components/SubmitButton";
 import { cancelRegistrationAdminAction, markRegistrationNoShowAction } from "./actions";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,7 @@ interface RegistrationRow {
 
 export default async function RegistrationsPage({ searchParams }: { searchParams: Promise<{ q?: string; status?: string }> }) {
 const member = await requireNonProvider();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) return <ModuleDisabled title="活動與報名" />;
   const params = await searchParams;
   const q = (params.q ?? "").trim().replace(/[,%()*]/g, "");
   const status = ["pending", "confirmed", "cancelled", "waitlisted", "attended", "no_show"].includes(params.status ?? "") ? params.status : null;

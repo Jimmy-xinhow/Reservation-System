@@ -20,6 +20,7 @@ interface Service {
 }
 
 interface Config {
+  liff_id: string | null;
   booking_mode: "time" | "number";
   max_advance_days: number;
   doctors: Doctor[];
@@ -99,8 +100,8 @@ function todayStr(offset = 0): string {
 }
 
 export default function ReschedulePage() {
-  const { ready, idToken, error: liffError } = useLiff();
   const [config, setConfig] = useState<Config | null>(null);
+  const { ready, idToken, error: liffError } = useLiff(config === null ? undefined : config.liff_id);
   const [appointmentId, setAppointmentId] = useState("");
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [doctorId, setDoctorId] = useState("");

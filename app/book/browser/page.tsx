@@ -5,18 +5,24 @@ import { useEffect, useMemo, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { trackFunnelEvent } from "@/lib/funnel-client";
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
 
-interface BookingField { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox"; required: boolean; options: string[]; }
+interface BookingField { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox" | "consent"; required: boolean; options: string[]; }
+interface ServiceAddon { id: string; name: string; description: string | null; duration_minutes: number; price: number; }
 interface Config {
   clinic_name: string | null;
   booking_mode: "time" | "number";
   max_advance_days: number;
+  recurring_booking_enabled: boolean;
+  max_recurring_occurrences: number;
+  deposit_enabled: boolean;
   doctors: Array<{ id: string; name: string; specialty: string | null }>;
-  services: Array<{ id: string; name: string; description: string | null; booking_target: "provider_required" | "provider_optional" | "resource_only"; booking_fields: BookingField[] }>;
+  services: Array<{ id: string; name: string; description: string | null; booking_target: "provider_required" | "provider_optional" | "resource_only"; booking_fields: BookingField[]; service_addons: ServiceAddon[] }>;
 }
 interface Slot { slot_start: string; slot_end: string; remaining: number }
 interface Session { template_id: string; session_start: string; session_end: string; total: number; taken: number; remaining: number }
-interface Result { appointment_id: string; queue_number: number | null; deposit_status: string; deposit_amount: number; start_at: string | null; end_at: string | null; doctor_name: string | null; service_name: string | null }
+interface Result { appointment_id: string; queue_number: number | null; deposit_status: string; deposit_amount: number; start_at: string | null; end_at: string | null; doctor_name: string | null; service_name: string | null; addons_amount: number; series_count: number; appointment_ids: string[] }
+interface WaitlistResult { waitlist_id: string; position: number }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(scopeUrl(url), init);
@@ -61,8 +67,7 @@ function customerTokenKey(): string {
 }
 
 function rememberBrowserToken(value: string): void {
-  window.localStorage.setItem(browserTokenKey(), value);
-  window.localStorage.setItem(customerTokenKey(), value);
+  safeLocalStorageSet([[browserTokenKey(), value], [customerTokenKey(), value]]);
 }
 
 function todayStr(offset = 0): string {
@@ -77,17 +82,23 @@ export default function BrowserBookingPage() {
   const [date, setDate] = useState("");
   const [slots, setSlots] = useState<Slot[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [waitlistSlots, setWaitlistSlots] = useState<Slot[]>([]);
+  const [waitlistSessions, setWaitlistSessions] = useState<Session[]>([]);
   const [pickedStart, setPickedStart] = useState("");
   const [pickedTemplate, setPickedTemplate] = useState("");
+  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [birthday, setBirthday] = useState("");
   const [email, setEmail] = useState("");
   const [membershipCode, setMembershipCode] = useState("");
   const [bookingAnswers, setBookingAnswers] = useState<Record<string, unknown>>({});
+  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+  const [recurrenceCount, setRecurrenceCount] = useState(1);
   const [visitType, setVisitType] = useState<"first" | "return">("return");
   const [token, setToken] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [waitlistResult, setWaitlistResult] = useState<WaitlistResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -97,18 +108,23 @@ export default function BrowserBookingPage() {
     trackFunnelEvent("booking_view");
     void api<Config>("/api/booking/config").then((value) => {
       setConfig(value);
-      setDoctorId(value.doctors[0]?.id ?? "");
-      setServiceId(value.services[0]?.id ?? "");
+      const source = new URLSearchParams(window.location.search);
+      const requestedDoctor = source.get("doctor_id")?.trim() ?? "";
+      const requestedService = source.get("service_id")?.trim() ?? "";
+      setDoctorId(value.doctors.some((doctor) => doctor.id === requestedDoctor) ? requestedDoctor : value.doctors[0]?.id ?? "");
+      setServiceId(value.services.some((service) => service.id === requestedService) ? requestedService : value.services[0]?.id ?? "");
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "載入失敗"));
   }, []);
 
   useEffect(() => {
     const source = new URLSearchParams(window.location.search);
     const scope = source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default";
-    const storedToken = window.localStorage.getItem(customerTokenKey())
-      || window.localStorage.getItem(browserTokenKey())
-      || window.localStorage.getItem(`booking_browser_token:${scope}`)
-      || window.localStorage.getItem("membership_browser_token");
+    const storedToken = safeLocalStorageGet(
+      customerTokenKey(),
+      browserTokenKey(),
+      `booking_browser_token:${scope}`,
+      "membership_browser_token",
+    );
     if (storedToken) setToken(storedToken);
     const value = new URLSearchParams(window.location.search).get("membership_code");
     if (value) setMembershipCode(value.trim().toUpperCase());
@@ -122,21 +138,28 @@ export default function BrowserBookingPage() {
     if (selectedService && !providerRequired) setDoctorId("");
     else if (selectedService && providerRequired && !doctorId) setDoctorId(config.doctors[0]?.id ?? "");
     setBookingAnswers({});
+    setSelectedAddonIds([]);
+    setRecurrenceCount(1);
   }, [config, selectedService, providerRequired, doctorId]);
 
   useEffect(() => {
     if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
-    setSlots([]); setSessions([]); setPickedStart(""); setPickedTemplate("");
+    setSlots([]); setSessions([]); setWaitlistSlots([]); setWaitlistSessions([]); setPickedStart(""); setPickedTemplate(""); setJoiningWaitlist(false);
     const params = new URLSearchParams({ date, visit_type: visitType, service_id: serviceId });
     if (doctorId) params.set("doctor_id", doctorId);
-    void api<{ slots?: Slot[]; sessions?: Session[] }>(`/api/booking/availability?${params.toString()}`)
-      .then((value) => { setSlots(value.slots ?? []); setSessions(value.sessions ?? []); })
+    if (selectedAddonIds.length > 0) params.set("addon_ids", selectedAddonIds.join(","));
+    void api<{ slots?: Slot[]; sessions?: Session[]; waitlist_slots?: Slot[]; waitlist_sessions?: Session[] }>(`/api/booking/availability?${params.toString()}`)
+      .then((value) => { setSlots(value.slots ?? []); setSessions(value.sessions ?? []); setWaitlistSlots(value.waitlist_slots ?? []); setWaitlistSessions(value.waitlist_sessions ?? []); })
       .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "查詢時段失敗"));
-  }, [config, doctorId, date, visitType, serviceId, providerRequired]);
+  }, [config, doctorId, date, visitType, serviceId, providerRequired, selectedAddonIds]);
 
   async function submit() {
     if (!config || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId) || !date || (!pickedStart && !pickedTemplate) || !name.trim() || !phone.trim() || !birthday || !bookingFieldsReady(selectedService?.booking_fields ?? [], bookingAnswers)) {
       setError("請完成基本資料與時段選擇");
+      return;
+    }
+    if (joiningWaitlist && membershipCode.trim()) {
+      setError("候補不會預先保留或扣除套票堂數，請先清空套票序號");
       return;
     }
     setLoading(true); setError(null);
@@ -145,11 +168,12 @@ export default function BrowserBookingPage() {
       const browserToken = token ?? (await api<{ browser_token: string }>("/api/booking/browser/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, phone, birthday }) })).browser_token;
       setToken(browserToken);
       rememberBrowserToken(browserToken);
-      const body: Record<string, unknown> = { browser_token: browserToken, doctor_id: doctorId || undefined, service_id: serviceId || undefined, visit_type: visitType, is_self_pay: false, email: email.trim() || undefined, membership_code: membershipCode.trim().toUpperCase() || undefined, booking_answers: bookingAnswers };
+      const body: Record<string, unknown> = { browser_token: browserToken, doctor_id: doctorId || undefined, service_id: serviceId || undefined, visit_type: visitType, is_self_pay: false, email: email.trim() || undefined, membership_code: membershipCode.trim().toUpperCase() || undefined, booking_answers: bookingAnswers, addon_ids: selectedAddonIds, recurrence_count: recurrenceCount };
       if (config.booking_mode === "time") body.start_at = pickedStart;
       else { body.template_id = pickedTemplate; body.date = date; }
-      setResult(await api<Result>("/api/booking/reserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
-      trackFunnelEvent("booking_success", { booking_mode: config.booking_mode });
+      if (joiningWaitlist) setWaitlistResult(await api<WaitlistResult>("/api/booking/waitlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, action: "join" }) }));
+      else setResult(await api<Result>("/api/booking/reserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
+      trackFunnelEvent("booking_success", { booking_mode: config.booking_mode, series_count: recurrenceCount });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "預約失敗");
     } finally { setLoading(false); }
@@ -184,7 +208,8 @@ export default function BrowserBookingPage() {
     }
   }
 
-  if (result) return <Shell><div className="card space-y-5 p-6 text-center"><div className="text-4xl text-emerald-600">✓</div><h1 className="text-xl font-bold text-slate-900">{result.deposit_status === "pending" ? "預約已建立，待付款" : "預約成功"}</h1><p className="text-sm text-slate-600">{result.start_at ? `${formatDateSession(result.start_at)} ${formatTime(result.start_at)}` : "已完成預約"}</p>{result.queue_number !== null && <p className="text-3xl font-bold text-brand-700">{result.queue_number} 號</p>}{result.deposit_status === "pending" && <div className="space-y-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800"><p>需繳訂金 NT${result.deposit_amount}；完成付款後才確認名額。</p><button type="button" onClick={() => void payDeposit()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（NT$${result.deposit_amount}）`}</button>{paymentError && <p className="rounded-lg bg-red-50 p-2 text-left text-xs text-red-700">{paymentError}</p>}</div>}<p className="text-xs text-slate-400">請保留此瀏覽器頁面，之後可使用同一裝置查看預約。</p><Link href={scopePageUrl("/book/browser/my")} className="btn btn-primary w-full">查看我的預約</Link><Link href={scopeUrl("/")} className="btn btn-secondary w-full">返回品牌首頁</Link></div></Shell>;
+  if (result) return <Shell><div className="card space-y-5 p-6 text-center"><div className="text-4xl text-emerald-600">✓</div><h1 className="text-xl font-bold text-slate-900">{result.deposit_status === "pending" ? "預約已建立，待付款" : result.series_count > 1 ? `已建立 ${result.series_count} 週預約` : "預約成功"}</h1><p className="text-sm text-slate-600">{result.start_at ? `${formatDateSession(result.start_at)} ${formatTime(result.start_at)}` : "已完成預約"}</p>{result.queue_number !== null && <p className="text-3xl font-bold text-brand-700">{result.queue_number} 號</p>}{result.addons_amount > 0 && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">本次加購金額 NT${result.addons_amount}</p>}{result.deposit_status === "pending" && <div className="space-y-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800"><p>需繳訂金 NT${result.deposit_amount}；完成付款後才確認名額。</p><button type="button" onClick={() => void payDeposit()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（NT$${result.deposit_amount}）`}</button>{paymentError && <p className="rounded-lg bg-red-50 p-2 text-left text-xs text-red-700">{paymentError}</p>}</div>}<p className="text-xs text-slate-400">請保留此瀏覽器頁面，之後可使用同一裝置查看預約。</p><Link href={scopePageUrl("/book/browser/my")} className="btn btn-primary w-full">查看我的預約</Link><Link href={scopeUrl("/")} className="btn btn-secondary w-full">返回品牌首頁</Link></div></Shell>;
+  if (waitlistResult) return <Shell><div className="card space-y-4 p-6 text-center"><div className="text-4xl text-amber-600">✓</div><h1 className="text-xl font-bold text-slate-900">候補登記完成</h1><p className="text-sm text-slate-600">目前順位：第 {waitlistResult.position} 位；名額釋出後會以 Email 通知。</p><Link href={scopePageUrl("/book/browser/my")} className="btn btn-primary w-full">查看我的候補</Link></div></Shell>;
   if (!config) return <Shell><p className="card p-8 text-center text-sm text-slate-500">{error ?? "載入中…"}</p></Shell>;
   return (
     <Shell>
@@ -201,9 +226,11 @@ export default function BrowserBookingPage() {
         </div>
         {selectedService?.booking_target === "resource_only" && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">此服務依場地／設備容量安排，不需要指定服務提供者。</p>}
         <BookingFields fields={selectedService?.booking_fields ?? []} answers={bookingAnswers} onChange={(key, value) => setBookingAnswers((current) => ({ ...current, [key]: value }))} />
+        <ServiceAddons addons={selectedService?.service_addons ?? []} selectedIds={selectedAddonIds} onChange={setSelectedAddonIds} />
         <label className="block text-sm"><span className="label">日期</span><input type="date" className="input" min={todayStr()} max={maxDate} value={date} onChange={(event) => setDate(event.target.value)} /></label>
-        {date && (!providerRequired || !!doctorId) && <div className="space-y-2"><div className="label">可預約時段</div>{config.booking_mode === "time" ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slots.map((slot) => <button type="button" key={slot.slot_start} onClick={() => setPickedStart(slot.slot_start)} className={`rounded-xl border p-3 text-sm ${pickedStart === slot.slot_start ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatTime(slot.slot_start)}<span className="mt-1 block text-xs text-slate-400">剩 {slot.remaining}</span></button>)}</div> : <div className="grid grid-cols-1 gap-2">{sessions.map((session) => <button type="button" key={session.template_id} onClick={() => setPickedTemplate(session.template_id)} className={`rounded-xl border p-3 text-left text-sm ${pickedTemplate === session.template_id ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs text-slate-400">剩 {session.remaining}</span></button>)}</div>}{(config.booking_mode === "time" ? slots.length === 0 : sessions.length === 0) && <p className="text-sm text-slate-400">目前沒有可預約時段。</p>}</div>}
-        {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button type="button" className="btn btn-primary w-full" disabled={loading} onClick={() => void submit()}>{loading ? "送出中…" : "確認預約"}</button>
+        {date && (!providerRequired || !!doctorId) && <div className="space-y-2"><div className="label">可預約時段</div>{config.booking_mode === "time" ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slots.map((slot) => <button type="button" key={slot.slot_start} onClick={() => { setPickedStart(slot.slot_start); setJoiningWaitlist(false); }} className={`rounded-xl border p-3 text-sm ${!joiningWaitlist && pickedStart === slot.slot_start ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatTime(slot.slot_start)}<span className="mt-1 block text-xs text-slate-400">剩 {slot.remaining}</span></button>)}</div> : <div className="grid grid-cols-1 gap-2">{sessions.map((session) => <button type="button" key={session.template_id} onClick={() => { setPickedTemplate(session.template_id); setJoiningWaitlist(false); }} className={`rounded-xl border p-3 text-left text-sm ${!joiningWaitlist && pickedTemplate === session.template_id ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs text-slate-400">剩 {session.remaining}</span></button>)}</div>}{config.booking_mode === "time" && waitlistSlots.length > 0 && <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{waitlistSlots.map((slot) => <button type="button" key={slot.slot_start} onClick={() => { setPickedStart(slot.slot_start); setJoiningWaitlist(true); }} className={`min-h-11 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 ${joiningWaitlist && pickedStart === slot.slot_start ? "ring-2 ring-amber-400" : ""}`}>{formatTime(slot.slot_start)}<span className="block text-xs">加入候補</span></button>)}</div>}{config.booking_mode === "number" && waitlistSessions.length > 0 && <div className="mt-4 space-y-2">{waitlistSessions.map((session) => <button type="button" key={session.template_id} onClick={() => { setPickedTemplate(session.template_id); setJoiningWaitlist(true); }} className={`min-h-11 w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800 ${joiningWaitlist && pickedTemplate === session.template_id ? "ring-2 ring-amber-400" : ""}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs">加入候補</span></button>)}</div>}{(config.booking_mode === "time" ? slots.length + waitlistSlots.length === 0 : sessions.length + waitlistSessions.length === 0) && <p className="text-sm text-slate-400">目前沒有可預約或候補時段。</p>}</div>}
+        {(pickedStart || pickedTemplate) && config.recurring_booking_enabled && selectedService && !joiningWaitlist && <label className="block rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm"><span className="label">每週重複預約</span><select className="input" value={recurrenceCount} disabled={config.deposit_enabled} onChange={(event) => setRecurrenceCount(Number(event.target.value))}>{Array.from({ length: config.max_recurring_occurrences }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count === 1 ? "只預約本次" : `連續 ${count} 週`}</option>)}</select><span className="mt-2 block text-xs text-slate-500">{config.deposit_enabled ? "啟用訂金時，請逐筆完成預約與付款。" : "系統會先確認每一週都有名額，再一次建立全部預約。"}</span></label>}
+        {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button type="button" className="btn btn-primary w-full" disabled={loading} onClick={() => void submit()}>{loading ? "送出中…" : joiningWaitlist ? "確認加入候補" : recurrenceCount > 1 ? `確認建立 ${recurrenceCount} 週預約` : "確認預約"}</button>
       </div>
     </Shell>
   );
@@ -214,11 +241,17 @@ function Shell({ children, clinicName }: { children: React.ReactNode; clinicName
 function bookingFieldsReady(fields: BookingField[], answers: Record<string, unknown>): boolean {
   return fields.every((field) => {
     const value = answers[field.key];
-    return !field.required || (field.type === "checkbox" ? value === true : typeof value === "string" && value.trim().length > 0);
+    return !field.required || (field.type === "checkbox" || field.type === "consent" ? value === true : typeof value === "string" && value.trim().length > 0);
   });
 }
 
 function BookingFields({ fields, answers, onChange }: { fields: BookingField[]; answers: Record<string, unknown>; onChange: (key: string, value: unknown) => void }) {
   if (fields.length === 0) return null;
-  return <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-sm font-medium text-slate-800">預約前資料</p>{fields.map((field) => { const label = `${field.label}${field.required ? " *" : ""}`; const value = answers[field.key]; if (field.type === "checkbox") return <label key={field.key} className="flex items-start gap-2 text-sm text-slate-600"><input type="checkbox" className="mt-1" checked={value === true} onChange={(event) => onChange(field.key, event.target.checked)} />{label}</label>; if (field.type === "textarea") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><textarea className="input" rows={3} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; if (field.type === "select") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><select className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)}><option value="">請選擇</option>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>; return <label key={field.key} className="block text-sm"><span className="label">{label}</span><input type={field.type === "date" ? "date" : "text"} className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; })}</div>;
+  return <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-sm font-medium text-slate-800">預約前資料</p>{fields.map((field) => { const label = `${field.label}${field.required ? " *" : ""}`; const value = answers[field.key]; if (field.type === "checkbox" || field.type === "consent") return <label key={field.key} className={`flex items-start gap-2 rounded-lg p-2 text-sm ${field.type === "consent" ? "border border-brand-100 bg-white text-slate-700" : "text-slate-600"}`}><input type="checkbox" className="mt-1 h-4 w-4" checked={value === true} onChange={(event) => onChange(field.key, event.target.checked)} /><span>{label}</span></label>; if (field.type === "textarea") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><textarea className="input" rows={3} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; if (field.type === "select") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><select className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)}><option value="">請選擇</option>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>; return <label key={field.key} className="block text-sm"><span className="label">{label}</span><input type={field.type === "date" ? "date" : "text"} className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; })}</div>;
+}
+
+function ServiceAddons({ addons, selectedIds, onChange }: { addons: ServiceAddon[]; selectedIds: string[]; onChange: (ids: string[]) => void }) {
+  if (addons.length === 0) return null;
+  const total = addons.filter((addon) => selectedIds.includes(addon.id)).reduce((sum, addon) => sum + addon.price, 0);
+  return <div className="space-y-2 rounded-xl border border-slate-100 bg-slate-50 p-4"><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-slate-800">加購服務</p>{total > 0 && <span className="text-xs font-medium text-brand-700">加購 NT${total}</span>}</div>{addons.map((addon) => { const checked = selectedIds.includes(addon.id); return <label key={addon.id} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 text-sm ${checked ? "border-brand-300" : "border-slate-200"}`}><input type="checkbox" className="mt-0.5 h-4 w-4" checked={checked} onChange={() => onChange(checked ? selectedIds.filter((id) => id !== addon.id) : [...selectedIds, addon.id])} /><span className="min-w-0 flex-1"><span className="block font-medium text-slate-800">{addon.name}</span>{addon.description && <span className="block text-xs text-slate-500">{addon.description}</span>}</span><span className="shrink-0 text-right text-xs text-slate-600">{addon.duration_minutes > 0 && <span className="block">+{addon.duration_minutes} 分</span>}{addon.price > 0 && <span className="block">NT${addon.price}</span>}</span></label>; })}</div>;
 }

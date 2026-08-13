@@ -19,19 +19,21 @@
 
 既有資料庫：
 
-1. 先備份，再依序執行 `migration_crm_lite.sql`、`migration_registration_payments.sql`、`migration_v3_hardening.sql`、`migration_memberships_coupons.sql`、`migration_role_matrix_v4.sql`、`migration_security_advisor_hardening.sql`、`migration_registration_credentials.sql`、`migration_marketing_opt_in_sync.sql`。
-2. 每支 migration 執行一次後重跑同一支，確認可重跑且沒有重複 constraint／policy 錯誤。
-3. 檢查 `reminder_logs.clinic_id`、付款欄位、表單版本、會員 ledger 與所有新表的 row count／NULL。
-4. 重新執行三個本機命令並保存輸出。
+1. 先執行 `supabase migration list` 與 `supabase db push --dry-run --linked`，保存遠端最後版本、`dryRun=true` 及將套用的檔名順序；dry-run 不可當成已套用證據。
+2. 先完成可還原備份，再依 README「既有資料庫 migration 順序」完整執行至 `202608130004_brand_configuration_permission_boundaries.sql`；其中 `migration_marketing_opt_in_sync.sql`、`202608110001`～`202608110008` 產品重整／角色 migration，以及 `202608120001`～`202608130004` 驗收 hardening migration 都不可跳過。
+3. 每支 migration 執行一次後重跑同一支，確認可重跑且沒有重複 constraint／policy 錯誤。
+4. 執行 `supabase db lint --linked --schema public --level warning --fail-on warning`；error 或 warning 都必須為零。若仍有名稱歧義、未使用變數或型別問題，不得繼續部署。
+5. 檢查 `reminder_logs.clinic_id`、付款欄位、表單版本、會員 ledger 與所有新表的 row count／NULL。
+6. 重新執行三個本機命令並保存輸出。
 
 ## 2. 租戶與角色隔離
 
 | 測試 | 操作 | 必須觀察的結果 |
 |---|---|---|
-| 品牌建立 | Brand-A 的 owner 建立 Brand-B | DB transaction 同時建立品牌、預設設定與 owner 成員；中途失敗不得留下半套資料 |
+| 品牌建立 | 系統管理者建立 Brand-B 並指定品牌管理者 | DB transaction 同時建立品牌、預設設定與品牌管理者成員；中途失敗不得留下半套資料 |
 | 品牌切換 | 同一帳號切換 A／B | 後台資料、公開品牌名稱、服務、活動、報表跟著 active brand 改變 |
 | URL 猜測 | 以 A 的 session 查 B 的 id、slug、活動 id、報名 id、付款 id | 回傳空資料或拒絕，不可洩漏 B 的 PII、金額或狀態 |
-| 角色矩陣 | provider、frontdesk、admin、owner 各執行設定、匯出、報到、CRM、成員管理 | 只能執行規格允許的操作；不能只靠前端隱藏按鈕達成 |
+| 權限矩陣 | 系統管理者、品牌管理者，以及勾選不同權限的系統／品牌員工各執行設定、匯出、報到、CRM、成員管理 | 管理身份只顯示兩種；員工只能執行已授權工作，且不能靠前端隱藏按鈕達成 |
 | provider 指派範圍 | provider 查詢未指派醫師的 `doctors`、`appointments`、`patients`、`schedule_templates`，並嘗試修改他人預約 | 回傳 0 筆／拒絕；只能讀被指派資料，且只能標記完成／未到；叫號控制為唯讀 |
 | anon RLS | 以 anon key 查 `patients`、`appointments`、`registrations`、`payment_orders`、`crm_delivery_logs` | 所有查詢均被拒絕或回傳 0 筆；不可讀取其他品牌資料 |
 
@@ -54,7 +56,16 @@
 2. 平行搶最後一號；只能一筆成功，號碼不重用。
 3. 驗證取消與 `no_show` 不佔位，`booked／confirmed／done` 佔位。
 
-### 3.3 訂金
+### 3.3 預約候補（時間制與號次制都要執行）
+
+1. 額滿目標只能出現在獨立「可候補」區，不可混入正常可預約時段；未額滿目標必須拒絕加入候補。
+2. 以兩位顧客依序加入同一目標，確認順位唯一且重送同一顧客不新增第二筆。
+3. 取消一筆有效預約後只能為第一順位建立一筆保留預約；顧客接受前不得顯示成預約成功，也不得付款、改期或由一般取消入口處理。
+4. 顧客接受後顯示正式預約；若有訂金，從「我的預約」進入既有付款流程。顧客取消候補或保留逾時時，預留預約須取消並遞補下一位。
+5. 執行 registration cron，確認 LINE／Email 分渠道去重、失敗最多重試五次、claimed worker 逾時可恢復；普通 appointment notification 不可在候補接受前先發成功訊息。
+6. 後台可依日期查看順位、保留期限及取消候補；跨品牌及 provider 查詢一律拒絕。
+
+### 3.4 訂金
 
 1. 開啟 `deposit_enabled`，分別測試 `all`、`self_pay`、`none`。
 2. 預約建立後狀態應為待付款並保留 15 分鐘名額；付款成功才變成 `confirmed`。
@@ -89,8 +100,16 @@
 ## 7. 通知、入口與品牌化
 4. 預約建立、付款確認、取消與改期後，確認 LINE／Email 各自最多投遞一次；檢查 appointment_notification_logs 的 kind、channel、status、attempt_count 與失敗重試結果。
 
-- LINE：驗證 LIFF ID token、Rich Menu、webhook signature、destination 對應品牌；錯誤 destination 不得 fallback 到其他品牌。
+- LINE：先在後台保存品牌的 destination、LINE Login Channel ID、LIFF ID 與 endpoint path，再按「重新驗證渠道」；系統必須以 server-only token 確認 Bot 身分、destination、webhook 已啟用且 URL 相符，並寫回 ready／error。這只代表伺服器渠道就緒，仍須以手機驗證 LIFF ID token、Rich Menu、webhook signature 與實際訊息；錯誤 destination 不得 fallback 到其他品牌。
+- Rich Menu：分別建立預約型、活動型、綜合型草稿，確認停用模組不會產生失效按鈕；圖片 MIME／尺寸錯誤必須在呼叫 LINE 前拒絕。
+- Rich Menu 版本：發布 v1、再發布 v2、回復 v1、下架；確認舊版未刪除、每次狀態與操作者都有 publication event，資料庫寫入失敗時 LINE default 會補償還原。
+- Rich Menu Alias：以同品牌兩個 LINE 版本建立 Alias，驗證頁籤雙向切換；嘗試綁定另一品牌版本必須被資料庫複合外鍵或 server 品牌條件拒絕；共享同一 destination 的另一品牌使用相同 Alias ID 也必須拒絕，且不得改寫既有遠端 Alias。
+- Rich Menu 排程：建立不重疊顯示期間，確認開始後切換、結束後回復；製造 LINE 失敗後確認最多 5 次重試、錯誤與 publication event，手動發布新版本後舊排程不得覆蓋。
+- Rich Menu 洞察：讀取 7 日 LINE Insights，對照各格 bounds、曝光／點擊與匿名預約／報名轉換；未達 20 位不重複點擊者時應顯示隱私門檻，不得補造數字。
+- 單一 LIFF：逐一開啟 `booking`、`appointments`、`events`、`tickets`、`membership`、`support`、`brand`；同一 LINE 綁定多人時須可切換，且不得讀到另一品牌顧客。
 - 瀏覽器：驗證必要欄位、生日精確命中、signed token 過期與跨品牌 token 拒絕。
+- 瀏覽器身分 audit：執行 `railway run npm run audit:staging-browser-identity`，確認本品牌 token 只列出自己的預約、不能取消／改期同品牌他人預約、跨品牌 token 與 URL slug 切換被拒絕、竄改 token 為 401，且臨時資料清理成功。
+- staging 核心 release gate：執行 `railway run npm run audit:staging-core`，一次串行檢查公開 smoke、RLS／角色、預約候補、活動商務、通知與瀏覽器身分共 6 個 gate；任一段失敗即停止，需先確認該 domain audit 已完成臨時資料清理再重跑。
 - Email：使用 staging 寄件網域與測試信箱，確認提醒、報名狀態與行銷信件的成功／失敗紀錄。
 - 嵌入元件：在另一個測試網站 iframe 開啟，確認 `clinic_slug` 或自訂網域仍正確解析。
 - 自訂網域：新增 DNS TXT、驗證成功後才啟用；未驗證／停用網域不得成為公開品牌入口。

@@ -1,4 +1,4 @@
-import { requireNonProvider } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import ResourceManager, { type ResourceAssignment, type ResourceItem } from "./ResourceManager";
 import { assignResourceAction, createResourceAction, removeAssignmentAction, toggleResourceAction } from "./actions";
@@ -6,7 +6,7 @@ import { assignResourceAction, createResourceAction, removeAssignmentAction, tog
 export const dynamic = "force-dynamic";
 
 export default async function ResourcesPage() {
-  const { clinicId } = await requireNonProvider();
+  const { clinicId } = await requireAdmin();
   const service = createServiceClient();
   const [{ data: resources }, { data: services }, { data: assignments }] = await Promise.all([
     service.from("service_resources").select("id, name, kind, capacity, active").eq("clinic_id", clinicId).order("name"),

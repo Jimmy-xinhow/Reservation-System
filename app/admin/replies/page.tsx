@@ -9,12 +9,15 @@ import {
 import { requireAdmin } from "@/lib/admin";
 import RepliesEditor, { type Reply } from "./RepliesEditor";
 import { SubmitButton } from "@/components/SubmitButton";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
 export default async function RepliesPage() {
   const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="LINE 自動回覆" />;
   const [{ data: replies }, { data: settings }, { data: msgs }] = await Promise.all([
     supabase
       .from("line_auto_replies")

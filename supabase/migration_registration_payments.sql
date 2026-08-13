@@ -335,9 +335,9 @@ begin
     v_payment_status := 'pending';
   end if;
 
-  select coalesce(max(nullif(regexp_replace(r.registration_no, '[^0-9]', '', 'g'), '')::bigint), 0) + 1
+  select coalesce(max(nullif(substring(r.registration_no from '([0-9]+)$'), '')::bigint), 0) + 1
     into v_no from registrations r where r.event_id = p_event_id;
-  v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, 4, '0');
+  v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, greatest(4, length(v_no::text)), '0');
 
   insert into registrations (
     clinic_id, event_id, session_id, ticket_type_id, registration_no, status,

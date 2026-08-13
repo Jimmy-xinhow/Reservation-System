@@ -15,12 +15,12 @@ export async function GET(req: NextRequest) {
     if (!clinicId) return fail("缺少品牌設定", 500);
     const { data: settings, error: settingsError } = await svc
       .from("clinic_settings")
-      .select("public_registration_enabled")
+      .select("events_enabled, public_registration_enabled")
       .eq("clinic_id", clinicId)
       .maybeSingle();
     if (settingsError) return fail(settingsError.message, 500);
     if (!settings) return fail("公開報名設定尚未完成", 503);
-    if (settings.public_registration_enabled === false) return ok({ events: [] });
+    if (settings.events_enabled !== true || settings.public_registration_enabled === false) return ok({ events: [] });
 
     const { data, error } = await svc
       .from("events")

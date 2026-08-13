@@ -4,7 +4,13 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createSupabaseServer } from "./supabase-server";
-import { CLINIC_ID } from "./supabase";
+import { CLINIC_ID, createServiceClient } from "./supabase";
+import {
+  normalizeBrandPermissions,
+  permissionsForLegacyBrandRole,
+  type BrandAccessType,
+  type BrandPermission,
+} from "./access-control";
 
 export const ACTIVE_CLINIC_COOKIE = "active_clinic_id";
 
@@ -15,6 +21,8 @@ export interface AccessibleClinic {
   name: string;
   active: boolean;
   role: Role;
+  accessType: BrandAccessType;
+  permissions: BrandPermission[];
 }
 
 export interface MemberContext {
@@ -23,7 +31,23 @@ export interface MemberContext {
   clinicId: string;
   clinicName: string;
   role: Role;
+  accessType: BrandAccessType;
+  permissions: BrandPermission[];
   clinics: AccessibleClinic[];
+}
+
+async function recordPermissionDenied(context: MemberContext): Promise<void> {
+  try {
+    await createServiceClient().from("admin_product_events").insert({
+      clinic_id: context.clinicId,
+      event_name: "permission_denied",
+      session_id: `server_${crypto.randomUUID().replaceAll("-", "")}`,
+      actor_scope: context.accessType === "brand_admin" ? "brand_admin" : "brand_employee",
+      metadata: {},
+    });
+  } catch {
+    // Permission enforcement remains fail-closed when telemetry is unavailable.
+  }
 }
 
 function normalizeRole(value: unknown): Role {
@@ -35,6 +59,11 @@ function isAdminRole(role: Role): boolean {
   return role === "owner" || role === "admin";
 }
 
+function normalizeBrandAccessType(value: unknown, role: Role): BrandAccessType {
+  if (value === "brand_admin" || value === "employee") return value;
+  return isAdminRole(role) ? "brand_admin" : "employee";
+}
+
 async function findMemberContext(): Promise<MemberContext | null> {
   const supabase = await createSupabaseServer();
   const {
@@ -44,23 +73,29 @@ async function findMemberContext(): Promise<MemberContext | null> {
 
   const { data, error } = await supabase
     .from("clinic_members")
-    .select("clinic_id, role, clinics(name, active)")
+    .select("clinic_id, role, access_type, permissions, clinics(name, active)")
     .eq("user_id", user.id);
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as Array<{
     clinic_id: string;
     role: string;
+    access_type: string | null;
+    permissions: string[] | null;
     clinics: { name: string; active: boolean } | { name: string; active: boolean }[] | null;
   }>;
   const clinics = rows
     .map((row) => {
       const clinic = Array.isArray(row.clinics) ? row.clinics[0] : row.clinics;
+      const role = normalizeRole(row.role);
+      const permissions = normalizeBrandPermissions(row.permissions);
       return {
         id: row.clinic_id,
         name: clinic?.name ?? "未命名品牌",
         active: clinic?.active !== false,
-        role: normalizeRole(row.role),
+        role,
+        accessType: normalizeBrandAccessType(row.access_type, role),
+        permissions: permissions.length > 0 ? permissions : permissionsForLegacyBrandRole(role),
       } satisfies AccessibleClinic;
     })
     .filter((clinic) => clinic.active);
@@ -80,6 +115,8 @@ async function findMemberContext(): Promise<MemberContext | null> {
     clinicId: selected.id,
     clinicName: selected.name,
     role: selected.role,
+    accessType: selected.accessType,
+    permissions: selected.permissions,
     clinics,
   };
 }
@@ -97,34 +134,47 @@ export async function getOptionalMember(): Promise<MemberContext | null> {
 /** Required authenticated member and active brand context. */
 export async function requireMember(): Promise<MemberContext> {
   const context = await findMemberContext();
-  if (!context) throw new Error("此帳號沒有可用的品牌權限");
+  if (!context) redirect("/admin/login?reason=brand-access-required");
   return context;
 }
 
 /** Required authenticated staff member allowed to change operational data. */
 export async function requireOperator(): Promise<MemberContext> {
   const context = await requireMember();
-  if (!canOperate(context.role)) throw new Error("目前角色不可修改資料");
+  if (!hasBrandPermission(context, "operations.manage") && !hasBrandPermission(context, "brand.manage")) throw new Error("目前帳號沒有日常營運權限");
   return context;
 }
 
 /** Provider 可在被指派的預約上執行完成／未到狀態，其餘修改仍禁止。 */
 export async function requireStatusOperator(): Promise<MemberContext> {
   const context = await requireMember();
-  if (context.role !== "provider" && !canOperate(context.role)) throw new Error("目前角色不可修改資料");
+  if (!["provider.assigned", "operations.manage", "brand.manage"].some((permission) => hasBrandPermission(context, permission as BrandPermission))) throw new Error("目前帳號沒有狀態更新權限");
   return context;
 }
 
 /** Required owner/admin access. */
 export async function requireAdmin(): Promise<MemberContext> {
   const context = await requireMember();
-  if (!isAdminRole(context.role)) redirect("/admin");
+  if (!hasBrandPermission(context, "brand.manage")) {
+    await recordPermissionDenied(context);
+    redirect("/admin/dashboard?notice=permission");
+  }
+  return context;
+}
+
+/** Only a brand administrator may add people or change employee permissions. */
+export async function requireBrandAdmin(): Promise<MemberContext> {
+  const context = await requireMember();
+  if (context.accessType !== "brand_admin") {
+    await recordPermissionDenied(context);
+    redirect("/admin/dashboard?notice=permission");
+  }
   return context;
 }
 
 /** Provider pages must use an explicit doctor assignment; an empty assignment is fail-closed. */
 export async function getAssignedDoctorIds(context: MemberContext): Promise<string[]> {
-  if (context.role !== "provider") return [];
+  if (!hasBrandPermission(context, "provider.assigned")) return [];
   const { data, error } = await context.supabase
     .from("doctor_assignments")
     .select("doctor_id")
@@ -138,8 +188,15 @@ export async function getAssignedDoctorIds(context: MemberContext): Promise<stri
 /** Routes outside provider operations must not expose brand-wide data. */
 export async function requireNonProvider(): Promise<MemberContext> {
   const context = await requireMember();
-  if (context.role === "provider") redirect("/admin");
+  if (!hasBrandPermission(context, "operations.manage") && !hasBrandPermission(context, "brand.manage")) {
+    await recordPermissionDenied(context);
+    redirect("/admin/dashboard?notice=permission");
+  }
   return context;
+}
+
+export function hasBrandPermission(context: Pick<MemberContext, "accessType" | "permissions">, permission: BrandPermission): boolean {
+  return context.accessType === "brand_admin" || context.permissions.includes(permission);
 }
 
 export function canManageSettings(role: Role): boolean {

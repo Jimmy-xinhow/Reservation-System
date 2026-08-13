@@ -502,8 +502,8 @@ begin
     v_payment_status := case when v_amount = 0 then 'not_required' else 'pending' end;
   end if;
 
-  select coalesce(max(nullif(regexp_replace(r.registration_no, '[^0-9]', '', 'g'), '')::bigint), 0) + 1 into v_no from registrations r where r.clinic_id = p_clinic_id and r.event_id = p_event_id;
-  v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, 4, '0');
+  select coalesce(max(nullif(substring(r.registration_no from '([0-9]+)$'), '')::bigint), 0) + 1 into v_no from registrations r where r.clinic_id = p_clinic_id and r.event_id = p_event_id;
+  v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, greatest(4, length(v_no::text)), '0');
   insert into registrations (
     clinic_id, event_id, session_id, ticket_type_id, registration_no, status, payment_status, amount, discount_code_id, discount_amount, membership_id,
     name, phone, email, line_user_id, marketing_opt_in, answers, checkin_token_hash, expires_at, form_id, form_version

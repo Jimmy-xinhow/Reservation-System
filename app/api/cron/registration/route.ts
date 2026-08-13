@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { processRegistrationNotificationQueue } from "@/lib/registration-notifications";
 import { processAppointmentNotificationQueue } from "@/lib/appointment-notifications";
+import { processAppointmentWaitlistNotificationQueue } from "@/lib/appointment-waitlist-notifications";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,9 +20,12 @@ export async function GET(req: NextRequest) {
     if (appointmentExpiryError) throw new Error(appointmentExpiryError.message);
     const { data: expiredMembershipPayments, error: membershipExpiryError } = await svc.rpc("expire_pending_membership_payments");
     if (membershipExpiryError) throw new Error(membershipExpiryError.message);
+    const { data: expiredWaitlistOffers, error: waitlistExpiryError } = await svc.rpc("expire_appointment_waitlist_offers");
+    if (waitlistExpiryError) throw new Error(waitlistExpiryError.message);
     const notifications = await processRegistrationNotificationQueue(svc);
     const appointmentNotifications = await processAppointmentNotificationQueue(svc);
-    return Response.json({ ok: true, expired: Number(data ?? 0), expired_appointments: Number(expiredAppointments ?? 0), expired_membership_payments: Number(expiredMembershipPayments ?? 0), released_benefits: Number(releasedBenefits ?? 0), notifications, appointment_notifications: appointmentNotifications });
+    const appointmentWaitlistNotifications = await processAppointmentWaitlistNotificationQueue(svc);
+    return Response.json({ ok: true, expired: Number(data ?? 0), expired_appointments: Number(expiredAppointments ?? 0), expired_membership_payments: Number(expiredMembershipPayments ?? 0), expired_waitlist_offers: Number(expiredWaitlistOffers ?? 0), released_benefits: Number(releasedBenefits ?? 0), notifications, appointment_notifications: appointmentNotifications, appointment_waitlist_notifications: appointmentWaitlistNotifications });
   } catch (error) {
     return Response.json({ ok: false, error: error instanceof Error ? error.message : "報名付款逾時處理失敗" }, { status: 500 });
   }

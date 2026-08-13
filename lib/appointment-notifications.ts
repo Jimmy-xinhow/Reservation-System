@@ -136,7 +136,7 @@ export async function processAppointmentNotificationQueue(svc: SupabaseClient): 
 
       const { data: appointment, error: appointmentError } = await svc
         .from("appointments")
-        .select("status, deposit_status")
+        .select("status, deposit_status, waitlist_entry_id")
         .eq("id", String(event.appointment_id))
         .maybeSingle();
       if (appointmentError) {
@@ -146,6 +146,13 @@ export async function processAppointmentNotificationQueue(svc: SupabaseClient): 
       // A later state transition supersedes this event; it no longer needs a
       // notification, but it must still leave the queue permanently.
       if (String(appointment?.status ?? "") !== String(event.to_status)) {
+        await markAppointmentStatusEventProcessed(svc, eventId);
+        continue;
+      }
+      // A waitlist offer creates a capacity-holding appointment before the
+      // customer accepts. The waitlist queue owns that notification; sending
+      // the ordinary booked message here would falsely claim a confirmed booking.
+      if (appointment?.waitlist_entry_id && String(event.to_status) === "booked") {
         await markAppointmentStatusEventProcessed(svc, eventId);
         continue;
       }

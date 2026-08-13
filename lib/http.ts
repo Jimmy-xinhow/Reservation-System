@@ -31,11 +31,17 @@ export interface ClinicSettings {
   deposit_scope: "all" | "self_pay" | "none";
   min_lead_minutes: number;
   max_advance_days: number;
+  recurring_booking_enabled: boolean;
+  max_recurring_occurrences: number;
   cancel_lead_minutes: number;
   reschedule_lead_minutes: number;
   public_booking_enabled: boolean;
   public_registration_enabled: boolean;
   email_enabled: boolean;
+  events_enabled: boolean;
+  memberships_enabled: boolean;
+  crm_automation_enabled: boolean;
+  line_channel_enabled: boolean;
 }
 
 /** 讀取診所設定;查無回 null。 */
@@ -45,7 +51,7 @@ export async function getClinicSettings(
 ): Promise<ClinicSettings | null> {
   const { data, error } = await svc
     .from("clinic_settings")
-    .select("clinic_id, booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled")
+    .select("clinic_id, booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled")
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -69,10 +75,16 @@ function isClinicSettings(value: unknown): value is ClinicSettings {
     (row.deposit_scope === "all" || row.deposit_scope === "self_pay" || row.deposit_scope === "none") &&
     typeof row.min_lead_minutes === "number" &&
     typeof row.max_advance_days === "number" &&
+    typeof row.recurring_booking_enabled === "boolean" &&
+    typeof row.max_recurring_occurrences === "number" &&
     typeof row.cancel_lead_minutes === "number" &&
     typeof row.reschedule_lead_minutes === "number" &&
     typeof row.public_booking_enabled === "boolean" &&
     typeof row.public_registration_enabled === "boolean" &&
-    typeof row.email_enabled === "boolean"
+    typeof row.email_enabled === "boolean" &&
+    typeof row.events_enabled === "boolean" &&
+    typeof row.memberships_enabled === "boolean" &&
+    typeof row.crm_automation_enabled === "boolean" &&
+    typeof row.line_channel_enabled === "boolean"
   );
 }

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePlatformAdmin } from "@/lib/platform";
+import { requireSystemPermission } from "@/lib/platform";
 import { createServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 interface HealthCheck { label: string; description: string; configured: boolean; }
 
 export default async function PlatformOperationsPage() {
-  await requirePlatformAdmin();
+  await requireSystemPermission("operations.view");
   const service = createServiceClient();
   const [
     { count: activeBrands, error: activeBrandsError },

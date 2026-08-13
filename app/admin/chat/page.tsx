@@ -2,6 +2,8 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireNonProvider } from "@/lib/admin";
 import { buildThreads } from "@/lib/chatQueries";
 import ChatConsole from "./ChatConsole";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,7 @@ const { clinicId, role } = await requireNonProvider();
     return <p className="card p-6 text-sm text-slate-500">目前角色無法查看顧客訊息。</p>;
   }
   const supabase = await createSupabaseServer();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="訊息中心" />;
   const threads = await buildThreads(supabase, clinicId);
 
   return (

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, rateLimitResponse } from "@/lib/http";
-import { verifyLiffIdToken } from "@/lib/line";
+import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 
 export const runtime = "nodejs";
@@ -26,17 +26,18 @@ export async function POST(req: NextRequest) {
     const payload = (await req.json().catch(() => null)) as { idToken?: string } | null;
     if (!payload?.idToken) return fail("缺少 LINE 身分驗證");
 
+    const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("缺少品牌設定", 500);
+
     let lineUserId: string;
     try {
-      const profile = await verifyLiffIdToken(payload.idToken);
+      const profile = await verifyClinicLiffIdToken(svc, clinicId, payload.idToken);
       lineUserId = profile.sub;
     } catch (e) {
       return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟頁面"), 401);
     }
 
-    const svc = createServiceClient();
-    const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
     const { data, error } = await svc
       .from("chat_messages")
       .select("id, sender, body, created_at")

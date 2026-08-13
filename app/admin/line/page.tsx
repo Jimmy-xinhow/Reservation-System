@@ -2,31 +2,35 @@ import { headers } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getBotInfo, getQuota, lineAccessTokenForDestination, type LineBotInfo } from "@/lib/line";
 import { requireAdmin } from "@/lib/admin";
-import { sendTestPushAction } from "../actions";
+import { sendTestPushAction, updateLineChannelSettingsAction, verifyLineChannelSettingsAction } from "../actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
-// 唯讀的 LINE 連線狀態頁。只顯示要貼到 LINE 後台的網址、環境變數是否設定(不露值),
-// 與一顆測試推播按鈕。機密一律走環境變數,這裡不儲存、不顯示任何金鑰內容。
+// 品牌管理員可保存非機密識別資料並觸發 server-side 渠道驗證。
+// 機密一律走環境變數,這裡不儲存、不顯示任何金鑰內容。
 export default async function LinePage({
   searchParams,
 }: {
-  searchParams: Promise<{ test?: string; reason?: string }>;
+    searchParams: Promise<{ test?: string; reason?: string; saved?: string; verified?: string }>;
 }) {
   const { clinicId } = await requireAdmin();
-  const { test, reason } = await searchParams;
+  const { test, reason, saved, verified } = await searchParams;
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-app.up.railway.app";
   const proto = h.get("x-forwarded-proto") ?? "https";
   const base = `${proto}://${host}`;
   const supabase = await createSupabaseServer();
-  const { data: clinic } = await supabase
-    .from("clinics")
-    .select("line_destination")
-    .eq("id", clinicId)
-    .maybeSingle();
+  const [{ data: clinic }, { data: settings }, { data: channel }] = await Promise.all([
+    supabase.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
+    supabase.from("clinic_settings").select("line_channel_enabled").eq("clinic_id", clinicId).maybeSingle(),
+    supabase
+      .from("clinic_line_channels")
+      .select("connection_mode, login_channel_id, liff_id, liff_endpoint_path, verification_status, verification_error, last_verified_at")
+      .eq("clinic_id", clinicId)
+      .maybeSingle(),
+  ]);
   let clinicToken: string | null = null;
   try {
     clinicToken = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
@@ -70,11 +74,24 @@ export default async function LinePage({
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">LINE 連線</h1>
-        <p className="text-sm text-slate-400">設定值請填在 Railway 環境變數與 LINE Developers 後台,此頁僅供查看與測試。</p>
+        <p className="text-sm text-slate-400">品牌識別資料可在此設定與驗證；機密請填在 Railway 環境變數，webhook／LIFF URL 則設定於 LINE Developers。</p>
       </div>
 
       {test === "ok" && (
         <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">測試推播已送出 ✅</p>
+      )}
+      {saved === "1" && (
+        <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">品牌 LINE／LIFF 設定已儲存，請執行渠道驗證。</p>
+      )}
+      {verified === "ok" && (
+        <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">
+          伺服器端渠道驗證通過；LIFF 手機登入與實際訊息流程仍需在 LINE App 完成最終測試。
+        </p>
+      )}
+      {verified === "err" && (
+        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
+          渠道驗證失敗：{reason || "請檢查 LINE Developers 與伺服器環境設定"}
+        </p>
       )}
       {test === "err" && (
         <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -122,11 +139,68 @@ export default async function LinePage({
         ) : null}
       </section>
 
+      <form action={updateLineChannelSettingsAction} className="card space-y-5 p-5">
+        <div>
+          <h2 className="font-semibold text-slate-900">品牌渠道模式</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-400">只保存非機密識別資料；channel secret 與 access token 仍必須放在 server environment。</p>
+        </div>
+        <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4">
+          <input type="checkbox" name="line_channel_enabled" defaultChecked={settings?.line_channel_enabled === true} className="mt-1" />
+          <span><span className="block text-sm font-medium text-slate-800">啟用 LINE／LIFF 顧客入口</span><span className="mt-1 block text-xs text-slate-400">停用時不應顯示或接受該品牌的 LINE 顧客入口。</span></span>
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="label">渠道模式</label>
+            <select name="connection_mode" className="input" defaultValue={channel?.connection_mode ?? "shared"}>
+              <option value="shared">共享渠道（沿用全域 Login／LIFF 設定）</option>
+              <option value="brand">品牌獨立渠道</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Webhook destination</label>
+            <input name="line_destination" className="input" defaultValue={clinic?.line_destination ?? ""} placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+          </div>
+          <div>
+            <label className="label">LINE Login Channel ID</label>
+            <input name="login_channel_id" className="input" inputMode="numeric" defaultValue={channel?.login_channel_id ?? ""} placeholder="品牌獨立模式必填" />
+          </div>
+          <div>
+            <label className="label">LIFF ID</label>
+            <input name="liff_id" className="input" defaultValue={channel?.liff_id ?? ""} placeholder="1234567890-AbCdEfGh" />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">LIFF Endpoint Path</label>
+            <input name="liff_endpoint_path" className="input" defaultValue={channel?.liff_endpoint_path ?? "/book"} placeholder="/book" />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <SubmitButton className="btn btn-primary">儲存品牌渠道設定</SubmitButton>
+          <span className={`badge ${channel?.verification_status === "ready" ? "bg-accent-500/10 text-accent-600" : channel?.verification_status === "error" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-700"}`}>
+            外部驗證：{channel?.verification_status === "ready" ? "已就緒" : channel?.verification_status === "error" ? "失敗" : channel?.verification_status === "pending" ? "待驗證" : "未設定"}
+          </span>
+        </div>
+        {channel?.verification_error && <p className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{channel.verification_error}</p>}
+        {channel?.last_verified_at && <p className="text-xs text-slate-400">最後驗證：{new Date(channel.last_verified_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</p>}
+      </form>
+
+      <form action={verifyLineChannelSettingsAction} className="card space-y-3 p-5">
+        <div>
+          <h2 className="font-semibold text-slate-900">渠道就緒驗證</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            檢查此品牌的 server-only access token、Bot 身分、destination、webhook 啟用狀態與 URL；不會顯示或寫入任何機密。
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <SubmitButton className="btn btn-primary">重新驗證渠道</SubmitButton>
+          <span className="text-xs text-slate-400">LIFF 手機登入、Rich Menu 點擊與推播請在正式驗收時操作。</span>
+        </div>
+      </form>
+
       {/* 要貼到 LINE 後台的網址 */}
       <section className="card p-5">
         <h2 className="mb-3 font-semibold text-slate-900">要設定到 LINE 後台的網址</h2>
         <CopyRow label="Webhook URL(Messaging API)" value={`${base}/api/line/webhook`} />
-        <CopyRow label="LIFF Endpoint URL(顧客預約頁)" value={`${base}/book`} />
+        <CopyRow label="LIFF Endpoint URL(顧客入口)" value={`${base}${channel?.liff_endpoint_path ?? "/book"}`} />
         <p className="mt-3 text-xs text-slate-400">
           於 LINE Developers:Messaging API → Webhook URL 貼上第一條並啟用;LIFF app 的 Endpoint URL 貼上第二條。
         </p>

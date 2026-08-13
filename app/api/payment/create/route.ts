@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { requireOperator } from "@/lib/admin";
 import { verifyBrowserBookingToken } from "@/lib/browser-booking";
 import { resolvePublicClinicId } from "@/lib/public-brand";
-import { verifyLiffIdToken } from "@/lib/line";
+import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { fail, ok } from "@/lib/http";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
@@ -133,12 +133,12 @@ export async function POST(req: NextRequest) {
       clinicId = registration.clinic_id;
       const { data: publicSettings, error: publicSettingsError } = await svc
         .from("clinic_settings")
-        .select("public_registration_enabled")
+        .select("events_enabled, public_registration_enabled")
         .eq("clinic_id", clinicId)
         .maybeSingle();
       if (publicSettingsError) throw new Error(publicSettingsError.message);
       if (!publicSettings) return fail("公開報名設定尚未完成", 503);
-      if (publicSettings.public_registration_enabled === false) return fail("目前暫停公開報名付款", 403);
+      if (publicSettings.events_enabled !== true || publicSettings.public_registration_enabled === false) return fail("目前暫停公開報名付款", 403);
       registrationId = registration.id;
       amount = Number(registration.amount);
       const { data: found, error: foundError } = await svc
@@ -153,6 +153,13 @@ export async function POST(req: NextRequest) {
       if (!body.browser_token) return fail("缺少會員身分憑證");
       const publicClinicId = await resolvePublicClinicId(req, svc);
       if (!publicClinicId) return fail("缺少品牌設定", 500);
+      const { data: membershipSettings, error: membershipSettingsError } = await svc
+        .from("clinic_settings")
+        .select("memberships_enabled")
+        .eq("clinic_id", publicClinicId)
+        .maybeSingle();
+      if (membershipSettingsError) throw new Error(membershipSettingsError.message);
+      if (membershipSettings?.memberships_enabled !== true) return fail("此品牌目前未啟用會員與套票", 403);
       const identity = verifyBrowserBookingToken(body.browser_token);
       if (!identity || identity.clinicId !== publicClinicId) return fail("會員身分憑證已失效", 401);
       clinicId = publicClinicId;
@@ -190,7 +197,7 @@ export async function POST(req: NextRequest) {
         let browserPatientId: string | null = null;
         if (body.idToken) {
           try {
-            lineUserId = (await verifyLiffIdToken(body.idToken)).sub;
+            lineUserId = (await verifyClinicLiffIdToken(svc, clinicId, body.idToken)).sub;
           } catch {
             return fail("LINE 身分驗證失敗", 401);
           }
@@ -224,6 +231,15 @@ export async function POST(req: NextRequest) {
         .eq("clinic_id", clinicId)
         .maybeSingle()).data;
       if (!appointment) return fail("查無預約", 404);
+      const { data: activeWaitlistOffer, error: waitlistError } = await svc
+        .from("appointment_waitlist_entries")
+        .select("id")
+        .eq("clinic_id", clinicId)
+        .eq("appointment_id", appointment.id)
+        .eq("status", "offered")
+        .maybeSingle();
+      if (waitlistError) throw new Error(waitlistError.message);
+      if (activeWaitlistOffer) return fail("請先在我的預約接受候補名額，再進行付款", 409);
       if (appointment.deposit_status !== "pending" || Number(appointment.deposit_amount) <= 0) return fail("此預約目前不需要付款");
       if (appointment.status === "cancelled") return fail("已取消的預約不可付款");
       if (appointment.deposit_expires_at && new Date(appointment.deposit_expires_at) <= new Date()) return fail("付款期限已過");

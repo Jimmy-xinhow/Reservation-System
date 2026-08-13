@@ -1,6 +1,7 @@
-import { requirePlatformAdmin } from "@/lib/platform";
+import { hasSystemPermission, requireSystemPermission } from "@/lib/platform";
 import { createServiceClient } from "@/lib/supabase";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { TrialObservationPanel } from "./TrialObservationPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ interface ClinicCountRow { clinic_id: string; }
 interface PlatformReportRow extends BrandRow { members: number; services: number; appointments: number; registrations: number; patients: number; }
 
 export default async function PlatformReportsPage() {
-  await requirePlatformAdmin();
+  const platform = await requireSystemPermission("reports.view");
   const service = createServiceClient();
   const [{ data: brands, error: brandsError }, members, services, appointments, registrations, patients] = await Promise.all([
     service.from("clinics").select("id, name, slug, active, created_at").order("created_at", { ascending: false }),
@@ -34,9 +35,11 @@ export default async function PlatformReportsPage() {
 
   return (
     <div className="space-y-8">
-      <header><p className="eyebrow">Cross-tenant insights</p><h1 className="mt-1 text-2xl font-bold text-slate-950">跨品牌報表</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">以平台 owner／admin 視角比較品牌使用量與開通狀態。這裡只呈現聚合數字，不顯示姓名、電話、LINE ID 或其他顧客個資。</p></header>
+      <header><p className="eyebrow">Cross-tenant insights</p><h1 className="mt-1 text-2xl font-bold text-slate-950">跨品牌報表</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">以系統管理者授權的系統視角比較品牌使用量與開通狀態。這裡只呈現聚合數字，不顯示姓名、電話、LINE ID 或其他顧客個資。</p></header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><Metric label="品牌" value={reportRows.length} detail={`${activeCount} 個啟用中`} /><Metric label="成員" value={totals.members} detail="跨品牌總數" /><Metric label="服務" value={totals.services} detail="啟用中的服務" /><Metric label="預約" value={totals.appointments} detail="累計紀錄" /><Metric label="報名" value={totals.registrations} detail="累計紀錄" /></section>
+
+      <TrialObservationPanel brands={brandRows} canManage={hasSystemPermission(platform, "brands.manage")} />
 
       <section className="card overflow-hidden"><div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-5 py-4 sm:px-6"><div><h2 className="font-semibold text-slate-900">品牌使用量比較</h2><p className="mt-1 text-sm text-slate-500">資料從各品牌的 tenant key 聚合；沒有跨品牌明細查詢入口。</p></div><span className="badge bg-indigo-50 text-indigo-700">平台視角</span></div><div className="hidden overflow-x-auto md:block"><table className="tbl"><thead><tr><th>品牌</th><th>狀態</th><th>成員</th><th>啟用服務</th><th>預約</th><th>報名</th><th>顧客</th></tr></thead><tbody>{reportRows.length === 0 ? <tr><td colSpan={7} className="py-10 text-center text-sm text-slate-400">尚未建立品牌。</td></tr> : reportRows.map((row) => <tr key={row.id}><td><p className="font-medium text-slate-900">{row.name}</p><p className="mt-1 text-xs text-slate-400">/{row.slug ?? "未設定代號"}</p></td><td><span className={`badge ${row.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{row.active ? "啟用" : "停用"}</span></td><td>{row.members}</td><td>{row.services}</td><td>{row.appointments}</td><td>{row.registrations}</td><td>{row.patients}</td></tr>)}</tbody></table></div><div className="divide-y divide-slate-100 md:hidden">{reportRows.length === 0 ? <p className="px-5 py-8 text-center text-sm text-slate-400">尚未建立品牌。</p> : reportRows.map((row) => <article key={row.id} className="space-y-3 px-5 py-4"><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-slate-900">{row.name}</p><p className="mt-1 text-xs text-slate-400">/{row.slug ?? "未設定代號"}</p></div><span className={`badge ${row.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{row.active ? "啟用" : "停用"}</span></div><div className="grid grid-cols-2 gap-2 text-sm"><CompactMetric label="成員" value={row.members} /><CompactMetric label="服務" value={row.services} /><CompactMetric label="預約" value={row.appointments} /><CompactMetric label="報名" value={row.registrations} /><CompactMetric label="顧客" value={row.patients} /></div></article>)}</div></section>
       <p className="text-xs leading-5 text-slate-400">本頁的預約、報名與顧客數為累計資料，未套日期範圍；品牌營運分析與 CSV 明細請進入該品牌的「營運報表」。</p>

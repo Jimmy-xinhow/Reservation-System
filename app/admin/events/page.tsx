@@ -2,6 +2,8 @@ import { requireNonProvider } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { formatAmount, formatEventDate, type EventStatus } from "@/lib/registration";
 import { addRegistrationFieldAction, createEventAction, createEventSessionAction, createTicketTypeAction, regeneratePrivateEventLinkAction, setEventStatusAction } from "./actions";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +41,7 @@ interface FieldRow { id: string; form_id: string; field_key: string; label: stri
 
 export default async function EventsPage({ searchParams }: { searchParams: Promise<{ private_event?: string; private_token?: string }> }) {
 const { supabase, clinicId, role } = await requireNonProvider();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "events"))) return <ModuleDisabled title="活動與報名" />;
   const query = await searchParams;
   const [{ data: events, error: eventsError }, { data: sessions, error: sessionsError }, { data: tickets, error: ticketsError }, { data: forms, error: formsError }, { data: fields, error: fieldsError }, { data: clinicData, error: clinicError }, { data: membershipPlans, error: membershipPlansError }] = await Promise.all([
     supabase.from("events").select("id, slug, title, description, status, access_mode").eq("clinic_id", clinicId).order("created_at", { ascending: false }),

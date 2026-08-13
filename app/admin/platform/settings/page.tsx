@@ -1,16 +1,17 @@
 import Link from "next/link";
-import { requirePlatformAdmin } from "@/lib/platform";
+import { requireSystemPermission } from "@/lib/platform";
+import { platformAccessLabel } from "@/lib/platform-roles";
 
 export const dynamic = "force-dynamic";
 
 export default async function PlatformSettingsPage() {
-  const platform = await requirePlatformAdmin();
+  const platform = await requireSystemPermission("settings.view");
   const governanceChecks = [
-    { label: "平台管理員權限", value: `目前帳號：${platform.role}`, tone: "good" },
+    { label: "系統帳號身分", value: `目前帳號：${platformAccessLabel(platform.accessType)}`, tone: "good" },
     { label: "多品牌資料隔離", value: "品牌 context、clinic_id 與 RLS 共同執行", tone: "good" },
     { label: "標準功能政策", value: "70 項標準功能全開放", tone: "good" },
     { label: "清單外需求", value: "七項加購／客製需另行報價與確認", tone: "note" },
-    { label: "品牌日常設定", value: "由各品牌 owner 在品牌後台管理", tone: "note" },
+    { label: "品牌日常設定", value: "由各品牌管理者在品牌後台管理", tone: "note" },
   ];
   const deploymentChecks = [
     ["多品牌 LINE 憑證對應", Boolean(process.env.LINE_CHANNEL_SECRETS_JSON && process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON)],
@@ -33,7 +34,7 @@ export default async function PlatformSettingsPage() {
         <div>
           <p className="eyebrow">System boundary</p>
           <h2 className="mt-1 text-lg font-bold text-slate-900">系統層級規則</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-500">這些是平台營運與品牌交付的界線，品牌 owner 不會在自己的後台看到。</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">這些是系統營運與品牌交付的界線，品牌管理者不會在自己的後台看到。</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {governanceChecks.map((check) => (
@@ -66,7 +67,7 @@ export default async function PlatformSettingsPage() {
         <p className="mt-2 max-w-3xl text-sm leading-6 text-indigo-900/75">請先在品牌租戶頁建立或查看品牌，再回到品牌後台處理服務、時段、LINE、訊息、CRM Lite 與報表。平台控制台不代替品牌操作。</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Link href="/admin/platform" className="btn btn-primary px-4 py-2 text-sm">前往品牌租戶</Link>
-          <Link href="/admin" className="btn btn-secondary px-4 py-2 text-sm">返回目前品牌後台</Link>
+          <a href="/admin" className="btn btn-secondary px-4 py-2 text-sm">返回目前品牌後台</a>
         </div>
       </section>
     </div>

@@ -21,6 +21,8 @@ import {
   toggleSegmentAction,
   updateAutomationAction,
 } from "./actions";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,7 @@ interface AutomationRow {
 
 export default async function CrmPage() {
   const { supabase, role, clinicId } = await requireMember();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "crm"))) return <ModuleDisabled title="CRM Lite／規則式自動化" />;
   const canEdit = role === "owner" || role === "admin";
   if (!canViewSensitiveCustomerData(role)) {
     return <p className="card p-6 text-sm text-slate-500">目前角色無法查看 CRM 顧客資料。</p>;

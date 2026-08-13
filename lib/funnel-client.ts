@@ -21,12 +21,17 @@ export function trackFunnelEvent(eventName: FunnelEventName, metadata: Record<st
     const scope = new URLSearchParams();
     const clinicSlug = source.get("clinic_slug")?.trim();
     const clinicId = source.get("clinic_id")?.trim();
+    const richMenuVersion = source.get("rm_version")?.trim();
+    const richMenuSlot = Number(source.get("rm_slot"));
+    const enrichedMetadata: Record<string, string | number | boolean> = { ...metadata };
+    if (richMenuVersion && /^[0-9a-f-]{36}$/i.test(richMenuVersion)) enrichedMetadata.rm_version = richMenuVersion;
+    if (Number.isInteger(richMenuSlot) && richMenuSlot >= 1 && richMenuSlot <= 20) enrichedMetadata.rm_slot = richMenuSlot;
     if (clinicSlug) scope.set("clinic_slug", clinicSlug);
     else if (clinicId) scope.set("clinic_id", clinicId);
     void fetch(`/api/analytics/funnel${scope.toString() ? `?${scope.toString()}` : ""}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ event_name: eventName, anonymous_id: anonymousId, source: source.get("utm_source")?.slice(0, 80) || null, metadata }),
+      body: JSON.stringify({ event_name: eventName, anonymous_id: anonymousId, source: source.get("utm_source")?.slice(0, 80) || null, metadata: enrichedMetadata }),
       keepalive: true,
     }).catch(() => undefined);
   } catch {

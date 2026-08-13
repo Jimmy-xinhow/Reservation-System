@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireOperator } from "@/lib/admin";
 import { fail, ok } from "@/lib/http";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   try {
     const member = await requireOperator();
+    if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) return fail("此品牌未啟用活動與報名", 403);
     const date = request.nextUrl.searchParams.get("date")?.trim() || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("日期格式不正確");
     const start = new Date(`${date}T00:00:00+08:00`).toISOString();

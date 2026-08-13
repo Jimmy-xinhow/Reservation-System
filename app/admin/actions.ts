@@ -2,26 +2,41 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { ACTIVE_CLINIC_COOKIE, requireMember, requireAdmin, requireOperator, requireStatusOperator, type Role } from "@/lib/admin";
+import { ACTIVE_CLINIC_COOKIE, requireMember, requireAdmin, requireBrandAdmin, requireOperator, requireStatusOperator, type Role } from "@/lib/admin";
+import {
+  legacyBrandRoleForPermissions,
+  normalizeBrandPermissions,
+  permissionsForLegacyBrandRole,
+  type BrandAccessType,
+  type BrandPermission,
+} from "@/lib/access-control";
 import { createServiceClient } from "@/lib/supabase";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   pushMessages,
   lineAccessTokenForDestination,
+  getBotInfo,
+  getWebhookEndpointInfo,
   createRichMenu,
   uploadRichMenuImage,
   setDefaultRichMenu,
   deleteRichMenu,
   clearDefaultRichMenu,
-  getRichMenuImage,
+  getRichMenuAlias,
+  createRichMenuAlias,
+  updateRichMenuAlias,
+  deleteRichMenuAlias,
 } from "@/lib/line";
-import { LAYOUTS, slotBounds, slotAction, type Layout, type Slot } from "@/lib/richmenu";
+import { LAYOUTS, RICH_MENU_ALIAS_ID_PATTERN, slotBounds, slotAction, validateRichMenuSlots, type Layout, type RichMenuEntryUrls, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
 import { getQueueForDate } from "@/lib/queue";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 import { headers, cookies } from "next/headers";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { customerEntryUrl, type CustomerEntryKey } from "@/lib/customer-entry";
+import { createSupabaseServer } from "@/lib/supabase-server";
 
 function str(fd: FormData, k: string): string {
   return (fd.get(k) ?? "").toString().trim();
@@ -34,7 +49,7 @@ function intOr(fd: FormData, k: string, dflt: number): number {
   const n = Number(str(fd, k));
   return Number.isFinite(n) ? n : dflt;
 }
-type ServiceBookingField = { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox"; required: boolean; options: string[] };
+type ServiceBookingField = { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox" | "consent"; required: boolean; options: string[] };
 function parseServiceBookingFields(fd: FormData): ServiceBookingField[] {
   const raw = str(fd, "booking_fields");
   if (!raw) return [];
@@ -47,10 +62,10 @@ function parseServiceBookingFields(fd: FormData): ServiceBookingField[] {
     const key = typeof row.key === "string" ? row.key.trim() : "";
     const label = typeof row.label === "string" ? row.label.trim() : "";
     const type = row.type;
-    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key) || !label || !["text", "textarea", "date", "select", "checkbox"].includes(String(type))) throw new Error("預約表單欄位設定錯誤");
+    if (!/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/.test(key) || !label || !["text", "textarea", "date", "select", "checkbox", "consent"].includes(String(type))) throw new Error("預約表單欄位設定錯誤");
     const options = Array.isArray(row.options) ? row.options.filter((option): option is string => typeof option === "string").map((option) => option.trim()).filter(Boolean).slice(0, 30) : [];
     if (type === "select" && options.length === 0) throw new Error(`${label}需要至少一個選項`);
-    return { key, label, type: type as ServiceBookingField["type"], required: row.required === true, options };
+    return { key, label, type: type as ServiceBookingField["type"], required: type === "consent" || row.required === true, options };
   });
 }
 export async function setActiveClinicAction(fd: FormData): Promise<void> {
@@ -68,7 +83,7 @@ export async function setActiveClinicAction(fd: FormData): Promise<void> {
   redirect("/admin");
 }
 
-/** 建立新品牌並將目前登入帳號設為該品牌 owner；實際交易由 DB function 原子完成。 */
+/** 建立新品牌並將目前登入帳號設為該品牌管理者；實際交易由 DB function 原子完成。 */
 export async function createBrandAction(fd: FormData): Promise<void> {
   const member = await requireAdmin();
   const name = str(fd, "name");
@@ -108,34 +123,44 @@ export async function createBrandAction(fd: FormData): Promise<void> {
   redirect("/admin/settings?brand_created=1");
 }
 
-// ── 使用者(後台帳號)管理 ─────────────────────────────────
-// 角色:admin=管理員(可管理使用者與 LINE 設定)、staff=櫃檯(日常預約作業)。
+// ── 品牌人員與權限管理 ─────────────────────────────────
 export interface StaffMember {
   userId: string;
   email: string;
   role: Role;
+  accessType: BrandAccessType;
+  permissions: BrandPermission[];
   isSelf: boolean;
   createdAt: string | null;
   assignedDoctors: Array<{ id: string; name: string }>;
 }
 
-/** 本診所目前的管理員人數(用於防止把最後一位管理員降級/移除)。 */
+function brandAccessInput(fd: FormData): { accessType: BrandAccessType; permissions: BrandPermission[]; legacyRole: Role } {
+  const accessType: BrandAccessType = str(fd, "access_type") === "brand_admin" ? "brand_admin" : "employee";
+  const permissions = accessType === "brand_admin"
+    ? (["brand.manage", "operations.manage"] as BrandPermission[])
+    : normalizeBrandPermissions(fd.getAll("permissions").map((value) => value.toString()));
+  if (accessType === "employee" && permissions.length === 0) throw new Error("品牌員工至少要有一項工作權限");
+  return { accessType, permissions, legacyRole: legacyBrandRoleForPermissions(accessType, permissions) };
+}
+
+/** 本品牌目前的品牌管理者人數，用於避免管理權限完全中斷。 */
 async function adminCount(svc: SupabaseClient, clinicId: string): Promise<number> {
   const { count } = await svc
     .from("clinic_members")
     .select("user_id", { count: "exact", head: true })
     .eq("clinic_id", clinicId)
-    .in("role", ["owner", "admin"]);
+    .eq("access_type", "brand_admin");
   return count ?? 0;
 }
 
 /** 列出本診所的後台帳號(僅管理員可用)。 */
 export async function listStaff(): Promise<StaffMember[]> {
-  const { user, clinicId } = await requireAdmin();
+  const { user, clinicId } = await requireBrandAdmin();
   const svc = createServiceClient();
   const { data: members } = await svc
     .from("clinic_members")
-    .select("user_id, role, created_at")
+    .select("user_id, role, access_type, permissions, created_at")
     .eq("clinic_id", clinicId);
   const rows = members ?? [];
   if (rows.length === 0) return [];
@@ -156,18 +181,24 @@ export async function listStaff(): Promise<StaffMember[]> {
     current.push({ id: doctorId, name });
     assignedByUser.set(assignment.user_id as string, current);
   }
-  return rows.map((m) => ({
-    userId: m.user_id as string,
-    email: emailMap.get(m.user_id as string) ?? "(未知)",
-    role: (m.role === "owner" || m.role === "admin" || m.role === "frontdesk" || m.role === "provider" || m.role === "staff" ? m.role : "staff") as Role,
-    isSelf: m.user_id === user.id,
-    createdAt: (m.created_at as string) ?? null,
-    assignedDoctors: assignedByUser.get(m.user_id as string) ?? [],
-  }));
+  return rows.map((m) => {
+    const role = (m.role === "owner" || m.role === "admin" || m.role === "frontdesk" || m.role === "provider" || m.role === "staff" ? m.role : "staff") as Role;
+    const permissions = normalizeBrandPermissions(m.permissions);
+    return {
+      userId: m.user_id as string,
+      email: emailMap.get(m.user_id as string) ?? "(未知)",
+      role,
+      accessType: m.access_type === "brand_admin" ? "brand_admin" : "employee",
+      permissions: permissions.length > 0 ? permissions : permissionsForLegacyBrandRole(role),
+      isSelf: m.user_id === user.id,
+      createdAt: (m.created_at as string) ?? null,
+      assignedDoctors: assignedByUser.get(m.user_id as string) ?? [],
+    };
+  });
 }
 
 export async function listClinicDoctors(): Promise<Array<{ id: string; name: string }>> {
-  const { clinicId } = await requireAdmin();
+  const { clinicId } = await requireBrandAdmin();
   const svc = createServiceClient();
   const { data, error } = await svc.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name");
   if (error) throw new Error(error.message);
@@ -175,11 +206,10 @@ export async function listClinicDoctors(): Promise<Array<{ id: string; name: str
 }
 
 export async function createStaffAction(fd: FormData) {
-  const { clinicId } = await requireAdmin();
+  const { clinicId } = await requireBrandAdmin();
   const email = str(fd, "email").toLowerCase();
   const password = str(fd, "password");
-  const submittedRole = str(fd, "role");
-  const role: Role = ["admin", "frontdesk", "provider", "staff"].includes(submittedRole) ? submittedRole as Role : "staff";
+  const { accessType, permissions, legacyRole } = brandAccessInput(fd);
   if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("請填正確 Email");
   if (password.length < 8) throw new Error("密碼至少 8 碼");
 
@@ -204,39 +234,28 @@ export async function createStaffAction(fd: FormData) {
 
   const { error: mErr } = await svc
     .from("clinic_members")
-    .upsert({ clinic_id: clinicId, user_id: userId, role }, { onConflict: "clinic_id,user_id" });
+    .upsert({ clinic_id: clinicId, user_id: userId, role: legacyRole, access_type: accessType, permissions }, { onConflict: "clinic_id,user_id" });
   if (mErr) throw new Error(mErr.message);
   revalidatePath("/admin/users");
 }
 
 export async function setStaffRoleAction(fd: FormData) {
-  const { clinicId } = await requireAdmin();
+  const { user, clinicId } = await requireBrandAdmin();
   const userId = str(fd, "user_id");
-  const submittedRole = str(fd, "role");
-  const role: Role = ["admin", "frontdesk", "provider", "staff"].includes(submittedRole) ? submittedRole as Role : "staff";
+  const { accessType, permissions, legacyRole } = brandAccessInput(fd);
   if (!userId) throw new Error("缺少帳號");
+  if (userId === user.id) throw new Error("不可變更目前登入帳號的管理身分");
   const svc = createServiceClient();
-  // 防止把最後一位管理員降級(含自己)→ 診所將無人能管理
   const { data: currentTarget } = await svc
     .from("clinic_members")
-    .select("role")
+    .select("access_type")
     .eq("clinic_id", clinicId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (currentTarget?.role === "owner") throw new Error("品牌擁有者角色不可變更");
-  if (role !== "admin" && role !== "owner") {
-    const { data: target } = await svc
-      .from("clinic_members")
-      .select("role")
-      .eq("clinic_id", clinicId)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (target?.role === "admin" && (await adminCount(svc, clinicId)) <= 1)
-      throw new Error("至少要保留一位管理員");
-  }
+  if (currentTarget?.access_type === "brand_admin" && accessType !== "brand_admin" && (await adminCount(svc, clinicId)) <= 1) throw new Error("至少要保留一位品牌管理者");
   const { error } = await svc
     .from("clinic_members")
-    .update({ role })
+    .update({ role: legacyRole, access_type: accessType, permissions })
     .eq("clinic_id", clinicId)
     .eq("user_id", userId);
   if (error) throw new Error(error.message);
@@ -244,18 +263,18 @@ export async function setStaffRoleAction(fd: FormData) {
 }
 
 export async function setDoctorAssignmentsAction(fd: FormData) {
-  const { clinicId } = await requireAdmin();
+  const { clinicId } = await requireBrandAdmin();
   const userId = str(fd, "user_id");
   if (!userId) throw new Error("缺少帳號");
   const selectedDoctorIds = [...new Set(fd.getAll("doctor_ids").map((value) => value.toString()).filter(Boolean))];
   const svc = createServiceClient();
   const { data: target } = await svc
     .from("clinic_members")
-    .select("role")
+    .select("permissions")
     .eq("clinic_id", clinicId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (target?.role !== "provider") throw new Error("只有服務提供者可設定人員指派");
+  if (!normalizeBrandPermissions(target?.permissions).includes("provider.assigned")) throw new Error("只有具備指派工作權限的品牌員工可設定服務人員");
   const { data: doctors, error: doctorError } = await svc
     .from("doctors")
     .select("id")
@@ -285,7 +304,7 @@ export async function setDoctorAssignmentsAction(fd: FormData) {
 }
 
 export async function removeStaffAction(fd: FormData) {
-  const { user, clinicId } = await requireAdmin();
+  const { user, clinicId } = await requireBrandAdmin();
   const userId = str(fd, "user_id");
   if (!userId) throw new Error("缺少帳號");
   if (userId === user.id) throw new Error("無法移除自己");
@@ -293,13 +312,11 @@ export async function removeStaffAction(fd: FormData) {
   // 防止移除最後一位管理員
   const { data: target } = await svc
     .from("clinic_members")
-    .select("role")
+    .select("access_type")
     .eq("clinic_id", clinicId)
     .eq("user_id", userId)
     .maybeSingle();
-  if (target?.role === "owner") throw new Error("品牌擁有者不可移除");
-  if (target?.role === "admin" && (await adminCount(svc, clinicId)) <= 1)
-    throw new Error("至少要保留一位管理員");
+  if (target?.access_type === "brand_admin" && (await adminCount(svc, clinicId)) <= 1) throw new Error("至少要保留一位品牌管理者");
   // 僅移除本診所權限(不刪除 auth 帳號)
   const { error } = await svc
     .from("clinic_members")
@@ -311,7 +328,7 @@ export async function removeStaffAction(fd: FormData) {
 }
 
 export async function resetStaffPasswordAction(fd: FormData) {
-  const { clinicId } = await requireAdmin();
+  const { clinicId } = await requireBrandAdmin();
   const userId = str(fd, "user_id");
   const password = str(fd, "password");
   if (!userId) throw new Error("缺少帳號");
@@ -319,13 +336,13 @@ export async function resetStaffPasswordAction(fd: FormData) {
   const svc = createServiceClient();
   const { data: target, error: targetError } = await svc
     .from("clinic_members")
-    .select("role")
+    .select("access_type")
     .eq("clinic_id", clinicId)
     .eq("user_id", userId)
     .maybeSingle();
   if (targetError) throw new Error(targetError.message);
   if (!target) throw new Error("找不到目標成員或無權限操作");
-  if (target.role === "owner") throw new Error("不可重設 owner 密碼");
+  if (target.access_type === "brand_admin") throw new Error("不可重設其他品牌管理者的密碼");
   const { error } = await svc.auth.admin.updateUserById(userId, { password });
   if (error) throw new Error(error.message);
   revalidatePath("/admin/users");
@@ -356,7 +373,7 @@ export async function sendTestPushAction(fd: FormData) {
 
 // ── 登出 ──────────────────────────────────────────────────
 export async function signOutAction() {
-  const { supabase } = await requireMember();
+  const supabase = await createSupabaseServer();
   await supabase.auth.signOut();
   redirect("/admin/login");
 }
@@ -641,6 +658,21 @@ export async function cancelAppointmentAction(fd: FormData) {
   revalidatePath("/admin/calendar");
 }
 
+export async function cancelAppointmentWaitlistAction(fd: FormData) {
+  const { clinicId, user } = await requireOperator();
+  const id = str(fd, "id");
+  if (!id) throw new Error("缺少候補編號");
+  const { error } = await createServiceClient().rpc("cancel_appointment_waitlist_by_operator", {
+    p_clinic_id: clinicId,
+    p_waitlist_id: id,
+    p_actor_user_id: user.id,
+    p_note: "cancelled by operator",
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin");
+  revalidatePath("/admin/dashboard");
+}
+
 const DEPOSIT_STATUSES = ["none", "pending", "paid", "waived", "refunded"] as const;
 export async function setDepositAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
@@ -863,7 +895,7 @@ export async function rescheduleAppointmentAction(fd: FormData) {
 
 // ── 服務排程 schedule_templates ────────────────────────────
 export async function createTemplateAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const doctorId = str(fd, "doctor_id");
   const serviceId = str(fd, "service_id");
   if (!doctorId && !serviceId) throw new Error("請指定服務提供者或服務");
@@ -899,7 +931,7 @@ export async function createTemplateAction(fd: FormData) {
 }
 
 export async function updateTemplateAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const doctorId = str(fd, "doctor_id");
   const serviceId = str(fd, "service_id");
@@ -939,7 +971,7 @@ export async function updateTemplateAction(fd: FormData) {
 }
 
 export async function toggleTemplateAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
@@ -952,7 +984,7 @@ export async function toggleTemplateAction(fd: FormData) {
 }
 
 export async function deleteTemplateAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("schedule_templates")
@@ -965,7 +997,7 @@ export async function deleteTemplateAction(fd: FormData) {
 
 // ── 休診 / 加診 schedule_exceptions ───────────────────────
 export async function createExceptionAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const isClosed = str(fd, "kind") !== "extra"; // kind=closed(休診) / extra(加診)
   const start = str(fd, "start_time");
   const end = str(fd, "end_time");
@@ -1037,7 +1069,7 @@ export async function createExceptionAction(fd: FormData) {
 }
 
 export async function deleteExceptionAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("schedule_exceptions")
@@ -1050,7 +1082,7 @@ export async function deleteExceptionAction(fd: FormData) {
 
 // ── 服務提供者(服務排程可選)────────────────────────────────
 export async function createDoctorAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const { error } = await supabase.from("doctors").insert({
     clinic_id: clinicId,
     name: str(fd, "name"),
@@ -1062,7 +1094,7 @@ export async function createDoctorAction(fd: FormData) {
 }
 
 export async function updateDoctorAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const name = str(fd, "name");
   if (!id || !name) throw new Error("缺少服務提供者或姓名");
@@ -1076,7 +1108,7 @@ export async function updateDoctorAction(fd: FormData) {
 }
 
 export async function toggleDoctorAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
@@ -1203,7 +1235,7 @@ export async function deletePatientRecordAction(fd: FormData) {
 
 // ── 看診服務 services ─────────────────────────────────────
 export async function createServiceAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const name = str(fd, "name");
   if (!name) throw new Error("請填服務名稱");
   const { error } = await supabase.from("services").insert({
@@ -1222,7 +1254,7 @@ export async function createServiceAction(fd: FormData) {
 }
 
 export async function updateServiceAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const name = str(fd, "name");
   if (!id || !name) throw new Error("缺少服務或名稱");
@@ -1244,7 +1276,7 @@ export async function updateServiceAction(fd: FormData) {
 }
 
 export async function toggleServiceAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
@@ -1257,7 +1289,7 @@ export async function toggleServiceAction(fd: FormData) {
 }
 
 export async function deleteServiceAction(fd: FormData) {
-  const { supabase, clinicId } = await requireOperator();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("services")
@@ -1400,27 +1432,23 @@ export async function deleteMessageAction(fd: FormData) {
 }
 
 // ── LINE 圖文選單 Rich Menu ───────────────────────────────
-// 依 slots 建立新 rich menu、上傳圖、設為預設、刪舊。回傳新 id。
+// 依版本建立新 rich menu、上傳圖並切為預設。舊版本保留供回復。
 async function buildAndPublishRichMenu(opts: {
+  versionId: string;
+  versionName: string;
   layout: Layout;
   slots: Slot[];
   chatBarText: string;
   imageBytes: ArrayBuffer;
   contentType: string;
-  oldId: string | null;
-  baseUrl: string;
   accessToken: string;
-  clinicSlug: string | null;
+  urls: RichMenuEntryUrls;
 }): Promise<string> {
   const spec = LAYOUTS[opts.layout];
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const liffUrl = liffId
-    ? `https://liff.line.me/${liffId}${opts.clinicSlug ? `?clinic_slug=${encodeURIComponent(opts.clinicSlug)}` : ""}`
-    : null;
   const bounds = slotBounds(opts.layout);
   const areas = bounds
     .map((b, i) => {
-      const action = opts.slots[i] ? slotAction(opts.slots[i], liffUrl, opts.baseUrl) : null;
+      const action = opts.slots[i] ? slotAction(opts.slots[i], opts.urls, { versionId: opts.versionId, slotIndex: i }) : null;
       return action ? { bounds: b, action } : null;
     })
     .filter(Boolean) as { bounds: (typeof bounds)[number]; action: Record<string, unknown> }[];
@@ -1428,7 +1456,7 @@ async function buildAndPublishRichMenu(opts: {
   const newId = await createRichMenu({
     size: { width: spec.width, height: spec.height },
     selected: true,
-    name: `clinic-menu-${Date.now() % 100000}`,
+    name: opts.versionName.slice(0, 300),
     chatBarText: opts.chatBarText || "選單",
     areas,
   }, opts.accessToken);
@@ -1436,34 +1464,86 @@ async function buildAndPublishRichMenu(opts: {
     await uploadRichMenuImage(newId, opts.imageBytes, opts.contentType, opts.accessToken);
     await setDefaultRichMenu(newId, opts.accessToken);
   } catch (e) {
-    await deleteRichMenu(newId, opts.accessToken);
+    try { await deleteRichMenu(newId, opts.accessToken); }
+    catch (cleanupError) { console.error("Failed to remove incomplete Rich Menu", cleanupError); }
     throw e;
   }
-  if (opts.oldId && opts.oldId !== newId) await deleteRichMenu(opts.oldId, opts.accessToken);
   return newId;
 }
 
-async function getClinicLineContext(supabase: SupabaseClient, clinicId: string): Promise<{ accessToken: string; clinicSlug: string | null }> {
-  const { data: clinic, error } = await supabase
-    .from("clinics")
-    .select("line_destination, slug")
-    .eq("id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+async function getRichMenuLineContext(supabase: SupabaseClient, clinicId: string, requireReady = false): Promise<{ accessToken: string; clinicSlug: string | null; liffId: string; destination: string | null }> {
+  const context = await getClinicLineChannelContext(supabase, clinicId);
+  if (!context.enabled) throw new Error("此品牌尚未啟用 LINE／LIFF");
+  if (!context.liffId) throw new Error("此品牌尚未設定 LIFF ID");
+  if (requireReady && context.verificationStatus !== "ready") throw new Error("LINE／LIFF 尚未完成正式連線驗證");
   return {
-    accessToken: lineAccessTokenForDestination(clinic?.line_destination as string | undefined),
-    clinicSlug: (clinic?.slug as string | null) ?? null,
+    accessToken: lineAccessTokenForDestination(context.destination ?? undefined),
+    clinicSlug: context.clinicSlug,
+    liffId: context.liffId,
+    destination: context.destination,
   };
 }
 
 function reqBaseUrl(h: Headers): string {
+  const configured = process.env.APP_URL?.trim();
+  if (configured) return new URL(configured).origin;
+  if (process.env.NODE_ENV === "production") throw new Error("正式環境必須設定 APP_URL");
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
   const proto = h.get("x-forwarded-proto") ?? "https";
   return host ? `${proto}://${host}` : "";
 }
 
+async function richMenuAvailability(supabase: SupabaseClient, clinicId: string): Promise<RichMenuModuleAvailability> {
+  const { data, error } = await supabase.from("clinic_settings")
+    .select("public_booking_enabled, events_enabled, public_registration_enabled, memberships_enabled, line_channel_enabled, legacy_progress_enabled")
+    .eq("clinic_id", clinicId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("品牌設定不存在");
+  return {
+    booking: data.public_booking_enabled === true,
+    events: data.events_enabled === true && data.public_registration_enabled === true,
+    tickets: data.events_enabled === true,
+    memberships: data.memberships_enabled === true,
+    line: data.line_channel_enabled === true,
+    legacyProgress: data.legacy_progress_enabled === true,
+  };
+}
+
+function buildRichMenuEntryUrls(baseUrl: string, clinicSlug: string | null, liffId: string): RichMenuEntryUrls {
+  const keys: CustomerEntryKey[] = ["booking", "appointments", "events", "tickets", "membership", "support", "brand"];
+  return Object.fromEntries(keys.map((key) => [key, customerEntryUrl(key, { baseUrl, clinicSlug, liffId })])) as unknown as RichMenuEntryUrls;
+}
+
+function inspectRichMenuImage(bytes: ArrayBuffer): { contentType: "image/png" | "image/jpeg"; width: number; height: number; sha256: string } {
+  const view = new DataView(bytes);
+  let contentType: "image/png" | "image/jpeg";
+  let width = 0;
+  let height = 0;
+  if (view.byteLength >= 24 && view.getUint32(0) === 0x89504e47 && view.getUint32(4) === 0x0d0a1a0a) {
+    contentType = "image/png";
+    width = view.getUint32(16);
+    height = view.getUint32(20);
+  } else if (view.byteLength >= 4 && view.getUint16(0) === 0xffd8) {
+    contentType = "image/jpeg";
+    let offset = 2;
+    while (offset + 8 < view.byteLength) {
+      if (view.getUint8(offset) !== 0xff) { offset += 1; continue; }
+      const marker = view.getUint8(offset + 1);
+      if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf].includes(marker)) {
+        height = view.getUint16(offset + 5); width = view.getUint16(offset + 7); break;
+      }
+      if (marker === 0xd9 || marker === 0xda) break;
+      const length = view.getUint16(offset + 2);
+      if (length < 2) break;
+      offset += 2 + length;
+    }
+  } else throw new Error("圖片內容必須是 PNG 或 JPEG");
+  if (!width || !height) throw new Error("無法讀取圖片尺寸");
+  return { contentType, width, height, sha256: createHash("sha256").update(Buffer.from(bytes)).digest("hex") };
+}
+
 export async function saveRichMenuAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireAdmin();
   const layout = str(fd, "layout") as Layout;
   if (!LAYOUTS[layout]) throw new Error("版型錯誤");
   const count = LAYOUTS[layout].slots;
@@ -1471,96 +1551,116 @@ export async function saveRichMenuAction(fd: FormData) {
   for (let i = 0; i < count; i++) {
     slots.push({
       label: str(fd, `label_${i}`),
+      accessibilityLabel: str(fd, `accessibility_label_${i}`),
       action: (str(fd, `action_${i}`) || "none") as Slot["action"],
       value: str(fd, `value_${i}`) || undefined,
     });
   }
+  const name = str(fd, "name") || `Rich Menu ${new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}`;
   const chatBarText = str(fd, "chat_bar_text") || "選單";
-  const { error } = await supabase.from("line_richmenu").upsert(
-    { clinic_id: clinicId, layout, chat_bar_text: chatBarText, slots, updated_at: new Date().toISOString() },
-    { onConflict: "clinic_id" },
-  );
+  const templateKey = (["booking", "events", "mixed", "custom"] as const).includes(str(fd, "template_key") as RichMenuTemplateKey) ? str(fd, "template_key") as RichMenuTemplateKey : "custom";
+  const errors = validateRichMenuSlots(layout, slots, await richMenuAvailability(supabase, clinicId));
+  if (chatBarText.length > 14) errors.push("選單列文字不可超過 14 字");
+  if (errors.length > 0) redirect(`/admin/richmenu?err=${encodeURIComponent(errors.join("；").slice(0, 500))}`);
+  const service = createServiceClient();
+  const { data: versionId, error } = await service.rpc("create_line_richmenu_version", {
+    p_clinic_id: clinicId, p_actor_user_id: user.id, p_name: name, p_template_key: templateKey,
+    p_layout: layout, p_chat_bar_text: chatBarText, p_slots: slots,
+  });
   if (error) redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
-
-  // 若已發布過,用「現有背景圖」立即同步更新選單(動作/格數變更馬上生效,不必重傳圖)
-  let syncErr: string | null = null;
-  try {
-    const { data: cfg } = await supabase
-      .from("line_richmenu")
-      .select("published_id")
-      .eq("clinic_id", clinicId)
-      .maybeSingle();
-    const oldId = (cfg?.published_id as string | null) ?? null;
-    if (oldId) {
-      const context = await getClinicLineContext(supabase, clinicId);
-      const img = await getRichMenuImage(oldId, context.accessToken);
-      if (img) {
-        const newId = await buildAndPublishRichMenu({
-          layout,
-          slots,
-          chatBarText,
-          imageBytes: img.bytes,
-          contentType: img.contentType,
-          oldId,
-          baseUrl: reqBaseUrl(await headers()),
-          accessToken: context.accessToken,
-          clinicSlug: context.clinicSlug,
-        });
-        await supabase
-          .from("line_richmenu")
-          .update({ published_id: newId, updated_at: new Date().toISOString() })
-          .eq("clinic_id", clinicId);
-      }
-    }
-  } catch (e) {
-    syncErr = e instanceof Error ? e.message : "更新選單失敗";
-  }
-  redirect(
-    syncErr
-      ? `/admin/richmenu?err=${encodeURIComponent(syncErr.slice(0, 200))}`
-      : "/admin/richmenu?saved=1",
-  );
+  redirect(`/admin/richmenu?saved=1&draft=${encodeURIComponent(String(versionId))}`);
 }
 
 export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireAdmin();
+  const service = createServiceClient();
+  const versionId = str(fd, "version_id");
   let errMsg: string | null = null;
+  let newId: string | null = null;
+  let oldId: string | null = null;
   try {
-    const { data: cfg } = await supabase
-      .from("line_richmenu")
-      .select("layout, chat_bar_text, slots, published_id")
-      .eq("clinic_id", clinicId)
-      .maybeSingle();
-    if (!cfg) throw new Error("請先按「儲存選單設定」再發布");
-
-    const layout = cfg.layout as Layout;
+    if (!versionId) throw new Error("請先建立草稿版本");
+    const [{ data: version, error: versionError }, { data: cfg, error: cfgError }] = await Promise.all([
+      service.from("line_richmenu_versions").select("id, name, layout, chat_bar_text, slots, status").eq("id", versionId).eq("clinic_id", clinicId).maybeSingle(),
+      service.from("line_richmenu").select("published_id").eq("clinic_id", clinicId).maybeSingle(),
+    ]);
+    if (versionError || cfgError) throw new Error(versionError?.message ?? cfgError?.message);
+    if (!version) throw new Error("找不到草稿版本");
+    const layout = version.layout as Layout;
     const spec = LAYOUTS[layout];
     if (!spec) throw new Error("版型錯誤");
+    const slots = (version.slots as Slot[]) ?? [];
+    const validationErrors = validateRichMenuSlots(layout, slots, await richMenuAvailability(supabase, clinicId));
+    if (validationErrors.length > 0) throw new Error(validationErrors.join("；"));
 
     const file = fd.get("image");
     if (!(file instanceof File) || file.size === 0) throw new Error("請選擇圖片");
     if (file.size > 1024 * 1024) throw new Error("圖片需小於 1MB");
-    const contentType = file.type === "image/png" ? "image/png" : "image/jpeg";
-
-    const context = await getClinicLineContext(supabase, clinicId);
-    const newId = await buildAndPublishRichMenu({
-      layout,
-      slots: (cfg.slots as Slot[]) ?? [],
-      chatBarText: (cfg.chat_bar_text as string) || "選單",
-      imageBytes: await file.arrayBuffer(),
-      contentType,
-      oldId: (cfg.published_id as string | null) ?? null,
-      baseUrl: reqBaseUrl(await headers()),
-      accessToken: context.accessToken,
-      clinicSlug: context.clinicSlug,
-    });
-
-    await supabase
-      .from("line_richmenu")
-      .update({ published_id: newId, updated_at: new Date().toISOString() })
+    const imageBytes = await file.arrayBuffer();
+    const image = inspectRichMenuImage(imageBytes);
+    if (image.width !== spec.width || image.height !== spec.height) throw new Error(`圖片尺寸必須是 ${spec.width} × ${spec.height} px`);
+    const context = await getRichMenuLineContext(supabase, clinicId, true);
+    const baseUrl = reqBaseUrl(await headers());
+    oldId = (cfg?.published_id as string | null) ?? null;
+    const { error: readyError } = await service
+      .from("line_richmenu_versions")
+      .update({ status: "ready", validation_errors: [] })
+      .eq("id", versionId)
       .eq("clinic_id", clinicId);
+    if (readyError) throw new Error(readyError.message);
+    const { error: validationEventError } = await service
+      .from("line_richmenu_publication_events")
+      .insert({ clinic_id: clinicId, version_id: versionId, kind: "validated", actor_id: user.id });
+    if (validationEventError) throw new Error(validationEventError.message);
+    const { error: publishingError } = await service
+      .from("line_richmenu_versions")
+      .update({ status: "publishing" })
+      .eq("id", versionId)
+      .eq("clinic_id", clinicId);
+    if (publishingError) throw new Error(publishingError.message);
+    newId = await buildAndPublishRichMenu({
+      versionId,
+      versionName: String(version.name),
+      layout,
+      slots,
+      chatBarText: (version.chat_bar_text as string) || "選單",
+      imageBytes,
+      contentType: image.contentType,
+      accessToken: context.accessToken,
+      urls: buildRichMenuEntryUrls(baseUrl, context.clinicSlug, context.liffId),
+    });
+    const { error: recordError } = await service.rpc("record_line_richmenu_publication", {
+      p_clinic_id: clinicId, p_actor_user_id: user.id, p_version_id: versionId,
+      p_line_rich_menu_id: newId, p_kind: "published", p_image_sha256: image.sha256,
+      p_image_width: image.width, p_image_height: image.height,
+    });
+    if (recordError) {
+      try {
+        if (oldId) await setDefaultRichMenu(oldId, context.accessToken); else await clearDefaultRichMenu(context.accessToken);
+      } catch (compensationError) {
+        console.error("Failed to restore previous Rich Menu default", compensationError);
+      }
+      try { await deleteRichMenu(newId, context.accessToken); }
+      catch (cleanupError) { console.error("Failed to remove unrecorded Rich Menu", cleanupError); }
+      newId = null;
+      throw new Error(recordError.message);
+    }
   } catch (e) {
     errMsg = e instanceof Error ? e.message : "發布失敗";
+    if (versionId) {
+      try {
+        const { error: failureRecordError } = await service.rpc("record_line_richmenu_publish_failure", {
+          p_clinic_id: clinicId,
+          p_actor_user_id: user.id,
+          p_version_id: versionId,
+          p_error: errMsg,
+        });
+        if (failureRecordError) console.error("Failed to record Rich Menu publication failure", failureRecordError);
+      } catch (auditError) {
+        // 保留原始發布錯誤；稽核寫入失敗會由 server log／後續驗收追查。
+        console.error("Failed to record Rich Menu publication failure", auditError);
+      }
+    }
   }
   revalidatePath("/admin/richmenu");
   // 回傳結果(此 action 由 client 端程式呼叫,不能用 redirect,否則會丟出 NEXT_REDIRECT)
@@ -1568,18 +1668,293 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
 }
 
 export async function unpublishRichMenuAction() {
-  const { supabase, clinicId } = await requireAdmin();
-  const { data: cfg } = await supabase
+  const { supabase, clinicId, user } = await requireAdmin();
+  const service = createServiceClient();
+  const { data: cfg } = await service
     .from("line_richmenu")
     .select("published_id")
     .eq("clinic_id", clinicId)
     .maybeSingle();
-  const context = await getClinicLineContext(supabase, clinicId);
+  const context = await getRichMenuLineContext(supabase, clinicId);
   await clearDefaultRichMenu(context.accessToken);
-  const id = cfg?.published_id as string | null;
-  if (id) await deleteRichMenu(id, context.accessToken);
-  await supabase.from("line_richmenu").update({ published_id: null }).eq("clinic_id", clinicId);
+  const id = (cfg?.published_id as string | null) ?? null;
+  const { error } = await service.rpc("record_line_richmenu_unpublished", { p_clinic_id: clinicId, p_actor_user_id: user.id });
+  if (error) {
+    if (id) await setDefaultRichMenu(id, context.accessToken);
+    throw new Error(error.message);
+  }
   revalidatePath("/admin/richmenu");
+}
+
+export async function rollbackRichMenuVersionAction(fd: FormData) {
+  const { supabase, clinicId, user } = await requireAdmin();
+  const versionId = str(fd, "version_id");
+  const service = createServiceClient();
+  const [{ data: target }, { data: current }] = await Promise.all([
+    service.from("line_richmenu_versions").select("id, line_rich_menu_id").eq("id", versionId).eq("clinic_id", clinicId).maybeSingle(),
+    service.from("line_richmenu").select("published_id").eq("clinic_id", clinicId).maybeSingle(),
+  ]);
+  const targetLineId = target?.line_rich_menu_id as string | null;
+  if (!targetLineId) throw new Error("此版本沒有可回復的 LINE Rich Menu ID");
+  const currentLineId = (current?.published_id as string | null) ?? null;
+  const context = await getRichMenuLineContext(supabase, clinicId);
+  await setDefaultRichMenu(targetLineId, context.accessToken);
+  const { error } = await service.rpc("record_line_richmenu_publication", {
+    p_clinic_id: clinicId, p_actor_user_id: user.id, p_version_id: versionId,
+    p_line_rich_menu_id: targetLineId, p_kind: "rolled_back",
+  });
+  if (error) {
+    if (currentLineId) await setDefaultRichMenu(currentLineId, context.accessToken); else await clearDefaultRichMenu(context.accessToken);
+    throw new Error(error.message);
+  }
+  revalidatePath("/admin/richmenu");
+}
+
+export async function cloneRichMenuVersionAction(fd: FormData) {
+  const { clinicId, user } = await requireAdmin();
+  const sourceVersionId = str(fd, "version_id");
+  const name = str(fd, "name") || null;
+  if (!sourceVersionId) redirect("/admin/richmenu?err=%E6%89%BE%E4%B8%8D%E5%88%B0%E8%A6%81%E8%A4%87%E8%A3%BD%E7%9A%84%E7%89%88%E6%9C%AC");
+  const { data: versionId, error } = await createServiceClient().rpc("clone_line_richmenu_version", {
+    p_clinic_id: clinicId,
+    p_actor_user_id: user.id,
+    p_source_version_id: sourceVersionId,
+    p_name: name,
+  });
+  if (error) redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
+  revalidatePath("/admin/richmenu");
+  redirect(`/admin/richmenu?cloned=1&draft=${encodeURIComponent(String(versionId))}`);
+}
+
+export async function syncRichMenuAliasAction(fd: FormData) {
+  const { supabase, clinicId, user } = await requireAdmin();
+  const aliasId = str(fd, "alias_id");
+  const label = str(fd, "label");
+  const versionId = str(fd, "version_id");
+  if (!RICH_MENU_ALIAS_ID_PATTERN.test(aliasId)) redirect(`/admin/richmenu?err=${encodeURIComponent("Alias ID 僅能使用 1–32 個小寫英數字、底線或連字號")}`);
+  if (!label || label.length > 40) redirect(`/admin/richmenu?err=${encodeURIComponent("Alias 名稱需為 1–40 字")}`);
+
+  const service = createServiceClient();
+  const [{ data: version, error: versionError }, { data: localAlias, error: localAliasError }] = await Promise.all([
+    service.from("line_richmenu_versions").select("id, line_rich_menu_id").eq("id", versionId).eq("clinic_id", clinicId).maybeSingle(),
+    service.from("line_richmenu_aliases").select("id, channel_destination, status").eq("clinic_id", clinicId).eq("alias_id", aliasId).maybeSingle(),
+  ]);
+  if (localAliasError) redirect(`/admin/richmenu?err=${encodeURIComponent(localAliasError.message.slice(0, 200))}`);
+  if (versionError || !version?.line_rich_menu_id) redirect(`/admin/richmenu?err=${encodeURIComponent(versionError?.message ?? "Alias 只能連到此品牌已上傳至 LINE 的版本")}`);
+
+  const context = await getRichMenuLineContext(supabase, clinicId, true);
+  if (!context.destination) redirect(`/admin/richmenu?err=${encodeURIComponent("建立 Alias 前必須先設定品牌 LINE destination")}`);
+  if (localAlias && localAlias.status !== "removed" && localAlias.channel_destination !== context.destination) {
+    redirect(`/admin/richmenu?err=${encodeURIComponent("此 Alias 仍屬於舊 LINE 渠道，請先移除後再於新渠道建立")}`);
+  }
+  const { data: channelConflict, error: conflictError } = await service
+    .from("line_richmenu_aliases")
+    .select("id")
+    .eq("channel_destination", context.destination)
+    .eq("alias_id", aliasId)
+    .neq("clinic_id", clinicId)
+    .neq("status", "removed")
+    .limit(1)
+    .maybeSingle();
+  if (conflictError || channelConflict) redirect(`/admin/richmenu?err=${encodeURIComponent(conflictError?.message ?? "此 Alias ID 已由同一 LINE 渠道的其他品牌使用")}`);
+  const remoteBefore = await getRichMenuAlias(aliasId, context.accessToken);
+  const ownsRemoteAlias = Boolean(localAlias && localAlias.channel_destination === context.destination && localAlias.status !== "removed");
+  if (remoteBefore && !ownsRemoteAlias) redirect(`/admin/richmenu?err=${encodeURIComponent("此 Alias ID 已存在於 LINE 渠道且不屬於本品牌，請改用其他 ID")}`);
+  if (remoteBefore) await updateRichMenuAlias(aliasId, version.line_rich_menu_id, context.accessToken);
+  else await createRichMenuAlias(aliasId, version.line_rich_menu_id, context.accessToken);
+
+  const { error } = await service.from("line_richmenu_aliases").upsert({
+    clinic_id: clinicId,
+    channel_destination: context.destination,
+    alias_id: aliasId,
+    label,
+    version_id: version.id,
+    line_rich_menu_id: version.line_rich_menu_id,
+    status: "ready",
+    last_error: null,
+    last_synced_at: new Date().toISOString(),
+    created_by: user.id,
+    updated_by: user.id,
+  }, { onConflict: "clinic_id,alias_id" });
+  if (error) {
+    try {
+      if (remoteBefore) await updateRichMenuAlias(aliasId, remoteBefore.richMenuId, context.accessToken);
+      else await deleteRichMenuAlias(aliasId, context.accessToken);
+    } catch (compensationError) {
+      console.error("Failed to restore Rich Menu Alias after database error", compensationError);
+    }
+    redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
+  }
+  revalidatePath("/admin/richmenu");
+  redirect("/admin/richmenu?alias_saved=1");
+}
+
+export async function removeRichMenuAliasAction(fd: FormData) {
+  const { clinicId, user } = await requireAdmin();
+  const aliasId = str(fd, "alias_id");
+  if (!RICH_MENU_ALIAS_ID_PATTERN.test(aliasId)) redirect(`/admin/richmenu?err=${encodeURIComponent("Alias ID 格式錯誤")}`);
+  const service = createServiceClient();
+  const { data: local, error: localError } = await service
+    .from("line_richmenu_aliases")
+    .select("id, channel_destination")
+    .eq("clinic_id", clinicId)
+    .eq("alias_id", aliasId)
+    .maybeSingle();
+  if (localError || !local) redirect(`/admin/richmenu?err=${encodeURIComponent(localError?.message ?? "找不到此品牌的 Alias")}`);
+  const aliasAccessToken = lineAccessTokenForDestination(local.channel_destination);
+  const remoteBefore = await getRichMenuAlias(aliasId, aliasAccessToken);
+  await deleteRichMenuAlias(aliasId, aliasAccessToken);
+  const { error } = await service
+    .from("line_richmenu_aliases")
+    .update({ status: "removed", last_error: null, last_synced_at: new Date().toISOString(), updated_by: user.id })
+    .eq("id", local.id)
+    .eq("clinic_id", clinicId);
+  if (error) {
+    if (remoteBefore) {
+      try { await createRichMenuAlias(aliasId, remoteBefore.richMenuId, aliasAccessToken); }
+      catch (compensationError) { console.error("Failed to restore deleted Rich Menu Alias", compensationError); }
+    }
+    redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
+  }
+  revalidatePath("/admin/richmenu");
+  redirect("/admin/richmenu?alias_removed=1");
+}
+
+function taipeiLocalDateTime(value: string): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, yearText, monthText, dayText, hourText, minuteText] = match;
+  const [year, month, day, hour, minute] = [yearText, monthText, dayText, hourText, minuteText].map(Number);
+  const maxDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  if (year < 2000 || month < 1 || month > 12 || day < 1 || day > maxDay || hour > 23 || minute > 59) return null;
+  return new Date(Date.UTC(year, month - 1, day, hour - 8, minute)).toISOString();
+}
+
+export async function createRichMenuScheduleAction(fd: FormData) {
+  const { supabase, clinicId, user } = await requireAdmin();
+  const versionId = str(fd, "version_id");
+  const startsAt = taipeiLocalDateTime(str(fd, "starts_at"));
+  const endsAt = taipeiLocalDateTime(str(fd, "ends_at"));
+  if (!startsAt || !endsAt) redirect(`/admin/richmenu?err=${encodeURIComponent("顯示期間格式錯誤")}`);
+  await getRichMenuLineContext(supabase, clinicId, true);
+  const { error } = await createServiceClient().rpc("create_line_richmenu_schedule", {
+    p_clinic_id: clinicId,
+    p_actor_user_id: user.id,
+    p_version_id: versionId,
+    p_starts_at: startsAt,
+    p_ends_at: endsAt,
+  });
+  if (error) redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
+  revalidatePath("/admin/richmenu");
+  redirect("/admin/richmenu?scheduled=1");
+}
+
+export async function cancelRichMenuScheduleAction(fd: FormData) {
+  const { clinicId, user } = await requireAdmin();
+  const scheduleId = str(fd, "schedule_id");
+  const { error } = await createServiceClient().rpc("cancel_line_richmenu_schedule", {
+    p_clinic_id: clinicId,
+    p_actor_user_id: user.id,
+    p_schedule_id: scheduleId,
+  });
+  if (error) redirect(`/admin/richmenu?err=${encodeURIComponent(error.message.slice(0, 200))}`);
+  revalidatePath("/admin/richmenu");
+  redirect("/admin/richmenu?schedule_cancelled=1");
+}
+
+export async function updateLineChannelSettingsAction(fd: FormData) {
+  const { supabase, clinicId, user } = await requireAdmin();
+  const enabled = bool(fd, "line_channel_enabled");
+  const connectionMode = str(fd, "connection_mode") === "brand" ? "brand" : "shared";
+  const destination = str(fd, "line_destination") || null;
+  const loginChannelId = str(fd, "login_channel_id") || null;
+  const liffId = str(fd, "liff_id") || null;
+  const endpointPath = str(fd, "liff_endpoint_path") || "/book";
+
+  if (destination && !/^U[A-Za-z0-9_-]{8,100}$/.test(destination)) throw new Error("LINE destination 格式不正確");
+  if (loginChannelId && !/^[0-9]{6,30}$/.test(loginChannelId)) throw new Error("LINE Login Channel ID 格式不正確");
+  if (liffId && !/^[0-9]{6,30}-[A-Za-z0-9_-]{4,100}$/.test(liffId)) throw new Error("LIFF ID 格式不正確");
+  if (!endpointPath.startsWith("/") || endpointPath.startsWith("//") || endpointPath.includes("\\") || endpointPath.length > 200) {
+    throw new Error("LIFF Endpoint Path 格式不正確");
+  }
+  if (enabled && connectionMode === "brand" && (!destination || !loginChannelId || !liffId)) {
+    throw new Error("品牌獨立渠道必須填寫 destination、LINE Login Channel ID 與 LIFF ID");
+  }
+
+  const { error } = await supabase.rpc("update_clinic_line_channel", {
+    p_clinic_id: clinicId,
+    p_actor_user_id: user.id,
+    p_enabled: enabled,
+    p_connection_mode: connectionMode,
+    p_destination: destination,
+    p_login_channel_id: loginChannelId,
+    p_liff_id: liffId,
+    p_liff_endpoint_path: endpointPath,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/line");
+  revalidatePath("/admin/richmenu");
+  redirect("/admin/line?saved=1");
+}
+
+function normalizedWebhookUrl(value: string): string {
+  const url = new URL(value);
+  const pathname = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
+  return `${url.origin}${pathname}${url.search}`;
+}
+
+export async function verifyLineChannelSettingsAction() {
+  const { supabase, clinicId } = await requireAdmin();
+  const service = createServiceClient();
+  const verifiedAt = new Date().toISOString();
+  let result: "ok" | "err" = "ok";
+  let reason = "";
+
+  try {
+    const context = await getClinicLineChannelContext(supabase, clinicId);
+    if (!context.enabled) throw new Error("請先啟用並儲存此品牌的 LINE／LIFF 渠道");
+    if (!context.destination) throw new Error("缺少 LINE webhook destination");
+    if (!context.loginChannelId) throw new Error("缺少 LINE Login Channel ID");
+    if (!context.liffId) throw new Error("缺少 LIFF ID");
+
+    const token = lineAccessTokenForDestination(context.destination);
+    const [bot, webhook] = await Promise.all([
+      getBotInfo(token),
+      getWebhookEndpointInfo(token),
+    ]);
+    if (bot.userId !== context.destination) {
+      throw new Error("LINE destination 與目前 access token 的 Bot 不一致");
+    }
+    if (!webhook.active) throw new Error("LINE Developers 尚未啟用 webhook");
+
+    const expectedWebhook = normalizedWebhookUrl(`${reqBaseUrl(await headers())}/api/line/webhook`);
+    const configuredWebhook = normalizedWebhookUrl(webhook.endpoint);
+    if (configuredWebhook !== expectedWebhook) {
+      throw new Error(`LINE Webhook URL 不一致，應設定為 ${expectedWebhook}`);
+    }
+
+    const { data: verifiedChannel, error } = await service
+      .from("clinic_line_channels")
+      .update({ verification_status: "ready", verification_error: null, last_verified_at: verifiedAt })
+      .eq("clinic_id", clinicId)
+      .select("clinic_id")
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!verifiedChannel) throw new Error("找不到此品牌的 LINE 渠道設定，請先儲存後再驗證");
+  } catch (error) {
+    result = "err";
+    reason = (error instanceof Error ? error.message : "LINE 渠道驗證失敗").slice(0, 500);
+    const { error: updateError } = await service
+      .from("clinic_line_channels")
+      .update({ verification_status: "error", verification_error: reason, last_verified_at: verifiedAt })
+      .eq("clinic_id", clinicId);
+    if (updateError) reason = `${reason}；狀態寫入失敗：${updateError.message}`.slice(0, 500);
+  }
+
+  revalidatePath("/admin/line");
+  revalidatePath("/admin/dashboard");
+  revalidatePath("/admin/richmenu");
+  redirect(`/admin/line?verified=${result}${reason ? `&reason=${encodeURIComponent(reason)}` : ""}`);
 }
 
 // ── Email 提醒設定(只在 clinic_settings 保存啟用狀態；金鑰與寄件人由 server environment 管理)──────
@@ -1677,6 +2052,7 @@ export async function updateSettingsAction(fd: FormData) {
   )
     ? str(fd, "deposit_scope")
     : "self_pay";
+  const eventsEnabled = bool(fd, "events_enabled");
 
   const { error } = await supabase
     .from("clinic_settings")
@@ -1693,10 +2069,15 @@ export async function updateSettingsAction(fd: FormData) {
       deposit_scope,
       min_lead_minutes: Math.max(0, intOr(fd, "min_lead_minutes", 30)),
       max_advance_days: Math.max(1, intOr(fd, "max_advance_days", 30)),
+      recurring_booking_enabled: bool(fd, "recurring_booking_enabled"),
+      max_recurring_occurrences: Math.max(2, Math.min(12, intOr(fd, "max_recurring_occurrences", 8))),
       cancel_lead_minutes: Math.max(0, intOr(fd, "cancel_lead_minutes", 120)),
       reschedule_lead_minutes: Math.max(0, intOr(fd, "reschedule_lead_minutes", 120)),
       public_booking_enabled: bool(fd, "public_booking_enabled"),
-      public_registration_enabled: bool(fd, "public_registration_enabled"),
+      events_enabled: eventsEnabled,
+      memberships_enabled: bool(fd, "memberships_enabled"),
+      crm_automation_enabled: bool(fd, "crm_automation_enabled"),
+      public_registration_enabled: eventsEnabled && bool(fd, "public_registration_enabled"),
     })
     .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);

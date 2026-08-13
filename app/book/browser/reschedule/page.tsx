@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Brand } from "@/components/Brand";
 import { formatDateSession, formatTime } from "@/lib/slots";
+import { safeLocalStorageGet } from "@/lib/browser-storage";
 
 interface Config { booking_mode: "time" | "number"; max_advance_days: number; doctors: Array<{ id: string; name: string; specialty: string | null }>; services: Array<{ id: string; name: string; description: string | null; booking_target?: "provider_required" | "provider_optional" | "resource_only" }> }
 interface Slot { slot_start: string; slot_end: string; remaining: number }
@@ -79,7 +80,7 @@ export default function BrowserReschedulePage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const id = params.get("appointment_id")?.trim() ?? "";
-    const stored = window.localStorage.getItem(tokenKey());
+    const stored = safeLocalStorageGet(tokenKey());
     setAppointmentId(id);
     setToken(stored);
     setIdentityReady(true);

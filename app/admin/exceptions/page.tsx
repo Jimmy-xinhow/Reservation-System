@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { requireNonProvider } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin";
 import { createExceptionAction, deleteExceptionAction } from "../actions";
 import ExceptionForm from "../_components/ExceptionForm";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -37,7 +37,7 @@ interface Exception {
 }
 
 export default async function ExceptionsPage() {
-const { clinicId } = await requireNonProvider();
+  const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
   const [{ data: doctors }, { data: services }, { data: templates }, { data: exceptions }] = await Promise.all([
     supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
