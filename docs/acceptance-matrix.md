@@ -48,7 +48,7 @@
 | M4 Rich Menu 重建 | 完成本機兩批功能 | 正式 LINE 發布、回復、Alias、排程與 Insights 待驗收 |
 | M5 統一 LIFF 顧客中心 | 完成本機與響應式驗收 | 真實 LINE WebView／LIFF 身分待驗收 |
 | M6 自動化、資安及跨租戶驗收 | 本機契約、型別、build、公開邊界與安全追溯完成 | PostgreSQL RLS、雙品牌、Cron 去重／重試與核心狀態機已完成 staging；外部投遞仍歸 M7 |
-| M7 正式渠道驗證與文件交付 | staging deployment `f58f03c4-3758-4c2f-84ce-37f1f0513bf6`、migration 至 `202608130009`、`audit:staging-core` 6／6、`audit:staging-growth`、DB lint、四身分桌機／手機與顧客端成長流程驗收完成 | LINE／LIFF、Email、測試金流、DNS 與三個真實試用品牌觀察待外部設定及實際使用 |
+| M7 正式渠道驗證與文件交付 | staging migration 至 `202609020002`；最新 Railway deployment `37f691da-4c5d-4527-8a0c-4b2ca2b7da3c`，DB lint、公開 smoke、新 RPC 與本輪 390px 權限返回局部驗收通過；既有 core／growth／四身分基線保留 | GitHub staging environment、LINE／LIFF、Email、測試金流、DNS 與三個真實試用品牌觀察待完成 |
 
 | 項目 | 證據 | 結果 |
 |---|---|---|
@@ -96,10 +96,10 @@
 | Email／行銷投遞 | Resend provider、寄件網域、測試信箱 | 需要部署環境 secret 與寄件網域驗證 |
 | Cron 重跑、LINE 額度與錯誤恢復 | 部署後 staging Cron route 與臨時 notification／marketing 資料 | 內部流程 PASS；授權、去重、十分鐘後重試、缺渠道 skip／fail-closed 已驗證，真實 LINE 額度與送達仍待渠道 |
 | 自訂網址／HTTPS | DNS 控制權、TLS／反向代理 | 本機無法證明 DNS ownership 與正式 HTTPS |
-| Railway staging 頁面／API | `Reservation-System`／`staging`／`Reservation-System-staging` | deployment `f58f03c4-3758-4c2f-84ce-37f1f0513bf6` SUCCESS；migration 至 `202608130009`，DB lint 零警告；core 6／6 與 growth gate fresh PASS |
+| Railway staging 頁面／API | `Reservation-System`／`staging`／`Reservation-System-staging` | deployment `37f691da-4c5d-4527-8a0c-4b2ca2b7da3c` SUCCESS；migration 至 `202609020002`，DB lint 零警告；公開 smoke、新 RPC 與 390px 品牌員工權限返回局部驗收 PASS；既有 core／growth 基線保留 |
 | 雙入口管理者登入 | 共用 `/admin/login` 的「系統管理後台／品牌營運後台」，真實 staging Auth + 系統管理者 + `staging-test` 品牌管理者 | PASS；同一帳號正確切換 `/admin/platform` 與 `/admin`，系統／品牌人員頁均顯示管理者與員工權限；390／768／1024px 無整頁水平溢位，管理頁瀏覽器 errors = 0 |
 | 行動 LIFF、嵌入元件與瀏覽器完整流程 | staging URL、手機或 Playwright 環境 | 瀏覽器備援、跨網域嵌入、第三方儲存遭拒的安全降級與響應式已 PASS；真實 LINE WebView／LIFF ID token 尚待外部渠道 |
-| 備份／還原演練 | PostgreSQL 16 custom-format dump、獨立還原資料庫；正式 staging 仍需 Supabase connection string／password | 本機全新資料庫 dump／restore PASS，還原後 63 張表、RLS 全開、anon policy 0；真實 staging 資料備份／還原仍待外部連線資料 |
+| 備份／還原演練 | PostgreSQL 16 custom-format dump、獨立還原資料庫；Supabase staging 實體備份 | 本機全新資料庫 dump／restore PASS；Supabase staging 已確認 2026-09-02 實體備份為 COMPLETED。真實 staging 還原會造成停機，仍待另行授權演練 |
 
 ## 執行順序
 
