@@ -34,9 +34,21 @@ async function login(page, identity, entry) {
 async function expectNoHorizontalOverflow(page) {
   await expect.poll(() => page.evaluate(() => {
     const viewportWidth = document.documentElement.clientWidth;
+
+    function isContainedByOverflowBoundary(element, rect) {
+      for (let ancestor = element.parentElement; ancestor && ancestor !== document.body; ancestor = ancestor.parentElement) {
+        const overflowX = getComputedStyle(ancestor).overflowX;
+        if (!["auto", "scroll", "hidden", "clip"].includes(overflowX)) continue;
+        const boundary = ancestor.getBoundingClientRect();
+        if (rect.left < boundary.left - 0.5 || rect.right > boundary.right + 0.5) return true;
+      }
+      return false;
+    }
+
     return [...document.querySelectorAll("body *")]
       .map((element) => {
         const rect = element.getBoundingClientRect();
+        if (isContainedByOverflowBoundary(element, rect)) return null;
         return {
           element: element.tagName.toLowerCase(),
           className: typeof element.className === "string" ? element.className : "",
@@ -45,7 +57,7 @@ async function expectNoHorizontalOverflow(page) {
           width: Math.round(rect.width * 100) / 100,
         };
       })
-      .filter(({ left, right }) => left < -0.5 || right > viewportWidth + 0.5)
+      .filter((item) => item && (item.left < -0.5 || item.right > viewportWidth + 0.5))
       .slice(0, 12);
   })).toEqual([]);
 }
