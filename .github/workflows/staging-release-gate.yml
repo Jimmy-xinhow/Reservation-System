@@ -29,10 +29,10 @@ jobs:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       BROWSER_BOOKING_SECRET: ${{ secrets.BROWSER_BOOKING_SECRET }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - name: 資料與 API 核心驗收
