@@ -2,6 +2,12 @@
 
 版本：2026-08-13。品牌後台中的「啟用」是產品開關，不代表外部渠道已可用。所有 secret、token、HashKey、HashIV 與 API key 只可放在部署環境變數。
 
+## Supabase Auth 邀請連結（後台帳號）
+
+1. Supabase Dashboard 的 Authentication → URL Configuration，將 staging 的公開網址設為 Site URL，並加入 `https://reservation-system-staging-staging.up.railway.app/auth/accept-invite` 到 Redirect URLs。
+2. 部署環境設定 `APP_URL` 為同一個 staging 公開網址；系統寄出的品牌／系統人員邀請會導向 `/auth/accept-invite`，不使用 Supabase 預設的 localhost。
+3. 收件者開啟邀請後，在該頁自行設定密碼，再回到 `/admin/login` 登入。邀請連結過期時由管理者重新寄送，不要在訊息中傳遞密碼。
+
 ## LINE Messaging API 與 LIFF
 
 1. 在 LINE Developers 建立或確認 Messaging API Channel 與 LINE Login Channel。
@@ -53,4 +59,3 @@
 | 通過 | 可由伺服器確認的設定與解析已完成 | 繼續手機收件／付款等真實外部 smoke test |
 | 待完成 | 品牌尚未啟用或該渠道非必要 | 確認商業需求後再設定，不視為系統故障 |
 | 失敗 | 已啟用但缺設定、憑證或品牌解析 | 依卡片指引修復，重跑並保存新結果 |
-

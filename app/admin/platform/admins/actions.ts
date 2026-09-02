@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase";
 import { requireSystemAdmin } from "@/lib/platform";
 import { normalizeSystemPermissions, type PlatformAccessType } from "@/lib/platform-roles";
+import { authInviteRedirectUrl } from "@/lib/auth-invite";
 
 function value(fd: FormData, key: string): string {
   return (fd.get(key) ?? "").toString().trim();
@@ -22,7 +23,9 @@ export async function upsertPlatformAdminAction(fd: FormData): Promise<void> {
   if (usersError) throw new Error(`查詢使用者失敗：${usersError.message}`);
   let user = users.users.find((candidate) => candidate.email?.toLowerCase() === email) ?? null;
   if (!user) {
-    const { data, error } = await service.auth.admin.inviteUserByEmail(email);
+    const { data, error } = await service.auth.admin.inviteUserByEmail(email, {
+      redirectTo: authInviteRedirectUrl(),
+    });
     if (error || !data.user) throw new Error(`寄送系統人員邀請失敗：${error?.message ?? "找不到使用者"}`);
     user = data.user;
   }

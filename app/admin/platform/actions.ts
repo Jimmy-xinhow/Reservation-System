@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase";
 import { PLATFORM_ADD_ONS, requireSystemPermission } from "@/lib/platform";
+import { authInviteRedirectUrl } from "@/lib/auth-invite";
 
 function value(fd: FormData, key: string): string {
   return (fd.get(key) ?? "").toString().trim();
@@ -31,7 +32,9 @@ export async function createPlatformBrandAction(fd: FormData): Promise<void> {
   if (listError) throw new Error(`查詢品牌管理者失敗：${listError.message}`);
   let owner = users.users.find((user) => user.email?.toLowerCase() === ownerEmail) ?? null;
   if (!owner) {
-    const { data, error } = await service.auth.admin.inviteUserByEmail(ownerEmail);
+    const { data, error } = await service.auth.admin.inviteUserByEmail(ownerEmail, {
+      redirectTo: authInviteRedirectUrl(),
+    });
     if (error || !data.user) throw new Error(`寄送品牌管理者邀請失敗：${error?.message ?? "無法建立使用者"}`);
     owner = data.user;
   }
