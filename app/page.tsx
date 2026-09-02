@@ -67,11 +67,10 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
   }
   if (brandPage) {
     return (
-      <>
-        <ShowcaseFonts />
+      <ShowcaseFonts>
         <FunnelTracker eventName="portal_view" />
         <IndustryShowcase slug={brandPage.template} brand={brandPage} />
-      </>
+      </ShowcaseFonts>
     );
   }
   const clinic = await getClinic(clinicId);

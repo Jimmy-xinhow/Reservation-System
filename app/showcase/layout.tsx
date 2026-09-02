@@ -8,10 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function ShowcaseLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <ShowcaseFonts />
-      {children}
-    </>
-  );
+  return <ShowcaseFonts>{children}</ShowcaseFonts>;
 }

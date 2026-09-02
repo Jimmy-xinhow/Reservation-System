@@ -29,7 +29,7 @@
   padding: .35rem .75rem;
   background: #111;
   color: #f5f3ec;
-  font: 600 .75rem/1 "DM Sans", "Noto Sans TC", sans-serif;
+  font: 600 .75rem/1 var(--font-showcase-dm-sans), var(--font-showcase-noto-sans-tc), sans-serif;
   letter-spacing: .09em;
   text-transform: uppercase;
 }
@@ -88,14 +88,14 @@
   padding-top: 3.25rem;
   background: #e7e4dc;
   color: #121212;
-  font-family: "DM Sans", "Noto Sans TC", sans-serif;
+  font-family: var(--font-showcase-dm-sans), var(--font-showcase-noto-sans-tc), sans-serif;
 }
 .indexHeader { padding: 4rem 1.25rem 3rem; border-bottom: 1px solid #1c1c1c; }
 .indexKicker { font-size: .6875rem; letter-spacing: .18em; font-weight: 700; }
 .indexHeader h1 {
   max-width: 13em;
   margin-top: 1.75rem;
-  font: 600 clamp(2.65rem, 9vw, 6.6rem)/1.14 "Noto Serif TC", "Songti TC", serif;
+  font: 600 clamp(2.65rem, 9vw, 6.6rem)/1.14 var(--font-showcase-noto-serif-tc), "Songti TC", serif;
   letter-spacing: .025em;
   text-wrap: balance;
 }
@@ -119,7 +119,7 @@
 .indexImage { position: relative; aspect-ratio: 4 / 5; overflow: hidden; filter: saturate(.7); }
 .indexItem:hover .indexImage { filter: saturate(1); }
 .indexName span, .indexMeta span { display: block; font-size: .65rem; letter-spacing: .08em; text-transform: uppercase; }
-.indexName strong { display: block; margin-top: .35rem; font: 500 1.1rem/1.15 "Fraunces", "Noto Serif TC", serif; }
+.indexName strong { display: block; margin-top: .35rem; font: 500 1.1rem/1.15 var(--font-showcase-fraunces), var(--font-showcase-noto-serif-tc), serif; }
 .indexMeta, .indexPalette { display: none; }
 .indexArrow { font-size: 1.25rem; }
 .indexFooter { display: flex; justify-content: space-between; padding: 1rem; font-size: .625rem; letter-spacing: .1em; }
@@ -130,7 +130,7 @@
   padding-top: 0;
   background: #ebe8e1;
   color: #171714;
-  font-family: "DM Sans", "Noto Sans TC", sans-serif;
+  font-family: var(--font-showcase-dm-sans), var(--font-showcase-noto-sans-tc), sans-serif;
 }
 .beautyNav {
   min-height: 4.5rem;
@@ -141,14 +141,14 @@
   border-bottom: 1px solid #88847b;
 }
 .beautyNav button { text-align: left; text-transform: uppercase; font-size: .6875rem; letter-spacing: .14em; }
-.beautyLogo { text-align: center; font: 500 1.5rem/1 "Playfair Display", serif; letter-spacing: .14em; }
-.beautyLogo span { display: block; margin-top: .35rem; font: 600 .42rem/1 "DM Sans", sans-serif; letter-spacing: .28em; }
+.beautyLogo { text-align: center; font: 500 1.5rem/1 var(--font-showcase-playfair-display), serif; letter-spacing: .14em; }
+.beautyLogo span { display: block; margin-top: .35rem; font: 600 .42rem/1 var(--font-showcase-dm-sans), sans-serif; letter-spacing: .28em; }
 .beautyNav > a:last-child { min-width: 2.75rem; justify-self: end; justify-content: center; font-size: 0; }
 .beautyNav > a:last-child::after { content: "BOOK"; font-size: .6875rem; letter-spacing: .14em; }
 .beautyHero { position: relative; display: flex; flex-direction: column-reverse; min-height: calc(100svh - 7.125rem); }
 .beautyCopy { padding: 2rem 1.25rem 3.25rem; }
 .beautyCopy > p, .beautyServices header > p { font-size: .625rem; font-weight: 700; letter-spacing: .18em; }
-.beautyCopy h1 { margin-top: 1rem; font: 500 clamp(3.5rem, 16vw, 8.7rem)/.82 "Playfair Display", "Noto Serif TC", serif; letter-spacing: -.065em; }
+.beautyCopy h1 { margin-top: 1rem; font: 500 clamp(3.5rem, 16vw, 8.7rem)/.82 var(--font-showcase-playfair-display), var(--font-showcase-noto-serif-tc), serif; letter-spacing: -.065em; }
 .beautyCopy h1 em { color: #a8422f; font-weight: 500; }
 .beautyCopy > div { display: grid; gap: 1.25rem; margin-top: 2.25rem; font-size: .875rem; line-height: 1.7; }
 .beautyCopy > div a { width: fit-content; min-height: 2.75rem; display: inline-flex; align-items: center; padding-bottom: .4rem; border-bottom: 1px solid; font-weight: 600; }
@@ -157,7 +157,7 @@
 .beautyHeroImage figcaption { position: absolute; inset: auto .75rem .75rem auto; padding: .5rem .7rem; background: #ebe8e1; font-size: .55rem; letter-spacing: .12em; }
 .beautyEdition { display: none; }
 .beautyServices { padding: 4.5rem 1.25rem; background: #191918; color: #edeae3; }
-.beautyServices header h2 { max-width: 12em; margin-top: 1.25rem; font: 500 clamp(2.15rem, 7vw, 4.35rem)/1.28 "Noto Serif TC", "Songti TC", serif; letter-spacing: .035em; text-wrap: balance; }
+.beautyServices header h2 { max-width: 12em; margin-top: 1.25rem; font: 500 clamp(2.15rem, 7vw, 4.35rem)/1.28 var(--font-showcase-noto-serif-tc), "Songti TC", serif; letter-spacing: .035em; text-wrap: balance; }
 .beautyServiceBody { margin-top: 3rem; }
 .beautyServiceList { border-top: 1px solid #67655f; }
 .beautyServiceList > a {
@@ -170,8 +170,8 @@
   color: inherit;
 }
 .beautyServiceList > a > span { align-self: start; padding-top: 1.2rem; font-size: .625rem; }
-.beautyServiceList strong { font: 400 1.35rem/1.1 "Crimson Pro", serif; }
-.beautyServiceList small { display: block; margin-top: .4rem; font: 400 .875rem/1.5 "DM Sans", "Noto Sans TC", sans-serif; color: #aaa79f; }
+.beautyServiceList strong { font: 400 1.35rem/1.1 var(--font-showcase-crimson-pro), serif; }
+.beautyServiceList small { display: block; margin-top: .4rem; font: 400 .875rem/1.5 var(--font-showcase-dm-sans), var(--font-showcase-noto-sans-tc), sans-serif; color: #aaa79f; }
 .beautyServiceList i { text-align: right; font-style: normal; font-size: .75rem; }
 .beautyServiceList b { display: none; }
 .beautyServiceBody figure { position: relative; min-height: 27rem; margin-top: 2.5rem; }
@@ -185,17 +185,17 @@
   padding-top: 0;
   background: #f1eee5;
   color: #183a32;
-  font-family: "Figtree", "Noto Sans TC", sans-serif;
+  font-family: var(--font-showcase-figtree), var(--font-showcase-noto-sans-tc), sans-serif;
 }
 .wellnessNav { min-height: 4.75rem; display: flex; align-items: center; gap: 1rem; padding: 0 1.125rem; border-bottom: 1px solid #b8b7ab; }
-.wellnessLogo { font: 400 1.35rem/1 "Chiron GoRound TC", "Noto Sans TC", sans-serif; letter-spacing: .08em; }
-.wellnessLogo span { display: block; margin-top: .25rem; font: 700 .45rem/1 "Figtree", sans-serif; letter-spacing: .2em; }
+.wellnessLogo { font: 400 1.35rem/1 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .08em; }
+.wellnessLogo span { display: block; margin-top: .25rem; font: 700 .45rem/1 var(--font-showcase-figtree), sans-serif; letter-spacing: .2em; }
 .wellnessNav nav { display: none; }
 .wellnessNav > a:last-child { margin-left: auto; min-height: 2.75rem; display: inline-flex; align-items: center; padding: 0 .85rem; background: #183a32; color: #fff; font-size: .75rem; font-weight: 700; }
 .wellnessHero { display: grid; }
 .wellnessCopy { padding: 3.8rem 1.25rem 3rem; }
 .wellnessCopy > p:first-child, .wellnessJourneyIntro > p { font-size: .625rem; letter-spacing: .17em; font-weight: 700; color: #a74a31; }
-.wellnessCopy h1 { margin-top: 1.1rem; font: 400 clamp(2.55rem, 7vw, 4.55rem)/1.2 "Chiron GoRound TC", "Noto Sans TC", sans-serif; letter-spacing: .025em; }
+.wellnessCopy h1 { margin-top: 1.1rem; font: 400 clamp(2.55rem, 7vw, 4.55rem)/1.2 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .025em; }
 .wellnessCopy h1 span,
 .wellnessJourneyIntro h2 span { display: block; }
 .wellnessCopy > p:nth-of-type(2) { max-width: 37rem; margin-top: 1.5rem; font-size: 1rem; line-height: 1.85; color: #47645d; }
@@ -205,25 +205,25 @@
 .wellnessHeroImage { position: relative; min-height: 54svh; margin: 0 1.25rem 1.25rem; overflow: hidden; }
 .wellnessHeroImage img { object-fit: cover; object-position: 62% center; filter: saturate(.62) sepia(.08); }
 .wellnessHeroImage figcaption { position: absolute; left: 0; bottom: 0; display: flex; align-items: center; gap: .8rem; padding: .8rem 1rem; background: #183a32; color: #fff; }
-.wellnessHeroImage figcaption strong { font: 500 2.25rem/1 "Fraunces", serif; }
+.wellnessHeroImage figcaption strong { font: 500 2.25rem/1 var(--font-showcase-fraunces), serif; }
 .wellnessHeroImage figcaption span { font-size: .625rem; line-height: 1.45; }
 .wellnessTrust { display: grid; grid-template-columns: 1fr 1fr; border-block: 1px solid #b8b7ab; }
 .wellnessTrust span { min-height: 3.5rem; display: grid; place-items: center; padding: .6rem; border: solid #b8b7ab; border-width: 0 1px 1px 0; text-align: center; font-size: .6875rem; font-weight: 700; }
 .wellnessJourney { padding: 4.5rem 1.25rem; }
-.wellnessJourneyIntro h2 { margin-top: 1rem; font: 400 clamp(2.25rem, 6vw, 4rem)/1.25 "Chiron GoRound TC", "Noto Sans TC", sans-serif; letter-spacing: .025em; }
+.wellnessJourneyIntro h2 { margin-top: 1rem; font: 400 clamp(2.25rem, 6vw, 4rem)/1.25 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .025em; }
 .wellnessJourneyIntro figure { position: relative; min-height: 24rem; margin-top: 2.25rem; }
 .wellnessJourneyIntro figure img { object-fit: cover; object-position: 50% 25%; filter: saturate(.65); }
 .wellnessSteps { margin-top: 2.5rem; border-top: 1px solid #81938d; }
 .wellnessSteps article { display: grid; grid-template-columns: 2.75rem 1fr; gap: .75rem; padding: 1.6rem 0; border-bottom: 1px solid #81938d; }
-.wellnessSteps article > span { font: 500 1.4rem/1 "Fraunces", serif; color: #c85f3d; }
-.wellnessSteps h3 { font: 400 1.35rem/1.45 "Chiron GoRound TC", "Noto Sans TC", sans-serif; letter-spacing: .02em; }
+.wellnessSteps article > span { font: 500 1.4rem/1 var(--font-showcase-fraunces), serif; color: #c85f3d; }
+.wellnessSteps h3 { font: 400 1.35rem/1.45 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .02em; }
 .wellnessSteps p { margin-top: .65rem; font-size: 1rem; line-height: 1.85; color: #526b65; }
 .wellnessSteps > a { min-height: 3rem; display: inline-flex; align-items: center; margin-top: 1.5rem; padding: 0 1rem; border: 1px solid #183a32; font-size: .8125rem; font-weight: 700; }
 
 /* 03 Fitness — campaign and schedule */
-.fitness { min-height: 100vh; padding-top: 0; background: #0b0b0b; color: #f4f2eb; font-family: "Montserrat", "Noto Sans TC", sans-serif; }
+.fitness { min-height: 100vh; padding-top: 0; background: #0b0b0b; color: #f4f2eb; font-family: var(--font-showcase-montserrat), var(--font-showcase-noto-sans-tc), sans-serif; }
 .fitnessNav { min-height: 4.5rem; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; background: #0b0b0b; border-bottom: 1px solid #393939; }
-.fitnessLogo { font: 400 1.35rem/.7 "Archivo Black", sans-serif; letter-spacing: -.08em; color: #f12b20; }
+.fitnessLogo { font: 400 1.35rem/.7 var(--font-showcase-archivo-black), sans-serif; letter-spacing: -.08em; color: #f12b20; }
 .fitnessNav nav { display: none; }
 .fitnessNav > a:last-child { min-height: 2.75rem; display: inline-flex; align-items: center; margin-left: auto; padding: 0 .8rem; background: #e9ff4f; color: #0b0b0b; font-size: .65rem; font-weight: 900; text-transform: uppercase; }
 .fitnessHero { position: relative; min-height: calc(100svh - 7.125rem); overflow: hidden; }
@@ -231,17 +231,17 @@
 .fitnessShade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.85), rgba(0,0,0,.12) 80%); }
 .fitnessHeroCopy { position: relative; min-height: inherit; display: flex; flex-direction: column; justify-content: flex-end; padding: 3.5rem 1rem 2rem; }
 .fitnessHeroCopy > p { font-size: .6rem; letter-spacing: .16em; font-weight: 800; color: #e9ff4f; }
-.fitnessHeroCopy h1 { margin-top: 1rem; font: 400 clamp(3.55rem, 16.5vw, 11rem)/.75 "Archivo Black", sans-serif; letter-spacing: -.1em; }
+.fitnessHeroCopy h1 { margin-top: 1rem; font: 400 clamp(3.55rem, 16.5vw, 11rem)/.75 var(--font-showcase-archivo-black), sans-serif; letter-spacing: -.1em; }
 .fitnessHeroCopy h1 span { color: #f12b20; }
 .fitnessHeroCopy > div { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 2rem; }
 .fitnessHeroCopy > div a { min-height: 3.25rem; display: inline-flex; align-items: center; padding: 0 1rem; background: #e9ff4f; color: #0b0b0b; font-size: .75rem; font-weight: 900; }
 .fitnessHeroCopy > div span { font-size: .55rem; letter-spacing: .1em; }
 .fitnessSideType { display: none; }
-.fitnessTicker { min-height: 3.75rem; display: flex; align-items: center; justify-content: space-around; gap: 1.25rem; overflow: hidden; padding: 0 1rem; background: #f12b20; font: 400 1rem/1 "Archivo Black", sans-serif; white-space: nowrap; }
+.fitnessTicker { min-height: 3.75rem; display: flex; align-items: center; justify-content: space-around; gap: 1.25rem; overflow: hidden; padding: 0 1rem; background: #f12b20; font: 400 1rem/1 var(--font-showcase-archivo-black), sans-serif; white-space: nowrap; }
 .fitnessTicker span:nth-child(2), .fitnessTicker span:nth-child(3) { display: none; }
 .fitnessWorkout { padding: 4.5rem 1rem; }
 .fitnessStatement > p:first-child { font-size: .625rem; letter-spacing: .18em; color: #9d9d9d; }
-.fitnessStatement h2 { margin-top: 1.25rem; font: 900 clamp(2.45rem, 9vw, 5.3rem)/1.12 "Noto Sans TC", sans-serif; letter-spacing: .015em; }
+.fitnessStatement h2 { margin-top: 1.25rem; font: 900 clamp(2.45rem, 9vw, 5.3rem)/1.12 var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .015em; }
 .fitnessStatement h2 span,
 .fitnessStatement h2 i { display: block; }
 .fitnessStatement h2 i { color: #f12b20; font-style: normal; }
@@ -252,26 +252,26 @@
 .fitnessSchedule { padding: 0 1rem 5rem; }
 .fitnessSchedule header { display: grid; gap: .5rem; padding-bottom: 1.5rem; border-bottom: 3px solid #f4f2eb; }
 .fitnessSchedule header span { font-size: .625rem; color: #e9ff4f; letter-spacing: .16em; }
-.fitnessSchedule header h2 { font: 400 2.7rem/1 "Archivo Black", sans-serif; text-transform: uppercase; }
+.fitnessSchedule header h2 { font: 400 2.7rem/1 var(--font-showcase-archivo-black), sans-serif; text-transform: uppercase; }
 .fitnessSchedule header a { min-height: 2.75rem; display: inline-flex; align-items: center; font-size: .8125rem; }
 .fitnessSchedule > a { min-height: 6.25rem; display: grid; grid-template-columns: 4.5rem 1fr auto; gap: .5rem; align-items: center; border-bottom: 1px solid #515151; color: inherit; }
-.fitnessSchedule > a strong { font: 400 1.45rem/1 "Archivo Black", sans-serif; }
+.fitnessSchedule > a strong { font: 400 1.45rem/1 var(--font-showcase-archivo-black), sans-serif; }
 .fitnessSchedule > a span { font-size: .75rem; font-weight: 700; }
 .fitnessSchedule > a span:nth-of-type(2) { display: none; }
 .fitnessSchedule > a i { grid-column: 2; color: #aaa; font-size: .6875rem; font-style: normal; }
 .fitnessSchedule > a b { grid-row: 1 / 3; grid-column: 3; color: #e9ff4f; font-size: .6875rem; }
 
 /* 04 Education — playful, structured discovery */
-.education { min-height: 100vh; padding-top: 0; background: #f4efdf; color: #211b37; font-family: "Manrope", "Huninn", "Noto Sans TC", sans-serif; }
+.education { min-height: 100vh; padding-top: 0; background: #f4efdf; color: #211b37; font-family: var(--font-showcase-manrope), var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; }
 .educationNav { min-height: 4.75rem; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; border-bottom: 2px solid #211b37; }
-.educationLogo { font: 900 1.15rem/.9 "Manrope", sans-serif; letter-spacing: -.06em; }
+.educationLogo { font: 900 1.15rem/.9 var(--font-showcase-manrope), sans-serif; letter-spacing: -.06em; }
 .educationLogo span { color: #e44b34; }
 .educationNav nav { display: none; }
 .educationNav > a:last-child { min-height: 2.75rem; display: inline-flex; align-items: center; margin-left: auto; padding: 0 1rem; border-radius: 999px; background: #4426a8; color: #fff; font-size: .75rem; font-weight: 800; }
 .educationHero { position: relative; padding-bottom: 1.25rem; background: #ffdc57; border-bottom: 2px solid #211b37; overflow: hidden; }
 .educationCopy { padding: 3.5rem 1.25rem 2rem; }
 .educationCopy > p:first-child, .educationExplore header p { font-size: .625rem; font-weight: 800; letter-spacing: .16em; }
-.educationCopy h1 { margin-top: 1rem; font: 400 clamp(3rem, 11vw, 6.25rem)/1.08 "Huninn", "Noto Sans TC", sans-serif; letter-spacing: .025em; }
+.educationCopy h1 { margin-top: 1rem; font: 400 clamp(3rem, 11vw, 6.25rem)/1.08 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .025em; }
 .educationCopy h1 > span { display: block; }
 .educationCopy h1 span { color: #4426a8; }
 .educationCopy > p:last-child { max-width: 34rem; margin-top: 1.5rem; font-size: 1rem; line-height: 1.9; }
@@ -283,25 +283,25 @@
 .educationSearch input, .educationSearch select { width: 100%; min-height: 3rem; padding: 0 .75rem; border: 1px solid #7b7461; background: transparent; font-size: 1rem; outline: none; }
 .educationSearch button, .educationSearch > a { min-height: 3.25rem; display: inline-flex; align-items: center; justify-content: center; padding-inline: 1rem; background: #4426a8; color: #fff; font-size: .8125rem; font-weight: 800; }
 .educationExplore { padding: 5rem 1rem; }
-.educationExplore header h2 { max-width: 12em; margin-top: 1rem; font: 400 clamp(2.4rem, 7vw, 4.5rem)/1.2 "Huninn", "Noto Sans TC", sans-serif; letter-spacing: .025em; text-wrap: balance; }
+.educationExplore header h2 { max-width: 12em; margin-top: 1rem; font: 400 clamp(2.4rem, 7vw, 4.5rem)/1.2 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .025em; text-wrap: balance; }
 .educationTracks { margin-top: 2.5rem; border-top: 2px solid #211b37; }
 .educationTracks > a { min-height: 11rem; display: grid; grid-template-columns: 2rem 1fr; gap: .6rem; align-content: center; border-bottom: 2px solid #211b37; color: inherit; }
 .educationTracks > a > span { align-self: start; font-size: .75rem; font-weight: 800; color: #e44b34; }
-.educationTracks strong { font: 400 1.55rem/1.5 "Huninn", "Noto Sans TC", sans-serif; letter-spacing: .015em; }
+.educationTracks strong { font: 400 1.55rem/1.5 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .015em; }
 .educationTracks small, .educationTracks b { grid-column: 2; display: block; margin-top: .55rem; font-size: .8125rem; line-height: 1.55; }
 .educationTracks b { width: fit-content; padding-bottom: .25rem; border-bottom: 1px solid; }
 .educationTracks figure { position: relative; min-height: 21rem; margin: 1.25rem 0; border: 2px solid #211b37; }
 .educationTracks figure img { object-fit: cover; }
 
 /* 05 Consulting — Swiss editorial portfolio */
-.consulting { min-height: 100vh; padding-top: 0; background: #f2f0ea; color: #101010; font-family: "DM Sans", "Noto Sans TC", sans-serif; }
+.consulting { min-height: 100vh; padding-top: 0; background: #f2f0ea; color: #101010; font-family: var(--font-showcase-dm-sans), var(--font-showcase-noto-sans-tc), sans-serif; }
 .consultingNav { min-height: 4.75rem; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; border-bottom: 1px solid #111; }
 .consultingNav > a:first-child { font-size: 1.15rem; font-weight: 800; letter-spacing: -.05em; }
 .consultingNav nav { display: none; }
 .consultingNav > a:last-child { margin-left: auto; font-size: .6875rem; font-weight: 700; }
 .consultingHero { min-height: 70svh; display: flex; flex-direction: column; justify-content: space-between; padding: 3.5rem 1rem 1.25rem; border-bottom: 1px solid #111; }
 .consultingHero > p { font-size: .625rem; font-weight: 700; letter-spacing: .16em; }
-.consultingHero h1 { margin: 3rem 0; font: 500 clamp(3.7rem, 16vw, 10.5rem)/.82 "Fraunces", "Noto Serif TC", serif; letter-spacing: -.075em; }
+.consultingHero h1 { margin: 3rem 0; font: 500 clamp(3.7rem, 16vw, 10.5rem)/.82 var(--font-showcase-fraunces), var(--font-showcase-noto-serif-tc), serif; letter-spacing: -.075em; }
 .consultingHero h1 em { color: #ff4f24; font-weight: 400; }
 .consultingHeroFoot { display: grid; gap: 1.2rem; font-size: 1rem; line-height: 1.8; }
 .consultingHeroFoot span { max-width: 34rem; }
@@ -311,33 +311,33 @@
 .consultingWork figure img { object-fit: cover; filter: saturate(.6) contrast(1.08); }
 .consultingWork figcaption { position: absolute; inset: auto 0 0 0; display: grid; gap: .5rem; padding: 1rem; background: #101010; color: #fff; }
 .consultingWork figcaption span { font-size: .55rem; letter-spacing: .15em; }
-.consultingWork figcaption strong { max-width: 27rem; font: 600 1.35rem/1.55 "Noto Serif TC", "Songti TC", serif; letter-spacing: .025em; }
+.consultingWork figcaption strong { max-width: 27rem; font: 600 1.35rem/1.55 var(--font-showcase-noto-serif-tc), "Songti TC", serif; letter-spacing: .025em; }
 .consultingWork aside { min-height: 18rem; display: flex; flex-direction: column; padding: 1.25rem; background: #ff4f24; }
 .consultingWork aside > span, .consultingWork aside b { font-size: .625rem; letter-spacing: .14em; }
-.consultingWork aside strong { margin-top: 3rem; font: 600 2.5rem/1.25 "Noto Serif TC", "Songti TC", serif; letter-spacing: .04em; }
+.consultingWork aside strong { margin-top: 3rem; font: 600 2.5rem/1.25 var(--font-showcase-noto-serif-tc), "Songti TC", serif; letter-spacing: .04em; }
 .consultingWork aside p { margin-top: 1rem; font-size: .875rem; line-height: 1.75; }
 .consultingWork aside b { margin-top: auto; }
 .consultingExpertise { padding: 4.5rem 1rem; }
 .consultingExpertise header p { font-size: .625rem; font-weight: 700; letter-spacing: .15em; }
-.consultingExpertise header h2 { max-width: 9em; margin-top: 1rem; font: 600 clamp(2.35rem, 6vw, 4.25rem)/1.3 "Noto Serif TC", "Songti TC", serif; letter-spacing: .035em; text-wrap: balance; }
+.consultingExpertise header h2 { max-width: 9em; margin-top: 1rem; font: 600 clamp(2.35rem, 6vw, 4.25rem)/1.3 var(--font-showcase-noto-serif-tc), "Songti TC", serif; letter-spacing: .035em; text-wrap: balance; }
 .consultingExpertise > div { margin-top: 2.5rem; border-top: 1px solid #111; }
 .consultingExpertise > div a { min-height: 7.5rem; display: grid; grid-template-columns: 2.5rem 1fr auto; align-items: center; gap: .75rem; border-bottom: 1px solid #111; color: inherit; }
 .consultingExpertise > div span { align-self: start; padding-top: 1rem; font-size: .625rem; }
-.consultingExpertise > div strong { font: 500 1.4rem/1.15 "Fraunces", serif; }
-.consultingExpertise > div small { display: block; margin-top: .5rem; font: 400 .875rem/1.55 "DM Sans", "Noto Sans TC", sans-serif; color: #555; }
+.consultingExpertise > div strong { font: 500 1.4rem/1.15 var(--font-showcase-fraunces), serif; }
+.consultingExpertise > div small { display: block; margin-top: .5rem; font: 400 .875rem/1.55 var(--font-showcase-dm-sans), var(--font-showcase-noto-sans-tc), sans-serif; color: #555; }
 .consultingExpertise > div b { font-size: 1.5rem; font-weight: 400; }
 
 /* 06 Pet care — warm hospitality with urgent utility */
-.pet { min-height: 100vh; padding-top: 0; background: #f5e9d8; color: #173d36; font-family: "Figtree", "Noto Sans TC", sans-serif; }
+.pet { min-height: 100vh; padding-top: 0; background: #f5e9d8; color: #173d36; font-family: var(--font-showcase-figtree), var(--font-showcase-noto-sans-tc), sans-serif; }
 .petNav { min-height: 4.75rem; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; border-bottom: 1px solid #8f9f97; }
-.petLogo { font: 600 1.15rem/.9 "Fraunces", serif; }
-.petLogo span { display: block; margin-top: .3rem; font: 700 .45rem/1 "Figtree", sans-serif; letter-spacing: .18em; }
+.petLogo { font: 600 1.15rem/.9 var(--font-showcase-fraunces), serif; }
+.petLogo span { display: block; margin-top: .3rem; font: 700 .45rem/1 var(--font-showcase-figtree), sans-serif; letter-spacing: .18em; }
 .petNav nav, .petNav > a:nth-last-child(2) { display: none; }
 .petNav > a:last-child { min-height: 2.75rem; display: inline-flex; align-items: center; margin-left: auto; padding: 0 1rem; background: #173d36; color: #fff; font-size: .75rem; font-weight: 700; border-radius: 999px; }
 .petHero { display: grid; }
 .petCopy { padding: 3.5rem 1.25rem 3rem; }
 .petCopy > p:first-child, .petAvailability header > p { font-size: .625rem; letter-spacing: .17em; font-weight: 800; color: #c65338; }
-.petCopy h1 { margin-top: 1rem; font: 700 clamp(2.75rem, 10vw, 5.65rem)/1.17 "LXGW WenKai TC", "Noto Serif TC", serif; letter-spacing: .025em; }
+.petCopy h1 { margin-top: 1rem; font: 700 clamp(2.75rem, 10vw, 5.65rem)/1.17 var(--font-showcase-lxgw-wenkai-tc), var(--font-showcase-noto-serif-tc), serif; letter-spacing: .025em; }
 .petCopy h1 span,
 .petCopy h1 em { display: block; }
 .petCopy h1 em { color: #c65338; font-weight: 700; font-style: normal; }
@@ -350,29 +350,29 @@
 .petHero > figure figcaption { position: absolute; bottom: 1rem; left: 1rem; padding: .55rem .7rem; border-radius: 999px; background: #f5e9d8; font-size: .55rem; font-weight: 800; letter-spacing: .1em; }
 .petTrust { display: grid; grid-template-columns: auto 1fr; align-items: center; border-block: 1px solid #8f9f97; }
 .petTrust strong, .petTrust span { min-height: 3.4rem; display: flex; align-items: center; padding: 0 .8rem; border-bottom: 1px solid #8f9f97; font-size: .6875rem; }
-.petTrust strong { font: 600 1.1rem/1 "Fraunces", serif; color: #c65338; }
+.petTrust strong { font: 600 1.1rem/1 var(--font-showcase-fraunces), serif; color: #c65338; }
 .petAvailability { position: relative; padding: 4.5rem 1rem; }
-.petAvailability header h2 { max-width: 10em; margin-top: 1rem; font: 700 clamp(2.25rem, 7vw, 4.25rem)/1.25 "LXGW WenKai TC", "Noto Serif TC", serif; letter-spacing: .025em; text-wrap: balance; }
+.petAvailability header h2 { max-width: 10em; margin-top: 1rem; font: 700 clamp(2.25rem, 7vw, 4.25rem)/1.25 var(--font-showcase-lxgw-wenkai-tc), var(--font-showcase-noto-serif-tc), serif; letter-spacing: .025em; text-wrap: balance; }
 .petAvailability header > span { display: block; margin-top: 1rem; font-size: .75rem; color: #58716b; }
 .petTimes { margin-top: 2rem; border-top: 1px solid #8f9f97; }
 .petTimes > a { min-height: 7.25rem; display: grid; grid-template-columns: 1fr auto; gap: .4rem; align-content: center; border-bottom: 1px solid #8f9f97; color: inherit; }
 .petTimes > a span { font-size: .8125rem; font-weight: 700; }
 .petTimes > a span small { display: block; margin-top: .25rem; color: #6b807b; font-weight: 400; }
-.petTimes > a strong { font: 600 1.8rem/1 "Fraunces", serif; }
+.petTimes > a strong { font: 600 1.8rem/1 var(--font-showcase-fraunces), serif; }
 .petTimes > a i { font-size: .8125rem; font-style: normal; color: #6b807b; }
 .petTimes > a b { font-size: .8125rem; color: #c65338; }
 .petLiveTimes > a { grid-template-columns: 3.25rem minmax(0, 1fr) auto; grid-template-rows: auto auto; gap: .65rem 1rem; align-content: center; padding: 1.25rem 0; }
 .petLiveTimes > a span { grid-row: 1 / 3; align-self: start; padding-top: .25rem; }
-.petLiveTimes > a strong { grid-column: 2 / 4; font: 700 clamp(1.25rem, 5vw, 1.75rem)/1.35 "LXGW WenKai TC", "Noto Serif TC", serif; overflow-wrap: anywhere; }
+.petLiveTimes > a strong { grid-column: 2 / 4; font: 700 clamp(1.25rem, 5vw, 1.75rem)/1.35 var(--font-showcase-lxgw-wenkai-tc), var(--font-showcase-noto-serif-tc), serif; overflow-wrap: anywhere; }
 .petLiveTimes > a i { grid-column: 2; line-height: 1.6; }
 .petLiveTimes > a b { grid-column: 3; align-self: end; white-space: nowrap; }
 .petAvailability > figure { position: relative; min-height: 26rem; margin-top: 2rem; overflow: hidden; border-radius: 999px 999px 1rem 1rem; }
 .petAvailability > figure img { object-fit: cover; }
 
 /* 07 Venue — photo first and booking utility */
-.venue { min-height: 100vh; padding-top: 0; background: #eee9df; color: #181818; font-family: "DM Sans", "Noto Sans TC", sans-serif; }
+.venue { min-height: 100vh; padding-top: 0; background: #eee9df; color: #181818; font-family: var(--font-showcase-dm-sans), var(--font-showcase-noto-sans-tc), sans-serif; }
 .venueNav { min-height: 4.75rem; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; background: #eee9df; border-bottom: 1px solid #181818; }
-.venueNav > a:first-child { font: 700 1.2rem/1 "Manrope", sans-serif; letter-spacing: -.06em; }
+.venueNav > a:first-child { font: 700 1.2rem/1 var(--font-showcase-manrope), sans-serif; letter-spacing: -.06em; }
 .venueNav > a:first-child span { color: #6d39ff; }
 .venueNav nav { display: none; }
 .venueNav > a:last-child { min-height: 2.75rem; display: inline-flex; align-items: center; margin-left: auto; padding: 0 .9rem; background: #181818; color: #fff; font-size: .7rem; font-weight: 700; }
@@ -381,7 +381,7 @@
 .venueShade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.7)); }
 .venueTitle { position: relative; margin-top: auto; padding: 5rem 1rem 1.5rem; color: #fff; }
 .venueTitle > p { font-size: .6rem; font-weight: 700; letter-spacing: .16em; }
-.venueTitle h1 { max-width: 12ch; margin-top: 1rem; font: 500 clamp(3.3rem, 14vw, 7.6rem)/.9 "Fraunces", serif; letter-spacing: -.055em; }
+.venueTitle h1 { max-width: 12ch; margin-top: 1rem; font: 500 clamp(3.3rem, 14vw, 7.6rem)/.9 var(--font-showcase-fraunces), serif; letter-spacing: -.055em; }
 .venueTitle h1 em { color: #c8ff3d; font-weight: 400; }
 .venueSearch { position: relative; display: grid; gap: .75rem; margin: 0 1rem 1rem; padding: 1rem; background: #eee9df; color: #181818; }
 .venueSearch label span { display: block; margin-bottom: .35rem; font-size: .55rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
@@ -392,7 +392,7 @@
 .venueFacts strong { font-size: 1rem; }
 .venueStory { padding: 4.5rem 1rem; }
 .venueStory header p { font-size: .625rem; font-weight: 700; letter-spacing: .16em; }
-.venueStory header h2 { max-width: 9em; margin-top: 1rem; font: 400 clamp(2.45rem, 7vw, 4.65rem)/1.28 "Chiron GoRound TC", "Noto Sans TC", sans-serif; letter-spacing: .035em; text-wrap: balance; }
+.venueStory header h2 { max-width: 9em; margin-top: 1rem; font: 400 clamp(2.45rem, 7vw, 4.65rem)/1.28 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .035em; text-wrap: balance; }
 .venueStory > div { max-width: 33rem; margin-top: 1.75rem; font-size: 1rem; line-height: 1.9; }
 .venueStory > div a { min-height: 2.75rem; display: inline-flex; align-items: center; margin-top: 1.25rem; padding-bottom: .25rem; border-bottom: 1px solid; font-weight: 700; }
 .venueStory figure { position: relative; min-height: 31rem; margin-top: 2.5rem; }
@@ -400,31 +400,31 @@
 .venueStory figure figcaption { position: absolute; bottom: .75rem; left: .75rem; padding: .5rem .65rem; background: #c8ff3d; font-size: .55rem; font-weight: 700; letter-spacing: .12em; }
 
 /* 08 Event — poster identity drives the system */
-.event { min-height: 100vh; padding-top: 0; background: #101017; color: #f7f1e9; font-family: "Montserrat", "Noto Sans TC", sans-serif; }
+.event { min-height: 100vh; padding-top: 0; background: #101017; color: #f7f1e9; font-family: var(--font-showcase-montserrat), var(--font-showcase-noto-sans-tc), sans-serif; }
 .eventNav { min-height: 4.75rem; display: flex; align-items: center; gap: 1rem; padding: 0 1rem; border-bottom: 1px solid #4e4e58; }
-.eventNav > a:first-child { font: 400 1.25rem/.8 "Bebas Neue", sans-serif; letter-spacing: .08em; }
+.eventNav > a:first-child { font: 400 1.25rem/.8 var(--font-showcase-bebas-neue), sans-serif; letter-spacing: .08em; }
 .eventNav > a:first-child span { display: block; color: #ff4f9a; font-size: .55rem; letter-spacing: .2em; }
 .eventNav nav { display: none; }
 .eventNav > a:last-child { min-height: 2.75rem; display: inline-flex; align-items: center; margin-left: auto; padding: 0 .9rem; background: #ff4f9a; color: #101017; font-size: .6875rem; font-weight: 900; text-transform: uppercase; }
 .eventHero { position: relative; min-height: calc(100svh - 7.375rem); overflow: hidden; }
 .eventHero > img { object-fit: cover; filter: saturate(1.15) contrast(1.1); }
 .eventNoise { position: absolute; inset: 0; background: linear-gradient(120deg, rgba(16,16,23,.15), rgba(16,16,23,.8)); }
-.eventDate { position: absolute; top: 1rem; left: 1rem; z-index: 1; font: 400 1.4rem/.85 "Bebas Neue", sans-serif; letter-spacing: .06em; color: #ff7138; }
-.eventHero h1 { position: absolute; left: -.1em; bottom: 24%; z-index: 1; font: 400 clamp(4.5rem, 22vw, 13rem)/.7 "Bebas Neue", sans-serif; letter-spacing: -.035em; color: #ff4f9a; transform: rotate(-3deg); }
+.eventDate { position: absolute; top: 1rem; left: 1rem; z-index: 1; font: 400 1.4rem/.85 var(--font-showcase-bebas-neue), sans-serif; letter-spacing: .06em; color: #ff7138; }
+.eventHero h1 { position: absolute; left: -.1em; bottom: 24%; z-index: 1; font: 400 clamp(4.5rem, 22vw, 13rem)/.7 var(--font-showcase-bebas-neue), sans-serif; letter-spacing: -.035em; color: #ff4f9a; transform: rotate(-3deg); }
 .eventEdition { position: absolute; right: 1rem; top: 22%; z-index: 1; max-width: 13rem; text-align: right; font-size: .55rem; line-height: 1.5; letter-spacing: .12em; }
 .eventLocation { position: absolute; left: 1rem; right: 1rem; bottom: 6.5rem; z-index: 1; display: flex; justify-content: space-between; align-items: end; border-top: 1px solid #fff; padding-top: .6rem; font-size: .55rem; font-weight: 700; letter-spacing: .1em; }
-.eventLocation span:first-child { font: 400 2rem/1 "Bebas Neue", sans-serif; color: #ff7138; }
+.eventLocation span:first-child { font: 400 2rem/1 var(--font-showcase-bebas-neue), sans-serif; color: #ff7138; }
 .eventHeroCta { position: absolute; left: 1rem; right: 1rem; bottom: 1rem; z-index: 1; min-height: 3.75rem; display: flex; align-items: center; justify-content: center; background: #ff7138; color: #101017; font-size: .8125rem; font-weight: 900; }
 .eventInfo { display: grid; padding: 4.5rem 1rem; }
 .eventManifesto > p:first-child { font-size: .625rem; letter-spacing: .16em; color: #ff4f9a; }
-.eventManifesto h2 { margin-top: 1rem; font: 900 clamp(2.75rem, 11vw, 6rem)/1.08 "Noto Sans TC", sans-serif; letter-spacing: .01em; }
+.eventManifesto h2 { margin-top: 1rem; font: 900 clamp(2.75rem, 11vw, 6rem)/1.08 var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .01em; }
 .eventManifesto h2 span,
 .eventManifesto h2 i { display: block; }
 .eventManifesto h2 i { color: #ff7138; font-style: normal; }
 .eventManifesto > p:last-child { max-width: 37rem; margin-top: 1.75rem; color: #bebec8; font-size: 1rem; line-height: 1.85; }
 .eventTicket { margin-top: 3rem; padding: 1.25rem; background: #f7f1e9; color: #101017; transform: rotate(1deg); box-shadow: .5rem .5rem 0 #ff4f9a; }
 .eventTicket > span { font-size: .55rem; font-weight: 800; letter-spacing: .14em; color: #b83270; }
-.eventTicket h3 { margin-top: 2.5rem; font: 400 2.8rem/1 "Bebas Neue", sans-serif; }
+.eventTicket h3 { margin-top: 2.5rem; font: 400 2.8rem/1 var(--font-showcase-bebas-neue), sans-serif; }
 .eventTicket > strong { display: block; margin-top: .3rem; font-size: 1.15rem; }
 .eventTicket dl { margin-top: 2rem; border-top: 1px solid #101017; }
 .eventTicket dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .85rem 0; border-bottom: 1px solid #b7b3ac; font-size: .875rem; }
@@ -432,7 +432,7 @@
 .eventTicket small { display: block; margin-top: .8rem; text-align: center; font-size: .75rem; line-height: 1.5; color: #666; }
 .eventLineup { display: flex; flex-direction: column; padding: 1rem; border-top: 1px solid #4e4e58; }
 .eventLineup > span { margin-bottom: 2rem; font-size: .625rem; color: #ff4f9a; letter-spacing: .15em; }
-.eventLineup > strong { padding: .35rem 0; font: 400 clamp(3.2rem, 14vw, 7rem)/.85 "Bebas Neue", sans-serif; border-bottom: 1px solid #4e4e58; }
+.eventLineup > strong { padding: .35rem 0; font: 400 clamp(3.2rem, 14vw, 7rem)/.85 var(--font-showcase-bebas-neue), sans-serif; border-bottom: 1px solid #4e4e58; }
 .eventLineup > a { min-height: 4rem; display: flex; align-items: center; color: #ff7138; font-size: .75rem; font-weight: 800; }
 
 .wellnessCopy h1 span,
@@ -478,7 +478,7 @@
   right: 1rem;
   bottom: 25%;
   max-width: 10em;
-  font: 900 clamp(3.25rem, 13vw, 7rem)/1.02 "Noto Sans TC", sans-serif;
+  font: 900 clamp(3.25rem, 13vw, 7rem)/1.02 var(--font-showcase-noto-sans-tc), sans-serif;
   letter-spacing: .015em;
   transform: none;
   overflow-wrap: normal;
