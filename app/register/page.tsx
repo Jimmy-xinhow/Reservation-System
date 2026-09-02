@@ -104,7 +104,7 @@ export default function RegisterPage() {
   if (!event) {
     return (
       <Shell>
-        <header className="mb-5"><div className="eyebrow">Registration</div><h1 className="text-2xl font-bold text-slate-900">課程與活動</h1><p className="mt-1 text-sm leading-6 text-slate-500">選擇活動後，依場次與票種完成報名。</p></header>
+        <header className="mb-5"><div className="eyebrow">活動與報名</div><h1 className="text-2xl font-bold text-slate-900">課程與活動</h1><p className="mt-1 text-sm leading-6 text-slate-500">選擇活動後，依場次與票種完成報名。</p></header>
         {events.length === 0 ? <div className="card p-8 text-center text-sm text-slate-400">目前沒有公開活動。</div> : <div className="space-y-3">{events.map((item) => <a key={item.id} href={`/register?event=${encodeURIComponent(item.id)}${clinicSlug ? `&clinic_slug=${encodeURIComponent(clinicSlug)}` : clinicId ? `&clinic_id=${encodeURIComponent(clinicId)}` : ""}${liffRequested ? "&liff=1" : ""}`} className="card block p-5 transition hover:border-brand-300 hover:bg-brand-50"><h2 className="font-semibold text-slate-900">{item.title}</h2>{item.description && <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{item.description}</p>}<p className="mt-3 text-xs text-slate-400">{item.registration_close_at ? `報名至 ${formatEventDate(item.registration_close_at)}` : "報名時間依活動公告"}</p></a>)}</div>}
       </Shell>
     );
@@ -163,7 +163,13 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, liffReques
     <Shell>
       <Link href={(clinicSlug ? "/register?clinic_slug=" + encodeURIComponent(clinicSlug) : clinicId ? "/register?clinic_id=" + encodeURIComponent(clinicId) : "/register") + (liffRequested ? (clinicSlug || clinicId ? "&" : "?") + "liff=1" : "")} className="mb-4 inline-block text-sm text-slate-500 hover:text-brand-700">← 返回活動列表</Link>
       <article className="card overflow-hidden">
-        {event.cover_url && <img src={event.cover_url} alt="" className="h-44 w-full object-cover" />}
+        {event.cover_url && (
+          <>
+            {/* External brand images are validated when saved and may use tenant-owned hosts. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={event.cover_url} alt="" className="h-44 w-full object-cover" />
+          </>
+        )}
         <div className="space-y-5 p-5 sm:p-7">
           <div><div className="eyebrow">{event.clinic_name}</div><h1 className="text-2xl font-bold text-slate-900">{event.title}</h1>{event.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600">{event.description}</p>}</div>
           <div className="space-y-4 border-t border-slate-100 pt-5">

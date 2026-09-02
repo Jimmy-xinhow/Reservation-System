@@ -1,6 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireAdmin } from "@/lib/admin";
-import { createServiceAction, updateServiceAction, toggleServiceAction, deleteServiceAction } from "../actions";
+import { createServiceAction, updateServiceAction, toggleServiceAction, deleteServiceAction } from "../service-actions";
 import ServiceManager, { type ServiceItem } from "./ServiceManager";
 import { ServiceAddonManager, type ServiceAddon } from "./ServiceAddonManager";
 import { createServiceAddonAction, toggleServiceAddonAction, updateServiceAddonAction } from "./addon-actions";

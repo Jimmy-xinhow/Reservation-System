@@ -1,7 +1,7 @@
 # 統一顧客入口與深連結契約
 
-更新日期：2026-08-13  
-適用版本：產品重整 M2 起
+更新日期：2026-09-02
+適用版本：產品重整 M2 起；2026-09 顧客中心整合
 
 ## 目的
 
@@ -11,6 +11,7 @@
 
 | key | 顧客名稱 | LIFF view | 瀏覽器備援 | 啟用條件 |
 |---|---|---|---|---|
+| `home` | 服務首頁 | `home` | `/` | 永遠可用 |
 | `booking` | 立即預約 | `booking` | `/book/browser` | `public_booking_enabled` |
 | `appointments` | 我的預約 | `appointments` | `/my` | 預約模組可用 |
 | `events` | 活動／課程 | `events` | `/register` | `events_enabled` 且 `public_registration_enabled` |
@@ -34,7 +35,8 @@ LIFF URL 固定為 `https://liff.line.me/{brand_liff_id}?clinic_slug={slug}&view
 ## 狀態與相容界線
 
 - M2 已完成入口 key、品牌參數、LIFF view、瀏覽器備援及模組條件契約。
-- M5 已由 `/book` 統一解讀七個 `view`；現有 `tab=my`／`tab=chat` 仍保留相容。
+- M5 已由 `/book` 統一解讀八個 `view`；現有 `tab=my`／`tab=chat` 仍保留相容。
+- 2026-09 起，未指定 `view` 時先顯示服務首頁，集中呈現目前已啟用的預約、活動、票券、會員、客服與品牌捷徑；停用的模組不會出現在首頁或導覽列。
 - 活動 LIFF 報名會把品牌驗證後的 ID token 送到 server；票券與會員依該 LINE 身分下的已綁定顧客切換，不跨品牌共用。
 - 暫停新增預約不會隱藏「我的預約」；暫停公開活動列表不會隱藏既有票券。
 - Rich Menu 只有在目標 view、模組狀態、圖片與 LINE 渠道驗證全部通過後才可發布。

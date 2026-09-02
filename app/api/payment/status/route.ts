@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const limited = rateLimitResponse(req, "payment:status", 30);
+  const limited = await rateLimitResponse(req, "payment:status", 30);
   if (limited) return limited;
   const orderNo = req.nextUrl.searchParams.get("order")?.trim() ?? "";
   const provider = req.nextUrl.searchParams.get("provider")?.trim() ?? "";

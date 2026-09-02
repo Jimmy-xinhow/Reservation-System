@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { saveMessageAction, deleteMessageAction } from "../actions";
+import { saveMessageAction, deleteMessageAction } from "../line-actions";
 import MessageComposer from "./MessageComposer";
 import type { MsgKind, MsgData } from "@/lib/lineMessage";
 import { requireAdmin } from "@/lib/admin";

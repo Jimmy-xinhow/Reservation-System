@@ -172,7 +172,7 @@ export default function MembershipPage() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8">
       <header className="flex items-start justify-between gap-3">
-        <div><p className="eyebrow">Membership</p><h1 className="text-2xl font-bold text-slate-900">會員與套票</h1><p className="mt-2 text-sm leading-6 text-slate-500">查詢剩餘堂數、有效期限與可購買方案。資料只會回傳給通過身分驗證的顧客。</p></div>
+        <div><p className="eyebrow">會員權益</p><h1 className="text-2xl font-bold text-slate-900">會員與套票</h1><p className="mt-2 text-sm leading-6 text-slate-500">查詢剩餘堂數、有效期限與可購買方案。資料只會回傳給通過身分驗證的顧客。</p></div>
         <Link href={brandedPath("/my")} className="shrink-0 text-sm text-brand-700">我的紀錄</Link>
       </header>
 
@@ -187,7 +187,7 @@ export default function MembershipPage() {
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold text-slate-900">我的套票</h2>
-        {memberships.length === 0 ? <div className="card p-6 text-center text-sm text-slate-400">尚無會員套票資料。</div> : memberships.map((membership) => { const plan = one(membership.membership_plans); return <article key={membership.membership_code} className="card space-y-3 p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-900">{plan?.name ?? "會員方案"}</h3><p className="mt-1 font-mono text-xs text-slate-400">{membership.membership_code}</p></div><span className={`badge ${membership.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{membership.status === "active" ? "使用中" : membership.status === "expired" ? "已到期" : membership.status}</span></div><div className="flex items-end justify-between"><div><p className="text-xs text-slate-500">剩餘堂數</p><p className="mt-1 text-2xl font-bold text-slate-950">{membership.credits_remaining}<span className="ml-1 text-sm font-normal text-slate-400">/ {membership.credits_total}</span></p></div><p className="text-right text-xs text-slate-500">{membership.expires_at ? `到期：${new Date(membership.expires_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}` : "不限期"}</p></div></article>; })}
+        {memberships.length === 0 ? <div className="card p-6 text-center text-sm text-slate-400">尚無會員套票資料。</div> : memberships.map((membership) => { const plan = one(membership.membership_plans); return <article key={membership.membership_code} className="card space-y-3 p-5"><div className="flex items-start justify-between gap-3"><div><h3 className="font-semibold text-slate-900">{plan?.name ?? "會員方案"}</h3><p className="mt-1 font-mono text-xs text-slate-500">套票編號：{membership.membership_code}</p></div><span className={`badge ${membership.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{membership.status === "active" ? "使用中" : membership.status === "expired" ? "已到期" : membership.status === "exhausted" ? "已用完" : "其他狀態"}</span></div><div className="flex items-end justify-between"><div><p className="text-xs text-slate-500">剩餘堂數</p><p className="mt-1 text-2xl font-bold text-slate-950">{membership.credits_remaining}<span className="ml-1 text-sm font-normal text-slate-400">/ {membership.credits_total}</span></p></div><p className="text-right text-xs text-slate-500">{membership.expires_at ? `到期：${new Date(membership.expires_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}` : "不限期"}</p></div></article>; })}
       </section>
     </main>
   );

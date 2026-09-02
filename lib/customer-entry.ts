@@ -1,4 +1,5 @@
 export type CustomerEntryKey =
+  | "home"
   | "booking"
   | "appointments"
   | "events"
@@ -32,6 +33,7 @@ export interface CustomerEntryUrlContext {
 }
 
 export const CUSTOMER_ENTRY_DEFINITIONS: readonly CustomerEntryDefinition[] = [
+  { key: "home", label: "服務首頁", accessibilityLabel: "回到顧客服務首頁", browserPath: "/", liffView: "home", requires: "always" },
   { key: "booking", label: "立即預約", accessibilityLabel: "開啟線上預約", browserPath: "/book/browser", liffView: "booking", requires: "booking" },
   { key: "appointments", label: "我的預約", accessibilityLabel: "查詢、取消或改期我的預約", browserPath: "/my", liffView: "appointments", requires: "always" },
   { key: "events", label: "活動／課程", accessibilityLabel: "瀏覽活動與課程報名", browserPath: "/register", liffView: "events", requires: "events" },

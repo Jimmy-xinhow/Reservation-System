@@ -135,7 +135,7 @@ export default function RichMenuEditor({
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-slate-500">
-                  {s.action === "uri" ? "連結網址" : s.action === "message" ? "選擇訊息素材" : s.action === "richmenuswitch" ? "切換到 Alias" : "(此動作免填)"}
+                  {s.action === "uri" ? "連結網址" : s.action === "message" ? "選擇訊息素材" : s.action === "richmenuswitch" ? "切換到另一個選單" : "(此動作免填)"}
                 </span>
                 {s.action === "message" ? (
                   <>
@@ -166,10 +166,10 @@ export default function RichMenuEditor({
                       onChange={(e) => setSlot(i, { value: e.target.value })}
                       className="input"
                     >
-                      <option value="">請選擇 Alias</option>
+                      <option value="">請選擇頁籤捷徑</option>
                       {aliases.map((alias) => <option key={alias.alias_id} value={alias.alias_id}>{alias.label}（{alias.alias_id}）</option>)}
                     </select>
-                    {aliases.length === 0 && <span className="mt-1 block text-xs text-amber-600">請先在下方建立至少一個 Alias。</span>}
+                    {aliases.length === 0 && <span className="mt-1 block text-xs text-amber-700">請先在下方建立至少一個頁籤捷徑。</span>}
                   </>
                 ) : (
                   <input

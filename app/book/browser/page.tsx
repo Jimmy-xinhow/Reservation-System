@@ -213,7 +213,7 @@ export default function BrowserBookingPage() {
   if (!config) return <Shell><p className="card p-8 text-center text-sm text-slate-500">{error ?? "載入中…"}</p></Shell>;
   return (
     <Shell>
-      <div className="mb-4 flex items-center justify-between gap-3"><div><div className="eyebrow">Browser fallback</div><h1 className="text-2xl font-bold text-slate-900">瀏覽器預約</h1><p className="mt-1 text-sm text-slate-500">不使用 LINE 也可完成預約。</p></div><Link href={scopeUrl("/book")} className="text-sm text-brand-700">改用 LINE</Link></div>
+      <div className="mb-4 flex items-center justify-between gap-3"><div><div className="eyebrow">一般瀏覽器入口</div><h1 className="text-2xl font-bold text-slate-900">瀏覽器預約</h1><p className="mt-1 text-sm text-slate-500">不使用 LINE 也可完成預約。</p></div><Link href={scopeUrl("/book")} className="text-sm text-brand-700">改用 LINE</Link></div>
       <div className="card space-y-5 p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm"><span className="label">姓名</span><input className="input" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label><label className="text-sm"><span className="label">電話</span><input className="input" value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" autoComplete="tel" /></label></div>
         <label className="block text-sm"><span className="label">Email（選填，用於提醒）</span><input type="email" className="input" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" /></label>

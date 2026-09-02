@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const limited = rateLimitResponse(req, "registration:event-detail", 30);
+  const limited = await rateLimitResponse(req, "registration:event-detail", 30);
   if (limited) return limited;
   try {
     const { id } = await context.params;

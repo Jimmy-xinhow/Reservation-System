@@ -72,16 +72,16 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
     <div className="space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="eyebrow">System administration</p>
+          <p className="eyebrow">系統管理</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-950">系統管理控制台</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">這裡管理 XINHOW SaaS 的品牌租戶、開通交付與平台政策；品牌服務、預約、顧客與通知設定，必須由各品牌進入自己的品牌後台管理。</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">這裡管理 XINHOW SaaS 的品牌、開通交付與系統政策；品牌服務、預約、顧客與通知設定，必須由各品牌進入自己的品牌後台管理。</p>
         </div>
         {params.created === "1" && <span className="badge bg-emerald-50 px-3 py-1.5 text-emerald-700">品牌已建立，請通知品牌管理者查收登入資訊</span>}
       </header>
 
       <nav aria-label="系統管理任務" className="grid gap-2 sm:grid-cols-3">
         <PlatformTaskLink href="/admin/platform?section=overview" label="營運總覽" description="平台指標、健康與治理入口" selected={activeSection === "overview"} />
-        {canManageBrands && <PlatformTaskLink href="/admin/platform?section=create" label="建立新品牌" description="建立租戶並寄送管理者邀請" selected={activeSection === "create"} />}
+        {canManageBrands && <PlatformTaskLink href="/admin/platform?section=create" label="建立新品牌" description="建立品牌並寄送管理者邀請" selected={activeSection === "create"} />}
         <PlatformTaskLink href="/admin/platform?section=brands" label="品牌交付狀態" description="追蹤開通進度與方案備註" selected={activeSection === "brands"} />
       </nav>
 
@@ -105,15 +105,15 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
       </div>}
 
       {activeSection === "overview" && <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {platform.accessType === "system_admin" && <QuickLink href="/admin/platform/admins" eyebrow="Access" title="系統人員與權限" description="新增系統管理者，並授權系統員工。" />}
-        {hasSystemPermission(platform, "operations.view") && <QuickLink href="/admin/platform/operations" eyebrow="Health" title="檢查系統健康" description="查看通知、金流與部署能力。" />}
-        {hasSystemPermission(platform, "reports.view") && <QuickLink href="/admin/platform/reports" eyebrow="Insights" title="查看跨品牌報表" description="比較品牌活躍度與使用量。" />}
-        {hasSystemPermission(platform, "audit.view") && <QuickLink href="/admin/platform/audit" eyebrow="Governance" title="查看系統稽核" description="追蹤跨品牌狀態異動。" />}
+        {platform.accessType === "system_admin" && <QuickLink href="/admin/platform/admins" eyebrow="人員權限" title="系統人員與權限" description="新增系統管理者，並授權系統員工。" />}
+        {hasSystemPermission(platform, "operations.view") && <QuickLink href="/admin/platform/operations" eyebrow="運作狀態" title="檢查系統健康" description="查看通知、金流與部署能力。" />}
+        {hasSystemPermission(platform, "reports.view") && <QuickLink href="/admin/platform/reports" eyebrow="使用概況" title="查看跨品牌報表" description="比較品牌活躍度與使用量。" />}
+        {hasSystemPermission(platform, "audit.view") && <QuickLink href="/admin/platform/audit" eyebrow="操作追蹤" title="查看系統稽核" description="追蹤跨品牌狀態異動。" />}
       </section>}
 
       {activeSection === "create" && canManageBrands && <form action={createPlatformBrandAction} className="card space-y-5 border-brand-100 bg-brand-50/40 p-5">
         <div>
-          <p className="eyebrow">Step 1 · 建立租戶</p>
+          <p className="eyebrow">第一步 · 建立品牌</p>
           <h2 className="mt-1 font-semibold text-slate-900">建立新品牌並交給品牌管理者</h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">填寫品牌資料與品牌管理者 Email。系統會建立品牌、預設設定與品牌管理者權限；若 Email 尚未有帳號，會寄出登入邀請。</p>
         </div>
@@ -132,8 +132,8 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
 
       {activeSection === "brands" && <section className="space-y-4">
         <div>
-          <h2 className="text-lg font-bold text-slate-900">品牌租戶與交付狀態</h2>
-          <p className="mt-1 text-sm text-slate-500">系統層負責租戶與交接；每個品牌的服務、排程、入口、通知與員工權限，由品牌管理者在品牌後台完成。</p>
+          <h2 className="text-lg font-bold text-slate-900">品牌與交付狀態</h2>
+          <p className="mt-1 text-sm text-slate-500">系統層負責建立品牌與交接；每個品牌的服務、排程、入口、通知與員工權限，由品牌管理者在品牌後台完成。</p>
           <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">70 項標準功能保持開放；七項加購只記錄合作狀態，不會自動隱藏功能或代表功能已交付。</p>
         </div>
         {brandRows.length === 0 ? <div className="card p-6 text-sm text-slate-500">尚未建立品牌，請先完成上方「建立新品牌」。</div> : <div className="space-y-4">{brandRows.map((brand) => {
@@ -159,7 +159,7 @@ function OnboardingGuide() {
 function BrandCard({ brand, entitlement, flags, progress, canManageBrands, canManageEntitlements }: { brand: BrandRow; entitlement?: EntitlementRow; flags: Record<string, boolean>; progress: BrandProgress; canManageBrands: boolean; canManageEntitlements: boolean }) {
   return <article className="card space-y-5 p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-900">{brand.name}</h3><span className={`badge ${brand.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{brand.active ? "啟用" : "已停用"}</span><span className={`badge ${progress.complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{progress.complete ? "可開始營運" : `待完成 ${progress.total - progress.done} 項`}</span></div><p className="mt-1 text-xs text-slate-400">/{brand.slug ?? "未設定代號"} · {progress.members} 位品牌成員</p></div>
+      <div><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-slate-900">{brand.name}</h3><span className={`badge ${brand.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{brand.active ? "啟用" : "已停用"}</span><span className={`badge ${progress.complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{progress.complete ? "可開始營運" : `待完成 ${progress.total - progress.done} 項`}</span></div><p className="mt-1 text-xs text-slate-400">網址代號：/{brand.slug ?? "未設定"} · {progress.members} 位品牌成員</p></div>
       <div className="flex flex-wrap gap-2"><Link href="/admin/login" className="btn btn-secondary px-3 py-1.5 text-xs">品牌登入入口</Link>{brand.slug && <a href={`/book/browser?clinic_slug=${encodeURIComponent(brand.slug)}`} target="_blank" rel="noreferrer" className="btn btn-secondary px-3 py-1.5 text-xs">預覽顧客入口</a>}{canManageBrands && <form action={setPlatformBrandActiveAction}><input type="hidden" name="clinic_id" value={brand.id} /><input type="hidden" name="active" value={brand.active ? "false" : "true"} /><SubmitButton className="btn btn-secondary px-3 py-1.5 text-xs">{brand.active ? "停用品牌" : "重新啟用"}</SubmitButton></form>}</div>
     </div>
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium text-slate-800">開通檢查</p><p className="text-xs text-slate-500">{progress.done}/{progress.total} 完成</p></div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{progress.items.map((item) => <span key={item.label} className={`rounded-lg px-3 py-2 text-xs ${item.done ? "bg-emerald-50 text-emerald-700" : "bg-white text-slate-500"}`}>{item.done ? "✓ " : "○ "}{item.label}</span>)}</div>{progress.next && <p className="mt-3 text-xs text-amber-700">下一步：{progress.next}</p>}</div>

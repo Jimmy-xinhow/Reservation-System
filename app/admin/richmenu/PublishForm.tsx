@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { customerEntryUrl, type CustomerEntryKey } from "@/lib/customer-entry";
 import { ACTION_OPTIONS, LAYOUTS, type Layout, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
-import { publishRichMenuAction } from "../actions";
+import { publishRichMenuAction } from "../line-actions";
 
 interface PublishFormProps {
   width: number;
@@ -138,7 +138,7 @@ export default function PublishForm({
       const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", q));
       if (blob && (blob.size <= 1024 * 1024 || q === 0.3)) return blob;
     }
-    throw new Error("圖片壓縮失敗,請換一張");
+    throw new Error("圖片壓縮失敗，請換一張。");
   }
 
   async function submit(e: React.FormEvent) {
@@ -237,7 +237,7 @@ export default function PublishForm({
               <p className="mt-0.5 text-xs text-slate-500">{actionLabel}</p>
               <div className="mt-2 flex min-h-11 flex-wrap items-center gap-2">
                 {browserTarget ? <a href={browserTarget} target="_blank" rel="noreferrer" className="btn btn-secondary px-3 py-2 text-xs">瀏覽器測試</a> : <span className="text-xs text-amber-700">此動作只能在 LINE 內驗收</span>}
-                {lineTarget && lineTarget !== browserTarget && <a href={lineTarget} target="_blank" rel="noreferrer" className="btn btn-secondary px-3 py-2 text-xs">LIFF 目標</a>}
+                {lineTarget && lineTarget !== browserTarget && <a href={lineTarget} target="_blank" rel="noreferrer" className="btn btn-secondary px-3 py-2 text-xs">在 LINE 內開啟</a>}
               </div>
             </div>
           ))}

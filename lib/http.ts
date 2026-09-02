@@ -1,3 +1,6 @@
+import "server-only";
+
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
@@ -8,13 +11,29 @@ export function ok<T>(data: T) {
 }
 
 export function fail(message: string, status = 400) {
+  if (status >= 500) {
+    const errorId = randomUUID();
+    console.error("[api-error]", {
+      errorId,
+      status,
+      detail: message.replace(/[\r\n\t]+/g, " ").slice(0, 1000),
+    });
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "系統暫時無法完成操作，請稍後再試。若持續發生，請將錯誤編號提供給服務人員。",
+        error_id: errorId,
+      },
+      { status },
+    );
+  }
   return NextResponse.json({ ok: false, error: message }, { status });
 }
 
-export function rateLimitResponse(req: NextRequest, key: string, limit = 30) {
-  const rate = checkRateLimit(req, key, limit);
+export async function rateLimitResponse(req: NextRequest, key: string, limit = 30) {
+  const rate = await checkRateLimit(req, key, limit);
   if (rate.allowed) return null;
-  const response = fail("請稍後再試", 429);
+  const response = fail("操作太頻繁，請稍候再試。", 429);
   response.headers.set("Retry-After", String(rate.retryAfterSeconds));
   return response;
 }

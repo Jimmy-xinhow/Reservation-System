@@ -1,6 +1,7 @@
 # Reservation System v3 驗收矩陣
 
-日期：2026-08-13
+初版日期：2026-08-13
+最近更新：2026-09-02
 基準：`AGENTS.md`、`clinic-booking-spec-v3.md`
 
 本文件把「程式碼與本機可證明的結果」和「必須連接實際外部環境的結果」分開。沒有 Supabase 或第三方服務證據的項目，不視為已完成正式上線驗收。
@@ -13,7 +14,7 @@
 |---|---|---|
 | 契約與安全邊界靜態檢查 | `npm test` / `npm run verify:contracts` | PASS |
 | TypeScript strict 型別檢查 | `npm run typecheck` | PASS |
-| Next.js production build | `npm run build` | PASS；僅有 custom font、`img` 的非阻塞 lint warning |
+| Next.js production build | `npm run build` | PASS；僅既有展示頁的外部字型載入方式有一則非阻塞提示 |
 | 公開頁渲染 | `npm run smoke:public` 檢查首頁、報名／付款、瀏覽器預約／我的預約／改期、取消、付款結果、嵌入與 `/admin/login` | HTTP 200，無 Application error |
 | 瀏覽器 UI／互動 | Playwright desktop 1440×900、mobile 390×844；正式 Supabase active brand；初診切換、姓名／電話填寫與水平溢出檢查 | PASS；頁面無 application/page error 或水平溢出，外部 Google Fonts 受測試網路政策阻擋 |
 | 登入／受保護邊界 | `/admin/login` 為 200；後台資料與三支 Cron API 未登入為 401 | PASS |
@@ -58,13 +59,27 @@
 | Rich Menu 版本生命週期 | 三模板、草稿、server 驗證、原子發布、下架、回復、補償與既有資料 v1 回填 | Staging 已實際建立 v1、複製 v2、另存 v3、比較版本、拒絕停用模組動作，並驗證實圖疊合 6 熱區及逐格連結；正式 LINE 發布／回復仍待外部渠道 |
 | Rich Menu 第二批優化 | `202608110004`、Alias 官方 API、共享 channel 名稱隔離、richmenuswitch、台北時間顯示排程、5 次重試與稽核、版本複製／歷史比較、LINE Insights 與匿名轉換對照 | 契約／build／linked migration PASS；缺憑證時 Alias／排程／Insights 實測 disabled，正式正向流程待外部 LINE |
 | PostgreSQL DB lint hardening | linked `public` schema 先找到 5 errors／2 warnings；套用 `202608110005`～`007` 後重跑 `supabase db lint --linked --schema public --level warning --fail-on warning` | linked staging PASS：`results=[]`、No schema errors found |
-| 單一 LIFF 顧客入口 | `/book` 七個 view、活動 LIFF 身分、多人切換、票券 QR、會員與客服分流 | Playwright 375px 七 view PASS；414／768／1024／1440px 無水平溢出 |
+| 單一 LIFF 顧客入口 | `/book` 八個 view（含服務首頁）、活動 LIFF 身分、多人切換、票券 QR、會員與客服分流 | Playwright 375px 服務首頁與預約銜接 PASS；375／414／768／1024／1440px 無水平溢出 |
 | production runtime | 本機 `next start` + Playwright brand view；375px `scrollWidth=375` | PASS；console 0 errors／0 warnings |
-| 視覺證據 | `output/playwright/customer-entry-375.png`、`appointment-waitlist-375.png`、`appointment-waitlist-offer-375.png` | PASS；票券 QR、七入口、候補成功與名額保留手機畫面已人工檢視 |
+| 視覺證據 | `output/playwright/customer-home-mobile.png`、`admin-login-mobile.png`、`customer-entry-375.png`、`appointment-waitlist-375.png`、`appointment-waitlist-offer-375.png` | PASS；服務首頁、入口、票券 QR、候補成功與名額保留手機畫面已人工檢視 |
 | Railway staging 公開邊界 | `npm run smoke:public` 對 `reservation-system-staging-staging.up.railway.app` | PASS；14 個公開入口為 200，五支 Cron 未授權均為 401，包含 `/embed/book` 與 `/api/cron/richmenu` |
 | 單一 staging 核心 release gate | `railway run npm run audit:staging-core`；依序執行公開 smoke 與 security、booking、commerce、notifications、browser identity 五支 domain audit | 2026-08-13 fresh PASS（6／6）；任一 gate 失敗即停止，所有資料型 audit 均回報臨時資料清理成功 |
 | 成長功能 release gate | `railway run npm run audit:staging-growth`；CSV 冪等、加購時長、三週系列、容量失敗整批回復、三品牌上限 | 2026-08-13 fresh PASS；Growth QA 品牌、資料與 Auth 帳號已清理 |
 | 四身分與成長 UI | 系統管理者／系統員工／品牌管理者／品牌員工桌機與 390×844；顧客自訂欄位、加購、3 週預約與快速再約 | Staging PASS；未授權頁 server guard、無水平溢出、顧客系列實際建立後已清理 |
+
+## 2026-09-02 本機修復增量
+
+| 項目 | 證據 | 結果 |
+|---|---|---|
+| 錯誤資訊安全 | API、登入頁、後台錯誤頁與 Rich Menu 操作不直接顯示供應商或資料庫原始訊息；非預期錯誤保留識別碼 | 契約 PASS |
+| 公開 API 共用限流 | PostgreSQL 共用計數＋資料庫不可用時的單機保護 | 本機契約 PASS；`202609020001_api_rate_limits.sql` 待部署 |
+| 平台使用量聚合 | 跨品牌明細改由 PostgreSQL 聚合後回傳 | 本機契約 PASS；`202609020002_platform_report_aggregation.sql` 待部署 |
+| 後台可讀性 | 16px 正文、14px 輔助文字、44px 操作高度、鍵盤焦點、白話任務名稱與可展開技術資訊 | type-check／契約 PASS；登入頁 375px／1440px 局部驗收 PASS |
+| 顧客服務首頁 | 依品牌模組顯示預約、我的預約、活動、票券、會員、客服與品牌捷徑 | 375／414／768／1024／1440px 無水平溢位；最小按鈕 44px；主控台 0 errors |
+| 顧客首頁到預約 | 點擊「立即預約」更新為 `view=booking` 並進入本人／代約選擇 | 模擬品牌資料 Playwright PASS |
+| LINE webhook 維護邊界 | 公開 route 與訊息卡片、回覆、預約狀態處理分檔 | type-check／契約 PASS |
+| CI 發布關卡 | `.github/workflows/verify.yml`、`.github/workflows/staging-release-gate.yml`、`tests/staging-role-ui.spec.mjs` | 測試清單 4／4 可載入；正式 staging 執行待 GitHub Environment secrets |
+| 開源與指定案例參考 | `docs/reviews/reference-saas-starter-kit-analysis-2026-09-02.md` | 已區分展示型案例與成熟開源工程參考；正式環境未增加套件，僅新增 Playwright 測試工具 |
 
 ## 連接實際環境後必須執行
 
@@ -90,7 +105,7 @@
 
 正式 staging 的逐項操作、輸入資料與證據欄位，請同步依 [staging 驗收 runbook](staging-acceptance-runbook.md) 執行。
 
-1. 新環境執行 `supabase/schema.sql`；既有環境依 README 的 26 支 migration 順序執行。
+1. 新環境執行 `supabase/schema.sql`；既有環境依 README 的 37 支 migration 順序執行。
 2. 設定 `.env.example` 中的 Supabase、LINE、Email、付款與 `CRON_SECRET`。
 3. 先跑 `npm test`、`npm run typecheck`、`npm run build`；部署後再以 `SMOKE_BASE_URL` 執行 `npm run smoke:public`。
 4. 在 staging 建立至少兩個品牌、兩個後台帳號與各自的服務／活動資料。

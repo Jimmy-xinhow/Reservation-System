@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
  * 回傳此 LINE 身分名下、未來且未取消的約診。
  */
 export async function POST(req: NextRequest) {
-  const limited = rateLimitResponse(req, "booking:my", 12);
+  const limited = await rateLimitResponse(req, "booking:my", 12);
   if (limited) return limited;
   try {
     const body = (await req.json().catch(() => null)) as { idToken?: string } | null;
@@ -27,8 +27,8 @@ export async function POST(req: NextRequest) {
     let lineUserId: string;
     try {
       lineUserId = (await verifyClinicLiffIdToken(svc, clinicId, body.idToken)).sub;
-    } catch (e) {
-      return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟預約頁"), 401);
+    } catch {
+      return fail("LINE 身分驗證失敗，請重新開啟預約頁。", 401);
     }
 
     const { data: patients, error: pErr } = await svc

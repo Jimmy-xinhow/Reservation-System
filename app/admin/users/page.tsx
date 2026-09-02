@@ -6,7 +6,7 @@ import {
   resetStaffPasswordAction,
   setStaffRoleAction,
   setDoctorAssignmentsAction,
-} from "../actions";
+} from "./actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { brandAccessLabel } from "@/lib/access-control";
 import { BrandPermissionPicker } from "@/components/PermissionPresetPicker";

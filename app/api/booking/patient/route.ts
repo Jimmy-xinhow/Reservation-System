@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: NextRequest) {
   try {
-    const rate = checkRateLimit(req, "booking:patient", 10);
+    const rate = await checkRateLimit(req, "booking:patient", 10);
     if (!rate.allowed) {
       const response = fail("請稍後再試", 429);
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
     try {
       const profile = await verifyClinicLiffIdToken(svc, clinicId, body.idToken);
       lineUserId = profile.sub;
-    } catch (e) {
-      return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟預約頁"), 401);
+    } catch {
+      return fail("LINE 身分驗證失敗，請重新開啟預約頁。", 401);
     }
 
     const settings = await getClinicSettings(svc, clinicId);

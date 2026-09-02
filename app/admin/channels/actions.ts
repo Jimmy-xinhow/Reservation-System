@@ -63,7 +63,7 @@ export async function runChannelTestsAction(): Promise<void> {
   const emailChecks: Check[] = !settings.email_enabled
     ? [{ label: "Email 提醒", status: "warning", detail: "品牌尚未啟用 Email" }]
     : [
-        { label: "API 金鑰", status: emailConfig?.apiKey ? "passed" : "failed", detail: emailConfig?.apiKey ? "server-only 金鑰已設定" : "缺少 Resend 金鑰" },
+        { label: "Email 寄送授權", status: emailConfig?.apiKey ? "passed" : "failed", detail: emailConfig?.apiKey ? "私密授權資料已設定" : "尚未設定 Email 寄送服務授權" },
         { label: "寄件人", status: emailConfig?.from ? "passed" : "failed", detail: emailConfig?.from ? emailConfig.from : "缺少寄件人" },
       ];
   runs.push({ channel: "email", status: summarize(emailChecks), checks: emailChecks });
@@ -73,7 +73,7 @@ export async function runChannelTestsAction(): Promise<void> {
     : payment
       ? [
           { label: "商店設定", status: "passed", detail: `${payment.provider === "ecpay" ? "綠界" : "藍新"} · ${payment.environment === "production" ? "正式" : "測試"}` },
-          { label: "簽章密鑰", status: payment.hash_key && payment.hash_iv ? "passed" : "failed", detail: payment.hash_key && payment.hash_iv ? "server-only 金鑰已設定" : "缺少 HashKey／HashIV" },
+          { label: "付款驗證資料", status: payment.hash_key && payment.hash_iv ? "passed" : "failed", detail: payment.hash_key && payment.hash_iv ? "私密授權資料已設定" : "尚未設定付款驗證資料" },
         ]
       : [{ label: "標準金流", status: "failed", detail: "訂金已啟用，但沒有啟用中的金流商店" }];
   runs.push({ channel: "payment", status: summarize(paymentChecks), checks: paymentChecks });

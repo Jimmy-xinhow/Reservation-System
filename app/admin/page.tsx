@@ -12,7 +12,7 @@ import {
   createAppointmentAction,
   rescheduleAppointmentAction,
   cancelAppointmentWaitlistAction,
-} from "./actions";
+} from "./appointment-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -326,7 +326,7 @@ export default async function TodayPage({
                 </td>
                 <td>
                   <span className={`badge ${STATUS_STYLE[r.status] ?? "bg-slate-100 text-slate-600"}`}>
-                    {STATUS_LABEL[r.status] ?? r.status}
+                    {STATUS_LABEL[r.status] ?? "其他狀態"}
                   </span>
                 </td>
                 <td>

@@ -45,6 +45,8 @@ const migrationTrialGuard = read("supabase/migrations/202608130006_trial_observa
 const migrationBookingGrowth = read("supabase/migrations/202608130007_booking_growth_features.sql");
 const migrationAddonAvailability = read("supabase/migrations/202608130008_addon_availability.sql");
 const migrationRecurringLintFix = read("supabase/migrations/202608130009_recurring_booking_lint_fix.sql");
+const migrationApiRateLimits = read("supabase/migrations/202609020001_api_rate_limits.sql");
+const migrationPlatformReportAggregation = read("supabase/migrations/202609020002_platform_report_aggregation.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 const projectReadme = read("README.md");
@@ -57,12 +59,19 @@ const checks = [
   ["hardening trigger and queue functions are in consolidated schema", ["record_appointment_status_event", "record_registration_status_event", "promote_waitlist_for_session", "expire_registration_payments"]],
   ["dynamic RLS includes new tenant tables", ["registration_answers", "appointment_status_events", "appointment_notification_logs", "registration_notification_logs", "payment_status_events"]],
   ["server-only secret boundaries exist", ["lib/email.ts|import \"server-only\"", "lib/payment.ts|import \"server-only\"", "lib/registration-notifications.ts|import \"server-only\"", "lib/appointment-notifications.ts|import \"server-only\"", "lib/browser-booking.ts|import \"server-only\""]],
+  ["unexpected API errors are generic and traceable", ["lib/http.ts|if (status >= 500)", "lib/http.ts|error_id: errorId", "lib/http.ts|系統暫時無法完成操作", "lib/http.ts|detail: message.replace"]],
+  ["LINE identity failures do not expose provider details", ["app/api/booking/reserve/route.ts|LINE 身分驗證失敗，請重新開啟預約頁。", "app/api/booking/reschedule/route.ts|LINE 身分驗證失敗，請重新開啟預約頁。", "app/api/customer/portal/route.ts|LINE 身分驗證失敗，請重新開啟頁面。"]],
+  ["public API rate limiting is shared, atomic, and privacy-safe", ["supabase/migrations/202609020001_api_rate_limits.sql|on conflict (bucket_key) do update", "supabase/migrations/202609020001_api_rate_limits.sql|alter table public.api_rate_limit_buckets enable row level security", "supabase/migrations/202609020001_api_rate_limits.sql|grant execute on function public.consume_api_rate_limit", "lib/rate-limit.ts|createHash(\"sha256\")", "lib/rate-limit.ts|shared store unavailable; using local fallback", "lib/rate-limit.ts|MAX_LOCAL_BUCKETS"]],
+  ["platform usage report is aggregated by PostgreSQL", ["supabase/migrations/202609020002_platform_report_aggregation.sql|get_platform_usage_summary", "supabase/migrations/202609020002_platform_report_aggregation.sql|group by clinic_id", "supabase/migrations/202609020002_platform_report_aggregation.sql|grant execute on function public.get_platform_usage_summary() to service_role", "app/admin/platform/reports/page.tsx|service.rpc(\"get_platform_usage_summary\")"]],
+  ["admin UI has a readable and keyboard-visible baseline", ["app/globals.css|.admin-shell .text-xs", "app/globals.css|.admin-shell .text-slate-400", "app/globals.css|:focus-visible", "app/globals.css|.inline-action", "app/admin/layout.tsx|admin-shell min-h-screen"]],
+  ["admin navigation uses task language for technical modules", ["components/AdminNav.tsx|顧客回訪與自動提醒", "components/AdminNav.tsx|LINE 訊息範本", "components/AdminNav.tsx|通知與付款測試", "components/AdminNav.tsx|LINE 官方帳號連線", "components/AdminNav.tsx|LINE 圖文選單"]],
+  ["LINE setup presents plain steps before technical identifiers", ["app/admin/line/page.tsx|照順序完成 3 件事", "app/admin/line/page.tsx|進階技術設定：LINE 識別碼", "app/admin/line/page.tsx|Webhook 是 LINE 把顧客操作傳回本系統的接收網址"]],
   ["public tenant resolver is present", ["lib/public-brand.ts|resolvePublicClinicId"]],
   ["public and fallback routes exist", ["app/register/page.tsx", "app/book/browser/page.tsx", "app/book/browser/my/page.tsx", "app/book/browser/reschedule/page.tsx", "app/book/reschedule/page.tsx", "app/api/booking/browser/start/route.ts", "app/api/booking/browser/my/route.ts", "app/api/booking/reschedule/route.ts", "app/embed/book/page.tsx", "app/embed/register/page.tsx"]],
   ["admin SaaS modules exist", ["app/admin/crm/page.tsx", "app/admin/reports/page.tsx", "app/admin/registrations/page.tsx", "app/admin/checkin/page.tsx", "app/admin/calendar/page.tsx", "app/api/registration/checkin-search/route.ts"]],
   ["shared login exposes accessible brand and system destinations without granting roles client-side", ["app/admin/login/page.tsx|品牌營運後台", "app/admin/login/page.tsx|系統管理後台", "app/admin/login/page.tsx|實際權限仍由帳號角色在伺服器端判定", "app/admin/login/page.tsx|htmlFor=\"admin-email\"", "app/admin/login/page.tsx|htmlFor=\"admin-password\"", "app/admin/login/page.tsx|/admin/platform", "lib/platform.ts|platform_admins"]],
   ["system administration layer exists and is server-guarded", ["supabase/migration_saas_platform.sql|create table if not exists public.platform_admins", "supabase/migration_saas_platform.sql|create table if not exists public.brand_entitlements", "lib/platform.ts|requirePlatformAdmin", "lib/platform.ts|requireSystemAdmin", "lib/platform.ts|requireSystemPermission", "app/admin/platform/page.tsx", "app/admin/platform/admins/page.tsx", "app/admin/platform/admins/actions.ts", "app/admin/platform/operations/page.tsx", "app/admin/platform/reports/page.tsx", "app/admin/platform/audit/page.tsx", "app/admin/platform/settings/page.tsx", "app/admin/platform/actions.ts", "app/admin/page.tsx|redirect(\"/admin/platform\")", "app/admin/layout.tsx|XINHOW PLATFORM", "components/AdminNav.tsx|系統管理總控台"]],
-  ["two management identities and employee permissions are explicit", ["lib/platform-roles.ts|PlatformAccessType = \"system_admin\" | \"employee\"", "lib/platform-roles.ts|SYSTEM_PERMISSION_DEFINITIONS", "lib/access-control.ts|BrandAccessType = \"brand_admin\" | \"employee\"", "lib/access-control.ts|BRAND_PERMISSION_DEFINITIONS", "supabase/migrations/202608110008_two_level_admin_permissions.sql|access_type", "supabase/migrations/202608110008_two_level_admin_permissions.sql|permissions text[]", "app/admin/platform/admins/actions.ts|requireSystemAdmin", "app/admin/actions.ts|requireBrandAdmin", "app/admin/layout.tsx|hasDualAdminContext", "app/admin/layout.tsx|<a href=\"/admin/dashboard\"", "app/admin/layout.tsx|<a href=\"/admin/platform\""]],
+  ["two management identities and employee permissions are explicit", ["lib/platform-roles.ts|PlatformAccessType = \"system_admin\" | \"employee\"", "lib/platform-roles.ts|SYSTEM_PERMISSION_DEFINITIONS", "lib/access-control.ts|BrandAccessType = \"brand_admin\" | \"employee\"", "lib/access-control.ts|BRAND_PERMISSION_DEFINITIONS", "supabase/migrations/202608110008_two_level_admin_permissions.sql|access_type", "supabase/migrations/202608110008_two_level_admin_permissions.sql|permissions text[]", "app/admin/platform/admins/actions.ts|requireSystemAdmin", "app/admin/users/actions.ts|requireBrandAdmin", "app/admin/layout.tsx|hasDualAdminContext", "app/admin/layout.tsx|<a href=\"/admin/dashboard\"", "app/admin/layout.tsx|<a href=\"/admin/platform\""]],
   ["time-mode service bookings resolve their real schedule segment", ["supabase/migrations/202608120001_service_booking_segment_fix.sql|v_date := (v_appointment.start_at at time zone 'Asia/Taipei')::date", "supabase/migrations/202608120001_service_booking_segment_fix.sql|template.weekday = extract(dow from v_date)", "supabase/migrations/202608120001_service_booking_segment_fix.sql|v_time >= template.start_time", "supabase/migrations/202608120001_service_booking_segment_fix.sql|service duration exceeds schedule segment"]],
   ["provider appointment status updates avoid recursive patient policies", ["supabase/migrations/202608120002_provider_rls_recursion_fix.sql|provider_has_patient_assignment", "supabase/migrations/202608120002_provider_rls_recursion_fix.sql|p_user_id = auth.uid()", "supabase/migrations/202608120002_provider_rls_recursion_fix.sql|drop policy if exists patients_provider_read", "supabase/migrations/202608120002_provider_rls_recursion_fix.sql|drop policy if exists patient_records_provider_read"]],
   ["shared resource capacity is locked across different services", ["supabase/migrations/202608130002_shared_resource_capacity_lock.sql|enforce_appointment_resource_capacity", "supabase/migrations/202608130002_shared_resource_capacity_lock.sql|order by assignment.resource_id", "supabase/migrations/202608130002_shared_resource_capacity_lock.sql|pg_advisory_xact_lock", "supabase/migrations/202608130002_shared_resource_capacity_lock.sql|trg_appointments_resource_capacity"]],
@@ -70,7 +79,7 @@ const checks = [
   ["brand configuration pages and RLS require brand management permission", ["app/admin/services/page.tsx|requireAdmin()", "app/admin/resources/page.tsx|requireAdmin()", "app/admin/schedules/page.tsx|requireAdmin()", "app/admin/exceptions/page.tsx|requireAdmin()", "app/admin/audit/page.tsx|requireAdmin()", "supabase/migrations/202608130004_brand_configuration_permission_boundaries.sql|'brand.manage' = any(member.permissions)", "supabase/migrations/202608130004_brand_configuration_permission_boundaries.sql|schedule_templates_brand_manage", "supabase/migrations/202608130004_brand_configuration_permission_boundaries.sql|schedule_exceptions_brand_manage"]],
   ["adoption metrics and first-stage tools are tenant isolated", ["supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.clinic_activation_metrics", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.admin_product_events", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.data_import_jobs", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.channel_test_runs", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.handoff_tasks", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|revoke all on table public.admin_product_events from public, anon, authenticated", "app/admin/import/page.tsx", "app/admin/channels/page.tsx", "app/admin/handoff/page.tsx"]],
   ["three-brand observation limit is atomic", ["supabase/migrations/202608130006_trial_observation_guard.sql|pg_advisory_xact_lock", "supabase/migrations/202608130006_trial_observation_guard.sql|>= 3", "app/admin/platform/reports/TrialObservationPanel.tsx|未發生的行為顯示為「尚無資料」"]],
-  ["booking growth options stay atomic and configuration driven", ["supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.service_addons", "supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.appointment_series", "supabase/migrations/202608130007_booking_growth_features.sql|book_recurring_appointments", "supabase/migrations/202608130007_booking_growth_features.sql|recurring_booking_enabled", "supabase/migrations/202608130008_addon_availability.sql|get_available_service_slots_with_options", "app/api/booking/reserve/route.ts|book_time_slot_with_options", "app/book/page.tsx|再次預約", "app/book/browser/page.tsx|每週重複預約"]],
+  ["booking growth options stay atomic and configuration driven", ["supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.service_addons", "supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.appointment_series", "supabase/migrations/202608130007_booking_growth_features.sql|book_recurring_appointments", "supabase/migrations/202608130007_booking_growth_features.sql|recurring_booking_enabled", "supabase/migrations/202608130008_addon_availability.sql|get_available_service_slots_with_options", "app/api/booking/reserve/route.ts|book_time_slot_with_options", "app/book/MyAppointments.tsx|再次預約", "app/book/browser/page.tsx|每週重複預約"]],
   ["core SaaS gap migration and customer surfaces exist", ["supabase/migration_saas_core_gaps.sql|membership_notification_logs", "supabase/migration_saas_core_gaps.sql|service_resources_available", "supabase/migration_saas_core_gaps.sql|get_available_sessions_for_service", "app/api/cron/membership/route.ts|MEMBERSHIP_EXPIRY_NOTICE_DAYS", "app/api/membership/portal/route.ts", "app/api/registration/my/route.ts", "app/api/registration/checkin-live/route.ts", "app/admin/audit/page.tsx"]],
   ["unified customer portal migration and funnel tracking exist", ["app/api/customer/portal/route.ts", "app/my/page.tsx", "components/FunnelTracker.tsx", "lib/funnel-client.ts", "app/api/analytics/funnel/route.ts"]],
   ["cross-industry service targets and customer actions exist", ["supabase/migrations/202608060004_cross_industry_booking_foundation.sql|booking_target", "supabase/migrations/202608060004_cross_industry_booking_foundation.sql|book_service_slot", "app/admin/_components/ExceptionForm.tsx|service_id", "app/api/customer/registration-action/route.ts|cancel_registration_for_customer"]],
@@ -82,9 +91,9 @@ const checks = [
   ["Rich Menu drafts and publications are versioned and auditable", ["supabase/migrations/202608110001_product_modules_line_richmenu.sql|create table if not exists public.line_richmenu_versions", "supabase/migrations/202608110001_product_modules_line_richmenu.sql|create table if not exists public.line_richmenu_publication_events", "supabase/migrations/202608110001_product_modules_line_richmenu.sql|draft_version_id", "supabase/migrations/202608110001_product_modules_line_richmenu.sql|published_version_id", "supabase/migrations/202608110001_product_modules_line_richmenu.sql|create_line_richmenu_version"]],
   ["appointment waitlist is separate from event registration waitlist", ["supabase/migrations/202608110002_appointment_waitlist.sql|create table if not exists public.appointment_waitlist_entries", "supabase/migrations/202608110002_appointment_waitlist.sql|create table if not exists public.appointment_waitlist_events", "supabase/migrations/202608110002_appointment_waitlist.sql|create table if not exists public.appointment_waitlist_notification_logs", "supabase/migrations/202608110002_appointment_waitlist.sql|waitlist_entry_id uuid"]],
   ["appointment waitlist lifecycle is atomic and resumable", ["supabase/migrations/202608110002_appointment_waitlist.sql|create or replace function public.join_appointment_waitlist", "supabase/migrations/202608110002_appointment_waitlist.sql|create or replace function public.offer_next_appointment_waitlist", "supabase/migrations/202608110002_appointment_waitlist.sql|create or replace function public.accept_appointment_waitlist_offer", "supabase/migrations/202608110002_appointment_waitlist.sql|create or replace function public.expire_appointment_waitlist_offers", "supabase/migrations/202608110002_appointment_waitlist.sql|for update skip locked", "supabase/migrations/202608110002_appointment_waitlist.sql|pg_advisory_xact_lock"]],
-  ["appointment waitlist has customer, browser, operator, and delivery surfaces", ["supabase/migrations/202608110003_appointment_waitlist_surfaces.sql|create or replace function public.get_appointment_waitlist_targets", "supabase/migrations/202608110003_appointment_waitlist_surfaces.sql|create or replace function public.claim_appointment_waitlist_notifications", "supabase/migrations/202608110003_appointment_waitlist_surfaces.sql|for update skip locked", "app/api/booking/waitlist/route.ts|verifyClinicLiffIdToken", "app/api/booking/waitlist/route.ts|verifyBrowserBookingToken", "app/book/page.tsx|確認加入候補", "app/book/browser/my/page.tsx|接受名額", "app/admin/actions.ts|cancelAppointmentWaitlistAction", "lib/appointment-waitlist-notifications.ts|processAppointmentWaitlistNotificationQueue"]],
+  ["appointment waitlist has customer, browser, operator, and delivery surfaces", ["supabase/migrations/202608110003_appointment_waitlist_surfaces.sql|create or replace function public.get_appointment_waitlist_targets", "supabase/migrations/202608110003_appointment_waitlist_surfaces.sql|create or replace function public.claim_appointment_waitlist_notifications", "supabase/migrations/202608110003_appointment_waitlist_surfaces.sql|for update skip locked", "app/api/booking/waitlist/route.ts|verifyClinicLiffIdToken", "app/api/booking/waitlist/route.ts|verifyBrowserBookingToken", "app/book/page.tsx|確認加入候補", "app/book/browser/my/page.tsx|接受名額", "app/admin/appointment-actions.ts|cancelAppointmentWaitlistAction", "lib/appointment-waitlist-notifications.ts|processAppointmentWaitlistNotificationQueue"]],
   ["per-brand LINE channel writes are atomic and role-checked", ["supabase/migrations/202608110001_product_modules_line_richmenu.sql|create or replace function public.update_clinic_line_channel", "supabase/migrations/202608110001_product_modules_line_richmenu.sql|actor identity mismatch", "supabase/migrations/202608110001_product_modules_line_richmenu.sql|brand admin access required", "supabase/migrations/202608110001_product_modules_line_richmenu.sql|grant execute on function public.update_clinic_line_channel"]],
-  ["LINE channel readiness is verified and persisted server-side", ["lib/line.ts|/channel/webhook/endpoint", "app/admin/actions.ts|verifyLineChannelSettingsAction", "app/admin/actions.ts|const service = createServiceClient()", "app/admin/actions.ts|verification_status: \"ready\"", "app/admin/actions.ts|verification_status: \"error\"", "app/admin/line/page.tsx|重新驗證渠道"]],
+  ["LINE channel readiness is verified and persisted server-side", ["lib/line.ts|/channel/webhook/endpoint", "app/admin/line-actions.ts|verifyLineChannelSettingsAction", "app/admin/line-actions.ts|const service = createServiceClient()", "app/admin/line-actions.ts|verification_status: \"ready\"", "app/admin/line-actions.ts|verification_status: \"error\"", "app/admin/line/page.tsx|重新檢查連線"]],
   ["unified customer entry contract exists", ["lib/customer-entry.ts|CUSTOMER_ENTRY_DEFINITIONS", "lib/customer-entry.ts|customerEntryUrl", "docs/customer-entry-contract.md|LIFF ID token"]],
   ["Rich Menu optimization has alias, schedule, and clone contracts", ["supabase/migrations/202608110004_richmenu_optimization.sql|create table if not exists public.line_richmenu_aliases", "supabase/migrations/202608110004_richmenu_optimization.sql|create table if not exists public.line_richmenu_schedules", "supabase/migrations/202608110004_richmenu_optimization.sql|clone_line_richmenu_version", "supabase/migrations/202608110004_richmenu_optimization.sql|claim_due_line_richmenu_schedules"]],
   ["database lint findings have an explicit hardening migration", ["supabase/migrations/202608110005_db_lint_hardening.sql|on conflict on constraint clinic_settings_pkey", "supabase/migrations/202608110005_db_lint_hardening.sql|on conflict on constraint clinic_members_pkey", "supabase/migrations/202608110005_db_lint_hardening.sql|membership.membership_code = v_code", "supabase/migrations/202608110005_db_lint_hardening.sql|redemption.registration_id = registration_result.registration_id", "supabase/migrations/202608110005_db_lint_hardening.sql|select booking.appointment_id into new_appointment_id"]],
@@ -92,6 +101,7 @@ const checks = [
   ["waitlist capacity errors preserve queue position", ["supabase/migrations/202608110007_waitlist_capacity_error_fix.sql|v_error like '%額滿%'", "supabase/migrations/202608110007_waitlist_capacity_error_fix.sql|v_error like '%slot is full%'", "supabase/migrations/202608110007_waitlist_capacity_error_fix.sql|v_error like '%session is full%'", "supabase/migrations/202608110007_waitlist_capacity_error_fix.sql|return;"]],
   ["staging browser identity audit covers ownership and cross-brand rejection", ["package.json|audit:staging-browser-identity", "scripts/staging-browser-identity-audit.mjs|有效 token 只列出同品牌且屬於自己的預約", "scripts/staging-browser-identity-audit.mjs|同品牌 token 不可取消其他顧客預約", "scripts/staging-browser-identity-audit.mjs|同品牌 token 不可改期其他顧客預約", "scripts/staging-browser-identity-audit.mjs|品牌 B token 無法讀取品牌 A 入口", "scripts/staging-browser-identity-audit.mjs|URL clinic_slug 無法把已驗證網域切換到其他品牌", "scripts/staging-browser-identity-audit.mjs|竄改的瀏覽器 token 被拒絕"]],
   ["single staging core gate runs public smoke and every domain audit", ["package.json|audit:staging-core", "scripts/staging-core-acceptance.mjs|smoke-public.mjs", "scripts/staging-core-acceptance.mjs|staging-security-audit.mjs", "scripts/staging-core-acceptance.mjs|staging-booking-audit.mjs", "scripts/staging-core-acceptance.mjs|staging-commerce-audit.mjs", "scripts/staging-core-acceptance.mjs|staging-notification-audit.mjs", "scripts/staging-core-acceptance.mjs|staging-browser-identity-audit.mjs", "scripts/staging-core-acceptance.mjs|RAILWAY_ENVIRONMENT_NAME", "scripts/staging-core-acceptance.mjs|RAILWAY_PUBLIC_DOMAIN"]],
+  ["CI gates cover local quality and four staging admin identities", [".github/workflows/verify.yml|npm run verify:contracts", ".github/workflows/verify.yml|npm run build", ".github/workflows/staging-release-gate.yml|npm run audit:staging-core", ".github/workflows/staging-release-gate.yml|npm run audit:staging-role-ui", "tests/staging-role-ui.spec.mjs|system-admin", "tests/staging-role-ui.spec.mjs|system-employee", "tests/staging-role-ui.spec.mjs|brand-admin", "tests/staging-role-ui.spec.mjs|brand-employee"]],
 ];
 
 const failures = [];
@@ -320,7 +330,7 @@ invariant(
 );
 invariant(
   "customer entry contract covers every standard Rich Menu destination",
-  ["booking", "appointments", "events", "tickets", "membership", "support", "brand"].every((key) =>
+  ["home", "booking", "appointments", "events", "tickets", "membership", "support", "brand"].every((key) =>
     customerEntryContract.includes(`key: "${key}"`),
   ) && customerEntryContract.includes('url.searchParams.set("clinic_slug"') && customerEntryContract.includes('url.searchParams.set("view"'),
 );
@@ -415,7 +425,7 @@ invariant(
 const tableDefinitions = [...schema.matchAll(/create\s+table(?:\s+if\s+not\s+exists)?\s+([a-z0-9_]+)\s*\((.*?)\);/gis)];
 invariant(
   "all business tables carry clinic_id",
-  tableDefinitions.every((match) => ["clinics", "platform_admins"].includes(match[1]) || /\bclinic_id\b/i.test(match[2])),
+  tableDefinitions.every((match) => ["clinics", "platform_admins", "api_rate_limit_buckets"].includes(match[1]) || /\bclinic_id\b/i.test(match[2])),
 );
 
 const timeBooking = between(schema, "create or replace function book_time_slot", "create or replace function get_available_sessions");
@@ -429,6 +439,9 @@ const checkinSearchApi = read("app/api/registration/checkin-search/route.ts");
 const adminNav = read("components/AdminNav.tsx");
 const adminLayout = read("app/admin/layout.tsx");
 const adminDashboard = read("app/admin/dashboard/page.tsx");
+const adminSettingsPage = read("app/admin/settings/page.tsx");
+const adminLinePage = read("app/admin/line/page.tsx");
+const rootLayout = read("app/layout.tsx");
 invariant(
   "manual check-in is operator-only and tenant-scoped",
   checkinSearchApi.includes("requireOperator()") &&
@@ -446,8 +459,44 @@ invariant(
     adminLayout.includes("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, legacy_progress_enabled"),
 );
 invariant(
+  "technical LINE routing identifiers have one settings owner",
+  !adminSettingsPage.includes('name="line_destination"') &&
+    adminLinePage.includes('name="line_destination"') &&
+    !between(read("app/admin/settings/actions.ts"), "export async function updateClinicProfileAction", "function brandPageText").includes("line_destination"),
+);
+invariant(
+  "brand settings and team permissions use domain-scoped server action modules",
+  read("app/admin/settings/page.tsx").includes('from "./actions"') &&
+    read("app/admin/users/page.tsx").includes('from "./actions"') &&
+    read("app/admin/settings/actions.ts").startsWith('"use server"') &&
+    read("app/admin/users/actions.ts").startsWith('"use server"') &&
+    !read("app/admin/actions.ts").includes("export async function updateSettingsAction") &&
+    !read("app/admin/actions.ts").includes("export async function resetStaffPasswordAction"),
+);
+invariant(
+  "admin mutations are split by business domain",
+  [
+    "appointment-actions.ts",
+    "schedule-actions.ts",
+    "patient-actions.ts",
+    "service-actions.ts",
+    "line-actions.ts",
+  ].every((file) => read(`app/admin/${file}`).startsWith('"use server"')) &&
+    read("app/admin/actions.ts").split("\n").length < 150,
+);
+invariant(
+  "admin onboarding is secondary to today's work and uses plain language",
+  adminDashboard.indexOf("今日待處理") < adminDashboard.indexOf("<BrandSetupGuide") &&
+    adminDashboard.includes("<details className=\"card group") &&
+    !adminDashboard.includes("smoke test"),
+);
+invariant(
+  "application typography does not depend on a remote font stylesheet",
+  !rootLayout.includes("fonts.googleapis.com") && !rootLayout.includes("fonts.gstatic.com"),
+);
+invariant(
   "new brand onboarding exposes seven readiness steps and blocking reasons",
-  ["1. 品牌資料", "2. 服務／活動", "3. 人員／資源／排班", "4. 預約與報名規則", "5. LINE／LIFF／Rich Menu", "6. 通知與付款", "7. 正式上線測試"].every((label) =>
+  ["1. 品牌資料", "2. 服務／活動", "3. 人員／資源／排班", "4. 預約與報名規則", "5. LINE 官方帳號入口", "6. 通知與付款", "7. 上線前測試"].every((label) =>
     adminDashboard.includes(label),
   ) && adminDashboard.includes('type SetupStatus = "done" | "warning" | "blocked"') &&
     adminDashboard.includes("下一步：") &&
@@ -477,7 +526,16 @@ const paymentWebhook = read("lib/payment-webhook.ts");
 const appointmentNotifications = read("lib/appointment-notifications.ts");
 const registrationNotifications = read("lib/registration-notifications.ts");
 const registrationCredentials = read("lib/registration-credentials.ts");
-const adminActions = read("app/admin/actions.ts");
+const adminActions = [
+  read("app/admin/actions.ts"),
+  read("app/admin/appointment-actions.ts"),
+  read("app/admin/line-actions.ts"),
+  read("app/admin/patient-actions.ts"),
+  read("app/admin/schedule-actions.ts"),
+  read("app/admin/service-actions.ts"),
+  read("app/admin/settings/actions.ts"),
+  read("app/admin/users/actions.ts"),
+].join("\n");
 const richMenuLibrary = read("lib/richmenu.ts");
 const lineLibrary = read("lib/line.ts");
 const richMenuAdminPage = read("app/admin/richmenu/page.tsx");
@@ -491,16 +549,25 @@ const settingsPage = read("app/admin/settings/page.tsx");
 const browserStartApi = read("app/api/booking/browser/start/route.ts");
 const bookingRescheduleApi = read("app/api/booking/reschedule/route.ts");
 const browserMyApi = read("app/api/booking/browser/my/route.ts");
-const bookingPage = read("app/book/page.tsx");
+const bookingPage = [
+  read("app/book/page.tsx"),
+  read("app/book/BookingSteps.tsx"),
+  read("app/book/MyAppointments.tsx"),
+].join("\n");
+const bookingFlowState = read("app/book/booking-flow-state.ts");
 const reschedulePage = read("app/book/reschedule/page.tsx");
 const browserBookingPage = read("app/book/browser/page.tsx");
 const browserMyPage = read("app/book/browser/my/page.tsx");
 const browserReschedulePage = read("app/book/browser/reschedule/page.tsx");
 const bookingConfigApi = read("app/api/booking/config/route.ts");
-const rootLayout = read("app/layout.tsx");
 const brandComponent = read("components/Brand.tsx");
 const reminderCron = read("app/api/cron/reminders/route.ts");
-const lineWebhook = read("app/api/line/webhook/route.ts");
+const lineWebhook = [
+  read("app/api/line/webhook/route.ts"),
+  read("lib/line-webhook-messages.ts"),
+  read("lib/line-webhook-reply.ts"),
+  read("lib/line-webhook-status.ts"),
+].join("\n");
 const bookingPageSource = read("app/book/page.tsx");
 const publicBrand = read("lib/public-brand.ts");
 const homePage = read("app/page.tsx");
@@ -533,7 +600,8 @@ invariant(
     richMenuPublishForm.includes("背景與點擊區預覽") &&
     richMenuPublishForm.includes("逐格連結測試") &&
     richMenuPublishForm.includes("瀏覽器測試") &&
-    richMenuPublishForm.includes("LIFF 目標") &&
+    richMenuPublishForm.includes("lineTarget !== browserTarget") &&
+    richMenuPublishForm.includes("href={lineTarget}") &&
     richMenuPublishForm.includes('target="_blank"') &&
     richMenuAdminPage.includes("previewClinicSlug") &&
     richMenuAdminPage.includes("previewLiffId"),
@@ -589,12 +657,13 @@ invariant(
     migrationRichMenuOptimization.includes("on public.line_richmenu_aliases (channel_destination, alias_id)") &&
     migrationRichMenuOptimization.includes("where status <> 'removed'") &&
     adminActions.includes("channel_destination: context.destination") &&
-    adminActions.includes("此 Alias ID 已由同一 LINE 渠道的其他品牌使用") &&
+    adminActions.includes("此選單頁籤代碼已由同一 LINE 渠道的其他品牌使用") &&
     adminActions.includes("且不屬於本品牌") &&
     adminActions.includes('.eq("clinic_id", clinicId)') &&
     adminActions.includes("if (remoteBefore) await updateRichMenuAlias") &&
     adminActions.includes("else await deleteRichMenuAlias") &&
-    richMenuAdminPage.includes("Alias 只能指向同一品牌渠道內"),
+    richMenuAdminPage.includes("LINE 將這個捷徑稱為 Alias") &&
+    richMenuAdminPage.includes("syncRichMenuAliasAction"),
 );
 invariant(
   "Rich Menu tab actions use official alias switches and LINE label limits",
@@ -634,12 +703,12 @@ invariant(
     customerEntryView.includes('["utm_source", "rm_version", "rm_slot"]') &&
     richMenuAdminPage.includes('.eq("source", "richmenu")') &&
     richMenuAdminPage.includes('metadata->>rm_version') &&
-    richMenuAdminPage.includes("不含姓名、電話或 LINE user ID"),
+    richMenuAdminPage.includes("不含姓名、電話或 LINE 使用者識別碼"),
 );
 invariant(
   "one LIFF entry routes every standard customer task",
-  ["booking", "appointments", "events", "tickets", "membership", "support", "brand"].every((view) =>
-    bookingPageSource.includes(`\"${view}\"`) && customerEntryView.includes(`key: \"${view}\"`),
+  ["home", "booking", "appointments", "events", "tickets", "membership", "support", "brand"].every((view) =>
+    bookingPageSource.includes(`\"${view}\"`) && customerEntryContract.includes(`key: \"${view}\"`),
   ) &&
     bookingPageSource.includes('api<EntryConfig>("/api/customer/entry-config")') &&
     bookingPageSource.includes('params.get("view")') &&
@@ -703,9 +772,9 @@ invariant(
     read("lib/line.ts").includes("if (!destination) throw new Error(\"LINE destination 必須對應品牌 access token\")") &&
     read("lib/line.ts").includes("return destination ? map[destination] ?? \"\" : \"\";") &&
     read("lib/line.ts").includes("secretOverride === undefined ? process.env.LINE_CHANNEL_SECRET : secretOverride") &&
-    read("app/admin/actions.ts").includes("getRichMenuLineContext") &&
-    read("app/admin/actions.ts").includes("clinicSlug") &&
-    read("app/api/line/webhook/route.ts").includes("liffUrl(liffId, clinicSlug)") &&
+    read("app/admin/line-actions.ts").includes("getRichMenuLineContext") &&
+    read("app/admin/line-actions.ts").includes("clinicSlug") &&
+    lineWebhook.includes("liffUrl(liffId, clinicSlug)") &&
     read("app/page.tsx").includes("clinic_slug=${encodeURIComponent(clinicSlug)}") &&
     read("app/api/admin/richmenu-image/route.ts").includes("lineAccessTokenForDestination"),
 );
@@ -823,7 +892,7 @@ invariant(
     read("app/api/booking/reserve/route.ts").includes("notifyAppointmentStatus") &&
     read("app/api/booking/cancel/route.ts").includes("notifyAppointmentStatus") &&
     adminActions.includes("notifyAppointmentStatus") &&
-    read("app/api/line/webhook/route.ts").includes("notifyAppointmentStatus") &&
+    lineWebhook.includes("notifyAppointmentStatus") &&
     paymentEcpayApi.includes("appointment_id") &&
     paymentNewebpayApi.includes("appointment_id") &&
     paymentReturnApi.includes("notifyAppointmentForPayment") &&
@@ -926,6 +995,21 @@ invariant(
     bookingRescheduleApi.includes("if (!body.doctor_id && !serviceId)") &&
     browserReschedulePage.includes("providerRequired") &&
     reschedulePage.includes("providerRequired"),
+);
+invariant(
+  "customer booking steps use one explicit derived flow state",
+  bookingPageSource.includes('getBookingFlowState({') &&
+    bookingPageSource.includes('data-booking-stage={bookingFlow.stage}') &&
+    bookingPageSource.includes('disabled={!bookingFlow.canSubmit}') &&
+    bookingFlowState.includes('"identifying_customer"') &&
+    bookingFlowState.includes('"choosing_customer"') &&
+    bookingFlowState.includes('"customer_details"') &&
+    bookingFlowState.includes('"service_details"') &&
+    bookingFlowState.includes('"choosing_time"') &&
+    bookingFlowState.includes('submitBlock === null') &&
+    bookingPageSource.includes("<BookingCustomerStep") &&
+    bookingPageSource.includes("<BookingServiceStep") &&
+    bookingPageSource.includes("<BookingTimeStep"),
 );
 invariant(
   "public brand identity is not hardcoded to the legacy clinic",
@@ -1168,6 +1252,26 @@ invariant(
     lineWebhook.includes('if (action === "confirm" && appt.deposit_status === "pending")'),
 );
 invariant(
+  "admin errors hide raw provider messages and keep a traceable identifier",
+  read("app/admin/error.tsx").includes("錯誤識別碼") &&
+    read("app/admin/error.tsx").includes("error.digest") &&
+    !read("app/admin/error.tsx").includes("{error.message}"),
+);
+invariant(
+  "admin login does not expose authentication provider errors",
+  read("app/admin/login/page.tsx").includes("登入服務目前無法使用") &&
+    read("app/admin/login/page.tsx").includes("目前無法連線至登入服務") &&
+    !read("app/admin/login/page.tsx").includes("登入失敗:${reason}") &&
+    !read("app/admin/login/page.tsx").includes("無法連線至驗證伺服器:"),
+);
+invariant(
+  "Rich Menu operator errors hide provider details and keep a lookup id",
+  read("app/admin/line-actions.ts").includes("redirectRichMenuFailure") &&
+    read("app/admin/line-actions.ts").includes("錯誤識別碼") &&
+    read("app/admin/richmenu/page.tsx").includes("目前無法讀取成效資料") &&
+    !read("app/admin/line-actions.ts").includes("err=${encodeURIComponent(error.message"),
+);
+invariant(
   "admin status updates cannot resurrect terminal appointments",
   adminActions.includes('.update({ status })') &&
     adminActions.includes('.in("status", ["booked", "confirmed"])'),
@@ -1393,7 +1497,7 @@ invariant(
     migrationBenefits.includes("create or replace function cancel_appointment") &&
     adminActions.includes('rpc("cancel_appointment"') &&
     read("app/api/booking/cancel/route.ts").includes('rpc("cancel_appointment"') &&
-    read("app/api/line/webhook/route.ts").includes('rpc("cancel_appointment"'),
+    lineWebhook.includes('rpc("cancel_appointment"'),
 );
 invariant(
   "consolidated schema creates membership tables before dependent functions",

@@ -37,10 +37,8 @@ export default function AdminLoginPage() {
       const supabase = createSupabaseBrowser();
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        // 顯示真實原因以利診斷(帳密錯誤 / 專案暫停 / 金鑰失效 / 連線問題…)
-        const reason = error.message || "未知錯誤";
-        const isBadCred = /invalid login credentials/i.test(reason);
-        setError(isBadCred ? "帳號或密碼錯誤。" : `登入失敗:${reason}`);
+        const isBadCredential = /invalid login credentials/i.test(error.message);
+        setError(isBadCredential ? "帳號或密碼錯誤。" : "登入服務目前無法使用，請稍後再試；若持續發生，請聯絡系統管理者。");
         return;
       }
 
@@ -58,9 +56,8 @@ export default function AdminLoginPage() {
       }
       router.replace(entry === "platform" ? "/admin/platform" : "/admin/dashboard");
       router.refresh();
-    } catch (err) {
-      // 連 Supabase 都連不上(專案暫停 / 網路 / 環境變數錯誤)會走到這裡
-      setError("無法連線至驗證伺服器:" + (err instanceof Error ? err.message : "請稍後再試"));
+    } catch {
+      setError("目前無法連線至登入服務，請檢查網路後再試一次。");
     } finally {
       setLoading(false);
     }

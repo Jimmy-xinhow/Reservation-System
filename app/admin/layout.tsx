@@ -20,7 +20,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (platformAdmin && (isPlatformShell || !member)) {
     return (
-      <div className="min-h-screen bg-[#f1f4ff]">
+      <div className="admin-shell min-h-screen bg-[#f1f4ff]">
         <AdminNav role="owner" isPlatformAdmin platformAccessType={platformAdmin.accessType} platformPermissions={platformAdmin.permissions} hasBrandContext={Boolean(member)} />
         <div className="min-h-screen lg:pl-72">
           <header className="sticky top-0 z-20 border-b border-indigo-100 bg-white/95 backdrop-blur">
@@ -29,7 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#18245b] text-sm font-bold tracking-wide text-white shadow-sm sm:h-10 sm:w-10">XP</div>
                 <div className="min-w-0">
                   <div className="truncate text-sm font-bold tracking-tight text-slate-950 sm:text-base">XINHOW PLATFORM</div>
-                  <div className="hidden truncate text-xs text-indigo-700 md:block">系統管理控制台 · 跨品牌租戶管理</div>
+                  <div className="hidden truncate text-xs text-indigo-700 md:block">系統管理控制台 · 跨品牌管理</div>
                 </div>
               </div>
               <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -65,7 +65,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   };
 
   return (
-    <div className="min-h-screen bg-[#f5f8fb]">
+    <div className="admin-shell min-h-screen bg-[#f5f8fb]">
       <AdminProductTelemetry />
       <AdminNav role={member.role} isPlatformAdmin={Boolean(platformAdmin)} platformAccessType={platformAdmin?.accessType} platformPermissions={platformAdmin?.permissions} hasBrandContext modules={modules} />
       <div className="min-h-screen lg:pl-72">

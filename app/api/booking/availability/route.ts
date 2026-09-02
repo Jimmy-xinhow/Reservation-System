@@ -19,7 +19,7 @@ interface WaitlistTargetRow {
  * 依 clinic_settings.booking_mode 回傳可預約時段(time)或可預約場次(number)。
  */
 export async function GET(req: NextRequest) {
-  const limited = rateLimitResponse(req, "booking:availability", 30);
+  const limited = await rateLimitResponse(req, "booking:availability", 30);
   if (limited) return limited;
   try {
     const svc = createServiceClient();

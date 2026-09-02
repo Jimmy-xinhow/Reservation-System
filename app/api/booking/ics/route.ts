@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * 回傳 .ics 檔(含預約前 2 小時提醒),供顧客加入手機行事曆。
  */
 export async function GET(req: NextRequest) {
-  const limited = rateLimitResponse(req, "booking:ics", 30);
+  const limited = await rateLimitResponse(req, "booking:ics", 30);
   if (limited) return limited;
   const sp = req.nextUrl.searchParams;
   const startIso = sp.get("start") ?? "";

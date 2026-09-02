@@ -81,7 +81,7 @@ const GROUPS: Group[] = [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
       { href: "/admin/memberships", label: "會員與套票", icon: "membership", module: "memberships" },
       { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership", module: "memberships", adminOnly: true },
-      { href: "/admin/crm", label: "CRM Lite／自動化", icon: "crm", module: "crm", adminOnly: true },
+      { href: "/admin/crm", label: "顧客回訪與自動提醒", icon: "crm", module: "crm", adminOnly: true },
     ],
   },
   {
@@ -90,7 +90,7 @@ const GROUPS: Group[] = [
       { href: "/admin/chat", label: "客服對話", icon: "chat", module: "line" },
       { href: "/admin/replies", label: "自動回覆", icon: "message", module: "line", adminOnly: true },
       { href: "/admin/messages", label: "訊息模板", icon: "message", module: "line", adminOnly: true },
-      { href: "/admin/line-templates", label: "LINE UI 模板", icon: "line", module: "line", adminOnly: true },
+      { href: "/admin/line-templates", label: "LINE 訊息範本", icon: "line", module: "line", adminOnly: true },
     ],
   },
   {
@@ -102,16 +102,16 @@ const GROUPS: Group[] = [
     adminOnly: true,
     items: [
       { href: "/admin/settings", label: "品牌與規則", icon: "settings" },
-      { href: "/admin/import", label: "CSV 資料匯入", icon: "list" },
-      { href: "/admin/channels", label: "渠道測試中心", icon: "line" },
+      { href: "/admin/import", label: "匯入顧客與預約資料", icon: "list" },
+      { href: "/admin/channels", label: "通知與付款測試", icon: "line" },
       { href: "/admin/services", label: "服務與方案", icon: "service" },
       { href: "/admin/resources", label: "人員與資源", icon: "service" },
       { href: "/admin/schedules", label: "服務排程", icon: "schedule" },
       { href: "/admin/exceptions", label: "例外日期", icon: "calendar" },
-      { href: "/admin/line", label: "LINE／LIFF 連線", icon: "line" },
-      { href: "/admin/richmenu", label: "Rich Menu", icon: "menu", module: "line" },
+      { href: "/admin/line", label: "LINE 官方帳號連線", icon: "line" },
+      { href: "/admin/richmenu", label: "LINE 圖文選單", icon: "menu", module: "line" },
       { href: "/admin/users", label: "團隊與權限", icon: "users" },
-      { href: "/admin/audit", label: "操作與狀態稽核", icon: "settings" },
+      { href: "/admin/audit", label: "操作紀錄", icon: "settings" },
     ],
   },
   {
@@ -120,9 +120,9 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/platform", label: "系統總覽", icon: "dashboard", exact: true, systemPermission: "platform.overview" },
       { href: "/admin/platform/admins", label: "系統人員與權限", icon: "users", systemAdminOnly: true },
-      { href: "/admin/platform/operations", label: "營運健康", icon: "schedule", systemPermission: "operations.view" },
+      { href: "/admin/platform/operations", label: "系統運作狀態", icon: "schedule", systemPermission: "operations.view" },
       { href: "/admin/platform/reports", label: "跨品牌報表", icon: "report", systemPermission: "reports.view" },
-      { href: "/admin/platform/audit", label: "系統稽核", icon: "settings", systemPermission: "audit.view" },
+      { href: "/admin/platform/audit", label: "系統操作紀錄", icon: "settings", systemPermission: "audit.view" },
       { href: "/admin/platform/settings", label: "系統設定", icon: "settings", systemPermission: "settings.view" },
     ],
   },
@@ -193,7 +193,7 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
           <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold tracking-wide ${mode === "platform" ? "bg-white text-[#18245b]" : "bg-[#1f79d1] text-white"}`}>{mode === "platform" ? "XP" : "XH"}</div>
           <div>
             <div className="text-sm font-semibold tracking-wide">{mode === "platform" ? "XINHOW PLATFORM" : "XINHOW"}</div>
-            <div className="mt-0.5 text-[11px] text-slate-400">{mode === "platform" ? "系統管理總控台" : "BOOKING CONSOLE"}</div>
+            <div className="mt-0.5 text-xs text-slate-400">{mode === "platform" ? "系統管理總控台" : "品牌營運後台"}</div>
           </div>
         </div>
       </div>
@@ -211,18 +211,18 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
                 aria-expanded={groupOpen}
                 aria-controls={groupId}
                 onClick={() => setOpenGroup(groupOpen ? null : group.label)}
-                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[11px] font-semibold tracking-[0.16em] text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold tracking-[0.08em] text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
               >
                 <span className={`transition-transform ${groupOpen ? "rotate-90" : ""}`} aria-hidden="true">›</span>
                 <span className="flex-1">{group.label}</span>
-                <span className="text-[10px] font-normal tracking-normal text-slate-500">{group.items.length}</span>
+                <span className="text-xs font-normal tracking-normal text-slate-400">{group.items.length}</span>
               </button>
               {groupOpen && <div id={groupId} className="mt-1 space-y-1">{group.items.map((item) => <NavItem key={item.href} item={item} pathname={pathname} unread={unread} close={close} />)}</div>}
             </div>
           );
         })}
       </div>
-      <div className="border-t border-white/10 px-5 py-4 text-[11px] leading-5 text-slate-500">{mode === "platform" ? "系統總控台 · 跨品牌管理" : "營運後台 · 品牌資料隔離"}</div>
+      <div className="border-t border-white/10 px-5 py-4 text-xs leading-5 text-slate-400">{mode === "platform" ? "系統總控台 · 跨品牌管理" : "營運後台 · 各品牌資料分開管理"}</div>
     </div>
   );
 }
@@ -241,7 +241,7 @@ function NavItem({ item, pathname, unread, close }: { item: Item; pathname: stri
     >
       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {showBadge && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold leading-5 text-white">{unread > 99 ? "99+" : unread}</span>}
+      {showBadge && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold leading-5 text-white">{unread > 99 ? "99+" : unread}</span>}
     </Link>
   );
 }

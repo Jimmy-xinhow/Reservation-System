@@ -5,7 +5,7 @@ import {
   toggleReplyAction,
   deleteReplyAction,
   updateLineTextsAction,
-} from "../actions";
+} from "../line-actions";
 import { requireAdmin } from "@/lib/admin";
 import RepliesEditor, { type Reply } from "./RepliesEditor";
 import { SubmitButton } from "@/components/SubmitButton";

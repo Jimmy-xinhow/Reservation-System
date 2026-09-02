@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const limited = rateLimitResponse(req, "booking:browser-my", 12);
+  const limited = await rateLimitResponse(req, "booking:browser-my", 12);
   if (limited) return limited;
 
   try {

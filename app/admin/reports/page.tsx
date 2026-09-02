@@ -145,7 +145,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="eyebrow">Operations</div>
+          <div className="eyebrow">營運分析</div>
           <h1 className="text-2xl font-bold text-slate-900">營運報表</h1>
           <p className="mt-1 text-sm text-slate-500">品牌：{clinicName} · 資料範圍：{normalizedFrom} 至 {normalizedTo} · 時區：Asia/Taipei</p>
           <p className="mt-1 text-xs text-slate-400">最後更新：{generatedAt} · 取消資料保留於明細，但不計入有效名額。</p>

@@ -18,6 +18,7 @@
     "audit:staging-notifications": "node scripts/staging-notification-audit.mjs",
     "audit:staging-browser-identity": "node scripts/staging-browser-identity-audit.mjs",
     "audit:staging-core": "node scripts/staging-core-acceptance.mjs",
+    "audit:staging-role-ui": "playwright test tests/staging-role-ui.spec.mjs --reporter=line",
     "audit:staging-growth": "node scripts/staging-growth-features-audit.mjs",
     "fixture:staging-roles": "node scripts/staging-role-fixture.mjs",
     "reminders": "node scripts/trigger-reminders.mjs"
@@ -26,6 +27,8 @@
     "node": ">=20"
   },
   "overrides": {
+    "js-yaml": "4.3.1",
+    "nanoid": "3.3.18",
     "postcss": "8.5.25",
     "sharp": "$sharp"
   },
@@ -38,6 +41,7 @@
     "sharp": "0.35.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4.1.8",
     "@types/node": "^20.14.0",
     "@types/react": "^19.1.6",

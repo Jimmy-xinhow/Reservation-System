@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * 回傳此 LINE 身分已綁定的病患(用來判斷是否已綁定、預約時可選為誰看診)。
  */
 export async function POST(req: NextRequest) {
-  const limited = rateLimitResponse(req, "booking:patients-of-line", 12);
+  const limited = await rateLimitResponse(req, "booking:patients-of-line", 12);
   if (limited) return limited;
   try {
     const body = (await req.json().catch(() => null)) as { idToken?: string } | null;
@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
     let lineUserId: string;
     try {
       lineUserId = (await verifyClinicLiffIdToken(svc, clinicId, body.idToken)).sub;
-    } catch (e) {
-      return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟預約頁"), 401);
+    } catch {
+      return fail("LINE 身分驗證失敗，請重新開啟預約頁。", 401);
     }
 
     const { data, error } = await svc

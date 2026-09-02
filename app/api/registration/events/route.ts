@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
-  const limited = rateLimitResponse(req, "registration:events", 30);
+  const limited = await rateLimitResponse(req, "registration:events", 30);
   if (limited) return limited;
   try {
     const svc = createServiceClient();

@@ -154,12 +154,12 @@ export default function CheckinPage() {
 
   return (
     <div className="space-y-6">
-      <div><div className="eyebrow">Event check-in</div><h1 className="text-2xl font-bold text-slate-900">報名報到</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">支援 QR 掃描、報到憑證，以及以姓名／電話／報名編號搜尋的現場手動報到。</p></div>
+      <div><div className="eyebrow">活動現場作業</div><h1 className="text-2xl font-bold text-slate-900">報名報到</h1><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">可掃描 QR（二維條碼）、輸入報到憑證，或用姓名／電話／報名編號搜尋後手動報到。</p></div>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)]">
         <section className="card space-y-4 p-5">
-          <div className="overflow-hidden rounded-xl bg-slate-950"><video ref={videoRef} className={`aspect-video w-full object-cover ${scanning ? "block" : "hidden"}`} playsInline muted /><div className={`${scanning ? "hidden" : "flex"} aspect-video items-center justify-center px-6 text-center text-sm text-white/70`}>開啟相機後，將報到 QR 放入框內掃描</div></div>
-          <div className="flex gap-2"><button type="button" onClick={() => void scan()} disabled={scanning || loading} className="btn btn-secondary flex-1">開始 QR 掃描</button>{scanning && <button type="button" onClick={stopScanner} className="btn btn-ghost">停止</button>}</div>
+          <div className="overflow-hidden rounded-xl bg-slate-950"><video ref={videoRef} className={`aspect-video w-full object-cover ${scanning ? "block" : "hidden"}`} playsInline muted /><div className={`${scanning ? "hidden" : "flex"} aspect-video items-center justify-center px-6 text-center text-sm text-white/70`}>開啟相機後，將報到二維條碼放入框內掃描</div></div>
+          <div className="flex gap-2"><button type="button" onClick={() => void scan()} disabled={scanning || loading} className="btn btn-secondary flex-1">開始掃描二維條碼</button>{scanning && <button type="button" onClick={stopScanner} className="btn btn-ghost">停止</button>}</div>
           <label className="block text-sm"><span className="label">手動輸入報到憑證</span><textarea className="input min-h-28" value={token} onChange={(event) => setToken(event.target.value)} placeholder="貼上顧客的報到憑證" /></label>
           <button type="button" disabled={!token.trim() || loading} onClick={() => void submitToken()} className="btn btn-primary w-full">{loading ? "處理中…" : "使用憑證報到"}</button>
         </section>

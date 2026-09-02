@@ -1,0 +1,43 @@
+name: Staging release gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: 已部署的 staging 公開網址
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reservation-system-staging-acceptance
+  cancel-in-progress: false
+
+jobs:
+  staging-acceptance:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      RAILWAY_ENVIRONMENT_NAME: staging
+      STAGING_BASE_URL: ${{ inputs.base_url }}
+      PUBLIC_APP_URL: ${{ inputs.base_url }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      BROWSER_BOOKING_SECRET: ${{ secrets.BROWSER_BOOKING_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: 資料與 API 核心驗收
+        run: npm run audit:staging-core
+      - name: 安裝 Chromium 驗收瀏覽器
+        run: npx playwright install --with-deps chromium
+      - name: 四身分後台桌機與手機驗收
+        run: npm run audit:staging-role-ui

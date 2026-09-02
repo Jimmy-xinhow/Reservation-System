@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  * 預約頁初始化:回傳 booking_mode、訂金/前置設定、可預約醫師清單(無 PII)。
  */
 export async function GET(req: NextRequest) {
-  const limited = rateLimitResponse(req, "booking:config", 20);
+  const limited = await rateLimitResponse(req, "booking:config", 20);
   if (limited) return limited;
   try {
     const svc = createServiceClient();

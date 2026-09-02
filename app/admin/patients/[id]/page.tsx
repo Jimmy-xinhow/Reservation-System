@@ -5,10 +5,10 @@ import { formatDateTime } from "@/lib/slots";
 import {
   updatePatientAction,
   updatePatientBasicAction,
-  setPatientBlockAction,
   addPatientRecordAction,
   deletePatientRecordAction,
-} from "../../actions";
+  setPatientBlockAction,
+} from "../../patient-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -188,8 +188,8 @@ export default async function PatientDetailPage({
             <input type="email" name="email" defaultValue={p.email ?? ""} className="input" />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-600">標籤(逗號分隔)</span>
-            <input name="tags" defaultValue={p.tags ?? ""} placeholder="VIP, 會員, 待回訪" className="input" />
+            <span className="mb-1 block font-medium text-slate-600">標籤（以逗號分隔）</span>
+            <input name="tags" defaultValue={p.tags ?? ""} placeholder="例如：重要顧客，會員，待回訪" className="input" />
           </label>
         </div>
         <label className="flex items-center gap-2 text-sm text-slate-700">
@@ -212,7 +212,7 @@ export default async function PatientDetailPage({
           name="content"
           rows={2}
           required
-          placeholder="輸入服務備註、顧客需求或處理內容,送出即新增一筆…"
+          placeholder="輸入服務備註、顧客需求或處理內容，送出即新增一筆…"
           className="input"
         />
         <SubmitButton className="btn btn-primary">新增服務備註</SubmitButton>
@@ -238,7 +238,7 @@ export default async function PatientDetailPage({
                   <span
                     className={`badge ml-auto ${a.status === "no_show" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}
                   >
-                    {STATUS_LABEL[a.status] ?? a.status}
+                    {STATUS_LABEL[a.status] ?? "其他狀態"}
                   </span>
                 </li>
               ))}

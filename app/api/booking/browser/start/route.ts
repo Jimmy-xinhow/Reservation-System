@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const rate = checkRateLimit(req, "booking:browser-start", 8);
+  const rate = await checkRateLimit(req, "booking:browser-start", 8);
   if (!rate.allowed) {
     const response = fail("請稍後再試", 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));

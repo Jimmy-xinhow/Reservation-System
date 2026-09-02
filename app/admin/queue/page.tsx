@@ -2,7 +2,7 @@ import { createSupabaseServer } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase";
 import { getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { getQueueForDate, taipeiToday, type QueueAppt } from "@/lib/queue";
-import { advanceServingAction, setQueueAutoAction, setStatusAction } from "../actions";
+import { advanceServingAction, setQueueAutoAction, setStatusAction } from "../appointment-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -234,7 +234,7 @@ function StreamPanel({
             <span className="w-6 shrink-0 text-center font-bold">{a.seq}</span>
             <span className="flex-1 truncate">{a.name}</span>
             <span className={`shrink-0 text-xs ${a.seq === current ? "text-white/80" : "text-slate-400"}`}>
-              {STATUS_LABEL[a.status] ?? a.status}
+              {STATUS_LABEL[a.status] ?? "其他狀態"}
             </span>
             {a.status !== "done" && a.status !== "no_show" && (
               <div className="flex shrink-0 gap-1">

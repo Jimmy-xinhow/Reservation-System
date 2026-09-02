@@ -1253,8 +1253,23 @@ alter table clinic_settings add column if not exists timezone text not null defa
 alter table clinic_settings add column if not exists brand_logo_url text;
 alter table clinic_settings add column if not exists brand_primary_color text not null default '#1B6FC4';
 alter table clinic_settings add column if not exists brand_accent_color text not null default '#B8862B';
+alter table clinic_settings add column if not exists brand_page_enabled boolean not null default false;
+alter table clinic_settings add column if not exists brand_page_template text not null default 'beauty';
+alter table clinic_settings add column if not exists brand_page_content jsonb not null default '{}'::jsonb;
 alter table clinic_settings add column if not exists public_booking_enabled boolean not null default true;
 alter table clinic_settings add column if not exists public_registration_enabled boolean not null default true;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'clinic_settings_brand_page_template_check') then
+    alter table clinic_settings add constraint clinic_settings_brand_page_template_check
+      check (brand_page_template in ('beauty', 'wellness', 'fitness', 'education', 'consulting', 'pet-care', 'venue', 'event'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'clinic_settings_brand_page_content_check') then
+    alter table clinic_settings add constraint clinic_settings_brand_page_content_check
+      check (jsonb_typeof(brand_page_content) = 'object');
+  end if;
+end $$;
 
 create table if not exists clinic_domains (
   id uuid primary key default gen_random_uuid(),
@@ -8698,6 +8713,142 @@ grant execute on function public.apply_appointment_addons(uuid, uuid, uuid, uuid
 grant execute on function public.book_time_slot_with_options(uuid, uuid, uuid, uuid, timestamptz, text, boolean, text, jsonb, jsonb, uuid[]) to service_role;
 grant execute on function public.book_number_with_options(uuid, uuid, uuid, uuid, uuid, date, text, boolean, text, jsonb, jsonb, uuid[]) to service_role;
 grant execute on function public.book_recurring_appointments(uuid, uuid, uuid, uuid, timestamptz, uuid, date, text, boolean, text, jsonb, jsonb, uuid[], integer, integer) to service_role;
+
+commit;
+
+-- Shared API rate limiting for multi-instance production deployments.
+begin;
+
+create table if not exists public.api_rate_limit_buckets (
+  bucket_key text primary key,
+  window_started_at timestamptz not null,
+  request_count integer not null check (request_count > 0),
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_api_rate_limit_buckets_expires_at
+  on public.api_rate_limit_buckets (expires_at);
+
+alter table public.api_rate_limit_buckets enable row level security;
+revoke all on table public.api_rate_limit_buckets from public, anon, authenticated;
+grant select, insert, update, delete on table public.api_rate_limit_buckets to service_role;
+
+create or replace function public.consume_api_rate_limit(
+  p_bucket_key text,
+  p_limit integer,
+  p_window_seconds integer
+)
+returns table (allowed boolean, retry_after_seconds integer)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_now timestamptz := clock_timestamp();
+  v_count integer;
+  v_expires_at timestamptz;
+begin
+  if length(p_bucket_key) <> 64 or p_limit < 1 or p_limit > 10000 or p_window_seconds < 1 or p_window_seconds > 86400 then
+    raise exception 'invalid rate limit arguments';
+  end if;
+
+  insert into public.api_rate_limit_buckets as bucket (
+    bucket_key,
+    window_started_at,
+    request_count,
+    expires_at,
+    updated_at
+  )
+  values (
+    p_bucket_key,
+    v_now,
+    1,
+    v_now + make_interval(secs => p_window_seconds),
+    v_now
+  )
+  on conflict (bucket_key) do update
+  set window_started_at = case when bucket.expires_at <= v_now then v_now else bucket.window_started_at end,
+      request_count = case when bucket.expires_at <= v_now then 1 else bucket.request_count + 1 end,
+      expires_at = case when bucket.expires_at <= v_now then v_now + make_interval(secs => p_window_seconds) else bucket.expires_at end,
+      updated_at = v_now
+  returning bucket.request_count, bucket.expires_at into v_count, v_expires_at;
+
+  if random() < 0.01 then
+    delete from public.api_rate_limit_buckets
+     where bucket_key in (
+       select expired.bucket_key
+         from public.api_rate_limit_buckets expired
+        where expired.expires_at < v_now - interval '1 day'
+        order by expired.expires_at
+        limit 100
+     );
+  end if;
+
+  return query
+  select v_count <= p_limit,
+         case when v_count <= p_limit then 0 else greatest(1, ceil(extract(epoch from (v_expires_at - v_now)))::integer) end;
+end;
+$$;
+
+revoke all on function public.consume_api_rate_limit(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_api_rate_limit(text, integer, integer) to service_role;
+
+commit;
+
+-- Aggregate platform usage in PostgreSQL instead of loading every tenant row into Node.js.
+begin;
+
+create or replace function public.get_platform_usage_summary()
+returns table (
+  id uuid,
+  name text,
+  slug text,
+  active boolean,
+  created_at timestamptz,
+  members bigint,
+  services bigint,
+  appointments bigint,
+  registrations bigint,
+  patients bigint
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select
+    clinic.id,
+    clinic.name,
+    clinic.slug,
+    clinic.active,
+    clinic.created_at,
+    coalesce(member_count.total, 0)::bigint as members,
+    coalesce(service_count.total, 0)::bigint as services,
+    coalesce(appointment_count.total, 0)::bigint as appointments,
+    coalesce(registration_count.total, 0)::bigint as registrations,
+    coalesce(patient_count.total, 0)::bigint as patients
+  from public.clinics clinic
+  left join (
+    select clinic_id, count(*) as total from public.clinic_members group by clinic_id
+  ) member_count on member_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.services where active group by clinic_id
+  ) service_count on service_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.appointments group by clinic_id
+  ) appointment_count on appointment_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.registrations group by clinic_id
+  ) registration_count on registration_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.patients group by clinic_id
+  ) patient_count on patient_count.clinic_id = clinic.id
+  order by clinic.created_at desc;
+$$;
+
+revoke all on function public.get_platform_usage_summary() from public, anon, authenticated;
+grant execute on function public.get_platform_usage_summary() to service_role;
 
 commit;
 

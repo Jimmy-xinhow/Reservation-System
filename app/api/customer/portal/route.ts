@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const rate = checkRateLimit(request, "customer:portal", 20);
+  const rate = await checkRateLimit(request, "customer:portal", 20);
   if (!rate.allowed) return fail("查詢次數過多，請稍後再試", 429);
 
   try {
@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
       let lineUserId: string;
       try {
         lineUserId = (await verifyClinicLiffIdToken(service, clinicId, body.idToken.trim())).sub;
-      } catch (error) {
-        return fail(error instanceof Error ? error.message : "LINE 身分驗證失敗", 401);
+      } catch {
+        return fail("LINE 身分驗證失敗，請重新開啟頁面。", 401);
       }
       const { data: linkedPatients, error: linkedPatientError } = await service
         .from("patients")

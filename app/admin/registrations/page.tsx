@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { canOperate, canViewSensitiveCustomerData, requireNonProvider } from "@/lib/admin";
-import { formatAmount, formatEventDate } from "@/lib/registration";
+import { formatAmount, formatEventDate, paymentStatusLabel, registrationStatusLabel } from "@/lib/registration";
 import { SubmitButton } from "@/components/SubmitButton";
 import { cancelRegistrationAdminAction, markRegistrationNoShowAction } from "./actions";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
@@ -48,7 +48,7 @@ const member = await requireNonProvider();
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div><div className="eyebrow">Registration</div><h1 className="text-2xl font-bold text-slate-900">報名名單</h1><p className="mt-1 text-sm text-slate-500">品牌：{member.clinicName}，最多顯示最近 100 筆。</p></div>
+        <div><div className="eyebrow">活動與報名</div><h1 className="text-2xl font-bold text-slate-900">報名名單</h1><p className="mt-1 text-sm text-slate-500">品牌：{member.clinicName}，最多顯示最近 100 筆。</p></div>
         <Link href={`/api/admin/registrations?format=csv${status ? `&status=${encodeURIComponent(status)}` : ""}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className="btn btn-secondary w-fit">匯出 CSV</Link>
       </div>
       <form className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
@@ -60,7 +60,7 @@ const member = await requireNonProvider();
         {rows.length === 0 ? <div className="card p-8 text-center text-sm text-slate-400">目前沒有符合條件的報名。</div> : rows.map((row) => {
           const event = Array.isArray(row.events) ? row.events[0] : row.events;
           const session = Array.isArray(row.event_sessions) ? row.event_sessions[0] : row.event_sessions;
-          return <article key={row.id} className="card space-y-3 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-semibold text-slate-900">{event?.title ?? "未命名活動"}</div><div className="mt-1 text-sm text-slate-500">{session ? `${session.name} · ${formatEventDate(session.start_at)}` : "未設定場次"}</div></div><div className="flex gap-2 text-xs"><span className="badge bg-brand-50 text-brand-700">{row.status}</span><span className="badge bg-slate-100 text-slate-600">{row.payment_status}</span></div></div><div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3"><div>報名編號：<code>{row.registration_no}</code></div><div>金額：{formatAmount(Number(row.amount))}</div><div>建立：{formatEventDate(row.created_at)}</div></div>{showPii ? <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3"><div>姓名：{row.name}</div><div>電話：{row.phone}</div><div>Email：{row.email ?? "—"}</div></div> : <p className="text-xs text-slate-400">目前角色僅顯示必要報名資訊，已遮蔽聯絡資料。</p>}{canOperate(member.role) && <div className="flex flex-wrap gap-2">{["pending", "confirmed", "waitlisted"].includes(row.status) && <form action={cancelRegistrationAdminAction}><input type="hidden" name="id" value={row.id} /><SubmitButton className="btn btn-secondary text-xs">取消報名</SubmitButton></form>}{row.status === "confirmed" && <form action={markRegistrationNoShowAction}><input type="hidden" name="id" value={row.id} /><SubmitButton className="btn btn-secondary text-xs">標記未到</SubmitButton></form>}</div>}</article>;
+          return <article key={row.id} className="card space-y-3 p-4 sm:p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-semibold text-slate-900">{event?.title ?? "未命名活動"}</div><div className="mt-1 text-sm text-slate-500">{session ? `${session.name} · ${formatEventDate(session.start_at)}` : "未設定場次"}</div></div><div className="flex gap-2 text-xs"><span className="badge bg-brand-50 text-brand-700">{registrationStatusLabel(row.status)}</span><span className="badge bg-slate-100 text-slate-600">{paymentStatusLabel(row.payment_status)}</span></div></div><div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3"><div>報名編號：<code>{row.registration_no}</code></div><div>金額：{formatAmount(Number(row.amount))}</div><div>建立：{formatEventDate(row.created_at)}</div></div>{showPii ? <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3"><div>姓名：{row.name}</div><div>電話：{row.phone}</div><div>Email：{row.email ?? "—"}</div></div> : <p className="text-xs text-slate-400">目前角色僅顯示必要報名資訊，已遮蔽聯絡資料。</p>}{canOperate(member.role) && <div className="flex flex-wrap gap-2">{["pending", "confirmed", "waitlisted"].includes(row.status) && <form action={cancelRegistrationAdminAction}><input type="hidden" name="id" value={row.id} /><SubmitButton className="btn btn-secondary text-xs">取消報名</SubmitButton></form>}{row.status === "confirmed" && <form action={markRegistrationNoShowAction}><input type="hidden" name="id" value={row.id} /><SubmitButton className="btn btn-secondary text-xs">標記未到</SubmitButton></form>}</div>}</article>;
         })}
       </div>
     </div>

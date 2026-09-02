@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const rate = checkRateLimit(request, "membership:portal", 8);
+  const rate = await checkRateLimit(request, "membership:portal", 8);
   if (!rate.allowed) return fail("查詢次數過多，請稍後再試", 429);
   try {
     const body = await request.json().catch(() => null) as { browser_token?: string; name?: string; phone?: string; birthday?: string } | null;

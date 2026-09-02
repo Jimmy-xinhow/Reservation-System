@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 const ENTITIES = new Set(["patients", "services", "memberships"]);
 
 export async function POST(request: NextRequest) {
-  const rate = checkRateLimit(request, "admin:csv-import", 10);
+  const rate = await checkRateLimit(request, "admin:csv-import", 10);
   if (!rate.allowed) return fail("匯入要求過於頻繁", 429);
   try {
     const member = await getOptionalMember();

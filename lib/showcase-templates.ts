@@ -1,0 +1,88 @@
+export const SHOWCASE_TEMPLATES = [
+  {
+    slug: "beauty",
+    number: "01",
+    industry: "美業／髮廊",
+    name: "LUNE Hair Atelier",
+    direction: "時尚編輯",
+    reference: "Hershesons",
+    image: "/showcase/beauty-hero.jpg",
+    palette: ["#ebe8e1", "#171714", "#a8422f"],
+  },
+  {
+    slug: "wellness",
+    number: "02",
+    industry: "健康療癒／診所",
+    name: "沐森健康 Morrow",
+    direction: "臨床敘事",
+    reference: "Parsley Health",
+    image: "/showcase/wellness-hero.jpg",
+    palette: ["#f1eee5", "#183a32", "#c85f3d"],
+  },
+  {
+    slug: "fitness",
+    number: "03",
+    industry: "運動健身",
+    name: "REDLINE Training Club",
+    direction: "品牌戰役",
+    reference: "Barry’s / solidcore",
+    image: "/showcase/fitness-hero.jpg",
+    palette: ["#0b0b0b", "#f12b20", "#e9ff4f"],
+  },
+  {
+    slug: "education",
+    number: "04",
+    industry: "教育課程",
+    name: "OPENROOM 學習所",
+    direction: "探索導向",
+    reference: "Outschool / Domestika",
+    image: "/showcase/education-hero.jpg",
+    palette: ["#f4efdf", "#4426a8", "#ffdc57"],
+  },
+  {
+    slug: "consulting",
+    number: "05",
+    industry: "專業顧問",
+    name: "NORTH／策略顧問",
+    direction: "作品索引",
+    reference: "Koto / Pentagram",
+    image: "/showcase/consulting-hero.jpg",
+    palette: ["#f2f0ea", "#101010", "#ff4f24"],
+  },
+  {
+    slug: "pet-care",
+    number: "06",
+    industry: "寵物照護",
+    name: "MOMO Veterinary",
+    direction: "精品照護",
+    reference: "Small Door Veterinary",
+    image: "/showcase/pet-hero.jpg",
+    palette: ["#f5e9d8", "#173d36", "#f28a62"],
+  },
+  {
+    slug: "venue",
+    number: "07",
+    industry: "空間租借",
+    name: "ROOM 21",
+    direction: "照片商品頁",
+    reference: "Peerspace / Socks Studios",
+    image: "/showcase/space-detail.jpg",
+    palette: ["#eee9df", "#181818", "#c8ff3d"],
+  },
+  {
+    slug: "event",
+    number: "08",
+    industry: "活動票務",
+    name: "NOCTURNE 2026",
+    direction: "海報主導",
+    reference: "Luma / Fever",
+    image: "/showcase/event-detail.jpg",
+    palette: ["#101017", "#ff4f9a", "#ff6b2c"],
+  },
+] as const;
+
+export type ShowcaseSlug = (typeof SHOWCASE_TEMPLATES)[number]["slug"];
+
+export function getShowcaseTemplate(slug: string) {
+  return SHOWCASE_TEMPLATES.find((template) => template.slug === slug) ?? null;
+}

@@ -131,8 +131,8 @@ export default async function PatientsPage({
         {segmentId && <Link href="/admin/patients" className="btn btn-ghost text-sm">清除分眾篩選</Link>}
       </div>
 
-      <form className="flex gap-2">
-        <input name="q" defaultValue={keyword} placeholder="姓名 / 電話 / 生日 MMDD" className="input max-w-xs" />
+      <form className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
+        <label className="w-full max-w-md text-sm"><span className="label">搜尋顧客</span><input name="q" defaultValue={keyword} placeholder="姓名、電話或生日（月日四碼）" className="input" /><span className="help-text block">生日例如 3 月 8 日，可輸入 0308。</span></label>
         {segmentId && <input type="hidden" name="segment_id" value={segmentId} />}
         <SubmitButton className="btn btn-primary">搜尋</SubmitButton>
         {keyword && (

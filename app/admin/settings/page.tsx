@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireAdmin } from "@/lib/admin";
-import { addClinicDomainAction, createBrandAction, updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction, updatePaymentSettingsAction, verifyClinicDomainAction } from "../actions";
+import { createBrandAction } from "../actions";
+import { addClinicDomainAction, updateBrandPageAction, updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction, updatePaymentSettingsAction, verifyClinicDomainAction } from "./actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { emailConfigForClinic } from "@/lib/email";
 import { paymentSecretsForClinic } from "@/lib/payment";
+import { BrandPageEditor } from "./BrandPageEditor";
+import { isBrandPageTemplate, normalizeBrandPageContent, type BrandPageTemplate } from "@/lib/brand-page";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +43,10 @@ interface Settings {
   memberships_enabled: boolean;
   crm_automation_enabled: boolean;
   line_channel_enabled: boolean;
+  brand_page_enabled: boolean;
+  brand_page_template: BrandPageTemplate;
+  brand_page_content: unknown;
+  brand_logo_url: string | null;
 }
 
 interface PaymentSettings {
@@ -51,10 +58,11 @@ interface PaymentSettings {
 interface ClinicDomain { id: string; hostname: string; verification_token: string | null; verified_at: string | null; active: boolean; }
 interface LineChannelStatus { verification_status: string | null; liff_id: string | null; }
 
-type SettingsSectionId = "brand" | "booking" | "channels" | "domain" | "advanced";
+type SettingsSectionId = "brand" | "page" | "booking" | "channels" | "domain" | "advanced";
 
 const SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string; description: string }> = [
   { id: "brand", label: "品牌資料", description: "顧客看得到的名稱與聯絡資訊" },
+  { id: "page", label: "品牌形象頁", description: "選擇模板並編輯公開內容" },
   { id: "booking", label: "預約與入口規則", description: "模式、名額、訂金與公開入口" },
   { id: "channels", label: "付款與通知", description: "金流、LINE 與 Email 狀態" },
   { id: "domain", label: "網址與網域", description: "品牌短網址與自訂網域" },
@@ -78,7 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   ] = await Promise.all([
     supabase
       .from("clinic_settings")
-      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled")
+      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     supabase
@@ -108,13 +116,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   if (!s) {
     return (
-      <div className="space-y-2 text-sm text-red-600">
-        <p>讀不到此品牌設定。常見原因(資料其實存在時多半是後兩者):</p>
-        <ol className="ml-5 list-decimal space-y-1">
-          <li>尚未建立此品牌的 clinic_settings(請見 README 第一節)。</li>
-          <li>此登入帳號尚未對應到本品牌(clinic_members 缺一筆 → RLS 讀不到)。</li>
-          <li>clinic_settings 的 authenticated SELECT policy 未套用到資料庫。</li>
-        </ol>
+      <div className="card space-y-4 border-red-200 p-5 text-red-800">
+        <div><h1 className="text-lg font-semibold">目前無法載入品牌設定</h1><p className="mt-2 text-sm leading-6">請先重新整理頁面。若仍無法開啟，請將此畫面交給系統管理者檢查品牌是否已完成建立，以及你的帳號是否已加入這個品牌。</p></div>
+        <details className="technical-details border-red-200 bg-red-50/60"><summary>提供給系統管理者的檢查項目</summary><ol className="mx-5 mb-4 list-decimal space-y-2 text-sm"><li>確認此品牌已有預設設定資料</li><li>確認登入帳號已加入品牌成員名單</li><li>確認資料庫讀取權限規則已套用</li></ol></details>
       </div>
     );
   }
@@ -124,10 +128,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       <div>
         <p className="eyebrow">目前位置：品牌後台</p>
         <h1 className="mt-1 text-xl font-bold text-slate-900">品牌與系統設定</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">這裡只管理目前選取的品牌。若要協助其他使用者開通新的品牌，請由系統管理者進入「XINHOW PLATFORM → 品牌租戶」建立品牌並寄送登入邀請；不要在這裡替對方建立帳號。</p>
+        <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">這裡只管理目前選取的品牌。若要替其他使用者開通新品牌，請由系統管理者從「系統總控台」建立並寄送登入邀請。</p>
       </div>
 
-      <nav aria-label="品牌設定分類" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+      <nav aria-label="品牌設定分類" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
         {SETTINGS_SECTIONS.map((item) => {
           const selected = item.id === activeSection;
           return (
@@ -145,7 +149,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </nav>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SettingStatus label="LINE／LIFF" value={!s.line_channel_enabled ? "未啟用" : lineReady ? "已驗證" : "待完成驗證"} ready={lineReady} href="/admin/line" />
+        <SettingStatus label="LINE 官方帳號" value={!s.line_channel_enabled ? "未啟用" : lineReady ? "已驗證" : "待完成驗證"} ready={lineReady} href="/admin/line" />
         <SettingStatus label="標準金流" value={!payment?.active ? "未啟用" : paymentSecretConfigured ? "已啟用" : "缺少密鑰"} ready={payment?.active === true && paymentSecretConfigured} href="/admin/settings?section=channels" />
         <SettingStatus label="Email 提醒" value={!s.email_enabled ? "未啟用" : emailConfigured ? "已啟用" : "缺少寄件設定"} ready={s.email_enabled && emailConfigured} href="/admin/settings?section=channels" />
         <SettingStatus label="自訂網域" value={domains.some((item) => item.active) ? "已驗證" : domains.length ? "待驗證" : "尚未新增"} ready={domains.some((item) => item.active)} href="/admin/settings?section=domain" />
@@ -181,7 +185,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {/* 公開品牌資訊(顯示於公開資訊頁) */}
       {activeSection === "brand" && <form action={updateClinicProfileAction} className="card space-y-4 p-5">
         <h2 className="font-semibold text-slate-900">公開品牌資訊</h2>
-        <p className="-mt-2 text-xs text-slate-400">顯示於公開資訊頁,顧客看得到。</p>
+        <p className="-mt-2 text-xs text-slate-400">顯示於公開資訊頁，顧客看得到。</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="label">品牌名稱</label>
@@ -201,11 +205,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               placeholder="@738xusfj"
             />
             <p className="mt-1 text-xs text-slate-400">用於公開頁的「加入好友/線上預約」按鈕。</p>
-          </div>
-          <div>
-            <label className="label">LINE Webhook destination</label>
-            <input name="line_destination" className="input" defaultValue={clinic?.line_destination ?? ""} placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
-            <p className="mt-1 text-xs text-slate-400">填 LINE webhook payload 的 destination，用於多品牌路由。</p>
           </div>
           <div>
             <label className="label">電話</label>
@@ -229,6 +228,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <SubmitButton className="btn btn-primary">儲存公開資訊</SubmitButton>
       </form>}
 
+      {activeSection === "page" && (
+        <>
+          {params.brand_page_saved === "1" && <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-medium text-emerald-800">品牌形象頁已儲存，公開入口會立即使用最新內容。</p>}
+          <BrandPageEditor
+            enabled={s.brand_page_enabled}
+            initialTemplate={isBrandPageTemplate(s.brand_page_template) ? s.brand_page_template : "beauty"}
+            initialContent={normalizeBrandPageContent(s.brand_page_content, isBrandPageTemplate(s.brand_page_template) ? s.brand_page_template : "beauty")}
+            initialLogoUrl={s.brand_logo_url ?? ""}
+            publicUrl={clinic?.slug ? `/?clinic_slug=${encodeURIComponent(clinic.slug)}` : null}
+            action={updateBrandPageAction}
+          />
+        </>
+      )}
+
       {activeSection === "booking" && <form action={updateSettingsAction} className="space-y-6">
         <Section title="標準模組">
           <label className="flex items-center gap-2 text-sm">
@@ -241,10 +254,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="crm_automation_enabled" defaultChecked={s.crm_automation_enabled} />
-            啟用 CRM Lite／規則式自動化
+            啟用顧客回訪與自動提醒
           </label>
           <div className="w-full rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
-            LINE／LIFF：{s.line_channel_enabled ? "已啟用" : "未啟用"}。渠道識別與外部連線請到 <a href="/admin/line" className="font-medium text-brand-700 underline">LINE／LIFF 連線</a> 管理。
+            LINE 官方帳號入口：{s.line_channel_enabled ? "已啟用" : "未啟用"}。連線識別碼與檢查請到 <a href="/admin/line" className="font-medium text-brand-700 underline">LINE 官方帳號連線</a> 管理。
           </div>
         </Section>
 
@@ -266,7 +279,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             首次服務佔較長時段
           </label>
           <label className="text-sm">
-            首次服務時長(分,留空=沿用每格)
+            首次服務時間（分鐘；留空時沿用一般設定）
             <input
               type="number"
               name="first_visit_minutes"
@@ -372,26 +385,52 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <SubmitButton className="btn btn-primary">儲存設定</SubmitButton>
       </form>}
 
-      {activeSection === "channels" && <section className="card flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-slate-900">LINE／LIFF 與 Rich Menu</h2><p className="mt-1 text-sm leading-6 text-slate-500">渠道驗證、LIFF 入口與圖文選單有獨立工作區，避免與一般品牌設定混在一起。</p></div><Link href="/admin/line" className="btn btn-secondary shrink-0">前往 LINE 設定</Link></section>}
+      {activeSection === "channels" && <section className="card flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-slate-900">LINE 官方帳號與圖文選單</h2><p className="mt-1 text-sm leading-6 text-slate-600">LINE 連線、顧客入口與圖文選單集中在獨立工作區，並提供白話步驟與進階技術設定。</p></div><Link href="/admin/line" className="btn btn-secondary shrink-0">前往 LINE 設定</Link></section>}
 
       {activeSection === "channels" && <form action={updatePaymentSettingsAction} className="card space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">標準金流</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-400">支援綠界與藍新標準付款。HashKey／HashIV 只從 server environment 讀取，不寫入資料庫或回傳前端；退款、對帳與其他金流另行報價。</p>
+          <p className="help-text">支援綠界與藍新標準付款。付款密鑰只保存在伺服器，不會寫入一般資料表或顯示在畫面；退款、對帳與其他金流另行報價。</p>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label className="text-sm"><span className="label">金流商</span><select name="provider" defaultValue={payment?.provider ?? "ecpay"} className="input"><option value="ecpay">綠界 ECPay</option><option value="newebpay">藍新 NewebPay</option></select></label>
           <label className="text-sm"><span className="label">環境</span><select name="environment" defaultValue={payment?.environment ?? "test"} className="input"><option value="test">測試</option><option value="production">正式</option></select></label>
           <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" name="active" defaultChecked={payment?.active ?? false} />啟用付款</label>
         </div>
-        <label className="block text-sm"><span className="label">Merchant ID</span><input name="merchant_id" className="input" defaultValue={payment?.merchant_id ?? ""} required /></label>
+        <label className="block text-sm"><span className="label">商店代號（Merchant ID）</span><input name="merchant_id" className="input" defaultValue={payment?.merchant_id ?? ""} required /><span className="help-text block">由綠界或藍新提供，用來辨認收款商店。</span></label>
         <p className={`text-sm ${paymentSecretConfigured ? "text-emerald-700" : "text-amber-700"}`}>
-          金流密鑰狀態：{paymentSecretConfigured ? "已由 server environment 設定 ✓" : "尚未設定"}
+          金流密鑰狀態：{paymentSecretConfigured ? "已在伺服器安全設定 ✓" : "尚未設定"}
         </p>
         <SubmitButton className="btn btn-primary">儲存金流設定</SubmitButton>
       </form>}
 
-      {activeSection === "domain" && <section className="card space-y-4 p-5"><div><h2 className="font-semibold text-slate-900">自訂網址／網域</h2><p className="mt-1 text-xs leading-5 text-slate-400">新增網域後，請在 DNS 建立 TXT：<code>_booking-verification.你的網域</code>，再按驗證。驗證成功後才會作為品牌公開入口。</p></div>{clinic?.slug && <div className="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm text-brand-900"><p className="font-medium">目前品牌短網址</p><code className="mt-1 block break-all text-xs">/book/browser?clinic_slug={clinic.slug}　／　/register/{clinic.slug}</code></div>}<form action={addClinicDomainAction} className="flex flex-col gap-2 sm:flex-row"><input name="hostname" className="input flex-1" placeholder="booking.example.com" required /><SubmitButton className="btn btn-secondary">新增網域</SubmitButton></form>{domains.length > 0 ? <div className="space-y-2">{domains.map((domain) => <div key={domain.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium text-slate-800">{domain.hostname}</span>{domain.active ? <span className="badge bg-emerald-50 text-emerald-700">已啟用</span> : <form action={verifyClinicDomainAction}><input type="hidden" name="id" value={domain.id} /><SubmitButton className="btn btn-secondary px-3 py-1 text-xs">驗證 DNS</SubmitButton></form>}</div>{!domain.active && <code className="mt-2 block break-all text-xs text-slate-500">TXT 值：{domain.verification_token}</code>}</div>)}</div> : <p className="text-sm text-slate-500">尚未新增自訂網域；可先使用品牌短網址完成瀏覽器備援與測試。</p>}</section>}
+      {activeSection === "domain" && (
+        <section className="card space-y-4 p-5">
+          <div>
+            <h2 className="font-semibold text-slate-900">自訂網址／網域</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-500">新增網域後，需要到網址服務商完成所有權驗證。DNS 是網址服務商的網域設定；TXT 是用來證明這個網址屬於品牌的驗證文字。</p>
+          </div>
+          {clinic?.slug && <div className="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm text-brand-900"><p className="font-medium">目前品牌短網址</p><code className="mt-1 block break-all text-xs">/book/browser?clinic_slug={clinic.slug}　／　/register/{clinic.slug}</code></div>}
+          <form action={addClinicDomainAction} className="flex flex-col gap-2 sm:flex-row"><input name="hostname" className="input flex-1" placeholder="booking.example.com" required /><SubmitButton className="btn btn-secondary">新增網域</SubmitButton></form>
+          {domains.length > 0 ? (
+            <div className="space-y-2">{domains.map((domain) => (
+              <div key={domain.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium text-slate-800">{domain.hostname}</span>
+                  {domain.active ? <span className="badge bg-emerald-50 text-emerald-700">已啟用</span> : <form action={verifyClinicDomainAction}><input type="hidden" name="id" value={domain.id} /><SubmitButton className="btn btn-secondary px-3 py-1 text-xs">檢查網址設定</SubmitButton></form>}
+                </div>
+                {!domain.active && (
+                  <details className="technical-details mt-3">
+                    <summary>查看網址服務商設定資料</summary>
+                    <p className="mt-3 text-xs leading-5 text-slate-600">在網址服務商新增 TXT 紀錄，名稱填入 <code>_booking-verification.{domain.hostname}</code>，內容填入下列驗證文字：</p>
+                    <code className="mt-2 block break-all rounded-lg bg-white p-3 text-xs text-slate-600">{domain.verification_token}</code>
+                  </details>
+                )}
+              </div>
+            ))}</div>
+          ) : <p className="text-sm text-slate-500">尚未新增自訂網域；可先使用品牌短網址完成瀏覽器備援與測試。</p>}
+        </section>
+      )}
 
       {/* Email 提醒(選用,需自備 Resend 金鑰)*/}
       {activeSection === "channels" && <form action={updateEmailSettingsAction} className="card space-y-4 p-5">
@@ -411,7 +450,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           啟用 Email 提醒
         </label>
         <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-          寄件人與 Resend 金鑰狀態：{emailConfigured ? "已由 server environment 設定 ✓" : "尚未設定"}
+          寄件人與 Email 服務密鑰：{emailConfigured ? "已在伺服器安全設定 ✓" : "尚未設定"}
         </div>
         <div className="flex items-center gap-3">
           <SubmitButton className="btn btn-primary">儲存 Email 設定</SubmitButton>

@@ -252,7 +252,7 @@ export default function BookingForm({
                 </>
               )}
               {patientId && (
-                <p className="mt-1 text-xs text-accent-600">已套入既有顧客資料,可直接建立預約。</p>
+                <p className="mt-1 text-xs text-accent-600">已套入既有顧客資料，可直接建立預約。</p>
               )}
             </div>
 

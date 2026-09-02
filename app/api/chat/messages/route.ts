@@ -20,7 +20,7 @@ export interface ChatMsg {
  * 顧客輪詢自己的客服對話(最近 200 則)。順帶把服務人員訊息標記為顧客已讀。
  */
 export async function POST(req: NextRequest) {
-  const limited = rateLimitResponse(req, "chat:messages", 20);
+  const limited = await rateLimitResponse(req, "chat:messages", 20);
   if (limited) return limited;
   try {
     const payload = (await req.json().catch(() => null)) as { idToken?: string } | null;
@@ -34,8 +34,8 @@ export async function POST(req: NextRequest) {
     try {
       const profile = await verifyClinicLiffIdToken(svc, clinicId, payload.idToken);
       lineUserId = profile.sub;
-    } catch (e) {
-      return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟頁面"), 401);
+    } catch {
+      return fail("LINE 身分驗證失敗，請重新開啟頁面。", 401);
     }
 
     const { data, error } = await svc

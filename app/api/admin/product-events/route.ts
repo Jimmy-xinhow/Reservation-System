@@ -27,7 +27,7 @@ function safeMetadata(input: unknown): Record<string, string | number | boolean 
 }
 
 export async function POST(request: NextRequest) {
-  const rate = checkRateLimit(request, "admin:product-events", 80);
+  const rate = await checkRateLimit(request, "admin:product-events", 80);
   if (!rate.allowed) return fail("事件過於頻繁", 429);
   try {
     const member = await getOptionalMember();

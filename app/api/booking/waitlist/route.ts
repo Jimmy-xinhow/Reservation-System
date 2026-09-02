@@ -28,7 +28,7 @@ interface Body {
 }
 
 export async function POST(req: NextRequest) {
-  const rate = checkRateLimit(req, "booking:waitlist", 20);
+  const rate = await checkRateLimit(req, "booking:waitlist", 20);
   if (!rate.allowed) {
     const response = fail("請稍後再試", 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
@@ -171,8 +171,8 @@ async function verifiedIdentity(
     try {
       const profile = await verifyClinicLiffIdToken(service, clinicId, body.idToken);
       return { patientId: body.patient_id ?? null, lineUserId: profile.sub, browser: null, status: 200 };
-    } catch (error) {
-      return { patientId: null, lineUserId: null, browser: null, error: `LINE 身分驗證失敗:${error instanceof Error ? error.message : "請重新開啟預約頁"}`, status: 401 };
+    } catch {
+      return { patientId: null, lineUserId: null, browser: null, error: "LINE 身分驗證失敗，請重新開啟預約頁。", status: 401 };
     }
   }
   const browser = body.browser_token ? verifyBrowserBookingToken(body.browser_token) : null;

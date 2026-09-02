@@ -198,7 +198,7 @@ export default function BrowserMyAppointmentsPage() {
   return (
     <Shell>
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div><p className="eyebrow">Browser fallback</p><h1 className="text-2xl font-bold text-slate-900">我的預約</h1></div>
+        <div><p className="eyebrow">一般瀏覽器入口</p><h1 className="text-2xl font-bold text-slate-900">我的預約</h1></div>
         <Link href={scopePage("/book/browser")} className="text-sm text-brand-700">新增預約</Link>
       </div>
       {!token && (

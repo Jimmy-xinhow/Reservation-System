@@ -1,6 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireAdmin } from "@/lib/admin";
-import { createExceptionAction, deleteExceptionAction } from "../actions";
+import { createExceptionAction, deleteExceptionAction } from "../schedule-actions";
 import ExceptionForm from "../_components/ExceptionForm";
 import { SubmitButton } from "@/components/SubmitButton";
 

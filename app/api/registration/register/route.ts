@@ -30,7 +30,7 @@ interface Body {
 }
 
 export async function POST(req: NextRequest) {
-  const rate = checkRateLimit(req, "registration:register", 12);
+  const rate = await checkRateLimit(req, "registration:register", 12);
   if (!rate.allowed) {
     const response = fail("請稍後再試", 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));

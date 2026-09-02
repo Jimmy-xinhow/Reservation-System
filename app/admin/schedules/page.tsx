@@ -8,7 +8,7 @@ import {
   createDoctorAction,
   updateDoctorAction,
   toggleDoctorAction,
-} from "../actions";
+} from "../schedule-actions";
 import ScheduleEditor from "../_components/ScheduleEditor";
 import EntityManager from "../_components/EntityManager";
 
