@@ -53,7 +53,7 @@ const projectReadme = read("README.md");
 const envExample = read(".env.example");
 
 const checks = [
-  ["auth invites return to the deployed app and support password setup", ["lib/auth-invite.ts|authInviteRedirectUrl", "app/admin/platform/actions.ts|redirectTo: authInviteRedirectUrl()", "app/admin/platform/admins/actions.ts|redirectTo: authInviteRedirectUrl()", "app/auth/accept-invite/page.tsx|exchangeCodeForSession", "app/auth/accept-invite/page.tsx|updateUser({ password })"]],
+  ["auth invites return to the deployed app and support password setup", ["lib/auth-invite.ts|authInviteRedirectUrl", "app/admin/platform/actions.ts|redirectTo: authInviteRedirectUrl()", "app/admin/platform/admins/actions.ts|redirectTo: authInviteRedirectUrl()", "app/auth/accept-invite/page.tsx|exchangeCodeForSession", "app/auth/accept-invite/page.tsx|updateUser({ password })", "components/AuthCallbackBridge.tsx|window.location.replace"]],
   ["registration payment migration has core tables", ["create table if not exists events", "create table if not exists registrations", "create table if not exists payment_orders"]],
   ["registration answer snapshot is in consolidated schema", ["create table if not exists registration_answers", "insert into registration_answers"]],
   ["status and notification audit tables are in consolidated schema", ["create table if not exists appointment_status_events", "create table if not exists appointment_notification_logs", "create table if not exists registration_status_events", "create table if not exists registration_notification_logs", "create table if not exists payment_status_events"]],
