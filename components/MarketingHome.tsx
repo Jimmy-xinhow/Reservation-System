@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthCallbackBridge } from "@/components/AuthCallbackBridge";
 import { ArrowLink, Callout, CapabilityCard, DashboardMockup, FeatureIcon, MarketingPhoto, MarketingShell, PageIntro, PhotoBand, ProductShowcase, SectionHeading, SignalStrip, WorkflowRail } from "@/components/MarketingLayout";
 
 const homeModules = [
@@ -15,7 +16,9 @@ const journey = [
 ] as const;
 
 export function MarketingHome() {
-  return <MarketingShell>
+  return <>
+    <AuthCallbackBridge />
+    <MarketingShell>
     <PageIntro dark backgroundSrc="/marketing/hero-service-counter.png" eyebrow="多品牌服務營運平台" title="讓預約報名與回訪回到同一條流程" description="星昊科技為服務型品牌打造多品牌預約與報名 SaaS，從顧客入口、團隊作業到日常經營，讓每個流程都能被看見、被交接、被持續優化。" visual={<ProductShowcase variant="overview" />}>
       <Link href="/product" className="btn min-h-12 rounded-full bg-[#e2b644] px-5 font-bold text-[#193b43] hover:bg-[#f1ca5b]">看產品能力 <span aria-hidden="true">↗</span></Link>
       <Link href="/contact" className="btn min-h-12 rounded-full border border-white/25 bg-white/5 px-5 font-bold text-white hover:bg-white/10">預約導入</Link>
@@ -34,5 +37,6 @@ export function MarketingHome() {
     <section className="bg-[#eef2ed] px-5 py-20 sm:px-8 sm:py-24 lg:px-10"><div className="mx-auto max-w-7xl"><div className="grid gap-8 lg:grid-cols-[.72fr_1.28fr] lg:items-end lg:gap-16"><SectionHeading eyebrow="依場景配置" title="不同產業 不必共用同一種操作方式" description="一對一服務看時段，課程活動看場次，場地設備看資源衝突；系統用設定接住不同現場。" /><div className="grid gap-3 sm:grid-cols-2"><p className="flex items-center gap-3 border-t border-[#d8d2c5] py-3 text-sm text-[#536864]"><FeatureIcon name="users" compact />人員與資源都能成為服務目標</p><p className="flex items-center gap-3 border-t border-[#d8d2c5] py-3 text-sm text-[#536864]"><FeatureIcon name="calendar" compact />時間制與場次制依品牌切換</p><p className="flex items-center gap-3 border-t border-[#d8d2c5] py-3 text-sm text-[#536864]"><FeatureIcon name="line" compact />LINE 優先並保留瀏覽器備援</p><p className="flex items-center gap-3 border-t border-[#d8d2c5] py-3 text-sm text-[#536864]"><FeatureIcon name="chart" compact />完成後留下顧客與營運脈絡</p></div></div></div></section>
 
     <Callout title="先從你的實際流程開始 不從套版開始" description="告訴我們品牌類型、服務方式與目前使用的入口，我們會依照你的營運角色與顧客旅程規劃導入路徑。" />
-  </MarketingShell>;
+    </MarketingShell>
+  </>;
 }
