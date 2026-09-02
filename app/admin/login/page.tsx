@@ -15,13 +15,16 @@ export default function AdminLoginPage() {
 
   useEffect(() => {
     const reason = new URLSearchParams(window.location.search).get("reason");
-    if (!reason) return;
+    const inviteAccepted = new URLSearchParams(window.location.search).get("invite") === "accepted";
+    if (!reason && !inviteAccepted) return;
 
-    const message = reason === "platform-access-required"
-      ? "此帳號沒有系統管理後台權限。"
-      : reason === "brand-access-required"
-        ? "此帳號沒有品牌營運後台權限。"
-        : "此帳號目前沒有可用的後台權限。";
+    const message = inviteAccepted
+      ? "密碼已設定完成，請使用新密碼登入。"
+      : reason === "platform-access-required"
+        ? "此帳號沒有系統管理後台權限。"
+        : reason === "brand-access-required"
+          ? "此帳號沒有品牌營運後台權限。"
+          : "此帳號目前沒有可用的後台權限。";
     const supabase = createSupabaseBrowser();
     void supabase.auth.signOut().finally(() => {
       window.history.replaceState({}, "", "/admin/login");
