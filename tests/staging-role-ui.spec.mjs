@@ -32,7 +32,22 @@ async function login(page, identity, entry) {
 }
 
 async function expectNoHorizontalOverflow(page) {
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  await expect.poll(() => page.evaluate(() => {
+    const viewportWidth = document.documentElement.clientWidth;
+    return [...document.querySelectorAll("body *")]
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        return {
+          element: element.tagName.toLowerCase(),
+          className: typeof element.className === "string" ? element.className : "",
+          left: Math.round(rect.left * 100) / 100,
+          right: Math.round(rect.right * 100) / 100,
+          width: Math.round(rect.width * 100) / 100,
+        };
+      })
+      .filter(({ left, right }) => left < -0.5 || right > viewportWidth + 0.5)
+      .slice(0, 12);
+  })).toEqual([]);
 }
 
 test.describe.configure({ mode: "serial" });
