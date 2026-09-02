@@ -72,13 +72,13 @@ export default function RepliesEditor({
         {editingId && <input type="hidden" name="id" value={editingId} />}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-600">觸發關鍵字(逗號分隔,任一命中)</span>
+            <span className="mb-1 block font-medium text-slate-600">觸發關鍵字（以逗號分隔，符合任一個即可）</span>
             <input
               name="keywords"
               required
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              placeholder="例:進度, 報到, 號次"
+              placeholder="例如：進度、報到、號次"
               className="input"
             />
           </label>
@@ -118,7 +118,7 @@ export default function RepliesEditor({
               ))}
             </select>
             {messages.length === 0 && (
-              <p className="mt-1 text-xs text-amber-600">尚無訊息素材,請先到「訊息素材」建立。</p>
+              <p className="mt-1 text-xs text-amber-600">尚無訊息素材，請先到「訊息素材」建立。</p>
             )}
           </label>
         )}

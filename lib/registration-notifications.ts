@@ -5,6 +5,9 @@ import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { formatAmount, formatEventDate } from "@/lib/registration";
 import { decryptRegistrationToken } from "@/lib/registration-credentials";
+import { buildRegistrationStatusFlex } from "@/lib/line-ui-templates";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { customerEntryUrl } from "@/lib/customer-entry";
 
 export const REGISTRATION_NOTIFICATION_KINDS = ["pending", "confirmed", "waitlisted", "cancelled"] as const;
 export type RegistrationNotificationKind = (typeof REGISTRATION_NOTIFICATION_KINDS)[number];
@@ -69,8 +72,24 @@ export async function notifyRegistrationStatus(
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "line");
     if (claim) {
       try {
+        const context = await getClinicLineChannelContext(svc, row.clinic_id);
+        const ticketsUrl = customerEntryUrl("tickets", {
+          baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
+          clinicSlug: context.clinicSlug,
+          liffId: context.liffId,
+        });
         const token = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
-        await pushMessages(row.line_user_id, [{ type: "text", text: message.text }], token);
+        await pushMessages(row.line_user_id, [buildRegistrationStatusFlex({
+          kind,
+          clinicName: clinic?.name ?? "品牌",
+          eventTitle: event?.title ?? "活動",
+          registrationNo: row.registration_no,
+          sessionName: session?.name ?? "",
+          dateTime: session?.start_at ? formatEventDate(session.start_at) : "待確認",
+          venue: session?.venue ?? "",
+          amount: formatAmount(Number(row.amount)),
+          actionUrl: kind === "pending" ? paymentUrl ?? ticketsUrl : ticketsUrl,
+        })], token);
         await finishNotification(svc, claim, "sent");
         result.sent += 1;
       } catch (error) {

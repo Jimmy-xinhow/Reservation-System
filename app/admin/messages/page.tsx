@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { saveMessageAction, deleteMessageAction } from "../actions";
+import { saveMessageAction, deleteMessageAction } from "../line-actions";
 import MessageComposer from "./MessageComposer";
 import type { MsgKind, MsgData } from "@/lib/lineMessage";
 import { requireAdmin } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +31,7 @@ export default async function MessagesPage({
   const { clinicId } = await requireAdmin();
   const { edit } = await searchParams;
   const supabase = await createSupabaseServer();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="訊息模板" />;
   const { data } = await supabase
     .from("line_messages")
     .select("id, name, kind, data")

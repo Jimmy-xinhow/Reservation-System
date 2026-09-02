@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const rate = checkRateLimit(request, "registration:my", 10);
+  const rate = await checkRateLimit(request, "registration:my", 10);
   if (!rate.allowed) return fail("查詢次數過多，請稍後再試", 429);
   try {
     const registrationNo = request.nextUrl.searchParams.get("registration_no")?.trim().toUpperCase() ?? "";
@@ -30,4 +30,3 @@ export async function GET(request: NextRequest) {
     return fail(error instanceof Error ? error.message : "查詢失敗", 500);
   }
 }
-

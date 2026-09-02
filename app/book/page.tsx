@@ -1,100 +1,47 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
-import { Brand } from "@/components/Brand";
-import { googleCalendarUrl, type CalEvent } from "@/lib/calendar";
 import ChatTab from "./ChatTab";
-
-interface Doctor {
-  id: string;
-  name: string;
-  specialty: string | null;
-}
-interface Service {
-  id: string;
-  name: string;
-  description: string | null;
-  booking_target: "provider_required" | "provider_optional" | "resource_only";
-  booking_fields: BookingField[];
-}
-interface BookingField { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox"; required: boolean; options: string[]; }
-interface Config {
-  clinic_name: string | null;
-  booking_mode: "time" | "number";
-  deposit_enabled: boolean;
-  max_advance_days: number;
-  allow_multi_patient_per_phone: boolean;
-  max_patients_per_phone: number;
-  doctors: Doctor[];
-  services: Service[];
-}
-interface BoundPatient {
-  id: string;
-  name: string;
-  phone: string;
-  email: string | null;
-  blocked_until: string | null;
-}
-interface Slot {
-  slot_start: string;
-  slot_end: string;
-  remaining: number;
-}
-interface Session {
-  template_id: string;
-  session_start: string;
-  session_end: string;
-  total: number;
-  taken: number;
-  remaining: number;
-}
-interface ReserveResult {
-  appointment_id: string;
-  queue_number: number | null;
-  deposit_status: string;
-  deposit_amount: number;
-  start_at: string | null;
-  end_at: string | null;
-  doctor_name: string | null;
-  service_name: string | null;
-}
-
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(withBookingBrandScope(url), init);
-  const json = (await res.json().catch(() => null)) as
-    | { ok: true; data: T }
-    | { ok: false; error: string }
-    | null;
-  if (!json) throw new Error("伺服器回應異常");
-  if (!json.ok) throw new Error(json.error);
-  return json.data;
-}
-
-function withBookingBrandScope(url: string): string {
-  if (typeof window === "undefined" || (!url.startsWith("/api/booking") && !url.startsWith("/api/payment/create"))) return url;
-  const source = new URLSearchParams(window.location.search);
-  const scope = new URLSearchParams();
-  const clinicSlug = source.get("clinic_slug")?.trim();
-  const clinicId = source.get("clinic_id")?.trim();
-  if (clinicSlug) scope.set("clinic_slug", clinicSlug);
-  else if (clinicId) scope.set("clinic_id", clinicId);
-  if (!scope.toString()) return url;
-  const target = new URL(url, window.location.origin);
-  scope.forEach((value, key) => target.searchParams.set(key, value));
-  return `${target.pathname}${target.search}`;
-}
+import { CustomerEntryNav, CustomerHomeView, CustomerLiffView, type CustomerView } from "./CustomerEntry";
+import { trackFunnelEvent } from "@/lib/funnel-client";
+import MyAppointments, { type MyAppt } from "./MyAppointments";
+import { bookingApi as api } from "./client-api";
+import { getBookingFlowState } from "./booking-flow-state";
+import {
+  CalendarButtons,
+  Centered,
+  Shell,
+  bookingFieldsReady,
+  browserFallbackUrl,
+} from "./BookingFlowUi";
+import {
+  BookingCustomerStep,
+  BookingIdentityChoice,
+  BookingServiceStep,
+  BookingTimeStep,
+} from "./BookingSteps";
+import type {
+  BoundPatient,
+  Config,
+  EntryConfig,
+  ReserveResult,
+  Session,
+  Slot,
+  WaitlistResult,
+} from "./types";
 
 function todayStr(offset = 0): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(Date.now() + offset * 24 * 60 * 60 * 1000));
 }
 
 export default function BookPage() {
-  const { ready, idToken, error: liffError } = useLiff();
-
+  const [entryConfig, setEntryConfig] = useState<EntryConfig | null>(null);
+  const [entryError, setEntryError] = useState<string | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
+  const { ready, idToken, error: liffError } = useLiff(entryConfig === null ? undefined : entryConfig.liff_id);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const [doctorId, setDoctorId] = useState("");
@@ -102,11 +49,14 @@ export default function BookPage() {
   const [date, setDate] = useState("");
   const [slots, setSlots] = useState<Slot[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [waitlistSlots, setWaitlistSlots] = useState<Slot[]>([]);
+  const [waitlistSessions, setWaitlistSessions] = useState<Session[]>([]);
   const [availLoading, setAvailLoading] = useState(false);
   const [availMsg, setAvailMsg] = useState<string | null>(null);
 
   const [pickedStart, setPickedStart] = useState<string | null>(null);
   const [pickedTemplate, setPickedTemplate] = useState<string | null>(null);
+  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -114,6 +64,8 @@ export default function BookPage() {
   const [email, setEmail] = useState("");
   const [membershipCode, setMembershipCode] = useState("");
   const [bookingAnswers, setBookingAnswers] = useState<Record<string, unknown>>({});
+  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+  const [recurrenceCount, setRecurrenceCount] = useState(1);
   const [visitType, setVisitType] = useState<"first" | "return">("return");
 
   // 綁定:此 LINE 身分已綁定的顧客(null = 載入中)
@@ -124,23 +76,52 @@ export default function BookPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [result, setResult] = useState<ReserveResult | null>(null);
+  const [waitlistResult, setWaitlistResult] = useState<WaitlistResult | null>(null);
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
-  const [tab, setTab] = useState<"book" | "my" | "chat">("book");
+  const [view, setView] = useState<CustomerView>("home");
+  const trackedViews = useRef(new Set<string>());
 
-  // 深連結:圖文選單可用 ...?tab=chat 直接開客服分頁
+  // 所有 Rich Menu 都進同一個 LIFF，再由 view 分流；保留舊 tab 參數相容。
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "chat" || t === "my") setTab(t);
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get("view");
+    if (["home", "booking", "appointments", "events", "tickets", "membership", "support", "brand"].includes(requested ?? "")) {
+      setView(requested as CustomerView);
+      return;
+    }
+    const legacyTab = params.get("tab");
+    if (legacyTab === "chat") setView("support");
+    if (legacyTab === "my") setView("appointments");
   }, []);
 
   useEffect(() => {
+    api<EntryConfig>("/api/customer/entry-config")
+      .then(setEntryConfig)
+      .catch((e) => setEntryError(e instanceof Error ? e.message : "入口載入失敗"));
+  }, []);
+
+  useEffect(() => {
+    if (!entryConfig) return;
+    if (!trackedViews.current.has("portal")) {
+      trackFunnelEvent("portal_view");
+      trackedViews.current.add("portal");
+    }
+    if (trackedViews.current.has(view)) return;
+    if (view === "booking") trackFunnelEvent("booking_view");
+    if (view === "events") trackFunnelEvent("registration_view");
+    if (view === "membership") trackFunnelEvent("membership_view");
+    trackedViews.current.add(view);
+  }, [entryConfig, view]);
+
+  useEffect(() => {
+    if (!entryConfig?.availability.booking || view !== "booking" || config) return;
     api<Config>("/api/booking/config")
       .then(setConfig)
-      .catch((e) => setLoadErr(e instanceof Error ? e.message : "載入失敗"));
-  }, []);
+      .catch((e) => setLoadErr(e instanceof Error ? e.message : "預約設定載入失敗"));
+  }, [entryConfig, view, config]);
 
   // 取得此 LINE 身分已綁定的顧客
   const loadBound = useCallback(async () => {
@@ -159,8 +140,8 @@ export default function BookPage() {
   }, [idToken]);
 
   useEffect(() => {
-    if (ready && idToken) loadBound();
-  }, [ready, idToken, loadBound]);
+    if (ready && idToken && view === "booking") loadBound();
+  }, [ready, idToken, view, loadBound]);
 
   useEffect(() => {
     if (selectedPatientId === "__new__") {
@@ -189,6 +170,8 @@ export default function BookPage() {
       setDoctorId("");
     }
     setBookingAnswers({});
+    setSelectedAddonIds([]);
+    setRecurrenceCount(1);
   }, [selectedService, providerRequired, singleDoctor, doctorId]);
 
   const loadAvailability = useCallback(async () => {
@@ -197,28 +180,33 @@ export default function BookPage() {
     setAvailMsg(null);
     setSlots([]);
     setSessions([]);
+    setWaitlistSlots([]);
+    setWaitlistSessions([]);
     setPickedStart(null);
     setPickedTemplate(null);
+    setJoiningWaitlist(false);
     try {
       if (config.booking_mode === "time") {
-        const data = await api<{ slots: Slot[] }>(
-          `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, visit_type: visitType, ...(serviceId ? { service_id: serviceId } : {}) }).toString()}`,
+        const data = await api<{ slots: Slot[]; waitlist_slots?: Slot[] }>(
+          `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, visit_type: visitType, ...(serviceId ? { service_id: serviceId } : {}), ...(selectedAddonIds.length ? { addon_ids: selectedAddonIds.join(",") } : {}) }).toString()}`,
         );
         setSlots(data.slots);
-        if (data.slots.length === 0) setAvailMsg("這天沒有可預約的時段(休診或已額滿)");
+        setWaitlistSlots(data.waitlist_slots ?? []);
+        if (data.slots.length === 0) setAvailMsg((data.waitlist_slots ?? []).length > 0 ? "目前時段已額滿，可選擇候補。" : "這天沒有可預約的時段（未開放或已超過可預約時間）");
       } else {
-        const data = await api<{ sessions: Session[] }>(
-          `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, ...(serviceId ? { service_id: serviceId } : {}) }).toString()}`,
+        const data = await api<{ sessions: Session[]; waitlist_sessions?: Session[] }>(
+          `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, ...(serviceId ? { service_id: serviceId } : {}), ...(selectedAddonIds.length ? { addon_ids: selectedAddonIds.join(",") } : {}) }).toString()}`,
         );
         setSessions(data.sessions);
-        if (data.sessions.length === 0) setAvailMsg("這天沒有可預約的場次（未開放或已額滿）");
+        setWaitlistSessions(data.waitlist_sessions ?? []);
+        if (data.sessions.length === 0) setAvailMsg((data.waitlist_sessions ?? []).length > 0 ? "目前場次已額滿，可選擇候補。" : "這天沒有可預約的場次（未開放或已超過可預約時間）");
       }
     } catch (e) {
       setAvailMsg(e instanceof Error ? e.message : "查詢失敗");
     } finally {
       setAvailLoading(false);
     }
-  }, [config, doctorId, date, visitType, serviceId, providerRequired]);
+  }, [config, doctorId, date, visitType, serviceId, providerRequired, selectedAddonIds]);
 
   useEffect(() => {
     if (date && (!providerRequired || doctorId)) loadAvailability();
@@ -234,10 +222,22 @@ export default function BookPage() {
     : !!selectedPatientId && !selectedBlocked;
   const serviceReady = config ? config.services.length === 0 || !!serviceId : false;
   const fieldsReady = bookingFieldsReady(selectedService?.booking_fields ?? [], bookingAnswers);
-  const canSubmit = ready && patientReady && serviceReady && fieldsReady && slotPicked && !submitting;
+  const bookingFlow = getBookingFlowState({
+    customerLookupComplete: bound !== null,
+    customerChoiceComplete: forWhom !== "",
+    customerDetailsComplete: patientReady,
+    serviceComplete: serviceReady,
+    bookingFieldsComplete: fieldsReady,
+    timeComplete: slotPicked,
+    identityReady: ready,
+    submitting,
+    joiningWaitlist,
+    membershipCode,
+  });
 
   async function handleSubmit() {
     if (!config || !idToken) return;
+    trackFunnelEvent("booking_start", { booking_mode: config.booking_mode, waitlist: joiningWaitlist });
     setSubmitting(true);
     setSubmitErr(null);
     try {
@@ -262,6 +262,8 @@ export default function BookPage() {
         email: email.trim() || undefined,
         membership_code: membershipCode.trim().toUpperCase() || undefined,
         booking_answers: bookingAnswers,
+        addon_ids: selectedAddonIds,
+        recurrence_count: recurrenceCount,
       };
       if (config.booking_mode === "time") {
         payload.start_at = pickedStart;
@@ -269,12 +271,22 @@ export default function BookPage() {
         payload.template_id = pickedTemplate;
         payload.date = date;
       }
-      const res = await api<ReserveResult>("/api/booking/reserve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      setResult(res);
+      if (joiningWaitlist) {
+        const waitlist = await api<WaitlistResult>("/api/booking/waitlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, action: "join" }),
+        });
+        setWaitlistResult(waitlist);
+      } else {
+        const res = await api<ReserveResult>("/api/booking/reserve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        setResult(res);
+        trackFunnelEvent("booking_success", { booking_mode: config.booking_mode, deposit_pending: res.deposit_status === "pending", series_count: res.series_count });
+      }
       loadBound(); // 若剛新增就診者,刷新綁定清單
     } catch (e) {
       setSubmitErr(e instanceof Error ? e.message : "預約失敗");
@@ -315,24 +327,81 @@ export default function BookPage() {
   // 再預約一筆:回到最初「為自己/為他人」選擇,並清空選擇
   function bookAnother() {
     setResult(null);
+    setWaitlistResult(null);
     setForWhom("");
     setSelectedPatientId("");
     setName("");
     setPhone("");
     setBirthday("");
     setMembershipCode("");
+    setSelectedAddonIds([]);
+    setRecurrenceCount(1);
     setServiceId("");
     setDate("");
     setPickedStart(null);
     setPickedTemplate(null);
+    setJoiningWaitlist(false);
     setVisitType("return");
     setSubmitErr(null);
   }
 
+  function changeView(nextView: CustomerView) {
+    setView(nextView);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("tab");
+    params.set("view", nextView);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  }
+
+  function rebook(appointment: MyAppt) {
+    setServiceId(appointment.service_id ?? "");
+    setDoctorId(appointment.doctor_id ?? "");
+    setVisitType("return");
+    setDate("");
+    setResult(null);
+    setWaitlistResult(null);
+    changeView("booking");
+  }
+
   // ── 畫面 ──
-  if (liffError) return <Centered tone="error"><span className="space-y-3"><span className="block">{liffError}</span><Link href={browserFallbackUrl()} className="btn btn-secondary inline-flex">改用瀏覽器預約</Link></span></Centered>;
+  if (entryError) return <Centered tone="error">{entryError}</Centered>;
+  if (!entryConfig) return <Centered>載入顧客入口中…</Centered>;
+  if (liffError) return <Centered tone="error"><span className="space-y-3"><span className="block">{liffError}</span><Link href={browserFallbackUrl(view)} className="btn btn-secondary inline-flex">改用瀏覽器入口</Link></span></Centered>;
+
+  const entryNav = <CustomerEntryNav view={view} availability={entryConfig.availability} onChange={changeView} />;
+  if (view === "home") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={{ clinicName: entryConfig.clinic_name, clinicSlug: entryConfig.clinic_slug, phone: entryConfig.phone, address: entryConfig.address, intro: entryConfig.intro, lineBasicId: entryConfig.line_basic_id, pageEnabled: entryConfig.brand_page_enabled }} onChange={changeView} /></Shell>;
+  if (view === "appointments") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} /></Shell>;
+  if (view === "events" && !entryConfig.availability.events) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前沒有開放中的活動報名。</div></Shell>;
+  if (view === "tickets" && !entryConfig.availability.tickets) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用活動票券。</div></Shell>;
+  if (view === "membership" && !entryConfig.availability.memberships) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用會員與套票。</div></Shell>;
+  if (view === "support" && !entryConfig.availability.line) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌的 LINE 客服尚未完成啟用。</div></Shell>;
+  if (view === "support") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<ChatTab idToken={idToken} /></Shell>;
+  if (["events", "tickets", "membership", "brand"].includes(view)) {
+    return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<CustomerLiffView view={view as "events" | "tickets" | "membership" | "brand"} idToken={idToken} brand={{ clinicName: entryConfig.clinic_name, clinicSlug: entryConfig.clinic_slug, phone: entryConfig.phone, address: entryConfig.address, intro: entryConfig.intro, lineBasicId: entryConfig.line_basic_id, pageEnabled: entryConfig.brand_page_enabled }} /></Shell>;
+  }
+  if (!entryConfig.availability.booking) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前暫停線上預約，仍可使用上方其他服務。</div></Shell>;
   if (loadErr) return <Centered tone="error">{loadErr}</Centered>;
-  if (!config) return <Centered>載入中…</Centered>;
+  if (!config) return <Centered>載入預約設定中…</Centered>;
+
+  if (waitlistResult) {
+    return (
+      <Shell clinicName={config.clinic_name}>
+        {entryNav}
+        <div className="card overflow-hidden">
+          <div className="bg-gradient-to-br from-amber-500 to-orange-500 p-6 text-center text-white">
+            <div className="text-4xl">✓</div>
+            <h1 className="mt-2 text-xl font-bold">候補登記完成</h1>
+            <p className="mt-1 text-sm text-white/85">目前順位：第 {waitlistResult.position} 位</p>
+          </div>
+          <div className="space-y-3 p-6 text-sm text-slate-600">
+            <p>名額釋出後，系統會依順位暫時保留名額並透過 LINE／Email 通知；請在通知期限內至「我的預約」接受。</p>
+            <button type="button" onClick={() => changeView("appointments")} className="btn btn-primary w-full">查看我的候補</button>
+            <button type="button" onClick={bookAnother} className="btn btn-secondary w-full">登記其他時段</button>
+          </div>
+        </div>
+      </Shell>
+    );
+  }
 
   if (result) {
     return (
@@ -351,7 +420,7 @@ export default function BookPage() {
               </svg>
             </div>
             <h1 className="text-xl font-bold">{result.deposit_status === "pending" ? "預約已建立，待付款" : "預約成功"}</h1>
-            <p className="mt-1 text-sm text-white/80">服務開始前會以 LINE 提醒您</p>
+            <p className="mt-1 text-sm text-white/80">{result.series_count > 1 ? `已一次建立 ${result.series_count} 週預約` : "服務開始前會以 LINE 提醒您"}</p>
           </div>
 
           <div className="space-y-4 p-6 text-center">
@@ -388,7 +457,7 @@ export default function BookPage() {
               />
             )}
             <p className="rounded-xl bg-red-50 p-3 text-left text-xs leading-relaxed text-red-700">
-              ⚠️ 提醒:無法前來請務必提前取消。<strong>累計三次未提前取消而未出席,將暫停一個月的線上預約資格。</strong>
+              提醒：無法前來請務必提前取消。<strong>累計三次未提前取消而未出席，將暫停一個月的線上預約資格。</strong>
             </p>
             <button onClick={bookAnother} className="btn btn-secondary w-full">
               再預約一筆
@@ -399,297 +468,101 @@ export default function BookPage() {
     );
   }
 
-  const stepDone = { doctor: !providerRequired || !!doctorId, date: !!date, slot: slotPicked };
-
   return (
     <Shell clinicName={config.clinic_name}>
-      {/* 分頁:預約 / 我的預約 / 線上客服 */}
-      <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1">
-        <TabButton active={tab === "book"} onClick={() => setTab("book")}>
-          預約服務
-        </TabButton>
-        <TabButton active={tab === "my"} onClick={() => setTab("my")}>
-          我的預約
-        </TabButton>
-        <TabButton active={tab === "chat"} onClick={() => setTab("chat")}>
-          線上客服
-        </TabButton>
-      </div>
-
-      {tab === "chat" ? (
-        <ChatTab idToken={idToken} />
-      ) : tab === "my" ? (
-        <MyAppointments idToken={idToken} mode={config.booking_mode} />
-      ) : bound === null ? (
+      {entryNav}
+      {bound === null ? (
         <div className="card p-6 text-center text-sm text-slate-400">確認身分中…</div>
       ) : forWhom === "" ? (
-        // 先選:為自己 / 幫別人
-        <div className="space-y-3">
-          <p className="px-1 text-sm font-medium text-slate-600">請問這次要為誰預約?</p>
-          <button
-            type="button"
-            onClick={() => {
-              setForWhom("self");
-              setSelectedPatientId(bound[0]?.id ?? "__new__");
-            }}
-            className="card flex w-full items-center gap-3 p-5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50"
-          >
-            <span className="text-2xl">🧑</span>
-            <span>
-              <span className="block font-semibold text-slate-900">為我自己</span>
-              <span className="block text-xs text-slate-400">用本人資料預約</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setForWhom("other");
-              setSelectedPatientId("__new__");
-            }}
-            className="card flex w-full items-center gap-3 p-5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50"
-          >
-            <span className="text-2xl">👪</span>
-            <span>
-              <span className="block font-semibold text-slate-900">幫別人預約</span>
-              <span className="block text-xs text-slate-400">家人 / 朋友(填寫對方資料)</span>
-            </span>
-          </button>
-        </div>
+        <BookingIdentityChoice
+          onChooseSelf={() => {
+            setForWhom("self");
+            setSelectedPatientId(bound[0]?.id ?? "__new__");
+          }}
+          onChooseOther={() => {
+            setForWhom("other");
+            setSelectedPatientId("__new__");
+          }}
+        />
       ) : (
       <>
-      <div className="space-y-4">
-        {/* 步驟 1:顧客資料 */}
-        <section className="card p-5">
-          <div className="mb-2 flex items-center justify-between">
-            <SectionTitle n={1} title="顧客資料" done={patientReady} />
-            <button
-              type="button"
-              onClick={() => setForWhom("")}
-              className="text-xs text-slate-400 hover:text-brand-600"
-            >
-              重新選擇
-            </button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="label">預約對象</label>
-              <select
-                className="input"
-                value={selectedPatientId}
-                onChange={(e) => setSelectedPatientId(e.target.value)}
-              >
-                {(bound ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}({p.phone})
-                  </option>
-                ))}
-                {config.allow_multi_patient_per_phone &&
-                  (bound?.length ?? 0) < config.max_patients_per_phone && (
-                    <option value="__new__">+ 新增顧客</option>
-                  )}
-              </select>
-            </div>
-            {selectedBlocked && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-                此顧客目前暫停線上預約,請洽服務人員。
-              </p>
-            )}
-            <div>
-              <label className="label">Email（選填，用於提醒）</label>
-              <input
-                type="email"
-                name="email"
-                className="input"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
-                autoComplete="email"
-              />
-            </div>
-            {addingNew && (
-              <>
-                <div>
-                  <label className="label">姓名</label>
-                  <input
-                    className="input"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="顧客姓名"
-                  />
-                </div>
-                <div>
-                  <label className="label">電話</label>
-                  <input
-                    className="input"
-                    value={phone}
-                    inputMode="tel"
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="聯絡電話"
-                  />
-                </div>
-                <div>
-                  <label className="label">出生年月日</label>
-                  <input
-                    type="date"
-                    className="input"
-                    value={birthday}
-                    max={todayStr()}
-                    onChange={(e) => setBirthday(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-        </section>
-
-        <section className="card p-5">
-          <div className="mb-2"><label className="label">套票序號（選填）</label><input className="input uppercase" value={membershipCode} onChange={(e) => setMembershipCode(e.target.value.toUpperCase())} autoComplete="off" placeholder="使用套票時輸入序號" /></div>
-          <p className="text-xs leading-5 text-slate-500">符合方案時會在成功預約後扣除一堂額度；套票限本人電話綁定的會員使用。</p>
-        </section>
-
-        {/* 步驟 2:服務與預約類型 */}
-        <section className="card p-5">
-          <SectionTitle n={2} title="服務項目" done={serviceReady} />
-          <div className="space-y-4">
-            {config.services.length > 0 && (
-              <div>
-                <label className="label">服務項目</label>
-                <select
-                  className="input"
-                  value={serviceId}
-                  onChange={(e) => setServiceId(e.target.value)}
-                >
-                  <option value="">請選擇服務</option>
-                  {config.services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div>
-              <label className="label">預約類型(請確認)</label>
-              <div className="grid grid-cols-2 gap-2">
-                <TypeToggle active={visitType === "return"} onClick={() => setVisitType("return")}>
-                  再次服務
-                </TypeToggle>
-                <TypeToggle active={visitType === "first"} onClick={() => setVisitType("first")}>
-                  首次服務
-                </TypeToggle>
-              </div>
-              {visitType === "first" && (
-                <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
-                  🕒 首次服務可能需要較完整的資料確認,所需時間可能比再次服務長,請預留充足時間。
-                </p>
-              )}
-            </div>
-            <BookingFields fields={selectedService?.booking_fields ?? []} answers={bookingAnswers} onChange={(key, value) => setBookingAnswers((current) => ({ ...current, [key]: value }))} />
-          </div>
-        </section>
-
-        {/* 步驟 3:選服務提供者、日期與時段(資料填妥後) */}
-        <section className={`card p-5 ${!patientReady || !serviceReady ? "pointer-events-none opacity-50" : ""}`}>
-          <SectionTitle n={3} title="選擇時間" done={stepDone.slot} />
-          {(!patientReady || !serviceReady) && (
-            <p className="mb-3 text-sm text-slate-400">請先完成上方顧客資料與服務,再選擇時間。</p>
-          )}
-          <div className="space-y-4">
-            {(providerRequired || selectedService?.booking_target === "provider_optional") && (
-              <div>
-                <label className="label">服務提供者</label>
-                <select className="input" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
-                  <option value="">{selectedService?.booking_target === "provider_optional" ? "不指定,由系統安排" : "請選擇服務提供者"}</option>
-                  {config.doctors.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                      {d.specialty ? `(${d.specialty})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-            {selectedService?.booking_target === "resource_only" && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">此服務依場地／設備容量安排，不需要指定服務提供者。</p>}
-            <div>
-              <label className="label">日期</label>
-              <input
-                type="date"
-                className="input"
-                value={date}
-                min={todayStr()}
-                max={maxDate}
-                onChange={(e) => setDate(e.target.value)}
-              />
-            </div>
-
-            {date && (!providerRequired || !!doctorId) && (
-              <div>
-                <p className="label">{config.booking_mode === "time" ? "時段" : "場次"}</p>
-                {availLoading && <p className="text-sm text-slate-400">查詢中…</p>}
-                {availMsg && (
-                  <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-700">{availMsg}</p>
-                )}
-                {config.booking_mode === "time" && !availLoading && (
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                    {slots.map((s) => (
-                      <button
-                        key={s.slot_start}
-                        type="button"
-                        onClick={() => setPickedStart(s.slot_start)}
-                        className={`pill flex flex-col items-center ${pickedStart === s.slot_start ? "pill-active" : ""}`}
-                      >
-                        <span className="font-medium">{formatTime(s.slot_start)}</span>
-                        <span className="text-[11px] opacity-70">剩 {s.remaining}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {config.booking_mode === "number" && !availLoading && (
-                  <div className="space-y-2">
-                    {sessions.map((s) => {
-                      const full = s.remaining <= 0;
-                      return (
-                        <button
-                          key={s.template_id}
-                          type="button"
-                          disabled={full}
-                          onClick={() => !full && setPickedTemplate(s.template_id)}
-                          className={`pill flex w-full items-center justify-between ${
-                            full
-                              ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
-                              : pickedTemplate === s.template_id
-                                ? "pill-active"
-                                : ""
-                          }`}
-                        >
-                          <span className="font-medium">
-                            {formatDateSession(s.session_start)}　{formatTime(s.session_start)}–
-                            {formatTime(s.session_end)}
-                          </span>
-                          {full ? (
-                            <span className="text-xs font-medium text-red-500">名額已滿</span>
-                          ) : (
-                            <span className="text-xs opacity-70">剩 {s.remaining} 號</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-
+      <div className="space-y-4" data-booking-stage={bookingFlow.stage}>
+        <BookingCustomerStep
+          config={config}
+          bound={bound}
+          selectedPatientId={selectedPatientId}
+          selectedBlocked={selectedBlocked}
+          addingNew={addingNew}
+          complete={bookingFlow.completed.customer}
+          email={email}
+          name={name}
+          phone={phone}
+          birthday={birthday}
+          today={todayStr()}
+          membershipCode={membershipCode}
+          onResetChoice={() => setForWhom("")}
+          onPatientChange={setSelectedPatientId}
+          onEmailChange={setEmail}
+          onNameChange={setName}
+          onPhoneChange={setPhone}
+          onBirthdayChange={setBirthday}
+          onMembershipCodeChange={setMembershipCode}
+        />
+        <BookingServiceStep
+          config={config}
+          selectedService={selectedService}
+          serviceId={serviceId}
+          visitType={visitType}
+          bookingAnswers={bookingAnswers}
+          selectedAddonIds={selectedAddonIds}
+          complete={bookingFlow.completed.service}
+          onServiceChange={setServiceId}
+          onVisitTypeChange={setVisitType}
+          onBookingAnswerChange={(key, value) => setBookingAnswers((current) => ({ ...current, [key]: value }))}
+          onAddonIdsChange={setSelectedAddonIds}
+        />
+        <BookingTimeStep
+          config={config}
+          selectedService={selectedService}
+          providerRequired={providerRequired}
+          canChooseTime={bookingFlow.canChooseTime}
+          complete={bookingFlow.completed.time}
+          doctorId={doctorId}
+          date={date}
+          minDate={todayStr()}
+          maxDate={maxDate}
+          loading={availLoading}
+          message={availMsg}
+          slots={slots}
+          waitlistSlots={waitlistSlots}
+          sessions={sessions}
+          waitlistSessions={waitlistSessions}
+          pickedStart={pickedStart}
+          pickedTemplate={pickedTemplate}
+          joiningWaitlist={joiningWaitlist}
+          recurrenceCount={recurrenceCount}
+          onDoctorChange={setDoctorId}
+          onDateChange={setDate}
+          onPickTime={(value, waitlist) => {
+            setPickedStart(value);
+            setJoiningWaitlist(waitlist);
+          }}
+          onPickSession={(value, waitlist) => {
+            setPickedTemplate(value);
+            setJoiningWaitlist(waitlist);
+          }}
+          onRecurrenceChange={setRecurrenceCount}
+        />
         {submitErr && (
           <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{submitErr}</p>
         )}
+        {bookingFlow.submitBlock === "waitlist_membership_conflict" && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">候補不會預先保留或扣除套票堂數；請先清空套票序號再加入候補。</p>}
       </div>
 
       {/* 固定底部送出列 */}
       <div className="sticky bottom-0 -mx-4 mt-4 border-t border-slate-200 bg-white/90 p-4 backdrop-blur">
-        <button type="button" disabled={!canSubmit} onClick={handleSubmit} className="btn btn-primary w-full">
-          {submitting ? "送出中…" : "確認預約"}
+        <button type="button" disabled={!bookingFlow.canSubmit} onClick={handleSubmit} className="btn btn-primary w-full">
+          {submitting ? "送出中…" : joiningWaitlist ? "確認加入候補" : recurrenceCount > 1 ? `確認建立 ${recurrenceCount} 週預約` : "確認預約"}
         </button>
         {!ready && !liffError && (
           <p className="mt-2 text-center text-xs text-slate-400">正在確認 LINE 身分…</p>
@@ -699,307 +572,4 @@ export default function BookPage() {
       )}
     </Shell>
   );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg py-2 text-sm font-medium transition-colors ${
-        active ? "bg-white text-brand-700 shadow-sm" : "text-slate-500"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-interface MyAppt {
-  id: string;
-  start_at: string;
-  end_at: string | null;
-  queue_number: number | null;
-  status: string;
-  doctor_id: string;
-  service_id: string | null;
-  visit_type: "first" | "return";
-  doctors: { name: string } | null;
-  patients: { name: string } | null;
-}
-interface ProgressItem {
-  doctorName: string;
-  label: string;
-  yourNumber: number;
-  current: number;
-  status: string;
-  source: "online" | "offline";
-}
-
-function MyAppointments({ idToken, mode }: { idToken: string | null; mode: "time" | "number" }) {
-  const [list, setList] = useState<MyAppt[] | null>(null);
-  const [progress, setProgress] = useState<ProgressItem[]>([]);
-  const [err, setErr] = useState<string | null>(null);
-  const [cancelling, setCancelling] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!idToken) return;
-    setErr(null);
-    try {
-      const data = await api<{ appointments: MyAppt[]; progress: ProgressItem[] }>("/api/booking/my", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-      setList(data.appointments);
-      setProgress(data.progress ?? []);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "查詢失敗");
-    }
-  }, [idToken]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function cancel(id: string) {
-    if (!idToken) return;
-    setCancelling(id);
-    setErr(null);
-    try {
-      await api("/api/booking/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken, appointment_id: id }),
-      });
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "取消失敗");
-    } finally {
-      setCancelling(null);
-    }
-  }
-
-  function openReschedule(id: string) {
-    const source = new URLSearchParams(window.location.search);
-    const params = new URLSearchParams({ appointment_id: id });
-    const clinicSlug = source.get("clinic_slug")?.trim();
-    const clinicId = source.get("clinic_id")?.trim();
-    if (clinicSlug) params.set("clinic_slug", clinicSlug);
-    else if (clinicId) params.set("clinic_id", clinicId);
-    window.location.assign(`/book/reschedule?${params.toString()}`);
-  }
-
-  if (err) return <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>;
-  if (list === null) return <p className="px-1 text-sm text-slate-400">載入中…</p>;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between px-1">
-        <p className="text-sm font-medium text-slate-600">
-          {progress.length > 0 ? "今日服務進度" : "我的預約"}
-        </p>
-        <button
-          type="button"
-          onClick={load}
-          className="flex items-center gap-1 text-sm text-brand-600 hover:underline"
-        >
-          <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
-            <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.311h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clipRule="evenodd" />
-          </svg>
-          重新整理
-        </button>
-      </div>
-
-      {/* 今日服務進度 */}
-      {progress.length > 0 && (
-        <div className="space-y-2">
-          {progress.map((pr, i) => (
-            <div
-              key={i}
-              className="card flex items-center justify-between bg-gradient-to-br from-brand-500 to-accent-600 p-4 text-white"
-            >
-              <div>
-                <div className="text-sm">{pr.doctorName} · {pr.label}</div>
-                <div className="text-xs text-white/80">
-                  您的號碼:{pr.source === "offline" ? "現場" : "線上"} {pr.yourNumber} 號
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs text-white/80">目前服務號次</div>
-                <div className="text-3xl font-bold">{pr.current || "—"}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {list.length === 0 ? (
-        <div className="card p-6 text-center text-sm text-slate-400">目前沒有未來的預約。</div>
-      ) : (
-        <div className="space-y-3">
-          {list.map((a) => (
-        <div key={a.id} className="card flex items-center justify-between gap-3 p-4">
-          <div>
-            <div className="font-medium text-slate-900">
-              {mode === "time"
-                ? `${formatDateSession(a.start_at)} ${formatTime(a.start_at)}`
-                : `${formatDateSession(a.start_at)} 第 ${a.queue_number} 號`}
-            </div>
-            <div className="mt-0.5 text-xs text-slate-500">
-              {a.doctors?.name}
-              {a.patients?.name ? ` · ${a.patients.name}` : ""} · 預約成功
-            </div>
-          </div>
-          <div className="flex shrink-0 gap-2">
-          <button type="button" onClick={() => openReschedule(a.id)} className="btn btn-secondary px-3 py-1.5 text-xs">
-            改期
-          </button>
-          <button
-            type="button"
-            disabled={cancelling === a.id}
-            onClick={() => cancel(a.id)}
-            className="btn btn-danger px-3 py-1.5 text-xs"
-          >
-            {cancelling === a.id ? "取消中…" : "取消"}
-          </button>
-          </div>
-        </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function bookingFieldsReady(fields: BookingField[], answers: Record<string, unknown>): boolean {
-  return fields.every((field) => {
-    const value = answers[field.key];
-    return !field.required || (field.type === "checkbox" ? value === true : typeof value === "string" && value.trim().length > 0);
-  });
-}
-
-function BookingFields({ fields, answers, onChange }: { fields: BookingField[]; answers: Record<string, unknown>; onChange: (key: string, value: unknown) => void }) {
-  if (fields.length === 0) return null;
-  return <div className="space-y-3 rounded-xl border border-slate-100 bg-slate-50 p-4"><p className="text-sm font-medium text-slate-800">預約前資料</p>{fields.map((field) => { const label = `${field.label}${field.required ? " *" : ""}`; const value = answers[field.key]; if (field.type === "checkbox") return <label key={field.key} className="flex items-start gap-2 text-sm text-slate-600"><input type="checkbox" className="mt-1" checked={value === true} onChange={(event) => onChange(field.key, event.target.checked)} />{label}</label>; if (field.type === "textarea") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><textarea className="input" rows={3} value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; if (field.type === "select") return <label key={field.key} className="block text-sm"><span className="label">{label}</span><select className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)}><option value="">請選擇</option>{field.options.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>; return <label key={field.key} className="block text-sm"><span className="label">{label}</span><input type={field.type === "date" ? "date" : "text"} className="input" value={typeof value === "string" ? value : ""} onChange={(event) => onChange(field.key, event.target.value)} /></label>; })}</div>;
-}
-
-function Shell({ children, clinicName }: { children: React.ReactNode; clinicName?: string | null }) {
-  return (
-    <main className="mx-auto min-h-screen max-w-md px-4 pb-4">
-      <header className="flex items-center justify-between py-4">
-        <Brand name={clinicName} subtitle="線上預約" />
-      </header>
-      {children}
-    </main>
-  );
-}
-
-function SectionTitle({ n, title, done }: { n: number; title: string; done?: boolean }) {
-  return (
-    <div className="mb-4 flex items-center gap-2.5">
-      <span
-        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-          done ? "bg-accent-600 text-white" : "bg-brand-100 text-brand-700"
-        }`}
-      >
-        {done ? "✓" : n}
-      </span>
-      <h2 className="font-semibold text-slate-900">{title}</h2>
-    </div>
-  );
-}
-
-function TypeToggle({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button type="button" onClick={onClick} className={`pill text-center ${active ? "pill-active" : ""}`}>
-      {children}
-    </button>
-  );
-}
-
-function CalendarButtons({
-  start,
-  end,
-  doctor,
-  service,
-  clinicName,
-}: {
-  start: string;
-  end: string;
-  doctor: string | null;
-  service: string | null;
-  clinicName: string | null;
-}) {
-  const endIso = end && end !== start ? end : new Date(new Date(start).getTime() + 30 * 60000).toISOString();
-  const details = [doctor ? `服務提供者:${doctor}` : "", service ? `服務:${service}` : "", "服務開始前請提前準備;無法前來請提前取消。"]
-    .filter(Boolean)
-    .join("\n");
-  const displayName = clinicName?.trim() || "預約與報名平台";
-  const ev: CalEvent = { title: `${displayName} 預約`, startIso: start, endIso, details, location: displayName };
-
-  // 在 LINE 內建瀏覽器,直接開連結(blob 下載常失效);有 LIFF 就用外部瀏覽器開
-  function openUrl(url: string) {
-    const liff = typeof window !== "undefined" ? window.liff : undefined;
-    if (liff?.openWindow) {
-      liff.openWindow({ url, external: true });
-    } else {
-      window.open(url, "_blank");
-    }
-  }
-
-  const icsUrl =
-    `/api/booking/ics?start=${encodeURIComponent(start)}&end=${encodeURIComponent(endIso)}` +
-    `&title=${encodeURIComponent(ev.title)}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(displayName)}`;
-  const absIcsUrl = typeof window !== "undefined" ? new URL(icsUrl, window.location.origin).toString() : icsUrl;
-
-  return (
-    <div className="space-y-2">
-      <p className="text-xs text-slate-400">加入行事曆,手機會在服務開始前自動提醒您</p>
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => openUrl(googleCalendarUrl(ev))} className="btn btn-secondary text-sm">
-          Google 日曆
-        </button>
-        <button type="button" onClick={() => openUrl(absIcsUrl)} className="btn btn-secondary text-sm">
-          加入行事曆
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Centered({
-  children,
-  tone,
-}: {
-  children: React.ReactNode;
-  tone?: "error";
-}) {
-  return (
-    <main className="flex min-h-screen items-center justify-center p-6 text-center">
-      <p className={tone === "error" ? "text-red-600" : "text-slate-500"}>{children}</p>
-    </main>
-  );
-}
-
-function browserFallbackUrl(): string {
-  if (typeof window === "undefined") return "/book/browser";
-  const slug = new URLSearchParams(window.location.search).get("clinic_slug")?.trim();
-  return slug ? `/book/browser?clinic_slug=${encodeURIComponent(slug)}` : "/book/browser";
 }

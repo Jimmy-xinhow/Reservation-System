@@ -98,7 +98,7 @@ export default function ChatTab({ idToken }: { idToken: string | null }) {
           <p className="pt-8 text-center text-sm text-slate-400">載入中…</p>
         ) : messages.length === 0 ? (
           <p className="pt-8 text-center text-sm text-slate-400">
-            有任何問題都可以在這裡留言,櫃檯會盡快回覆您 🙌
+            有任何問題都可以在這裡留言，服務人員會盡快回覆您。
           </p>
         ) : (
           messages.map((m) => {

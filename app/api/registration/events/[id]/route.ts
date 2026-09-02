@@ -8,17 +8,17 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
-  const limited = rateLimitResponse(req, "registration:event-detail", 30);
+  const limited = await rateLimitResponse(req, "registration:event-detail", 30);
   if (limited) return limited;
   try {
     const { id } = await context.params;
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
     if (!clinicId) return fail("尚未設定公開品牌", 500);
-    const { data: settings, error: settingsError } = await svc.from("clinic_settings").select("public_registration_enabled").eq("clinic_id", clinicId).maybeSingle();
+    const { data: settings, error: settingsError } = await svc.from("clinic_settings").select("events_enabled, public_registration_enabled").eq("clinic_id", clinicId).maybeSingle();
     if (settingsError) return fail(settingsError.message, 500);
     if (!settings) return fail("公開報名設定尚未完成", 503);
-    if (settings.public_registration_enabled === false) return ok({ event: null });
+    if (settings.events_enabled !== true || settings.public_registration_enabled === false) return ok({ event: null });
     const accessToken = req.nextUrl.searchParams.get("access_token")?.trim() ?? "";
     const accessTokenHash = accessToken ? createHash("sha256").update(accessToken).digest("hex") : "";
     const { data: publicEvent, error: publicEventError } = await svc

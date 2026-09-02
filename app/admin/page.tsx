@@ -1,6 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase";
-import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, getOptionalMember } from "@/lib/admin";
+import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, getOptionalMember, hasBrandPermission } from "@/lib/admin";
 import { getOptionalPlatformAdmin } from "@/lib/platform";
 import { redirect } from "next/navigation";
 import { formatTime } from "@/lib/slots";
@@ -11,7 +11,8 @@ import {
   setDepositAction,
   createAppointmentAction,
   rescheduleAppointmentAction,
-} from "./actions";
+  cancelAppointmentWaitlistAction,
+} from "./appointment-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,19 @@ interface Row {
   status: string;
   deposit_status: string;
   deposit_amount: number;
+  doctors: { name: string } | null;
+  patients: { name: string; phone: string } | null;
+  services: { name: string } | null;
+}
+
+interface WaitlistRow {
+  id: string;
+  appointment_id: string | null;
+  requested_date: string;
+  requested_start_at: string | null;
+  position: number;
+  status: "waiting" | "offered";
+  offer_expires_at: string | null;
   doctors: { name: string } | null;
   patients: { name: string; phone: string } | null;
   services: { name: string } | null;
@@ -73,8 +87,9 @@ export default async function TodayPage({
 
   const [member, platformAdmin] = await Promise.all([getOptionalMember(), getOptionalPlatformAdmin()]);
   if (!member && platformAdmin) redirect("/admin/platform");
-  if (!member) throw new Error("找不到目前品牌成員權限，請重新登入或聯絡系統擁有者。");
+  if (!member) redirect("/admin/login?reason=no-access");
   const { clinicId, role } = member;
+  const canManageBrand = hasBrandPermission(member, "brand.manage");
   const supabase = await createSupabaseServer();
   const assignedDoctorIds = await getAssignedDoctorIds(member);
   const providerOnly = role === "provider";
@@ -101,7 +116,7 @@ export default async function TodayPage({
     );
   }
 
-  const [{ data: settings }, { data: doctors }, { data: appts }, { data: services }] = await Promise.all([
+  const [{ data: settings }, { data: doctors }, { data: appts }, { data: services }, { data: waitlistData }] = await Promise.all([
     settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
     (() => {
       let query = supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true);
@@ -110,13 +125,24 @@ export default async function TodayPage({
     })(),
     apptQuery.order("start_at").order("queue_number", { nullsFirst: true }),
     supabase.from("services").select("id, name, booking_target, booking_fields").eq("clinic_id", clinicId).eq("active", true).order("created_at"),
+    providerOnly
+      ? Promise.resolve({ data: [] })
+      : supabase
+          .from("appointment_waitlist_entries")
+          .select("id, appointment_id, requested_date, requested_start_at, position, status, offer_expires_at, doctors(name), patients(name, phone), services(name)")
+          .eq("clinic_id", clinicId)
+          .eq("requested_date", viewDate)
+          .in("status", ["waiting", "offered"])
+          .order("position"),
   ]);
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
   // 以 settingsUnavailable 明確提示;mode 僅用於排版,真正的狀態以警示呈現。
   const settingsUnavailable = !settings;
   const mode = (settings?.booking_mode as "time" | "number") ?? "time";
-  const rows = (appts ?? []) as unknown as Row[];
+  const waitlistRows = (waitlistData ?? []) as unknown as WaitlistRow[];
+  const offeredAppointmentIds = new Set(waitlistRows.filter((item) => item.status === "offered" && item.appointment_id).map((item) => item.appointment_id));
+  const rows = ((appts ?? []) as unknown as Row[]).filter((item) => !offeredAppointmentIds.has(item.id));
   const rescheduleOptions = rows
     .filter((r) => r.status === "booked" || r.status === "confirmed")
     .map((r) => ({
@@ -179,9 +205,13 @@ export default async function TodayPage({
       ) : (doctors ?? []).length === 0 && (services ?? []).length === 0 ? (
         <div className="card flex flex-col items-start gap-2 p-5">
           <p className="text-sm text-slate-600">尚未建立服務提供者或服務項目，顧客目前無法預約。</p>
-          <a href="/admin/schedules" className="btn btn-primary">
-            前往服務排程新增服務提供者
-          </a>
+          {canManageBrand ? (
+            <a href="/admin/schedules" className="btn btn-primary">
+              前往服務排程新增服務提供者
+            </a>
+          ) : (
+            <p className="text-xs text-slate-500">請聯絡品牌管理者完成服務與排程設定。</p>
+          )}
         </div>
       ) : (
         <BookingForm
@@ -234,6 +264,18 @@ export default async function TodayPage({
         <span className="ml-auto self-center text-sm text-slate-400">{rows.length} 筆</span>
       </form>
 
+      {!providerOnly && waitlistRows.length > 0 && (
+        <section className="card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div><h2 className="font-semibold text-slate-900">本日預約候補</h2><p className="mt-1 text-xs text-slate-500">取消有效預約後會依順位原子保留名額；保留期限與通知狀態可追蹤。</p></div>
+            <span className="badge bg-amber-50 text-amber-800">{waitlistRows.length} 筆</span>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {waitlistRows.map((item) => <article key={item.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="font-medium text-slate-900">{item.requested_start_at ? formatTime(item.requested_start_at) : "場次候補"} · {item.services?.name ?? item.doctors?.name ?? "預約"}</div><div className="mt-1 text-xs text-slate-500">{item.patients?.name ?? "未命名顧客"} · {canViewSensitiveCustomerData(role) ? item.patients?.phone : maskPhone(item.patients?.phone)} · 順位 {item.position}</div>{item.status === "offered" && <p className="mt-1 text-xs text-amber-700">名額保留至 {item.offer_expires_at ? `${formatTime(item.offer_expires_at)}` : "通知期限"}</p>}</div><div className="flex items-center gap-2"><span className={`badge ${item.status === "offered" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{item.status === "offered" ? "待顧客接受" : "候補中"}</span><form action={cancelAppointmentWaitlistAction}><input type="hidden" name="id" value={item.id} /><SubmitButton className="btn btn-secondary min-h-11 px-3 text-xs">取消候補</SubmitButton></form></div></article>)}
+          </div>
+        </section>
+      )}
+
       <div className="card overflow-x-auto">
         <table className="tbl">
           <thead>
@@ -284,7 +326,7 @@ export default async function TodayPage({
                 </td>
                 <td>
                   <span className={`badge ${STATUS_STYLE[r.status] ?? "bg-slate-100 text-slate-600"}`}>
-                    {STATUS_LABEL[r.status] ?? r.status}
+                    {STATUS_LABEL[r.status] ?? "其他狀態"}
                   </span>
                 </td>
                 <td>

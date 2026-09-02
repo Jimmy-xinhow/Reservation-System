@@ -2,11 +2,13 @@
 
 /* ── 設計系統:清爽醫療藍 ───────────────────────────────── */
 @theme {
-  --font-sans: "Noto Sans TC", ui-sans-serif, system-ui, "PingFang TC",
-    "Microsoft JhengHei", sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
   --font-display: "Noto Serif TC", "Songti TC", "PMingLiU", "Noto Sans TC",
     serif;
-  --font-mono: "Inter", "Noto Sans TC", ui-monospace, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --text-xs: 0.875rem;
+  --text-xs--line-height: 1.25rem;
 
   /* 簡報視覺基準:深青、天藍、金色 */
   --color-brand-50: #f2f8fd;
@@ -128,7 +130,7 @@ body {
   }
 
   .btn {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-base font-medium transition-colors;
   }
   .btn:disabled {
     @apply cursor-not-allowed opacity-50;
@@ -159,7 +161,7 @@ body {
   }
 
   .input {
-    @apply min-h-11 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition;
+    @apply min-h-11 w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-base text-slate-900 outline-none transition;
     -webkit-appearance: none;
     appearance: none;
   }
@@ -183,7 +185,7 @@ body {
   }
 
   .eyebrow {
-    @apply mb-2 font-mono text-[11px] font-semibold uppercase tracking-[0.22em] text-brand-600;
+    @apply mb-2 text-xs font-semibold tracking-[0.12em] text-brand-700;
   }
 
   .badge {
@@ -223,4 +225,110 @@ body {
   .tbl tbody tr:hover {
     @apply bg-slate-50/60;
   }
+
+  .tbl :where(a, button) {
+    @apply inline-flex min-h-11 items-center;
+  }
+
+  .tbl :where(input:not([type="hidden"]), select, textarea) {
+    @apply min-h-11;
+  }
+
+  .help-text {
+    @apply mt-1 text-sm leading-6 text-slate-600;
+  }
+
+  .technical-details {
+    @apply rounded-xl border border-slate-200 bg-slate-50/70;
+  }
+
+  .technical-details > summary {
+    @apply flex min-h-11 cursor-pointer items-center px-4 py-3 text-sm font-medium text-slate-700;
+  }
+
+  .inline-action {
+    @apply inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-medium;
+  }
+}
+
+/* 後台可讀性基準：內文 16px、輔助文字至少 14px，並維持 AA 對比。 */
+.admin-shell {
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.admin-shell .text-xs {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.admin-shell .text-\[10px\],
+.admin-shell .text-\[11px\] {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.admin-shell main h1 {
+  font-size: clamp(1.5rem, 1.35rem + 0.4vw, 1.75rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.admin-shell main h2 {
+  line-height: 1.35;
+}
+
+.admin-shell :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea) {
+  min-height: 2.75rem;
+}
+
+.technical-details {
+  color: var(--color-slate-500);
+  font-size: 0.875rem;
+}
+
+.technical-details > summary {
+  display: inline-flex;
+  min-height: 2.75rem;
+  cursor: pointer;
+  align-items: center;
+  font-weight: 600;
+  color: var(--color-slate-600);
+}
+
+.technical-details > summary:hover {
+  color: var(--color-brand-700);
+}
+
+.technical-details > dl {
+  margin-top: 0.25rem;
+  display: grid;
+  gap: 0.5rem;
+  border-left: 2px solid var(--color-slate-200);
+  padding-left: 0.75rem;
+}
+
+.technical-details > dl > div {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.technical-details dt {
+  color: var(--color-slate-500);
+}
+
+.technical-details dd,
+.technical-details code {
+  overflow-wrap: anywhere;
+  color: var(--color-slate-700);
+  font-size: 0.875rem;
+}
+
+.admin-shell .text-slate-400 {
+  color: #64748b;
+}
+
+.admin-shell :where(a, button, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
 }

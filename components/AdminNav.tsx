@@ -4,13 +4,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import type { Role } from "@/lib/admin";
+import type { PlatformAccessType, SystemPermission } from "@/lib/platform-roles";
 
 interface Item {
   href: string;
   label: string;
   icon: IconName;
   adminOnly?: boolean;
+  systemAdminOnly?: boolean;
+  systemPermission?: SystemPermission;
   exact?: boolean;
+  module?: keyof AdminModuleVisibility;
 }
 
 interface Group {
@@ -41,81 +45,86 @@ type IconName =
   | "users"
   | "platform";
 
+export interface AdminModuleVisibility {
+  events: boolean;
+  memberships: boolean;
+  crm: boolean;
+  line: boolean;
+  legacy: boolean;
+}
+
 const GROUPS: Group[] = [
   {
-    label: "營運中心",
+    label: "今日工作台",
+    items: [{ href: "/admin/dashboard", label: "今日工作台", icon: "dashboard" }],
+  },
+  {
+    label: "預約營運",
     items: [
-      { href: "/admin/dashboard", label: "總覽", icon: "dashboard" },
       { href: "/admin/calendar", label: "預約日曆", icon: "calendar" },
-      { href: "/admin", label: "預約列表", icon: "list" },
+      { href: "/admin", label: "預約列表", icon: "list", exact: true },
+      { href: "/admin/handoff", label: "交班待辦", icon: "checkin" },
+      { href: "/admin/queue", label: "舊版服務進度", icon: "queue", module: "legacy" },
     ],
   },
   {
-    label: "排程與服務",
+    label: "活動與報名",
     items: [
-      { href: "/admin/schedules", label: "服務排程", icon: "schedule" },
-      { href: "/admin/exceptions", label: "例外日期", icon: "calendar" },
-      { href: "/admin/services", label: "服務與方案", icon: "service" },
-      { href: "/admin/resources", label: "資源配置", icon: "service" },
+      { href: "/admin/events", label: "活動與課程", icon: "event", module: "events" },
+      { href: "/admin/registrations", label: "報名名單", icon: "list", module: "events" },
+      { href: "/admin/checkin", label: "報名報到", icon: "checkin", module: "events" },
     ],
   },
   {
-    label: "客戶與成長",
+    label: "顧客與會員",
     items: [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
-      { href: "/admin/crm", label: "CRM Lite／自動化", icon: "crm" },
-      { href: "/admin/memberships", label: "會員與方案", icon: "membership" },
-      { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership" },
+      { href: "/admin/memberships", label: "會員與套票", icon: "membership", module: "memberships" },
+      { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership", module: "memberships", adminOnly: true },
+      { href: "/admin/crm", label: "顧客回訪與自動提醒", icon: "crm", module: "crm", adminOnly: true },
     ],
   },
   {
-    label: "活動報名",
+    label: "訊息中心",
     items: [
-      { href: "/admin/events", label: "活動與課程", icon: "event" },
-      { href: "/admin/registrations", label: "報名名單", icon: "list" },
-      { href: "/admin/checkin", label: "報名報到", icon: "checkin" },
+      { href: "/admin/chat", label: "客服對話", icon: "chat", module: "line" },
+      { href: "/admin/replies", label: "自動回覆", icon: "message", module: "line", adminOnly: true },
+      { href: "/admin/messages", label: "訊息模板", icon: "message", module: "line", adminOnly: true },
+      { href: "/admin/line-templates", label: "LINE 訊息範本", icon: "line", module: "line", adminOnly: true },
     ],
   },
   {
-    label: "客戶服務",
-    items: [{ href: "/admin/chat", label: "LINE 客服對話", icon: "chat" }],
-  },
-  {
-    label: "報表與分析",
+    label: "報表",
     items: [{ href: "/admin/reports", label: "營運報表", icon: "report" }],
   },
   {
-    label: "通訊與入口",
+    label: "設定中心",
     adminOnly: true,
     items: [
-      { href: "/admin/line", label: "LINE 連線", icon: "line" },
-      { href: "/admin/replies", label: "自動回覆", icon: "message" },
-      { href: "/admin/messages", label: "訊息模板", icon: "message" },
-      { href: "/admin/richmenu", label: "Rich Menu", icon: "menu" },
+      { href: "/admin/settings", label: "品牌與規則", icon: "settings" },
+      { href: "/admin/import", label: "匯入顧客與預約資料", icon: "list" },
+      { href: "/admin/channels", label: "通知與付款測試", icon: "line" },
+      { href: "/admin/services", label: "服務與方案", icon: "service" },
+      { href: "/admin/resources", label: "人員與資源", icon: "service" },
+      { href: "/admin/schedules", label: "服務排程", icon: "schedule" },
+      { href: "/admin/exceptions", label: "例外日期", icon: "calendar" },
+      { href: "/admin/line", label: "LINE 官方帳號連線", icon: "line" },
+      { href: "/admin/richmenu", label: "LINE 圖文選單", icon: "menu", module: "line" },
+      { href: "/admin/users", label: "團隊與權限", icon: "users" },
+      { href: "/admin/audit", label: "操作紀錄", icon: "settings" },
     ],
   },
   {
-    label: "系統設定",
-    items: [
-      { href: "/admin/settings", label: "品牌與系統設定", icon: "settings", adminOnly: true },
-      { href: "/admin/users", label: "團隊與權限", icon: "users", adminOnly: true },
-    ],
-  },
-  {
-    label: "平台營運",
+    label: "系統管理",
     platformOnly: true,
     items: [
-      { href: "/admin/platform", label: "平台總覽", icon: "dashboard", exact: true },
-      { href: "/admin/platform/admins", label: "平台管理員", icon: "users" },
-      { href: "/admin/platform/operations", label: "營運健康", icon: "schedule" },
-      { href: "/admin/platform/reports", label: "跨品牌報表", icon: "report" },
-      { href: "/admin/platform/audit", label: "平台稽核", icon: "settings" },
-      { href: "/admin/platform/settings", label: "平台設定", icon: "settings" },
+      { href: "/admin/platform", label: "系統總覽", icon: "dashboard", exact: true, systemPermission: "platform.overview" },
+      { href: "/admin/platform/admins", label: "系統人員與權限", icon: "users", systemAdminOnly: true },
+      { href: "/admin/platform/operations", label: "系統運作狀態", icon: "schedule", systemPermission: "operations.view" },
+      { href: "/admin/platform/reports", label: "跨品牌報表", icon: "report", systemPermission: "reports.view" },
+      { href: "/admin/platform/audit", label: "系統操作紀錄", icon: "settings", systemPermission: "audit.view" },
+      { href: "/admin/platform/settings", label: "系統設定", icon: "settings", systemPermission: "settings.view" },
     ],
-  },
-  {
-    label: "治理與稽核",
-    items: [{ href: "/admin/audit", label: "操作與狀態稽核", icon: "settings" }],
   },
 ];
 
@@ -184,7 +193,7 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
           <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold tracking-wide ${mode === "platform" ? "bg-white text-[#18245b]" : "bg-[#1f79d1] text-white"}`}>{mode === "platform" ? "XP" : "XH"}</div>
           <div>
             <div className="text-sm font-semibold tracking-wide">{mode === "platform" ? "XINHOW PLATFORM" : "XINHOW"}</div>
-            <div className="mt-0.5 text-[11px] text-slate-400">{mode === "platform" ? "SYSTEM OWNER CONSOLE" : "BOOKING CONSOLE"}</div>
+            <div className="mt-0.5 text-xs text-slate-400">{mode === "platform" ? "系統管理總控台" : "品牌營運後台"}</div>
           </div>
         </div>
       </div>
@@ -202,18 +211,18 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
                 aria-expanded={groupOpen}
                 aria-controls={groupId}
                 onClick={() => setOpenGroup(groupOpen ? null : group.label)}
-                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-[11px] font-semibold tracking-[0.16em] text-slate-400 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold tracking-[0.08em] text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
               >
                 <span className={`transition-transform ${groupOpen ? "rotate-90" : ""}`} aria-hidden="true">›</span>
                 <span className="flex-1">{group.label}</span>
-                <span className="text-[10px] font-normal tracking-normal text-slate-500">{group.items.length}</span>
+                <span className="text-xs font-normal tracking-normal text-slate-400">{group.items.length}</span>
               </button>
               {groupOpen && <div id={groupId} className="mt-1 space-y-1">{group.items.map((item) => <NavItem key={item.href} item={item} pathname={pathname} unread={unread} close={close} />)}</div>}
             </div>
           );
         })}
       </div>
-      <div className="border-t border-white/10 px-5 py-4 text-[11px] leading-5 text-slate-500">{mode === "platform" ? "平台總控台 · 跨品牌管理" : "營運後台 · 品牌資料隔離"}</div>
+      <div className="border-t border-white/10 px-5 py-4 text-xs leading-5 text-slate-400">{mode === "platform" ? "系統總控台 · 跨品牌管理" : "營運後台 · 各品牌資料分開管理"}</div>
     </div>
   );
 }
@@ -232,12 +241,12 @@ function NavItem({ item, pathname, unread, close }: { item: Item; pathname: stri
     >
       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {showBadge && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[11px] font-bold leading-5 text-white">{unread > 99 ? "99+" : unread}</span>}
+      {showBadge && <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold leading-5 text-white">{unread > 99 ? "99+" : unread}</span>}
     </Link>
   );
 }
 
-export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, hasBrandContext = true }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean; hasBrandContext?: boolean }) {
+export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platformAccessType = null, platformPermissions = [], hasBrandContext = true, modules = { events: true, memberships: true, crm: true, line: true, legacy: false } }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean; platformAccessType?: PlatformAccessType | null; platformPermissions?: SystemPermission[]; hasBrandContext?: boolean; modules?: AdminModuleVisibility }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(chatUnread);
@@ -247,7 +256,7 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, hasBra
   const groups = GROUPS.filter((group) => (isAdmin || !group.adminOnly) && (mode === "platform" ? group.platformOnly === true : !group.platformOnly))
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => isAdmin || (!item.adminOnly && (role !== "provider" || providerAllowed.has(item.href)))),
+      items: group.items.filter((item) => (!item.systemAdminOnly || platformAccessType === "system_admin") && (!item.systemPermission || platformAccessType === "system_admin" || platformPermissions.includes(item.systemPermission)) && (!item.module || modules[item.module]) && (isAdmin || (!item.adminOnly && (role !== "provider" || providerAllowed.has(item.href))))),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -306,7 +315,7 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, hasBra
       {mobileOpen && (
         <>
           <button type="button" aria-label="關閉後台選單" onClick={() => setMobileOpen(false)} className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden" />
-          <aside role="dialog" aria-modal="true" aria-label={mode === "platform" ? "系統擁有者平台選單" : "品牌營運選單"} className="fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] shadow-2xl lg:hidden">
+          <aside role="dialog" aria-modal="true" aria-label={mode === "platform" ? "系統管理選單" : "品牌營運選單"} className="fixed inset-y-0 left-0 z-50 w-[min(18rem,88vw)] shadow-2xl lg:hidden">
             <NavigationContent groups={groups} unread={unread} close={() => setMobileOpen(false)} mode={mode} />
           </aside>
         </>

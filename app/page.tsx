@@ -5,6 +5,9 @@ import { headers } from "next/headers";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { FunnelTracker } from "@/components/FunnelTracker";
 import { MarketingHome } from "@/components/MarketingHome";
+import { IndustryShowcase } from "@/components/showcase/IndustryShowcase";
+import { ShowcaseFonts } from "@/components/showcase/ShowcaseFonts";
+import { loadPublicBrandPage } from "@/lib/public-brand-page";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +53,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
   if (!clinicSlug && !clinicIdParam && isPlatformHost(requestHost)) return <MarketingHome />;
 
   let clinicId: string | null = null;
+  let brandPage: Awaited<ReturnType<typeof loadPublicBrandPage>> = null;
   try {
     const svc = createServiceClient();
     clinicId = await resolvePublicClinicIdFromScope(svc, {
@@ -57,8 +61,17 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
       clinicId: clinicIdParam,
       host: requestHost,
     });
+    if (clinicId) brandPage = await loadPublicBrandPage(svc, clinicId);
   } catch {
     clinicId = null;
+  }
+  if (brandPage) {
+    return (
+      <ShowcaseFonts>
+        <FunnelTracker eventName="portal_view" />
+        <IndustryShowcase slug={brandPage.template} brand={brandPage} />
+      </ShowcaseFonts>
+    );
   }
   const clinic = await getClinic(clinicId);
   const basicId = clinic?.line_basic_id?.trim() || null;

@@ -15,7 +15,7 @@ const EVENT_NAMES = new Set<FunnelEventName>([
 ]);
 
 export async function POST(request: NextRequest) {
-  const rate = checkRateLimit(request, "analytics:funnel", 60);
+  const rate = await checkRateLimit(request, "analytics:funnel", 60);
   if (!rate.allowed) return fail("事件過於頻繁", 429);
   try {
     const body = await request.json().catch(() => null) as { event_name?: string; anonymous_id?: string; source?: string | null; metadata?: Record<string, unknown> } | null;

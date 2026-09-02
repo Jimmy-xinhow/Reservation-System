@@ -1,4 +1,4 @@
-// Railway cron：每次同時觸發提醒與 CRM Lite 行銷自動化。
+// Railway cron：依序觸發提醒、行銷、報名／付款逾時與 Rich Menu 排程。
 const secret = process.env.CRON_SECRET;
 if (!secret) {
   console.error("[cron] 缺少 CRON_SECRET");
@@ -12,19 +12,23 @@ const marketingTarget =
   process.env.CRON_MARKETING_TARGET_URL ||
   (appUrl ? `${appUrl}/api/cron/marketing` : reminderTarget?.replace(/\/api\/cron\/reminders\/?$/, "/api/cron/marketing"));
 
-if (!reminderTarget || !marketingTarget) {
-  console.error("[cron] 缺少 APP_URL 或 CRON_TARGET_URL");
-  process.exit(1);
-}
-
 const registrationTarget =
   process.env.CRON_REGISTRATION_TARGET_URL ||
   (appUrl ? `${appUrl}/api/cron/registration` : reminderTarget?.replace(/\/api\/cron\/reminders\/?$/, "/api/cron/registration"));
+const richMenuTarget =
+  process.env.CRON_RICHMENU_TARGET_URL ||
+  (appUrl ? `${appUrl}/api/cron/richmenu` : reminderTarget?.replace(/\/api\/cron\/reminders\/?$/, "/api/cron/richmenu"));
+
+if (!reminderTarget || !marketingTarget || !registrationTarget || !richMenuTarget) {
+  console.error("[cron] 缺少 APP_URL 或 Cron endpoint URL");
+  process.exit(1);
+}
 
 const targets = [
   ["reminders", reminderTarget],
   ["marketing", marketingTarget],
   ["registration", registrationTarget],
+  ["richmenu", richMenuTarget],
 ];
 
 let failed = false;

@@ -2,6 +2,8 @@
 
 更新日期：2026-08-06
 
+> 本檔保留 2026-08-06 production 快照，不代表目前 staging 或 M7 最新狀態。2026-08-13 的產品重整、角色、Rich Menu、瀏覽器身分與全新資料庫證據，請以 `docs/staging-full-acceptance-2026-08-12.md` 與 `docs/acceptance-matrix.md` 為準。
+
 本報告記錄目前已取得的程式、正式 Supabase 資料庫與併發驗收證據。沒有外部服務設定或備份／還原證據的項目，仍維持未完成，不宣稱正式上線完成。
 
 ## 已完成
@@ -63,7 +65,7 @@
 
 ## 尚未完成的外部驗收
 
-- 備份／還原演練：本機沒有 Docker Desktop；已找到 PostgreSQL 16 `pg_dump.exe`，但尚未設定 Supabase DB connection string／password，仍未取得可還原 backup 證據。
+- 備份／還原演練：2026-08-13 已完成隔離 PostgreSQL 全新資料庫的 custom-format dump／獨立 restore，還原後 63 張 public table、RLS 全開、anon policy 0；這不取代 production／staging Supabase 真實資料備份，後者仍需 DB connection string／password 與獨立還原目標。
 - LINE LIFF、Rich Menu、webhook signature、destination mapping：需要品牌 Channel 設定與 secret。
 - Email／行銷投遞：需要 Email provider、寄件網域與測試信箱。
 - ECPay／NewebPay：需要 test merchant、金流設定與可接收的 callback URL。

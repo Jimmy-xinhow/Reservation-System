@@ -9,13 +9,16 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const rate = checkRateLimit(request, "membership:portal", 8);
+  const rate = await checkRateLimit(request, "membership:portal", 8);
   if (!rate.allowed) return fail("查詢次數過多，請稍後再試", 429);
   try {
     const body = await request.json().catch(() => null) as { browser_token?: string; name?: string; phone?: string; birthday?: string } | null;
     const service = createServiceClient();
     const clinicId = await resolvePublicClinicId(request, service);
     if (!clinicId) return fail("找不到品牌入口", 404);
+    const settings = await getClinicSettings(service, clinicId);
+    if (!settings) return fail("品牌設定不存在", 503);
+    if (!settings.memberships_enabled) return fail("此品牌目前未啟用會員與套票", 403);
     let patientId: string | null = null;
     const identity = body?.browser_token ? verifyBrowserBookingToken(body.browser_token) : null;
     if (identity) {
@@ -24,8 +27,6 @@ export async function POST(request: NextRequest) {
     } else {
       const name = body?.name?.trim() ?? ""; const phone = body?.phone?.trim() ?? ""; const birthday = body?.birthday?.trim() ?? "";
       if (!name || !phone || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return fail("請填寫姓名、電話與出生年月日");
-      const settings = await getClinicSettings(service, clinicId);
-      if (!settings) return fail("品牌設定不存在", 503);
       const { data, error } = await service.rpc("create_or_get_public_patient", { p_clinic_id: clinicId, p_name: name, p_phone: phone, p_birthday: birthday, p_line_user_id: null });
       if (error) return fail(error.message, 409);
       const row = Array.isArray(data) ? data[0] : data;

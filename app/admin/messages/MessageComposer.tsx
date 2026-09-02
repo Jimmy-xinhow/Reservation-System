@@ -7,6 +7,12 @@ import { SubmitButton } from "@/components/SubmitButton";
 type ServerAction = (fd: FormData) => Promise<void>;
 
 const emptyCard = (): MsgCard => ({ imageUrl: "", title: "", text: "", buttons: [] });
+const TEXT_PRESETS = [
+  { name: "預約行前提醒", text: "提醒您即將有一筆預約，請提早抵達；若無法前來，請透過預約頁取消或改期。" },
+  { name: "臨時異動通知", text: "您好，您的預約安排有異動，請查看最新時間；如需協助請直接回覆本訊息。" },
+  { name: "活動最後提醒", text: "您報名的活動即將開始，請備妥報到資訊並提早抵達，期待與您見面。" },
+  { name: "回訪關懷", text: "感謝您上次的到訪。如需安排下一次服務，可直接從品牌預約入口快速選擇時間。" },
+] as const;
 
 export default function MessageComposer({
   initial,
@@ -32,6 +38,25 @@ export default function MessageComposer({
       {initial && <input type="hidden" name="id" value={initial.id} />}
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="data" value={JSON.stringify(data)} />
+
+      {!initial && (
+        <div className="rounded-xl border border-brand-100 bg-brand-50 p-3">
+          <p className="mb-2 text-sm font-medium text-brand-900">從常用範本開始</p>
+          <div className="flex flex-wrap gap-2">
+            {TEXT_PRESETS.map((preset) => (
+              <button
+                key={preset.name}
+                type="button"
+                className="btn btn-secondary min-h-10 px-3 py-2 text-xs"
+                onClick={() => { setName(preset.name); setKind("text"); setText(preset.text); }}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-brand-700">套用後仍可依品牌語氣修改再儲存，不會直接發送。</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="text-sm">

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
-import { verifyLiffIdToken } from "@/lib/line";
+import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { verifyBrowserBookingToken, type BrowserBookingIdentity } from "@/lib/browser-booking";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -23,7 +23,7 @@ interface RescheduleBody {
 }
 
 export async function POST(req: NextRequest) {
-  const rate = checkRateLimit(req, "booking:reschedule", 10);
+  const rate = await checkRateLimit(req, "booking:reschedule", 10);
   if (!rate.allowed) {
     const response = fail("請稍後再試", 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
@@ -35,27 +35,28 @@ export async function POST(req: NextRequest) {
     if (!body?.appointment_id) return fail("缺少改期預約");
     if (!body.idToken && !body.browser_token) return fail("缺少身分驗證", 401);
 
+    const svc = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, svc);
+    if (!clinicId) return fail("找不到品牌", 500);
+
     let lineUserId: string | null = null;
     let browserIdentity: BrowserBookingIdentity | null = null;
     if (body.idToken) {
       try {
-        lineUserId = (await verifyLiffIdToken(body.idToken)).sub;
-      } catch (error) {
-        return fail(`LINE 身分驗證失敗：${error instanceof Error ? error.message : "請重新登入"}`, 401);
+        lineUserId = (await verifyClinicLiffIdToken(svc, clinicId, body.idToken)).sub;
+      } catch {
+        return fail("LINE 身分驗證失敗，請重新開啟預約頁。", 401);
       }
     } else {
       browserIdentity = body.browser_token ? verifyBrowserBookingToken(body.browser_token) : null;
       if (!browserIdentity) return fail("瀏覽器驗證已失效，請重新開始", 401);
     }
 
-    const svc = createServiceClient();
-    const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("找不到品牌", 500);
     if (browserIdentity && browserIdentity.clinicId !== clinicId) return fail("品牌身分不一致", 403);
 
     const { data: appointment, error: appointmentError } = await svc
       .from("appointments")
-      .select("id, clinic_id, patient_id, status, start_at, doctor_id, service_id, patients(line_user_id)")
+      .select("id, clinic_id, patient_id, status, start_at, doctor_id, service_id, waitlist_entry_id, patients(line_user_id)")
       .eq("id", body.appointment_id)
       .eq("clinic_id", clinicId)
       .maybeSingle();
@@ -70,6 +71,11 @@ export async function POST(req: NextRequest) {
       if (appointment.patient_id !== browserIdentity.patientId) return fail("此預約不屬於目前瀏覽器身分", 403);
     } else if (!lineUserId || ownerLineUserId !== lineUserId) {
       return fail("此預約不屬於目前 LINE 身分", 403);
+    }
+    if (appointment.waitlist_entry_id) {
+      const { data: offer, error: offerError } = await svc.from("appointment_waitlist_entries").select("id").eq("id", appointment.waitlist_entry_id).eq("clinic_id", clinicId).eq("status", "offered").maybeSingle();
+      if (offerError) return fail(offerError.message, 500);
+      if (offer) return fail("請先接受候補名額，再進行改期", 409);
     }
     if (appointment.status !== "booked" && appointment.status !== "confirmed") {
       return fail("此預約目前無法改期");

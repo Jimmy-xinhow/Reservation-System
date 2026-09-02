@@ -17,10 +17,17 @@ const publicRoutes = [
   "/membership",
   "/my",
   "/payment/result",
+  "/embed/book",
   "/embed/register",
   "/admin/login",
 ];
-const cronRoutes = ["/api/cron/reminders", "/api/cron/registration", "/api/cron/marketing", "/api/cron/membership"];
+const cronRoutes = [
+  "/api/cron/reminders",
+  "/api/cron/registration",
+  "/api/cron/marketing",
+  "/api/cron/membership",
+  "/api/cron/richmenu",
+];
 
 async function fetchWithTimeout(path) {
   const controller = new AbortController();

@@ -21,6 +21,8 @@ import {
   toggleSegmentAction,
   updateAutomationAction,
 } from "./actions";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,7 @@ interface AutomationRow {
 
 export default async function CrmPage() {
   const { supabase, role, clinicId } = await requireMember();
+  if (!(await isAdminModuleEnabled(supabase, clinicId, "crm"))) return <ModuleDisabled title="顧客回訪與自動提醒" />;
   const canEdit = role === "owner" || role === "admin";
   if (!canViewSensitiveCustomerData(role)) {
     return <p className="card p-6 text-sm text-slate-500">目前角色無法查看 CRM 顧客資料。</p>;
@@ -98,9 +101,10 @@ export default async function CrmPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">CRM Lite</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            管理顧客資料、分眾與規則式行銷。所有發送都只對已同意行銷的顧客執行，完整投遞紀錄會保留在系統內。
+          <p className="eyebrow">顧客經營</p>
+          <h1 className="text-2xl font-bold text-slate-900">顧客回訪與自動提醒</h1>
+          <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
+            依清楚規則整理顧客名單，並在指定情況自動發送訊息。只有已同意接收行銷訊息的顧客會收到，完整發送紀錄會保留在系統內。
           </p>
         </div>
         <Link href="/admin/patients" className="btn btn-secondary w-fit">
@@ -121,7 +125,7 @@ export default async function CrmPage() {
         <p className="mt-1 text-sm leading-6 text-slate-600">先建立可解釋的分眾，再建立單一目的的自動化，啟用後觀察投遞結果；不要同時對同一顧客啟用多個相同觸發條件，避免訊息重複。</p>
       </section>
 
-      <nav aria-label="CRM Lite 導覽" className="sticky top-[68px] z-10 -mx-1 flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur">
+      <nav aria-label="顧客回訪功能導覽" className="sticky top-[68px] z-10 -mx-1 flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur">
         <a href="#segments" className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">分眾</a>
         <a href="#automations" className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">自動化</a>
         <a href="#delivery" className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">投遞狀態</a>

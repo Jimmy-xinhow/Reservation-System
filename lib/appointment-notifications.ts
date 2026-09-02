@@ -3,6 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
+import { customerEntryUrl } from "@/lib/customer-entry";
 
 export const APPOINTMENT_NOTIFICATION_KINDS = ["pending", "confirmed", "cancelled", "rescheduled"] as const;
 export type AppointmentNotificationKind = (typeof APPOINTMENT_NOTIFICATION_KINDS)[number];
@@ -58,8 +61,23 @@ export async function notifyAppointmentStatus(
     const claim = await claimNotification(svc, appointment, kind, "line");
     if (claim) {
       try {
+        const context = await getClinicLineChannelContext(svc, appointment.clinic_id);
         const token = lineAccessTokenForDestination(appointment.line_destination ?? undefined);
-        await pushMessages(appointment.patient_line_user_id, [{ type: "text", text: message.text }], token);
+        const manageUrl = customerEntryUrl("appointments", {
+          baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
+          clinicSlug: context.clinicSlug,
+          liffId: context.liffId,
+        });
+        await pushMessages(appointment.patient_line_user_id, [buildAppointmentStatusFlex({
+          kind,
+          clinicName: appointment.clinic_name,
+          dateTime: formatAppointmentDate(appointment.start_at),
+          serviceName: appointment.service_name ?? "預約服務",
+          providerName: appointment.doctor_name,
+          manageUrl,
+          depositAmount: appointment.deposit_amount,
+          queueNumber: appointment.queue_number,
+        })], token);
         await finishNotification(svc, claim, "sent");
         result.sent += 1;
       } catch (error) {
@@ -136,7 +154,7 @@ export async function processAppointmentNotificationQueue(svc: SupabaseClient): 
 
       const { data: appointment, error: appointmentError } = await svc
         .from("appointments")
-        .select("status, deposit_status")
+        .select("status, deposit_status, waitlist_entry_id")
         .eq("id", String(event.appointment_id))
         .maybeSingle();
       if (appointmentError) {
@@ -146,6 +164,13 @@ export async function processAppointmentNotificationQueue(svc: SupabaseClient): 
       // A later state transition supersedes this event; it no longer needs a
       // notification, but it must still leave the queue permanently.
       if (String(appointment?.status ?? "") !== String(event.to_status)) {
+        await markAppointmentStatusEventProcessed(svc, eventId);
+        continue;
+      }
+      // A waitlist offer creates a capacity-holding appointment before the
+      // customer accepts. The waitlist queue owns that notification; sending
+      // the ordinary booked message here would falsely claim a confirmed booking.
+      if (appointment?.waitlist_entry_id && String(event.to_status) === "booked") {
         await markAppointmentStatusEventProcessed(svc, eventId);
         continue;
       }
@@ -315,16 +340,7 @@ function buildMessage(appointment: AppointmentRecord, kind: AppointmentNotificat
     cancelled: "預約已取消",
     rescheduled: "預約已改期",
   };
-  const date = new Intl.DateTimeFormat("zh-TW", {
-    timeZone: "Asia/Taipei",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(appointment.start_at));
+  const date = formatAppointmentDate(appointment.start_at);
   const lines = [
     `${appointment.clinic_name}｜${labels[kind]}`,
     `預約人：${appointment.patient_name}`,
@@ -341,6 +357,19 @@ function buildMessage(appointment: AppointmentRecord, kind: AppointmentNotificat
   const subject = `${appointment.clinic_name}｜${labels[kind]}`;
   const html = `<div style="font-family:sans-serif;line-height:1.8;max-width:560px"><h2>${escapeHtml(subject)}</h2><p>${lines.map(escapeHtml).join("<br>")}</p></div>`;
   return { text, subject, html };
+}
+
+function formatAppointmentDate(value: string): string {
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
 }
 
 function escapeHtml(value: string): string {

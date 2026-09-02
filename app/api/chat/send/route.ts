@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail } from "@/lib/http";
-import { verifyLiffIdToken } from "@/lib/line";
+import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { isClinicOpenNow } from "@/lib/queue";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolvePublicClinicId } from "@/lib/public-brand";
@@ -20,7 +20,7 @@ const OFFHOURS_REPLY = "目前非服務時間,我們將在服務時間盡快回�
  */
 export async function POST(req: NextRequest) {
   try {
-    const rate = checkRateLimit(req, "chat:send", 20);
+    const rate = await checkRateLimit(req, "chat:send", 20);
     if (!rate.allowed) {
       const response = fail("請稍後再試", 429);
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
@@ -37,17 +37,17 @@ export async function POST(req: NextRequest) {
     if (body.length > 2000) return fail("訊息過長");
     if (!payload.idToken) return fail("缺少 LINE 身分驗證");
 
-    let lineUserId: string;
-    try {
-      const profile = await verifyLiffIdToken(payload.idToken);
-      lineUserId = profile.sub;
-    } catch (e) {
-      return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟頁面"), 401);
-    }
-
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
     if (!clinicId) return fail("缺少品牌設定", 500);
+
+    let lineUserId: string;
+    try {
+      const profile = await verifyClinicLiffIdToken(svc, clinicId, payload.idToken);
+      lineUserId = profile.sub;
+    } catch {
+      return fail("LINE 身分驗證失敗，請重新開啟頁面。", 401);
+    }
 
     // 黑名單:被封鎖者訊息一律靜默丟棄(不存、不回,對方無從得知被封,避免激怒)
     const { data: blk } = await svc

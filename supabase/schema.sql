@@ -17,13 +17,15 @@ create table if not exists clinics (
   phone text,
   address text,
   intro text,
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  updated_at timestamptz not null default now()
 );
 -- 既有資料庫補欄位(idempotent)
 alter table clinics add column if not exists line_basic_id text;
 alter table clinics add column if not exists phone text;
 alter table clinics add column if not exists address text;
 alter table clinics add column if not exists intro text;
+alter table clinics add column if not exists updated_at timestamptz not null default now();
 
 create table if not exists clinic_settings (
   clinic_id uuid primary key references clinics(id) on delete cascade,
@@ -329,6 +331,15 @@ create table if not exists service_resource_assignments (
 );
 create index if not exists service_resources_clinic_idx on service_resources (clinic_id, active, name);
 create index if not exists service_resource_assignments_service_idx on service_resource_assignments (clinic_id, service_id);
+
+-- updated_at 自動更新；必須先於任何引用它的 trigger 建立。
+create or replace function touch_updated_at() returns trigger
+language plpgsql set search_path = '' as $$ begin new.updated_at = now(); return new; end; $$;
+
+drop trigger if exists trg_clinics_touch on public.clinics;
+create trigger trg_clinics_touch before update on public.clinics
+  for each row execute function public.touch_updated_at();
+
 drop trigger if exists trg_service_resources_touch on service_resources;
 create trigger trg_service_resources_touch before update on service_resources for each row execute function touch_updated_at();
 alter table service_resources enable row level security;
@@ -352,7 +363,7 @@ create table if not exists appointments (
     check (status in ('booked','confirmed','cancelled','done','no_show')),
   is_self_pay boolean not null default false,
   deposit_status text not null default 'none'
-    check (deposit_status in ('none','pending','paid','waived','refunded')),
+    check (deposit_status in ('none','pending','paid','failed','waived','refunded')),
   deposit_amount integer not null default 0,
   deposit_expires_at timestamptz,
   note text,
@@ -490,10 +501,6 @@ end; $$;
 
 revoke all on function claim_reminder(uuid, text) from public, anon, authenticated;
 grant execute on function claim_reminder(uuid, text) to service_role;
-
--- updated_at 自動更新
-create or replace function touch_updated_at() returns trigger
-language plpgsql set search_path = '' as $$ begin new.updated_at = now(); return new; end; $$;
 
 drop trigger if exists trg_appt_touch on appointments;
 create trigger trg_appt_touch before update on appointments
@@ -1246,8 +1253,23 @@ alter table clinic_settings add column if not exists timezone text not null defa
 alter table clinic_settings add column if not exists brand_logo_url text;
 alter table clinic_settings add column if not exists brand_primary_color text not null default '#1B6FC4';
 alter table clinic_settings add column if not exists brand_accent_color text not null default '#B8862B';
+alter table clinic_settings add column if not exists brand_page_enabled boolean not null default false;
+alter table clinic_settings add column if not exists brand_page_template text not null default 'beauty';
+alter table clinic_settings add column if not exists brand_page_content jsonb not null default '{}'::jsonb;
 alter table clinic_settings add column if not exists public_booking_enabled boolean not null default true;
 alter table clinic_settings add column if not exists public_registration_enabled boolean not null default true;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'clinic_settings_brand_page_template_check') then
+    alter table clinic_settings add constraint clinic_settings_brand_page_template_check
+      check (brand_page_template in ('beauty', 'wellness', 'fitness', 'education', 'consulting', 'pet-care', 'venue', 'event'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'clinic_settings_brand_page_content_check') then
+    alter table clinic_settings add constraint clinic_settings_brand_page_content_check
+      check (jsonb_typeof(brand_page_content) = 'object');
+  end if;
+end $$;
 
 create table if not exists clinic_domains (
   id uuid primary key default gen_random_uuid(),
@@ -1603,9 +1625,9 @@ begin
     v_payment_status := 'pending';
   end if;
 
-  select coalesce(max(nullif(regexp_replace(r.registration_no, '[^0-9]', '', 'g'), '')::bigint), 0) + 1
+  select coalesce(max(nullif(substring(r.registration_no from '([0-9]+)$'), '')::bigint), 0) + 1
     into v_no from registrations r where r.event_id = p_event_id;
-  v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, 4, '0');
+  v_registration_no := 'REG-' || to_char(current_date, 'YYYYMMDD') || '-' || lpad(v_no::text, greatest(4, length(v_no::text)), '0');
 
   insert into registrations (
     clinic_id, event_id, session_id, ticket_type_id, registration_no, status,
@@ -2312,8 +2334,8 @@ begin
     v_status := case when v_amount=0 then 'confirmed' else 'pending' end;
     v_payment_status := case when v_amount=0 then 'not_required' else 'pending' end;
   end if;
-  select coalesce(max(nullif(regexp_replace(r.registration_no,'[^0-9]','','g'),'')::bigint),0)+1 into v_no from registrations r where r.clinic_id=p_clinic_id and r.event_id=p_event_id;
-  v_registration_no := 'REG-' || to_char(current_date,'YYYYMMDD') || '-' || lpad(v_no::text,4,'0');
+  select coalesce(max(nullif(substring(r.registration_no from '([0-9]+)$'),'')::bigint),0)+1 into v_no from registrations r where r.clinic_id=p_clinic_id and r.event_id=p_event_id;
+  v_registration_no := 'REG-' || to_char(current_date,'YYYYMMDD') || '-' || lpad(v_no::text,greatest(4,length(v_no::text)),'0');
   insert into registrations (clinic_id,event_id,session_id,ticket_type_id,registration_no,status,payment_status,amount,discount_code_id,discount_amount,membership_id,name,phone,email,line_user_id,marketing_opt_in,answers,checkin_token_hash,expires_at,form_id,form_version)
     values (p_clinic_id,p_event_id,p_session_id,p_ticket_type_id,v_registration_no,v_status,v_payment_status,v_amount,v_discount_code_id,v_discount,v_membership_id,trim(p_name),trim(p_phone),nullif(trim(p_email),''),nullif(trim(p_line_user_id),''),coalesce(p_marketing_opt_in,false),coalesce(p_answers,'{}'::jsonb),encode(digest(v_token,'sha256'),'hex'),case when v_status='pending' then now()+interval '15 minutes' else null end,p_form_id,p_form_version) returning id into v_id;
   insert into registration_answers (clinic_id,registration_id,answers) values (p_clinic_id,v_id,p_answers);
@@ -3654,6 +3676,7 @@ revoke all on function public.book_time_slot_with_membership_for_service(uuid, u
 grant execute on function public.service_booking_minutes(uuid, uuid, integer, text, boolean, integer) to service_role;
 grant execute on function public.get_available_slots_for_service(uuid, uuid, date, text, uuid) to service_role;
 grant execute on function public.book_time_slot_for_service(uuid, uuid, uuid, timestamptz, text, boolean, uuid) to service_role;
+
 grant execute on function public.book_time_slot_with_membership_for_service(uuid, uuid, uuid, timestamptz, text, boolean, text, uuid) to service_role;
 
 create or replace function public.register_for_event_with_terms(
@@ -3948,6 +3971,48 @@ as $$
        ) + required.quantity > resource.capacity));
 $$;
 
+-- Shared resource capacity must be guarded by resource id, not only by
+-- service id. This trigger covers every appointment write path, including
+-- provider bookings, service-only bookings, admin writes and reschedules.
+create or replace function public.enforce_appointment_resource_capacity()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  resource_row record;
+begin
+  if new.service_id is null or new.status not in ('booked', 'confirmed', 'done') then
+    return new;
+  end if;
+  for resource_row in
+    select assignment.resource_id
+      from public.service_resource_assignments assignment
+     where assignment.clinic_id = new.clinic_id
+       and assignment.service_id = new.service_id
+     order by assignment.resource_id
+  loop
+    perform pg_advisory_xact_lock(
+      hashtextextended('appointment-resource:' || new.clinic_id::text || ':' || resource_row.resource_id::text, 0)
+    );
+  end loop;
+  if not public.service_resources_available(
+    new.clinic_id, new.service_id, new.start_at, new.end_at, new.id
+  ) then
+    raise exception 'service resource is unavailable';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_appointments_resource_capacity on public.appointments;
+create trigger trg_appointments_resource_capacity
+before insert or update of clinic_id, service_id, start_at, end_at, status
+on public.appointments
+for each row execute function public.enforce_appointment_resource_capacity();
+revoke all on function public.enforce_appointment_resource_capacity() from public, anon, authenticated;
+
 create or replace function public.get_available_sessions_for_service(
   p_clinic_id uuid, p_doctor_id uuid, p_date date, p_service_id uuid
 )
@@ -4112,7 +4177,7 @@ end;
 $$;
 revoke all on function public.expire_pending_membership_payments() from public, anon, authenticated;
 grant execute on function public.expire_pending_membership_payments() to service_role;
-\n+-- Cross-industry booking foundation.
+-- Cross-industry booking foundation.
 -- Existing doctor/provider booking remains compatible; service-only schedules may omit doctor_id.
 begin;
 
@@ -4604,6 +4669,1338 @@ grant execute on function public.cancel_registration_for_customer(uuid, uuid, uu
 
 commit;
 
+-- Compatibility replay of migration 202608120001: time-mode service bookings must
+-- resolve their schedule segment without relying on appointments.template_id.
+
+-- Fix time-mode service bookings: book_time_slot does not persist template_id,
+-- so the service wrapper must resolve the already-validated schedule segment
+-- from the appointment's Taipei date and time.
+begin;
+
+create or replace function public.book_time_slot_for_service(
+  p_clinic_id uuid, p_doctor_id uuid, p_patient_id uuid, p_start_at timestamptz,
+  p_visit_type text default 'return', p_is_self_pay boolean default false, p_service_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_id uuid;
+  v_appointment record;
+  v_settings record;
+  v_segment record;
+  v_end_at timestamptz;
+  v_minutes integer;
+  v_date date;
+  v_time time;
+begin
+  v_id := public.book_time_slot(p_clinic_id, p_doctor_id, p_patient_id, p_start_at, p_visit_type, p_is_self_pay, p_service_id);
+  if p_service_id is null then return v_id; end if;
+
+  select * into v_settings from public.clinic_settings where clinic_id = p_clinic_id;
+  select * into v_appointment from public.appointments where id = v_id and clinic_id = p_clinic_id for update;
+  v_minutes := public.service_booking_minutes(
+    p_clinic_id,
+    p_service_id,
+    greatest(1, extract(epoch from (v_appointment.end_at - v_appointment.start_at))::integer / 60),
+    p_visit_type,
+    coalesce(v_settings.first_visit_extends, false),
+    v_settings.first_visit_minutes
+  );
+  v_end_at := v_appointment.start_at + (v_minutes || ' minutes')::interval;
+  v_date := (v_appointment.start_at at time zone 'Asia/Taipei')::date;
+  v_time := (v_appointment.start_at at time zone 'Asia/Taipei')::time;
+
+  select segment.start_time, segment.end_time
+    into v_segment
+    from (
+      select template.start_time, template.end_time
+        from public.schedule_templates template
+       where template.clinic_id = p_clinic_id
+         and template.doctor_id = p_doctor_id
+         and template.weekday = extract(dow from v_date)
+         and template.active
+         and v_time >= template.start_time
+         and v_time < template.end_time
+         and not exists (
+           select 1
+             from public.schedule_exceptions exception
+            where exception.clinic_id = p_clinic_id
+              and exception.doctor_id = p_doctor_id
+              and exception.date = v_date
+              and exception.is_closed
+              and exception.start_time is null
+         )
+      union all
+      select exception.start_time, exception.end_time
+        from public.schedule_exceptions exception
+       where exception.clinic_id = p_clinic_id
+         and exception.doctor_id = p_doctor_id
+         and exception.date = v_date
+         and not exception.is_closed
+         and v_time >= exception.start_time
+         and v_time < exception.end_time
+    ) segment
+   limit 1;
+
+  if v_segment.end_time is null
+     or v_end_at > ((v_date + v_segment.end_time) at time zone 'Asia/Taipei') then
+    raise exception 'service duration exceeds schedule segment';
+  end if;
+  if exists (
+    select 1
+      from public.appointments appointment
+     where appointment.id <> v_id
+       and appointment.clinic_id = p_clinic_id
+       and appointment.doctor_id = p_doctor_id
+       and appointment.status in ('booked', 'confirmed', 'done')
+       and appointment.start_at < v_end_at
+       and appointment.end_at > v_appointment.start_at
+  ) then
+    raise exception 'service duration slot is full';
+  end if;
+  if not public.service_resources_available(
+    p_clinic_id,
+    p_service_id,
+    v_appointment.start_at,
+    v_end_at,
+    v_id
+  ) then
+    raise exception 'service resource is unavailable';
+  end if;
+
+  update public.appointments
+     set end_at = v_end_at
+   where id = v_id
+     and clinic_id = p_clinic_id;
+  return v_id;
+end;
+$$;
+
+revoke all on function public.book_time_slot_for_service(uuid, uuid, uuid, timestamptz, text, boolean, uuid)
+  from public, anon, authenticated;
+grant execute on function public.book_time_slot_for_service(uuid, uuid, uuid, timestamptz, text, boolean, uuid)
+  to service_role;
+
+commit;
+
+
+
+-- Compatibility replay of migration 202608120002 after the legacy RLS definitions.
+-- Break the provider patients <-> appointments RLS recursion while preserving
+-- assignment-scoped access. The explicit caller check prevents using the helper
+-- to probe another authenticated user's assignments.
+begin;
+
+create or replace function public.provider_has_patient_assignment(
+  p_clinic_id uuid,
+  p_patient_id uuid,
+  p_user_id uuid
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, extensions
+as $$
+  select p_user_id = auth.uid()
+    and exists (
+      select 1
+        from public.appointments appointment
+        join public.doctor_assignments assignment
+          on assignment.clinic_id = appointment.clinic_id
+         and assignment.doctor_id = appointment.doctor_id
+       where appointment.clinic_id = p_clinic_id
+         and appointment.patient_id = p_patient_id
+         and assignment.user_id = p_user_id
+         and assignment.active
+    );
+$$;
+
+revoke all on function public.provider_has_patient_assignment(uuid, uuid, uuid)
+  from public, anon;
+grant execute on function public.provider_has_patient_assignment(uuid, uuid, uuid)
+  to authenticated, service_role;
+
+drop policy if exists patients_provider_read on public.patients;
+create policy patients_provider_read on public.patients for select to authenticated
+  using (
+    patients.clinic_id in (
+      select member.clinic_id
+        from public.clinic_members member
+       where member.user_id = auth.uid()
+    )
+    and (
+      exists (
+        select 1
+          from public.clinic_members member
+         where member.clinic_id = patients.clinic_id
+           and member.user_id = auth.uid()
+           and member.role <> 'provider'
+      )
+      or public.provider_has_patient_assignment(patients.clinic_id, patients.id, auth.uid())
+    )
+  );
+
+drop policy if exists patient_records_provider_read on public.patient_records;
+create policy patient_records_provider_read on public.patient_records for select to authenticated
+  using (
+    patient_records.clinic_id in (
+      select member.clinic_id
+        from public.clinic_members member
+       where member.user_id = auth.uid()
+    )
+    and (
+      exists (
+        select 1
+          from public.clinic_members member
+         where member.clinic_id = patient_records.clinic_id
+           and member.user_id = auth.uid()
+           and member.role <> 'provider'
+      )
+      or public.provider_has_patient_assignment(
+        patient_records.clinic_id,
+        patient_records.patient_id,
+        auth.uid()
+      )
+    )
+  );
+
+commit;
+
+
+
+-- Product restructure M2: appointment waitlist for time and number bookings.
+-- Event registration waitlist_entries remains a separate domain.
+begin;
+
+create table if not exists public.appointment_waitlist_entries (
+  id uuid primary key default gen_random_uuid(), clinic_id uuid not null references public.clinics(id) on delete restrict,
+  patient_id uuid not null references public.patients(id) on delete restrict,
+  service_id uuid references public.services(id) on delete restrict, doctor_id uuid references public.doctors(id) on delete restrict,
+  booking_mode text not null check (booking_mode in ('time', 'number')), template_id uuid,
+  requested_date date not null, requested_start_at timestamptz,
+  visit_type text not null default 'return' check (visit_type in ('first', 'return')),
+  is_self_pay boolean not null default false, booking_answers jsonb not null default '{}'::jsonb,
+  target_key text not null, position integer not null check (position > 0),
+  status text not null default 'waiting' check (status in ('waiting', 'offered', 'booked', 'cancelled', 'expired')),
+  appointment_id uuid references public.appointments(id) on delete restrict,
+  offered_at timestamptz, offer_expires_at timestamptz,
+  source text not null default 'online' check (source in ('online', 'admin', 'line')),
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  check (jsonb_typeof(booking_answers) = 'object'),
+  check ((booking_mode = 'time' and requested_start_at is not null and template_id is null) or (booking_mode = 'number' and requested_start_at is null and template_id is not null)),
+  check ((status = 'offered' and appointment_id is not null and offer_expires_at is not null) or status <> 'offered'),
+  check ((status = 'booked' and appointment_id is not null) or status <> 'booked')
+);
+create unique index if not exists appointment_waitlist_active_patient_target_idx on public.appointment_waitlist_entries (clinic_id, patient_id, target_key) where status in ('waiting', 'offered');
+create index if not exists appointment_waitlist_target_position_idx on public.appointment_waitlist_entries (clinic_id, target_key, status, position);
+create index if not exists appointment_waitlist_offer_expiry_idx on public.appointment_waitlist_entries (offer_expires_at) where status = 'offered';
+alter table public.appointments add column if not exists waitlist_entry_id uuid;
+do $$ begin alter table public.appointments add constraint appointments_waitlist_entry_fkey foreign key (waitlist_entry_id) references public.appointment_waitlist_entries(id) on delete restrict; exception when duplicate_object then null; end $$;
+create unique index if not exists appointments_waitlist_entry_unique_idx on public.appointments (waitlist_entry_id) where waitlist_entry_id is not null;
+
+create table if not exists public.appointment_waitlist_events (
+  id uuid primary key default gen_random_uuid(), clinic_id uuid not null references public.clinics(id) on delete restrict,
+  waitlist_id uuid references public.appointment_waitlist_entries(id) on delete restrict, target_key text not null,
+  kind text not null check (kind in ('joined', 'status_changed', 'promotion_failed')),
+  from_status text, to_status text, actor_id uuid references auth.users(id) on delete set null,
+  appointment_id uuid references public.appointments(id) on delete restrict, error text,
+  metadata jsonb not null default '{}'::jsonb, created_at timestamptz not null default now(),
+  check (jsonb_typeof(metadata) = 'object')
+);
+create index if not exists appointment_waitlist_events_history_idx on public.appointment_waitlist_events (clinic_id, target_key, created_at desc);
+create table if not exists public.appointment_waitlist_notification_logs (
+  id uuid primary key default gen_random_uuid(), clinic_id uuid not null references public.clinics(id) on delete restrict,
+  waitlist_id uuid not null references public.appointment_waitlist_entries(id) on delete restrict,
+  patient_id uuid not null references public.patients(id) on delete restrict,
+  kind text not null check (kind in ('joined', 'offered', 'booked', 'cancelled', 'expired')),
+  channel text not null check (channel in ('line', 'email')),
+  status text not null default 'pending' check (status in ('pending', 'claimed', 'sent', 'failed', 'skipped')),
+  attempt_count integer not null default 0 check (attempt_count >= 0), error text, sent_at timestamptz,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  unique (waitlist_id, kind, channel)
+);
+create index if not exists appointment_waitlist_notifications_pending_idx on public.appointment_waitlist_notification_logs (status, created_at) where status in ('pending', 'failed');
+drop trigger if exists trg_appointment_waitlist_touch on public.appointment_waitlist_entries;
+create trigger trg_appointment_waitlist_touch before update on public.appointment_waitlist_entries for each row execute function public.touch_updated_at();
+drop trigger if exists trg_appointment_waitlist_notifications_touch on public.appointment_waitlist_notification_logs;
+create trigger trg_appointment_waitlist_notifications_touch before update on public.appointment_waitlist_notification_logs for each row execute function public.touch_updated_at();
+
+create or replace function public.appointment_waitlist_target_key(p_booking_mode text, p_doctor_id uuid, p_service_id uuid, p_template_id uuid, p_requested_date date, p_requested_start_at timestamptz)
+returns text language sql immutable set search_path = '' as $$
+  select case when p_booking_mode = 'time' then concat_ws(':', 'time', extract(epoch from p_requested_start_at)::text, coalesce(p_doctor_id::text, '-'), coalesce(p_service_id::text, '-'))
+    when p_booking_mode = 'number' then concat_ws(':', 'number', p_requested_date::text, p_template_id::text, coalesce(p_doctor_id::text, '-'), coalesce(p_service_id::text, '-')) else null end;
+$$;
+create or replace function public.record_appointment_waitlist_change() returns trigger language plpgsql security definer set search_path = public, extensions as $$
+declare v_kind text; v_notification_kind text;
+begin
+  if tg_op = 'INSERT' then v_kind := 'joined'; v_notification_kind := 'joined';
+  elsif new.status is distinct from old.status then v_kind := 'status_changed'; v_notification_kind := new.status;
+  else return new; end if;
+  insert into public.appointment_waitlist_events (clinic_id, waitlist_id, target_key, kind, from_status, to_status, actor_id, appointment_id)
+  values (new.clinic_id, new.id, new.target_key, v_kind, case when tg_op = 'UPDATE' then old.status else null end, new.status, auth.uid(), new.appointment_id);
+  if v_notification_kind in ('joined', 'offered', 'booked', 'cancelled', 'expired') then
+    insert into public.appointment_waitlist_notification_logs (clinic_id, waitlist_id, patient_id, kind, channel)
+    select new.clinic_id, new.id, new.patient_id, v_notification_kind, channel from unnest(array['line'::text, 'email'::text]) channel
+    on conflict (waitlist_id, kind, channel) do nothing;
+  end if; return new;
+end; $$;
+drop trigger if exists trg_appointment_waitlist_change on public.appointment_waitlist_entries;
+create trigger trg_appointment_waitlist_change after insert or update of status on public.appointment_waitlist_entries for each row execute function public.record_appointment_waitlist_change();
+
+-- Appointment waitlist lifecycle. Keep this block synchronized with
+-- supabase/migrations/202608110002_appointment_waitlist.sql.
+create or replace function public.join_appointment_waitlist(
+  p_clinic_id uuid,
+  p_patient_id uuid,
+  p_booking_mode text,
+  p_doctor_id uuid default null,
+  p_service_id uuid default null,
+  p_template_id uuid default null,
+  p_requested_date date default null,
+  p_requested_start_at timestamptz default null,
+  p_visit_type text default 'return',
+  p_is_self_pay boolean default false,
+  p_booking_answers jsonb default '{}'::jsonb,
+  p_source text default 'online'
+) returns table (waitlist_id uuid, waitlist_position integer)
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  settings record;
+  service record;
+  v_date date;
+  v_target_start timestamptz;
+  v_target_key text;
+  v_position integer;
+  v_existing record;
+  v_available boolean := false;
+  v_id uuid;
+begin
+  if p_booking_mode not in ('time', 'number') then raise exception 'invalid booking mode'; end if;
+  if p_visit_type not in ('first', 'return') then raise exception 'invalid visit type'; end if;
+  if p_source not in ('online', 'admin', 'line') then raise exception 'invalid waitlist source'; end if;
+  if jsonb_typeof(coalesce(p_booking_answers, '{}'::jsonb)) <> 'object' then raise exception 'booking answers must be an object'; end if;
+  select * into settings from public.clinic_settings where clinic_id = p_clinic_id;
+  if not found or settings.booking_mode <> p_booking_mode then raise exception 'booking mode does not match brand settings'; end if;
+  if not exists (select 1 from public.patients where id = p_patient_id and clinic_id = p_clinic_id and active)
+    then raise exception 'customer is unavailable'; end if;
+  if p_doctor_id is null and p_service_id is null then raise exception 'service or provider is required'; end if;
+  if p_doctor_id is not null and not exists (select 1 from public.doctors where id = p_doctor_id and clinic_id = p_clinic_id and active)
+    then raise exception 'provider is unavailable'; end if;
+  if p_service_id is not null then
+    select id, booking_target into service from public.services where id = p_service_id and clinic_id = p_clinic_id and active;
+    if not found then raise exception 'service is unavailable'; end if;
+    if service.booking_target = 'provider_required' and p_doctor_id is null then raise exception 'provider is required'; end if;
+  end if;
+
+  if p_booking_mode = 'time' then
+    if p_requested_start_at is null or p_template_id is not null then raise exception 'time waitlist target is invalid'; end if;
+    v_date := (p_requested_start_at at time zone 'Asia/Taipei')::date;
+    if p_requested_date is not null and p_requested_date <> v_date then raise exception 'waitlist date does not match start time'; end if;
+    v_target_start := p_requested_start_at;
+    if p_doctor_id is not null then
+      if not exists (
+        select 1 from public.schedule_templates template
+         where template.clinic_id = p_clinic_id and template.doctor_id = p_doctor_id and template.active
+           and template.weekday = extract(dow from v_date)
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time >= template.start_time
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time < template.end_time
+        union all
+        select 1 from public.schedule_exceptions exception
+         where exception.clinic_id = p_clinic_id and exception.doctor_id = p_doctor_id and exception.date = v_date
+           and not exception.is_closed
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time >= exception.start_time
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time < exception.end_time
+      ) then raise exception 'waitlist target is not a service slot'; end if;
+      if p_service_id is null then
+        select exists(select 1 from public.get_available_slots(p_clinic_id, p_doctor_id, v_date, p_visit_type) slot where slot.slot_start = p_requested_start_at) into v_available;
+      else
+        select exists(select 1 from public.get_available_slots_for_service(p_clinic_id, p_doctor_id, v_date, p_visit_type, p_service_id) slot where slot.slot_start = p_requested_start_at) into v_available;
+      end if;
+    else
+      if not exists (
+        select 1 from public.schedule_templates template
+         where template.clinic_id = p_clinic_id and template.doctor_id is null and template.service_id = p_service_id and template.active
+           and template.weekday = extract(dow from v_date)
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time >= template.start_time
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time < template.end_time
+        union all
+        select 1 from public.schedule_exceptions exception
+         where exception.clinic_id = p_clinic_id and exception.doctor_id is null and exception.service_id = p_service_id and exception.date = v_date
+           and not exception.is_closed
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time >= exception.start_time
+           and (p_requested_start_at at time zone 'Asia/Taipei')::time < exception.end_time
+      ) then raise exception 'waitlist target is not a service slot'; end if;
+      select exists(select 1 from public.get_available_service_slots(p_clinic_id, p_service_id, v_date, p_visit_type, null) slot where slot.slot_start = p_requested_start_at) into v_available;
+    end if;
+  else
+    if p_requested_date is null or p_template_id is null or p_requested_start_at is not null then raise exception 'number waitlist target is invalid'; end if;
+    v_date := p_requested_date;
+    if p_doctor_id is not null then
+      select target.start_at into v_target_start from (
+        select ((v_date + template.start_time) at time zone 'Asia/Taipei') as start_at
+          from public.schedule_templates template
+         where template.id = p_template_id and template.clinic_id = p_clinic_id and template.doctor_id = p_doctor_id
+           and template.active and template.weekday = extract(dow from v_date)
+        union all
+        select ((v_date + exception.start_time) at time zone 'Asia/Taipei')
+          from public.schedule_exceptions exception
+         where exception.id = p_template_id and exception.clinic_id = p_clinic_id and exception.doctor_id = p_doctor_id
+           and exception.date = v_date and not exception.is_closed
+      ) target limit 1;
+      if v_target_start is null then raise exception 'waitlist session is invalid'; end if;
+      if p_service_id is null then
+        select exists(select 1 from public.get_available_sessions(p_clinic_id, p_doctor_id, v_date) session where session.template_id = p_template_id) into v_available;
+      else
+        select exists(select 1 from public.get_available_sessions_for_service(p_clinic_id, p_doctor_id, v_date, p_service_id) session where session.template_id = p_template_id) into v_available;
+      end if;
+    else
+      select target.start_at into v_target_start from (
+        select ((v_date + template.start_time) at time zone 'Asia/Taipei') as start_at
+          from public.schedule_templates template
+         where template.id = p_template_id and template.clinic_id = p_clinic_id and template.doctor_id is null
+           and template.service_id = p_service_id and template.active and template.weekday = extract(dow from v_date)
+        union all
+        select ((v_date + exception.start_time) at time zone 'Asia/Taipei')
+          from public.schedule_exceptions exception
+         where exception.id = p_template_id and exception.clinic_id = p_clinic_id and exception.doctor_id is null
+           and exception.service_id = p_service_id and exception.date = v_date and not exception.is_closed
+      ) target limit 1;
+      if v_target_start is null then raise exception 'waitlist session is invalid'; end if;
+      select exists(select 1 from public.get_available_service_sessions(p_clinic_id, p_service_id, v_date) session where session.template_id = p_template_id) into v_available;
+    end if;
+  end if;
+
+  if v_target_start < now() + (coalesce(settings.min_lead_minutes, 30) || ' minutes')::interval then raise exception 'waitlist target is too late'; end if;
+  if v_date > ((now() at time zone 'Asia/Taipei')::date + coalesce(settings.max_advance_days, 30)) then raise exception 'waitlist target is too far away'; end if;
+  if v_available then raise exception 'slot is still available'; end if;
+
+  v_target_key := public.appointment_waitlist_target_key(p_booking_mode, p_doctor_id, p_service_id, p_template_id, v_date, p_requested_start_at);
+  perform pg_advisory_xact_lock(hashtext('appointment-waitlist:' || p_clinic_id::text || ':' || v_target_key));
+  select id, position into v_existing from public.appointment_waitlist_entries
+   where clinic_id = p_clinic_id and patient_id = p_patient_id and target_key = v_target_key and status in ('waiting', 'offered')
+   for update;
+  if found then return query select v_existing.id, v_existing.position; return; end if;
+  select coalesce(max(position), 0) + 1 into v_position from public.appointment_waitlist_entries
+   where clinic_id = p_clinic_id and target_key = v_target_key;
+  insert into public.appointment_waitlist_entries (
+    clinic_id, patient_id, service_id, doctor_id, booking_mode, template_id,
+    requested_date, requested_start_at, visit_type, is_self_pay, booking_answers,
+    target_key, position, source
+  ) values (
+    p_clinic_id, p_patient_id, p_service_id, p_doctor_id, p_booking_mode, p_template_id,
+    v_date, p_requested_start_at, p_visit_type, p_is_self_pay, coalesce(p_booking_answers, '{}'::jsonb),
+    v_target_key, v_position, p_source
+  ) returning id into v_id;
+  return query select v_id, v_position;
+end;
+$$;
+
+create or replace function public.offer_next_appointment_waitlist(
+  p_clinic_id uuid,
+  p_target_key text,
+  p_offer_minutes integer default 15
+) returns table (waitlist_id uuid, appointment_id uuid, patient_id uuid, offer_expires_at timestamptz)
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  candidate record;
+  booking record;
+  v_appointment_id uuid;
+  v_offer_expires timestamptz;
+  v_error text;
+begin
+  if p_offer_minutes not between 5 and 1440 then raise exception 'invalid waitlist offer duration'; end if;
+  perform pg_advisory_xact_lock(hashtext('appointment-waitlist:' || p_clinic_id::text || ':' || p_target_key));
+  for candidate in
+    select * from public.appointment_waitlist_entries
+     where clinic_id = p_clinic_id and target_key = p_target_key and status = 'waiting'
+     order by position, created_at
+     for update skip locked
+  loop
+    v_appointment_id := null;
+    v_error := null;
+    begin
+      if candidate.booking_mode = 'time' then
+        if candidate.doctor_id is null then
+          v_appointment_id := public.book_service_slot(
+            candidate.clinic_id, candidate.service_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, candidate.booking_answers
+          );
+        elsif candidate.service_id is null then
+          v_appointment_id := public.book_time_slot(
+            candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, null
+          );
+        else
+          v_appointment_id := public.book_time_slot_for_service(
+            candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, candidate.service_id
+          );
+        end if;
+      elsif candidate.doctor_id is null then
+        select * into booking from public.book_service_session(
+          candidate.clinic_id, candidate.service_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, candidate.booking_answers
+        );
+        v_appointment_id := booking.appointment_id;
+      elsif candidate.service_id is null then
+        select * into booking from public.book_number(
+          candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, null
+        );
+        v_appointment_id := booking.appointment_id;
+      else
+        select * into booking from public.book_number_for_service(
+          candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, candidate.service_id
+        );
+        v_appointment_id := booking.appointment_id;
+      end if;
+    exception when others then
+      v_error := sqlerrm;
+    end;
+
+    if v_appointment_id is null then
+      insert into public.appointment_waitlist_events (clinic_id, waitlist_id, target_key, kind, from_status, to_status, error)
+      values (candidate.clinic_id, candidate.id, candidate.target_key, 'promotion_failed', candidate.status, candidate.status, v_error);
+      if v_error like '%額滿%' or v_error like '%capacity%' or v_error like '%resource is unavailable%' then
+        return;
+      end if;
+      update public.appointment_waitlist_entries set status = 'expired' where id = candidate.id;
+      continue;
+    end if;
+
+    v_offer_expires := now() + (p_offer_minutes || ' minutes')::interval;
+    update public.appointments
+       set waitlist_entry_id = candidate.id,
+           booking_answers = candidate.booking_answers,
+           note = concat_ws(E'\n', nullif(note, ''), 'waitlist offer')
+     where id = v_appointment_id and clinic_id = candidate.clinic_id;
+    update public.appointment_waitlist_entries
+       set status = 'offered', appointment_id = v_appointment_id,
+           offered_at = now(), offer_expires_at = v_offer_expires
+     where id = candidate.id and clinic_id = candidate.clinic_id;
+    return query select candidate.id, v_appointment_id, candidate.patient_id, v_offer_expires;
+    return;
+  end loop;
+end;
+$$;
+
+create or replace function public.accept_appointment_waitlist_offer(
+  p_clinic_id uuid,
+  p_waitlist_id uuid,
+  p_patient_id uuid
+) returns uuid
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare entry record;
+begin
+  select * into entry from public.appointment_waitlist_entries
+   where id = p_waitlist_id and clinic_id = p_clinic_id and patient_id = p_patient_id for update;
+  if not found then raise exception 'waitlist entry not found'; end if;
+  if entry.status = 'booked' then return entry.appointment_id; end if;
+  if entry.status <> 'offered' then raise exception 'waitlist offer is unavailable'; end if;
+  if entry.offer_expires_at <= now() then
+    update public.appointment_waitlist_entries set status = 'expired' where id = entry.id;
+    if exists (select 1 from public.appointments where id = entry.appointment_id and clinic_id = p_clinic_id and status in ('booked', 'confirmed')) then
+      perform public.cancel_appointment(p_clinic_id, entry.appointment_id, 'waitlist offer expired');
+    end if;
+    return null;
+  end if;
+  if not exists (select 1 from public.appointments where id = entry.appointment_id and clinic_id = p_clinic_id and status in ('booked', 'confirmed'))
+    then raise exception 'reserved appointment is unavailable'; end if;
+  update public.appointment_waitlist_entries set status = 'booked' where id = entry.id;
+  return entry.appointment_id;
+end;
+$$;
+
+create or replace function public.cancel_appointment_waitlist(
+  p_clinic_id uuid,
+  p_waitlist_id uuid,
+  p_patient_id uuid,
+  p_note text default null
+) returns boolean
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare entry record;
+begin
+  select * into entry from public.appointment_waitlist_entries
+   where id = p_waitlist_id and clinic_id = p_clinic_id and patient_id = p_patient_id for update;
+  if not found then raise exception 'waitlist entry not found'; end if;
+  if entry.status in ('cancelled', 'expired') then return true; end if;
+  if entry.status = 'booked' then raise exception 'booked waitlist entry must use appointment cancellation'; end if;
+  update public.appointment_waitlist_entries set status = 'cancelled' where id = entry.id;
+  if entry.appointment_id is not null and exists (
+    select 1 from public.appointments where id = entry.appointment_id and clinic_id = p_clinic_id and status in ('booked', 'confirmed')
+  ) then
+    perform public.cancel_appointment(p_clinic_id, entry.appointment_id, coalesce(p_note, 'waitlist cancelled'));
+  end if;
+  return true;
+end;
+$$;
+
+create or replace function public.cancel_appointment_waitlist_by_operator(
+  p_clinic_id uuid,
+  p_waitlist_id uuid,
+  p_actor_user_id uuid,
+  p_note text default null
+) returns boolean
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare entry record;
+begin
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id
+       and member.role in ('owner', 'admin', 'frontdesk', 'staff')
+  ) then raise exception 'operator access required'; end if;
+  select * into entry from public.appointment_waitlist_entries where id = p_waitlist_id and clinic_id = p_clinic_id;
+  if not found then raise exception 'waitlist entry not found'; end if;
+  return public.cancel_appointment_waitlist(p_clinic_id, p_waitlist_id, entry.patient_id, p_note);
+end;
+$$;
+
+create or replace function public.expire_appointment_waitlist_offers()
+returns integer
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare entry record; v_count integer := 0;
+begin
+  for entry in
+    select * from public.appointment_waitlist_entries
+     where status = 'offered' and offer_expires_at <= now()
+     order by offer_expires_at
+     for update skip locked
+  loop
+    begin
+      update public.appointment_waitlist_entries set status = 'expired' where id = entry.id;
+      if exists (select 1 from public.appointments where id = entry.appointment_id and clinic_id = entry.clinic_id and status in ('booked', 'confirmed')) then
+        perform public.cancel_appointment(entry.clinic_id, entry.appointment_id, 'waitlist offer expired');
+      end if;
+      v_count := v_count + 1;
+    exception when others then
+      insert into public.appointment_waitlist_events (clinic_id, waitlist_id, target_key, kind, from_status, to_status, error)
+      values (entry.clinic_id, entry.id, entry.target_key, 'promotion_failed', entry.status, entry.status, sqlerrm);
+    end;
+  end loop;
+  return v_count;
+end;
+$$;
+
+create or replace function public.promote_waitlist_after_appointment_cancel()
+returns trigger language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_mode text; v_target_key text;
+begin
+  if old.status in ('booked', 'confirmed', 'done') and new.status = 'cancelled' then
+    v_mode := case when old.queue_number is null then 'time' else 'number' end;
+    v_target_key := public.appointment_waitlist_target_key(
+      v_mode, old.doctor_id, old.service_id,
+      case when v_mode = 'number' then old.template_id else null end,
+      (old.start_at at time zone 'Asia/Taipei')::date,
+      case when v_mode = 'time' then old.start_at else null end
+    );
+    begin
+      perform public.offer_next_appointment_waitlist(old.clinic_id, v_target_key, 15);
+    exception when others then
+      insert into public.appointment_waitlist_events (clinic_id, target_key, kind, from_status, to_status, appointment_id, error)
+      values (old.clinic_id, v_target_key, 'promotion_failed', old.status, new.status, old.id, sqlerrm);
+    end;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists trg_promote_waitlist_after_appointment_cancel on public.appointments;
+create trigger trg_promote_waitlist_after_appointment_cancel
+after update of status on public.appointments
+for each row execute function public.promote_waitlist_after_appointment_cancel();
+
+
+alter table public.appointment_waitlist_entries enable row level security;
+alter table public.appointment_waitlist_events enable row level security;
+alter table public.appointment_waitlist_notification_logs enable row level security;
+revoke all on table public.appointment_waitlist_entries from public, anon, authenticated;
+revoke all on table public.appointment_waitlist_events from public, anon, authenticated;
+revoke all on table public.appointment_waitlist_notification_logs from public, anon, authenticated;
+grant select on table public.appointment_waitlist_entries to authenticated;
+grant select on table public.appointment_waitlist_events to authenticated;
+grant select on table public.appointment_waitlist_notification_logs to authenticated;
+drop policy if exists appointment_waitlist_read on public.appointment_waitlist_entries;
+create policy appointment_waitlist_read on public.appointment_waitlist_entries for select to authenticated using (exists (select 1 from public.clinic_members member where member.clinic_id = appointment_waitlist_entries.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin', 'frontdesk', 'staff')));
+drop policy if exists appointment_waitlist_events_read on public.appointment_waitlist_events;
+create policy appointment_waitlist_events_read on public.appointment_waitlist_events for select to authenticated using (exists (select 1 from public.clinic_members member where member.clinic_id = appointment_waitlist_events.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin', 'frontdesk', 'staff')));
+drop policy if exists appointment_waitlist_notifications_read on public.appointment_waitlist_notification_logs;
+create policy appointment_waitlist_notifications_read on public.appointment_waitlist_notification_logs for select to authenticated using (exists (select 1 from public.clinic_members member where member.clinic_id = appointment_waitlist_notification_logs.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin')));
+
+revoke all on function public.appointment_waitlist_target_key(text, uuid, uuid, uuid, date, timestamptz) from public, anon, authenticated;
+revoke all on function public.record_appointment_waitlist_change() from public, anon, authenticated;
+revoke all on function public.join_appointment_waitlist(uuid, uuid, text, uuid, uuid, uuid, date, timestamptz, text, boolean, jsonb, text) from public, anon, authenticated;
+revoke all on function public.offer_next_appointment_waitlist(uuid, text, integer) from public, anon, authenticated;
+revoke all on function public.accept_appointment_waitlist_offer(uuid, uuid, uuid) from public, anon, authenticated;
+revoke all on function public.cancel_appointment_waitlist(uuid, uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.cancel_appointment_waitlist_by_operator(uuid, uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.expire_appointment_waitlist_offers() from public, anon, authenticated;
+revoke all on function public.promote_waitlist_after_appointment_cancel() from public, anon, authenticated;
+grant execute on function public.join_appointment_waitlist(uuid, uuid, text, uuid, uuid, uuid, date, timestamptz, text, boolean, jsonb, text) to service_role;
+grant execute on function public.offer_next_appointment_waitlist(uuid, text, integer) to service_role;
+grant execute on function public.accept_appointment_waitlist_offer(uuid, uuid, uuid) to service_role;
+grant execute on function public.cancel_appointment_waitlist(uuid, uuid, uuid, text) to service_role;
+grant execute on function public.cancel_appointment_waitlist_by_operator(uuid, uuid, uuid, text) to service_role;
+grant execute on function public.expire_appointment_waitlist_offers() to service_role;
+
+commit;
+
+-- Product restructure M2: expose full-but-valid appointment targets and
+-- claim waitlist notifications atomically without changing normal availability.
+-- Keep synchronized with migrations/202608110003_appointment_waitlist_surfaces.sql.
+-- Product restructure M2: expose full-but-valid appointment targets and
+-- claim waitlist notifications atomically without changing normal availability.
+begin;
+
+create or replace function public.get_appointment_waitlist_targets(
+  p_clinic_id uuid,
+  p_doctor_id uuid,
+  p_service_id uuid,
+  p_date date,
+  p_visit_type text default 'return'
+)
+returns table (
+  booking_mode text,
+  template_id uuid,
+  target_start timestamptz,
+  target_end timestamptz,
+  total integer,
+  taken integer
+)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  settings record;
+  schedule record;
+  candidate record;
+  v_length integer;
+  v_taken integer;
+  v_start timestamptz;
+  v_end timestamptz;
+  v_resources_available boolean;
+begin
+  if p_visit_type not in ('first', 'return') then raise exception 'invalid visit type'; end if;
+  if p_doctor_id is null and p_service_id is null then raise exception 'service or provider is required'; end if;
+  select * into settings from public.clinic_settings where clinic_id = p_clinic_id;
+  if not found then raise exception 'brand settings not found'; end if;
+  if p_date < (now() at time zone 'Asia/Taipei')::date
+     or p_date > (now() at time zone 'Asia/Taipei')::date + settings.max_advance_days then
+    return;
+  end if;
+  if p_doctor_id is not null and not exists (
+    select 1 from public.doctors where id = p_doctor_id and clinic_id = p_clinic_id and active
+  ) then raise exception 'provider is unavailable'; end if;
+  if p_service_id is not null and not exists (
+    select 1 from public.services where id = p_service_id and clinic_id = p_clinic_id and active
+  ) then raise exception 'service is unavailable'; end if;
+
+  if settings.booking_mode = 'time' then
+    for schedule in
+      select t.id, t.start_time, t.end_time, t.slot_minutes, t.capacity
+        from public.schedule_templates t
+       where t.clinic_id = p_clinic_id and t.weekday = extract(dow from p_date) and t.active
+         and (
+           (p_doctor_id is not null and t.doctor_id = p_doctor_id and (p_service_id is null or t.service_id is null or t.service_id = p_service_id))
+           or (p_doctor_id is null and t.doctor_id is null and t.service_id = p_service_id)
+         )
+         and not exists (
+           select 1 from public.schedule_exceptions closed
+            where closed.clinic_id = p_clinic_id and closed.date = p_date and closed.is_closed and closed.start_time is null
+              and (
+                (p_doctor_id is not null and closed.doctor_id = p_doctor_id and (p_service_id is null or closed.service_id is null or closed.service_id = p_service_id))
+                or (p_doctor_id is null and closed.doctor_id is null and closed.service_id = p_service_id)
+              )
+         )
+      union all
+      select e.id, e.start_time, e.end_time, coalesce(e.slot_minutes, 15), coalesce(e.capacity, 1)
+        from public.schedule_exceptions e
+       where e.clinic_id = p_clinic_id and e.date = p_date and not e.is_closed
+         and (
+           (p_doctor_id is not null and e.doctor_id = p_doctor_id and (p_service_id is null or e.service_id is null or e.service_id = p_service_id))
+           or (p_doctor_id is null and e.doctor_id is null and e.service_id = p_service_id)
+         )
+    loop
+      v_length := case
+        when p_service_id is not null then public.service_booking_minutes(
+          p_clinic_id, p_service_id, schedule.slot_minutes, p_visit_type,
+          coalesce(settings.first_visit_extends, false), settings.first_visit_minutes
+        )
+        when p_visit_type = 'first' and coalesce(settings.first_visit_extends, false)
+          then coalesce(settings.first_visit_minutes, schedule.slot_minutes)
+        else schedule.slot_minutes
+      end;
+      for candidate in
+        select
+          ((p_date + schedule.start_time + (n || ' minutes')::interval) at time zone 'Asia/Taipei') as starts_at,
+          ((p_date + schedule.start_time + ((n + v_length) || ' minutes')::interval) at time zone 'Asia/Taipei') as ends_at
+          from generate_series(
+            0,
+            (extract(epoch from (schedule.end_time - schedule.start_time)) / 60)::integer - v_length,
+            schedule.slot_minutes
+          ) n
+      loop
+        if candidate.starts_at <= now() + (coalesce(settings.min_lead_minutes, 30) || ' minutes')::interval then continue; end if;
+        if exists (
+          select 1 from public.schedule_exceptions closed
+           where closed.clinic_id = p_clinic_id and closed.date = p_date and closed.is_closed and closed.start_time is not null
+             and (
+               (p_doctor_id is not null and closed.doctor_id = p_doctor_id and (p_service_id is null or closed.service_id is null or closed.service_id = p_service_id))
+               or (p_doctor_id is null and closed.doctor_id is null and closed.service_id = p_service_id)
+             )
+             and (candidate.starts_at at time zone 'Asia/Taipei')::time < coalesce(closed.end_time, '23:59:59.999999'::time)
+             and (candidate.ends_at at time zone 'Asia/Taipei')::time > closed.start_time
+        ) then continue; end if;
+
+        select count(*)::integer into v_taken
+          from public.appointments appointment
+         where appointment.clinic_id = p_clinic_id
+           and appointment.status in ('booked', 'confirmed', 'done')
+           and appointment.start_at < candidate.ends_at and appointment.end_at > candidate.starts_at
+           and (
+             (p_doctor_id is not null and appointment.doctor_id = p_doctor_id)
+             or (p_doctor_id is null and appointment.doctor_id is null and appointment.service_id = p_service_id)
+           );
+        v_resources_available := p_service_id is null or public.service_resources_available(
+          p_clinic_id, p_service_id, candidate.starts_at, candidate.ends_at, null
+        );
+        if v_taken >= schedule.capacity or not v_resources_available then
+          return query select 'time'::text, null::uuid, candidate.starts_at, candidate.ends_at,
+            schedule.capacity::integer, greatest(v_taken, schedule.capacity)::integer;
+        end if;
+      end loop;
+    end loop;
+  elsif settings.booking_mode = 'number' then
+    for schedule in
+      select t.id, t.start_time, t.end_time, t.capacity
+        from public.schedule_templates t
+       where t.clinic_id = p_clinic_id and t.weekday = extract(dow from p_date) and t.active
+         and (
+           (p_doctor_id is not null and t.doctor_id = p_doctor_id and (p_service_id is null or t.service_id is null or t.service_id = p_service_id))
+           or (p_doctor_id is null and t.doctor_id is null and t.service_id = p_service_id)
+         )
+         and not exists (
+           select 1 from public.schedule_exceptions closed
+            where closed.clinic_id = p_clinic_id and closed.date = p_date and closed.is_closed
+              and (
+                (p_doctor_id is not null and closed.doctor_id = p_doctor_id and (p_service_id is null or closed.service_id is null or closed.service_id = p_service_id))
+                or (p_doctor_id is null and closed.doctor_id is null and closed.service_id = p_service_id)
+              )
+              and (closed.start_time is null or (closed.start_time < t.end_time and coalesce(closed.end_time, '23:59:59.999999'::time) > t.start_time))
+         )
+      union all
+      select e.id, e.start_time, e.end_time, coalesce(e.capacity, 40)
+        from public.schedule_exceptions e
+       where e.clinic_id = p_clinic_id and e.date = p_date and not e.is_closed
+         and (
+           (p_doctor_id is not null and e.doctor_id = p_doctor_id and (p_service_id is null or e.service_id is null or e.service_id = p_service_id))
+           or (p_doctor_id is null and e.doctor_id is null and e.service_id = p_service_id)
+         )
+    loop
+      v_start := (p_date + schedule.start_time) at time zone 'Asia/Taipei';
+      v_end := (p_date + schedule.end_time) at time zone 'Asia/Taipei';
+      if v_start <= now() + (coalesce(settings.min_lead_minutes, 30) || ' minutes')::interval then continue; end if;
+      select count(*)::integer into v_taken
+        from public.appointments appointment
+       where appointment.clinic_id = p_clinic_id and appointment.template_id = schedule.id
+         and appointment.start_at = v_start and appointment.status in ('booked', 'confirmed', 'done')
+         and (
+           (p_doctor_id is not null and appointment.doctor_id = p_doctor_id)
+           or (p_doctor_id is null and appointment.doctor_id is null and appointment.service_id = p_service_id)
+         );
+      v_resources_available := p_service_id is null or public.service_resources_available(
+        p_clinic_id, p_service_id, v_start, v_end, null
+      );
+      if v_taken >= schedule.capacity or not v_resources_available then
+        return query select 'number'::text, schedule.id, v_start, v_end,
+          schedule.capacity::integer, greatest(v_taken, schedule.capacity)::integer;
+      end if;
+    end loop;
+  else
+    raise exception 'invalid booking mode';
+  end if;
+end;
+$$;
+
+create or replace function public.claim_appointment_waitlist_notifications(p_limit integer default 50)
+returns table (
+  log_id uuid,
+  clinic_id uuid,
+  waitlist_id uuid,
+  kind text,
+  channel text,
+  patient_name text,
+  line_user_id text,
+  email text,
+  booking_mode text,
+  requested_date date,
+  target_start_at timestamptz,
+  "position" integer,
+  offer_expires_at timestamptz,
+  appointment_id uuid,
+  doctor_name text,
+  service_name text,
+  clinic_name text,
+  line_destination text,
+  email_enabled boolean
+)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if p_limit not between 1 and 200 then raise exception 'invalid claim limit'; end if;
+  return query
+  with candidates as (
+    select notification.id
+      from public.appointment_waitlist_notification_logs notification
+     where (
+       notification.status in ('pending', 'failed') and notification.attempt_count < 5
+     ) or (
+       notification.status = 'claimed' and notification.updated_at < now() - interval '10 minutes' and notification.attempt_count < 5
+     )
+     order by notification.created_at, notification.id
+     for update skip locked
+     limit p_limit
+  ), claimed as (
+    update public.appointment_waitlist_notification_logs notification
+       set status = 'claimed', attempt_count = notification.attempt_count + 1, error = null
+      from candidates
+     where notification.id = candidates.id
+    returning notification.*
+  )
+  select claimed.id, claimed.clinic_id, claimed.waitlist_id, claimed.kind, claimed.channel,
+         patient.name, patient.line_user_id, patient.email,
+         entry.booking_mode, entry.requested_date,
+         coalesce(
+           entry.requested_start_at,
+           ((entry.requested_date + coalesce(template.start_time, schedule_exception.start_time)) at time zone 'Asia/Taipei')
+         ),
+         entry.position, entry.offer_expires_at, entry.appointment_id,
+         doctor.name, service.name, clinic.name, clinic.line_destination,
+         coalesce(settings.email_enabled, false)
+    from claimed
+    join public.appointment_waitlist_entries entry on entry.id = claimed.waitlist_id and entry.clinic_id = claimed.clinic_id
+    join public.patients patient on patient.id = claimed.patient_id and patient.clinic_id = claimed.clinic_id
+    join public.clinics clinic on clinic.id = claimed.clinic_id
+    join public.clinic_settings settings on settings.clinic_id = claimed.clinic_id
+    left join public.doctors doctor on doctor.id = entry.doctor_id and doctor.clinic_id = entry.clinic_id
+    left join public.services service on service.id = entry.service_id and service.clinic_id = entry.clinic_id
+    left join public.schedule_templates template on template.id = entry.template_id and template.clinic_id = entry.clinic_id
+    left join public.schedule_exceptions schedule_exception on schedule_exception.id = entry.template_id and schedule_exception.clinic_id = entry.clinic_id
+   order by claimed.created_at, claimed.id;
+end;
+$$;
+
+create or replace function public.finish_appointment_waitlist_notification(
+  p_log_id uuid,
+  p_status text,
+  p_error text default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  changed integer;
+begin
+  if p_status not in ('sent', 'failed', 'skipped') then raise exception 'invalid notification result'; end if;
+  update public.appointment_waitlist_notification_logs
+     set status = p_status,
+         error = left(nullif(p_error, ''), 1000),
+         sent_at = case when p_status = 'sent' then now() else null end
+   where id = p_log_id and status = 'claimed';
+  get diagnostics changed = row_count;
+  return changed = 1;
+end;
+$$;
+
+revoke all on function public.get_appointment_waitlist_targets(uuid, uuid, uuid, date, text) from public, anon, authenticated;
+revoke all on function public.claim_appointment_waitlist_notifications(integer) from public, anon, authenticated;
+revoke all on function public.finish_appointment_waitlist_notification(uuid, text, text) from public, anon, authenticated;
+grant execute on function public.get_appointment_waitlist_targets(uuid, uuid, uuid, date, text) to service_role;
+grant execute on function public.claim_appointment_waitlist_notifications(integer) to service_role;
+grant execute on function public.finish_appointment_waitlist_notification(uuid, text, text) to service_role;
+
+commit;
+
+
+-- Product restructure M2: standard module activation, per-brand LINE metadata,
+-- and a versioned Rich Menu lifecycle. Secrets remain server-environment only.
+begin;
+
+alter table public.clinic_settings
+  add column if not exists events_enabled boolean not null default false,
+  add column if not exists memberships_enabled boolean not null default false,
+  add column if not exists crm_automation_enabled boolean not null default false,
+  add column if not exists line_channel_enabled boolean not null default false;
+
+update public.clinic_settings settings
+set events_enabled = settings.events_enabled
+  or settings.public_registration_enabled
+  or exists (select 1 from public.events event where event.clinic_id = settings.clinic_id),
+    memberships_enabled = settings.memberships_enabled
+  or exists (select 1 from public.membership_plans plan where plan.clinic_id = settings.clinic_id)
+  or exists (select 1 from public.patient_memberships membership where membership.clinic_id = settings.clinic_id),
+    crm_automation_enabled = settings.crm_automation_enabled
+  or exists (select 1 from public.crm_segments segment where segment.clinic_id = settings.clinic_id)
+  or exists (select 1 from public.crm_automations automation where automation.clinic_id = settings.clinic_id),
+    line_channel_enabled = settings.line_channel_enabled
+  or exists (
+    select 1 from public.clinics clinic
+     where clinic.id = settings.clinic_id
+       and (clinic.line_destination is not null or clinic.line_basic_id is not null)
+  );
+
+alter table public.clinic_settings alter column public_registration_enabled set default false;
+
+create table if not exists public.clinic_line_channels (
+  clinic_id uuid primary key references public.clinics(id) on delete restrict,
+  connection_mode text not null default 'shared' check (connection_mode in ('shared', 'brand')),
+  provider_id text,
+  messaging_channel_id text,
+  login_channel_id text,
+  liff_id text,
+  liff_endpoint_path text not null default '/book',
+  verification_status text not null default 'unconfigured'
+    check (verification_status in ('unconfigured', 'pending', 'ready', 'error')),
+  verification_error text,
+  last_verified_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (liff_endpoint_path like '/%')
+);
+insert into public.clinic_line_channels (clinic_id, verification_status)
+select settings.clinic_id, case when settings.line_channel_enabled then 'pending' else 'unconfigured' end
+  from public.clinic_settings settings
+on conflict (clinic_id) do nothing;
+
+create table if not exists public.line_richmenu_versions (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete restrict,
+  version_no integer not null check (version_no > 0),
+  name text not null default '未命名版本',
+  template_key text not null default 'custom' check (template_key in ('booking', 'events', 'mixed', 'custom')),
+  layout text not null check (layout in ('full-3', 'full-6', 'compact-2', 'compact-3')),
+  chat_bar_text text not null default '選單',
+  slots jsonb not null default '[]'::jsonb,
+  image_storage_path text,
+  image_content_type text,
+  image_sha256 text,
+  image_width integer,
+  image_height integer,
+  status text not null default 'draft'
+    check (status in ('draft', 'validating', 'ready', 'publishing', 'published', 'failed', 'archived')),
+  line_rich_menu_id text,
+  validation_errors jsonb not null default '[]'::jsonb,
+  created_by uuid references auth.users(id) on delete set null,
+  published_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (clinic_id, version_no),
+  check (jsonb_typeof(slots) = 'array'),
+  check (jsonb_typeof(validation_errors) = 'array'),
+  check (image_width is null or image_width > 0),
+  check (image_height is null or image_height > 0)
+);
+create unique index if not exists line_richmenu_versions_one_published_idx
+  on public.line_richmenu_versions (clinic_id) where status = 'published';
+create index if not exists line_richmenu_versions_history_idx
+  on public.line_richmenu_versions (clinic_id, version_no desc);
+
+alter table public.line_richmenu
+  add column if not exists draft_version_id uuid,
+  add column if not exists published_version_id uuid;
+do $$ begin
+  alter table public.line_richmenu add constraint line_richmenu_draft_version_fkey
+    foreign key (draft_version_id) references public.line_richmenu_versions(id) on delete restrict;
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table public.line_richmenu add constraint line_richmenu_published_version_fkey
+    foreign key (published_version_id) references public.line_richmenu_versions(id) on delete restrict;
+exception when duplicate_object then null; end $$;
+
+insert into public.line_richmenu_versions (
+  clinic_id,
+  version_no,
+  name,
+  template_key,
+  layout,
+  chat_bar_text,
+  slots,
+  status,
+  line_rich_menu_id,
+  published_at,
+  created_at,
+  updated_at
+)
+select menu.clinic_id,
+       1,
+       '既有 Rich Menu',
+       'custom',
+       menu.layout,
+       menu.chat_bar_text,
+       coalesce(menu.slots, '[]'::jsonb),
+       case when menu.published_id is null then 'draft' else 'published' end,
+       menu.published_id,
+       case when menu.published_id is null then null else coalesce(menu.updated_at, now()) end,
+       coalesce(menu.updated_at, now()),
+       coalesce(menu.updated_at, now())
+  from public.line_richmenu menu
+ where not exists (
+   select 1
+     from public.line_richmenu_versions version
+    where version.clinic_id = menu.clinic_id
+ )
+on conflict (clinic_id, version_no) do nothing;
+
+update public.line_richmenu menu
+   set draft_version_id = coalesce(menu.draft_version_id, version.id),
+       published_version_id = case
+         when menu.published_id is null then menu.published_version_id
+         else coalesce(menu.published_version_id, version.id)
+       end
+  from public.line_richmenu_versions version
+ where version.clinic_id = menu.clinic_id
+   and version.version_no = 1;
+
+create table if not exists public.line_richmenu_publication_events (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete restrict,
+  version_id uuid not null references public.line_richmenu_versions(id) on delete restrict,
+  kind text not null check (kind in ('validated', 'validation_failed', 'published', 'publish_failed', 'rolled_back', 'unpublished')),
+  actor_id uuid references auth.users(id) on delete set null,
+  line_rich_menu_id text,
+  error text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  check (jsonb_typeof(metadata) = 'object')
+);
+create index if not exists line_richmenu_publication_events_history_idx
+  on public.line_richmenu_publication_events (clinic_id, created_at desc);
+
+drop trigger if exists trg_clinic_line_channels_touch on public.clinic_line_channels;
+create trigger trg_clinic_line_channels_touch before update on public.clinic_line_channels for each row execute function public.touch_updated_at();
+drop trigger if exists trg_line_richmenu_versions_touch on public.line_richmenu_versions;
+create trigger trg_line_richmenu_versions_touch before update on public.line_richmenu_versions for each row execute function public.touch_updated_at();
+
+alter table public.clinic_line_channels enable row level security;
+alter table public.line_richmenu_versions enable row level security;
+alter table public.line_richmenu_publication_events enable row level security;
+revoke all on table public.clinic_line_channels from public, anon;
+revoke all on table public.line_richmenu_versions from public, anon;
+revoke all on table public.line_richmenu_publication_events from public, anon;
+
+drop policy if exists clinic_line_channels_admin on public.clinic_line_channels;
+create policy clinic_line_channels_admin on public.clinic_line_channels for all to authenticated
+  using (exists (select 1 from public.clinic_members member where member.clinic_id = clinic_line_channels.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin')))
+  with check (exists (select 1 from public.clinic_members member where member.clinic_id = clinic_line_channels.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin')));
+drop policy if exists line_richmenu_versions_admin on public.line_richmenu_versions;
+create policy line_richmenu_versions_admin on public.line_richmenu_versions for all to authenticated
+  using (exists (select 1 from public.clinic_members member where member.clinic_id = line_richmenu_versions.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin')))
+  with check (exists (select 1 from public.clinic_members member where member.clinic_id = line_richmenu_versions.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin')));
+drop policy if exists line_richmenu_publication_events_admin on public.line_richmenu_publication_events;
+create policy line_richmenu_publication_events_admin on public.line_richmenu_publication_events for all to authenticated
+  using (exists (select 1 from public.clinic_members member where member.clinic_id = line_richmenu_publication_events.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin')))
+  with check (exists (select 1 from public.clinic_members member where member.clinic_id = line_richmenu_publication_events.clinic_id and member.user_id = auth.uid() and member.role in ('owner', 'admin')));
+
+create or replace function public.create_line_richmenu_version(
+  p_clinic_id uuid, p_actor_user_id uuid, p_name text, p_template_key text,
+  p_layout text, p_chat_bar_text text, p_slots jsonb
+) returns uuid
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_id uuid; v_version integer;
+begin
+  if not exists (select 1 from public.clinic_members member where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id and member.role in ('owner', 'admin'))
+    then raise exception 'brand admin access required'; end if;
+  if p_layout not in ('full-3', 'full-6', 'compact-2', 'compact-3') then raise exception 'invalid rich menu layout'; end if;
+  if p_template_key not in ('booking', 'events', 'mixed', 'custom') then raise exception 'invalid rich menu template'; end if;
+  if jsonb_typeof(coalesce(p_slots, '[]'::jsonb)) <> 'array' then raise exception 'rich menu slots must be an array'; end if;
+  if length(btrim(coalesce(p_name, ''))) not between 1 and 120 then raise exception 'rich menu version name is invalid'; end if;
+  if length(btrim(coalesce(p_chat_bar_text, ''))) not between 1 and 14 then raise exception 'rich menu chat bar text is invalid'; end if;
+  perform pg_advisory_xact_lock(hashtext('richmenu-version:' || p_clinic_id::text));
+  select coalesce(max(version_no), 0) + 1 into v_version from public.line_richmenu_versions where clinic_id = p_clinic_id;
+  insert into public.line_richmenu_versions (clinic_id, version_no, name, template_key, layout, chat_bar_text, slots, created_by)
+  values (p_clinic_id, v_version, btrim(p_name), p_template_key, p_layout, btrim(p_chat_bar_text), coalesce(p_slots, '[]'::jsonb), p_actor_user_id)
+  returning id into v_id;
+  insert into public.line_richmenu (clinic_id) values (p_clinic_id) on conflict (clinic_id) do nothing;
+  update public.line_richmenu set draft_version_id = v_id, updated_at = now() where clinic_id = p_clinic_id;
+  return v_id;
+end; $$;
+revoke all on function public.create_line_richmenu_version(uuid, uuid, text, text, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.create_line_richmenu_version(uuid, uuid, text, text, text, text, jsonb) to service_role;
+
+
+create or replace function public.update_clinic_line_channel(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_enabled boolean,
+  p_connection_mode text,
+  p_destination text default null,
+  p_login_channel_id text default null,
+  p_liff_id text default null,
+  p_liff_endpoint_path text default '/book'
+) returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  v_destination text := nullif(btrim(coalesce(p_destination, '')), '');
+  v_login_channel_id text := nullif(btrim(coalesce(p_login_channel_id, '')), '');
+  v_liff_id text := nullif(btrim(coalesce(p_liff_id, '')), '');
+  v_endpoint_path text := btrim(coalesce(p_liff_endpoint_path, '/book'));
+begin
+  if coalesce(auth.role(), '') <> 'service_role' and auth.uid() is distinct from p_actor_user_id then
+    raise exception 'actor identity mismatch';
+  end if;
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id
+       and member.role in ('owner', 'admin')
+  ) then raise exception 'brand admin access required'; end if;
+  if p_connection_mode not in ('shared', 'brand') then raise exception 'invalid LINE connection mode'; end if;
+  if v_destination is not null and v_destination !~ '^U[A-Za-z0-9_-]{8,100}$' then raise exception 'invalid LINE destination'; end if;
+  if v_login_channel_id is not null and v_login_channel_id !~ '^[0-9]{6,30}$' then raise exception 'invalid LINE Login Channel ID'; end if;
+  if v_liff_id is not null and v_liff_id !~ '^[0-9]{6,30}-[A-Za-z0-9_-]{4,100}$' then raise exception 'invalid LIFF ID'; end if;
+  if v_endpoint_path !~ '^/[^\\]*$' or length(v_endpoint_path) > 200 then raise exception 'invalid LIFF endpoint path'; end if;
+  if p_enabled and p_connection_mode = 'brand' and (v_destination is null or v_login_channel_id is null or v_liff_id is null) then
+    raise exception 'brand LINE channel metadata is incomplete';
+  end if;
+
+  update public.clinics set line_destination = v_destination, updated_at = now() where id = p_clinic_id and active;
+  if not found then raise exception 'brand not found'; end if;
+  update public.clinic_settings set line_channel_enabled = p_enabled, updated_at = now() where clinic_id = p_clinic_id;
+  if not found then raise exception 'brand settings not found'; end if;
+  insert into public.clinic_line_channels (
+    clinic_id, connection_mode, login_channel_id, liff_id, liff_endpoint_path,
+    verification_status, verification_error, last_verified_at
+  ) values (
+    p_clinic_id, p_connection_mode, v_login_channel_id, v_liff_id, v_endpoint_path,
+    case when p_enabled then 'pending' else 'unconfigured' end, null, null
+  )
+  on conflict (clinic_id) do update set
+    connection_mode = excluded.connection_mode,
+    login_channel_id = excluded.login_channel_id,
+    liff_id = excluded.liff_id,
+    liff_endpoint_path = excluded.liff_endpoint_path,
+    verification_status = excluded.verification_status,
+    verification_error = null,
+    last_verified_at = null,
+    updated_at = now();
+end;
+$$;
+revoke all on function public.update_clinic_line_channel(uuid, uuid, boolean, text, text, text, text, text) from public, anon;
+grant execute on function public.update_clinic_line_channel(uuid, uuid, boolean, text, text, text, text, text) to authenticated, service_role;
+
+
+create or replace function public.record_line_richmenu_publication(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_version_id uuid,
+  p_line_rich_menu_id text,
+  p_kind text default 'published',
+  p_image_sha256 text default null,
+  p_image_width integer default null,
+  p_image_height integer default null
+) returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if p_kind not in ('published', 'rolled_back') then raise exception 'invalid publication kind'; end if;
+  if not exists (select 1 from public.clinic_members member where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id and member.role in ('owner', 'admin'))
+    then raise exception 'brand admin access required'; end if;
+  if nullif(btrim(coalesce(p_line_rich_menu_id, '')), '') is null then raise exception 'LINE Rich Menu ID is required'; end if;
+  perform pg_advisory_xact_lock(hashtext('richmenu-publication:' || p_clinic_id::text));
+  if not exists (select 1 from public.line_richmenu_versions version where version.id = p_version_id and version.clinic_id = p_clinic_id) then
+    raise exception 'Rich Menu version not found';
+  end if;
+  update public.line_richmenu_versions
+     set status = 'archived', updated_at = now()
+   where clinic_id = p_clinic_id and status = 'published' and id <> p_version_id;
+  update public.line_richmenu_versions
+     set status = 'published', line_rich_menu_id = btrim(p_line_rich_menu_id),
+         image_sha256 = coalesce(p_image_sha256, image_sha256),
+         image_width = coalesce(p_image_width, image_width),
+         image_height = coalesce(p_image_height, image_height),
+         validation_errors = '[]'::jsonb, published_at = now(), updated_at = now()
+   where id = p_version_id and clinic_id = p_clinic_id;
+  insert into public.line_richmenu (clinic_id, published_id, published_version_id, draft_version_id, updated_at)
+  values (p_clinic_id, btrim(p_line_rich_menu_id), p_version_id, p_version_id, now())
+  on conflict (clinic_id) do update set
+    published_id = excluded.published_id,
+    published_version_id = excluded.published_version_id,
+    draft_version_id = excluded.draft_version_id,
+    updated_at = now();
+  insert into public.line_richmenu_publication_events (clinic_id, version_id, kind, actor_id, line_rich_menu_id)
+  values (p_clinic_id, p_version_id, p_kind, p_actor_user_id, btrim(p_line_rich_menu_id));
+end;
+$$;
+
+create or replace function public.record_line_richmenu_publish_failure(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_version_id uuid,
+  p_error text
+) returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if not exists (select 1 from public.clinic_members member where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id and member.role in ('owner', 'admin'))
+    then raise exception 'brand admin access required'; end if;
+  update public.line_richmenu_versions
+     set status = 'failed', validation_errors = jsonb_build_array(left(coalesce(p_error, 'publish failed'), 1000)), updated_at = now()
+   where id = p_version_id and clinic_id = p_clinic_id and status <> 'published';
+  if not found then raise exception 'Rich Menu version not found or already published'; end if;
+  insert into public.line_richmenu_publication_events (clinic_id, version_id, kind, actor_id, error)
+  values (p_clinic_id, p_version_id, 'publish_failed', p_actor_user_id, left(coalesce(p_error, 'publish failed'), 1000));
+end;
+$$;
+
+create or replace function public.record_line_richmenu_unpublished(
+  p_clinic_id uuid,
+  p_actor_user_id uuid
+) returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare current_version uuid; current_line_id text;
+begin
+  if not exists (select 1 from public.clinic_members member where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id and member.role in ('owner', 'admin'))
+    then raise exception 'brand admin access required'; end if;
+  perform pg_advisory_xact_lock(hashtext('richmenu-publication:' || p_clinic_id::text));
+  select published_version_id, published_id into current_version, current_line_id
+    from public.line_richmenu where clinic_id = p_clinic_id for update;
+  if current_version is not null then
+    update public.line_richmenu_versions set status = 'archived', updated_at = now()
+     where id = current_version and clinic_id = p_clinic_id;
+    insert into public.line_richmenu_publication_events (clinic_id, version_id, kind, actor_id, line_rich_menu_id)
+    values (p_clinic_id, current_version, 'unpublished', p_actor_user_id, current_line_id);
+  end if;
+  update public.line_richmenu set published_id = null, published_version_id = null, updated_at = now()
+   where clinic_id = p_clinic_id;
+end;
+$$;
+
+revoke all on function public.record_line_richmenu_publication(uuid, uuid, uuid, text, text, text, integer, integer) from public, anon, authenticated;
+revoke all on function public.record_line_richmenu_publish_failure(uuid, uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.record_line_richmenu_unpublished(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.record_line_richmenu_publication(uuid, uuid, uuid, text, text, text, integer, integer) to service_role;
+grant execute on function public.record_line_richmenu_publish_failure(uuid, uuid, uuid, text) to service_role;
+grant execute on function public.record_line_richmenu_unpublished(uuid, uuid) to service_role;
+
+commit;
+
 -- Allow a service/resource booking to be rescheduled without inventing a provider.
 begin;
 
@@ -4840,12 +6237,2754 @@ revoke all on function public.reschedule_service_appointment(uuid, uuid, text, u
 grant execute on function public.reschedule_service_appointment(uuid, uuid, text, uuid, uuid, timestamptz, uuid, date) to service_role;
 
 commit;
-
 commit;
 -- Keep the legacy queue/progress surface available only when a brand explicitly opts in.
 begin;
 
 alter table public.clinic_settings
   add column if not exists legacy_progress_enabled boolean not null default false;
+
+commit;
+-- Rich Menu second-batch product capabilities: aliases, scheduled display windows,
+-- privacy-safe insight linkage, explicit cloning, and auditable schedule execution.
+begin;
+
+alter table public.line_richmenu_versions
+  add column if not exists source_version_id uuid;
+
+create unique index if not exists line_richmenu_versions_clinic_id_id_uidx
+  on public.line_richmenu_versions (clinic_id, id);
+
+do $$
+begin
+  alter table public.line_richmenu_versions
+    add constraint line_richmenu_versions_source_tenant_fkey
+    foreign key (clinic_id, source_version_id)
+    references public.line_richmenu_versions (clinic_id, id) on delete restrict;
+exception when duplicate_object then null;
+end $$;
+
+create index if not exists line_richmenu_versions_source_idx
+  on public.line_richmenu_versions (clinic_id, source_version_id)
+  where source_version_id is not null;
+
+create table if not exists public.line_richmenu_aliases (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete restrict,
+  channel_destination text not null,
+  alias_id text not null,
+  label text not null,
+  version_id uuid not null,
+  line_rich_menu_id text not null,
+  status text not null default 'ready'
+    check (status in ('ready', 'error', 'removed')),
+  last_error text,
+  last_synced_at timestamptz,
+  created_by uuid references auth.users(id) on delete set null,
+  updated_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (clinic_id, alias_id),
+  foreign key (clinic_id, version_id)
+    references public.line_richmenu_versions (clinic_id, id) on delete restrict,
+  check (alias_id ~ '^[a-z0-9_-]{1,32}$'),
+  check (length(btrim(label)) between 1 and 40)
+);
+
+create index if not exists line_richmenu_aliases_version_idx
+  on public.line_richmenu_aliases (clinic_id, version_id)
+  where status <> 'removed';
+create unique index if not exists line_richmenu_aliases_channel_alias_uidx
+  on public.line_richmenu_aliases (channel_destination, alias_id)
+  where status <> 'removed';
+
+create table if not exists public.line_richmenu_schedules (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete restrict,
+  version_id uuid not null,
+  previous_version_id uuid,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  status text not null default 'scheduled'
+    check (status in ('scheduled', 'activating', 'active', 'expiring', 'completed', 'cancelled', 'failed')),
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  claimed_at timestamptz,
+  activated_at timestamptz,
+  completed_at timestamptz,
+  last_error text,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  foreign key (clinic_id, version_id)
+    references public.line_richmenu_versions (clinic_id, id) on delete restrict,
+  foreign key (clinic_id, previous_version_id)
+    references public.line_richmenu_versions (clinic_id, id) on delete restrict,
+  check (ends_at > starts_at)
+);
+
+create index if not exists line_richmenu_schedules_due_idx
+  on public.line_richmenu_schedules (status, starts_at, ends_at)
+  where status in ('scheduled', 'activating', 'active', 'expiring');
+create index if not exists line_richmenu_schedules_clinic_idx
+  on public.line_richmenu_schedules (clinic_id, starts_at desc);
+
+drop trigger if exists trg_line_richmenu_aliases_touch on public.line_richmenu_aliases;
+create trigger trg_line_richmenu_aliases_touch before update on public.line_richmenu_aliases
+for each row execute function public.touch_updated_at();
+drop trigger if exists trg_line_richmenu_schedules_touch on public.line_richmenu_schedules;
+create trigger trg_line_richmenu_schedules_touch before update on public.line_richmenu_schedules
+for each row execute function public.touch_updated_at();
+
+alter table public.line_richmenu_aliases enable row level security;
+alter table public.line_richmenu_schedules enable row level security;
+revoke all on table public.line_richmenu_aliases from public, anon, authenticated;
+revoke all on table public.line_richmenu_schedules from public, anon, authenticated;
+grant select on table public.line_richmenu_aliases to authenticated;
+grant select on table public.line_richmenu_schedules to authenticated;
+
+drop policy if exists line_richmenu_aliases_admin on public.line_richmenu_aliases;
+create policy line_richmenu_aliases_admin on public.line_richmenu_aliases
+for select to authenticated
+using (exists (
+  select 1 from public.clinic_members member
+   where member.clinic_id = line_richmenu_aliases.clinic_id
+     and member.user_id = auth.uid()
+     and member.role in ('owner', 'admin')
+));
+
+drop policy if exists line_richmenu_schedules_admin on public.line_richmenu_schedules;
+create policy line_richmenu_schedules_admin on public.line_richmenu_schedules
+for select to authenticated
+using (exists (
+  select 1 from public.clinic_members member
+   where member.clinic_id = line_richmenu_schedules.clinic_id
+     and member.user_id = auth.uid()
+     and member.role in ('owner', 'admin')
+));
+
+alter table public.line_richmenu_publication_events
+  drop constraint if exists line_richmenu_publication_events_kind_check;
+alter table public.line_richmenu_publication_events
+  add constraint line_richmenu_publication_events_kind_check check (kind in (
+    'validated', 'validation_failed', 'published', 'publish_failed', 'rolled_back', 'unpublished',
+    'scheduled', 'scheduled_published', 'schedule_failed', 'schedule_completed'
+  ));
+
+create or replace function public.clone_line_richmenu_version(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_source_version_id uuid,
+  p_name text default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  source_version public.line_richmenu_versions%rowtype;
+  v_id uuid;
+  v_version integer;
+  v_name text;
+begin
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_clinic_id
+       and member.user_id = p_actor_user_id
+       and member.role in ('owner', 'admin')
+  ) then raise exception 'brand admin access required'; end if;
+
+  select * into source_version
+    from public.line_richmenu_versions version
+   where version.id = p_source_version_id
+     and version.clinic_id = p_clinic_id;
+  if not found then raise exception 'Rich Menu source version not found'; end if;
+
+  v_name := coalesce(nullif(btrim(coalesce(p_name, '')), ''), source_version.name || ' 複本');
+  if length(v_name) > 120 then raise exception 'rich menu version name is invalid'; end if;
+
+  perform pg_advisory_xact_lock(hashtext('richmenu-version:' || p_clinic_id::text));
+  select coalesce(max(version.version_no), 0) + 1 into v_version
+    from public.line_richmenu_versions version where version.clinic_id = p_clinic_id;
+
+  insert into public.line_richmenu_versions (
+    clinic_id, version_no, name, template_key, layout, chat_bar_text, slots,
+    status, validation_errors, created_by, source_version_id
+  ) values (
+    p_clinic_id, v_version, v_name, source_version.template_key, source_version.layout,
+    source_version.chat_bar_text, source_version.slots, 'draft', '[]'::jsonb,
+    p_actor_user_id, source_version.id
+  ) returning id into v_id;
+
+  insert into public.line_richmenu (clinic_id) values (p_clinic_id)
+  on conflict (clinic_id) do nothing;
+  update public.line_richmenu
+     set draft_version_id = v_id, updated_at = now()
+   where clinic_id = p_clinic_id;
+  return v_id;
+end;
+$$;
+
+create or replace function public.create_line_richmenu_schedule(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_version_id uuid,
+  p_starts_at timestamptz,
+  p_ends_at timestamptz
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare v_id uuid;
+begin
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_clinic_id
+       and member.user_id = p_actor_user_id
+       and member.role in ('owner', 'admin')
+  ) then raise exception 'brand admin access required'; end if;
+  if p_starts_at <= now() then raise exception 'schedule start must be in the future'; end if;
+  if p_ends_at <= p_starts_at then raise exception 'schedule end must be after start'; end if;
+  if not exists (
+    select 1 from public.line_richmenu_versions version
+     where version.id = p_version_id
+       and version.clinic_id = p_clinic_id
+       and version.line_rich_menu_id is not null
+  ) then raise exception 'scheduled version must already exist on LINE'; end if;
+
+  perform pg_advisory_xact_lock(hashtext('richmenu-schedule:' || p_clinic_id::text));
+  if exists (
+    select 1 from public.line_richmenu_schedules schedule
+     where schedule.clinic_id = p_clinic_id
+       and schedule.status in ('scheduled', 'activating', 'active', 'expiring')
+       and tstzrange(schedule.starts_at, schedule.ends_at, '[)') && tstzrange(p_starts_at, p_ends_at, '[)')
+  ) then raise exception 'Rich Menu display schedule overlaps an existing schedule'; end if;
+
+  insert into public.line_richmenu_schedules (
+    clinic_id, version_id, starts_at, ends_at, created_by
+  ) values (
+    p_clinic_id, p_version_id, p_starts_at, p_ends_at, p_actor_user_id
+  ) returning id into v_id;
+  insert into public.line_richmenu_publication_events (
+    clinic_id, version_id, kind, actor_id, metadata
+  ) values (
+    p_clinic_id, p_version_id, 'scheduled', p_actor_user_id,
+    jsonb_build_object('schedule_id', v_id, 'starts_at', p_starts_at, 'ends_at', p_ends_at)
+  );
+  return v_id;
+end;
+$$;
+
+create or replace function public.cancel_line_richmenu_schedule(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_schedule_id uuid
+) returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_clinic_id
+       and member.user_id = p_actor_user_id
+       and member.role in ('owner', 'admin')
+  ) then raise exception 'brand admin access required'; end if;
+  update public.line_richmenu_schedules schedule
+     set status = 'cancelled', completed_at = now(), claimed_at = null,
+         last_error = 'cancelled by operator', updated_at = now()
+   where schedule.id = p_schedule_id
+     and schedule.clinic_id = p_clinic_id
+     and schedule.status = 'scheduled';
+  if not found then raise exception 'only a pending Rich Menu schedule can be cancelled'; end if;
+end;
+$$;
+
+create or replace function public.claim_due_line_richmenu_schedules(p_limit integer default 10)
+returns table (
+  schedule_id uuid,
+  clinic_id uuid,
+  action text,
+  version_id uuid,
+  line_rich_menu_id text,
+  restore_version_id uuid,
+  restore_line_rich_menu_id text,
+  attempt_count integer
+)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare candidate record;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then raise exception 'service role required'; end if;
+
+  update public.line_richmenu_schedules schedule
+     set status = case when schedule.status = 'activating' then 'scheduled' else 'active' end,
+         claimed_at = null,
+         last_error = coalesce(schedule.last_error, 'stale claim recovered'),
+         updated_at = now()
+   where schedule.status in ('activating', 'expiring')
+     and schedule.claimed_at < now() - interval '10 minutes'
+     and schedule.attempt_count < 5;
+
+  update public.line_richmenu_schedules schedule
+     set status = 'failed', claimed_at = null,
+         last_error = coalesce(schedule.last_error, 'retry limit reached'), updated_at = now()
+   where schedule.status in ('activating', 'expiring')
+     and schedule.claimed_at < now() - interval '10 minutes'
+     and schedule.attempt_count >= 5;
+
+  with expired_windows as (
+    update public.line_richmenu_schedules schedule
+       set status = 'failed', completed_at = now(), claimed_at = null,
+           last_error = 'display window ended before activation', updated_at = now()
+     where schedule.status = 'scheduled'
+       and schedule.ends_at <= now()
+     returning schedule.id, schedule.clinic_id, schedule.version_id
+  )
+  insert into public.line_richmenu_publication_events (
+    clinic_id, version_id, kind, error, metadata
+  )
+  select expired.clinic_id, expired.version_id, 'schedule_failed',
+         'display window ended before activation', jsonb_build_object('schedule_id', expired.id, 'action', 'activate')
+    from expired_windows expired;
+
+  for candidate in
+    select schedule.id, schedule.clinic_id, schedule.version_id, schedule.previous_version_id,
+           schedule.status, schedule.starts_at, schedule.ends_at, schedule.attempt_count,
+           version.line_rich_menu_id,
+           previous.line_rich_menu_id as previous_line_rich_menu_id,
+           menu.published_version_id
+      from public.line_richmenu_schedules schedule
+      join public.line_richmenu_versions version
+        on version.id = schedule.version_id and version.clinic_id = schedule.clinic_id
+      left join public.line_richmenu_versions previous
+        on previous.id = schedule.previous_version_id and previous.clinic_id = schedule.clinic_id
+      left join public.line_richmenu menu on menu.clinic_id = schedule.clinic_id
+     where schedule.attempt_count < 5
+       and ((schedule.status = 'scheduled' and schedule.starts_at <= now())
+         or (schedule.status = 'active' and schedule.ends_at <= now()))
+     order by case when schedule.status = 'active' then schedule.ends_at else schedule.starts_at end,
+              schedule.created_at
+     limit greatest(1, least(coalesce(p_limit, 10), 50))
+     for update of schedule skip locked
+  loop
+    if candidate.status = 'active' and candidate.published_version_id is distinct from candidate.version_id then
+      update public.line_richmenu_schedules schedule
+         set status = 'completed', completed_at = now(),
+             last_error = 'manual publication superseded this schedule', updated_at = now()
+       where schedule.id = candidate.id;
+      continue;
+    end if;
+
+    update public.line_richmenu_schedules schedule
+       set status = case when candidate.status = 'scheduled' then 'activating' else 'expiring' end,
+           claimed_at = now(), attempt_count = schedule.attempt_count + 1,
+           last_error = null, updated_at = now()
+     where schedule.id = candidate.id;
+
+    schedule_id := candidate.id;
+    clinic_id := candidate.clinic_id;
+    action := case when candidate.status = 'scheduled' then 'activate' else 'expire' end;
+    version_id := candidate.version_id;
+    line_rich_menu_id := candidate.line_rich_menu_id;
+    restore_version_id := candidate.previous_version_id;
+    restore_line_rich_menu_id := candidate.previous_line_rich_menu_id;
+    attempt_count := candidate.attempt_count + 1;
+    return next;
+  end loop;
+end;
+$$;
+
+create or replace function public.finish_line_richmenu_schedule(
+  p_schedule_id uuid,
+  p_action text,
+  p_success boolean,
+  p_error text default null
+) returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  schedule_row public.line_richmenu_schedules%rowtype;
+  current_version_id uuid;
+  restore_line_id text;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then raise exception 'service role required'; end if;
+  if p_action not in ('activate', 'expire') then raise exception 'invalid Rich Menu schedule action'; end if;
+
+  select * into schedule_row from public.line_richmenu_schedules schedule
+   where schedule.id = p_schedule_id for update;
+  if not found then raise exception 'Rich Menu schedule not found'; end if;
+  if (p_action = 'activate' and schedule_row.status <> 'activating')
+     or (p_action = 'expire' and schedule_row.status <> 'expiring') then
+    raise exception 'Rich Menu schedule is not claimed for this action';
+  end if;
+
+  if not p_success then
+    update public.line_richmenu_schedules schedule
+       set status = case
+         when schedule.attempt_count >= 5 then 'failed'
+         when p_action = 'activate' then 'scheduled'
+         else 'active'
+       end,
+       claimed_at = null,
+       last_error = left(coalesce(p_error, 'Rich Menu schedule failed'), 1000),
+       updated_at = now()
+     where schedule.id = p_schedule_id;
+    insert into public.line_richmenu_publication_events (
+      clinic_id, version_id, kind, error, metadata
+    ) values (
+      schedule_row.clinic_id, schedule_row.version_id, 'schedule_failed',
+      left(coalesce(p_error, 'Rich Menu schedule failed'), 1000),
+      jsonb_build_object('schedule_id', schedule_row.id, 'action', p_action, 'attempt', schedule_row.attempt_count)
+    );
+    return;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('richmenu-publication:' || schedule_row.clinic_id::text));
+  select menu.published_version_id
+    into current_version_id
+    from public.line_richmenu menu
+   where menu.clinic_id = schedule_row.clinic_id for update;
+
+  if p_action = 'activate' then
+    update public.line_richmenu_versions version
+       set status = 'archived', updated_at = now()
+     where version.clinic_id = schedule_row.clinic_id
+       and version.status = 'published'
+       and version.id <> schedule_row.version_id;
+    update public.line_richmenu_versions version
+       set status = 'published', published_at = now(), updated_at = now()
+     where version.id = schedule_row.version_id and version.clinic_id = schedule_row.clinic_id;
+    insert into public.line_richmenu (clinic_id, published_id, published_version_id, draft_version_id, updated_at)
+    select schedule_row.clinic_id, version.line_rich_menu_id, version.id, version.id, now()
+      from public.line_richmenu_versions version
+     where version.id = schedule_row.version_id
+    on conflict (clinic_id) do update set
+      published_id = excluded.published_id,
+      published_version_id = excluded.published_version_id,
+      draft_version_id = excluded.draft_version_id,
+      updated_at = now();
+    update public.line_richmenu_schedules schedule
+       set status = 'active', previous_version_id = coalesce(schedule.previous_version_id, current_version_id),
+           activated_at = now(), claimed_at = null, last_error = null, updated_at = now()
+     where schedule.id = p_schedule_id;
+    insert into public.line_richmenu_publication_events (
+      clinic_id, version_id, kind, line_rich_menu_id, metadata
+    ) select schedule_row.clinic_id, schedule_row.version_id, 'scheduled_published',
+             version.line_rich_menu_id, jsonb_build_object('schedule_id', schedule_row.id)
+        from public.line_richmenu_versions version where version.id = schedule_row.version_id;
+  else
+    if current_version_id is distinct from schedule_row.version_id then
+      update public.line_richmenu_schedules schedule
+         set status = 'completed', completed_at = now(), claimed_at = null,
+             last_error = 'manual publication superseded this schedule', updated_at = now()
+       where schedule.id = p_schedule_id;
+      return;
+    end if;
+
+    update public.line_richmenu_versions version
+       set status = 'archived', updated_at = now()
+     where version.id = schedule_row.version_id and version.clinic_id = schedule_row.clinic_id;
+    select version.line_rich_menu_id into restore_line_id
+      from public.line_richmenu_versions version
+     where version.id = schedule_row.previous_version_id
+       and version.clinic_id = schedule_row.clinic_id;
+    if schedule_row.previous_version_id is not null and restore_line_id is not null then
+      update public.line_richmenu_versions version
+         set status = 'published', published_at = now(), updated_at = now()
+       where version.id = schedule_row.previous_version_id and version.clinic_id = schedule_row.clinic_id;
+    end if;
+    update public.line_richmenu menu
+       set published_id = restore_line_id,
+           published_version_id = case when restore_line_id is null then null else schedule_row.previous_version_id end,
+           updated_at = now()
+     where menu.clinic_id = schedule_row.clinic_id;
+    update public.line_richmenu_schedules schedule
+       set status = 'completed', completed_at = now(), claimed_at = null,
+           last_error = null, updated_at = now()
+     where schedule.id = p_schedule_id;
+    insert into public.line_richmenu_publication_events (
+      clinic_id, version_id, kind, line_rich_menu_id, metadata
+    ) values (
+      schedule_row.clinic_id, schedule_row.version_id, 'schedule_completed',
+      restore_line_id, jsonb_build_object('schedule_id', schedule_row.id, 'restored_version_id', schedule_row.previous_version_id)
+    );
+  end if;
+end;
+$$;
+
+revoke all on function public.clone_line_richmenu_version(uuid, uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.create_line_richmenu_schedule(uuid, uuid, uuid, timestamptz, timestamptz) from public, anon, authenticated;
+revoke all on function public.cancel_line_richmenu_schedule(uuid, uuid, uuid) from public, anon, authenticated;
+revoke all on function public.claim_due_line_richmenu_schedules(integer) from public, anon, authenticated;
+revoke all on function public.finish_line_richmenu_schedule(uuid, text, boolean, text) from public, anon, authenticated;
+grant execute on function public.clone_line_richmenu_version(uuid, uuid, uuid, text) to service_role;
+grant execute on function public.create_line_richmenu_schedule(uuid, uuid, uuid, timestamptz, timestamptz) to service_role;
+grant execute on function public.cancel_line_richmenu_schedule(uuid, uuid, uuid) to service_role;
+grant execute on function public.claim_due_line_richmenu_schedules(integer) to service_role;
+grant execute on function public.finish_line_richmenu_schedule(uuid, text, boolean, text) to service_role;
+
+commit;
+
+-- Resolve PL/pgSQL output-column ambiguity reported by `supabase db lint`
+-- without changing business behavior or grants.
+begin;
+
+create or replace function public.create_brand_with_owner(
+  p_actor_user_id uuid,
+  p_source_clinic_id uuid,
+  p_name text,
+  p_slug text,
+  p_phone text default null,
+  p_address text default null
+) returns table (clinic_id uuid, clinic_name text, clinic_slug text)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_id uuid;
+  v_name text := btrim(coalesce(p_name, ''));
+  v_slug text := lower(btrim(coalesce(p_slug, '')));
+begin
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_source_clinic_id
+       and member.user_id = p_actor_user_id
+       and member.role in ('owner', 'admin')
+  ) then
+    raise exception '無權限建立品牌';
+  end if;
+  if v_name = '' or length(v_name) > 120 then raise exception '品牌名稱格式錯誤'; end if;
+  if v_slug !~ '^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$' then
+    raise exception '品牌短網址格式錯誤';
+  end if;
+
+  insert into public.clinics (name, slug, phone, address)
+  values (v_name, v_slug, nullif(btrim(p_phone), ''), nullif(btrim(p_address), ''))
+  returning id into v_id;
+
+  insert into public.clinic_settings (clinic_id) values (v_id)
+  on conflict on constraint clinic_settings_pkey do nothing;
+  insert into public.clinic_members (clinic_id, user_id, role)
+  values (v_id, p_actor_user_id, 'owner');
+
+  return query select v_id, v_name, v_slug;
+exception
+  when unique_violation then
+    raise exception '品牌短網址已存在' using errcode = '23505';
+end;
+$$;
+
+create or replace function public.create_brand_with_platform_admin(
+  p_actor_user_id uuid,
+  p_owner_user_id uuid,
+  p_name text,
+  p_slug text,
+  p_phone text default null,
+  p_address text default null
+)
+returns table (clinic_id uuid, owner_user_id uuid)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_clinic_id uuid;
+  v_name text := btrim(coalesce(p_name, ''));
+  v_slug text := lower(btrim(coalesce(p_slug, '')));
+begin
+  if not exists (
+    select 1 from public.platform_admins platform_admin
+     where platform_admin.user_id = p_actor_user_id and platform_admin.active
+  ) then
+    raise exception 'platform admin access required';
+  end if;
+  if v_name = '' or length(v_name) > 120 then raise exception 'invalid brand name'; end if;
+  if v_slug !~ '^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$' then raise exception 'invalid brand slug'; end if;
+  if not exists (select 1 from auth.users auth_user where auth_user.id = p_owner_user_id) then
+    raise exception 'owner user not found';
+  end if;
+
+  insert into public.clinics (name, slug, phone, address, active)
+  values (v_name, v_slug, nullif(btrim(p_phone), ''), nullif(btrim(p_address), ''), true)
+  returning id into v_clinic_id;
+
+  insert into public.clinic_members (clinic_id, user_id, role)
+  values (v_clinic_id, p_owner_user_id, 'owner')
+  on conflict on constraint clinic_members_pkey do update set role = 'owner';
+
+  return query select v_clinic_id, p_owner_user_id;
+exception
+  when unique_violation then
+    raise exception 'brand slug already exists' using errcode = '23505';
+end;
+$$;
+
+create or replace function public.grant_patient_membership(
+  p_clinic_id uuid,
+  p_patient_id uuid,
+  p_plan_id uuid,
+  p_actor_user_id uuid,
+  p_source text default 'manual',
+  p_note text default null
+) returns table (membership_id uuid, membership_code text, expires_at timestamptz, credits_remaining integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  plan_row record;
+  v_id uuid;
+  v_code text;
+  v_expires timestamptz;
+begin
+  if p_source not in ('manual', 'purchase', 'migration') then raise exception 'invalid membership source'; end if;
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_clinic_id
+       and member.user_id = p_actor_user_id
+       and member.role <> 'provider'
+  ) then raise exception 'membership actor is not allowed'; end if;
+  if not exists (
+    select 1 from public.patients patient
+     where patient.id = p_patient_id and patient.clinic_id = p_clinic_id and patient.active
+  ) then raise exception 'patient not found'; end if;
+  select plan.* into plan_row
+    from public.membership_plans plan
+   where plan.id = p_plan_id and plan.clinic_id = p_clinic_id and plan.active;
+  if not found then raise exception 'membership plan not found'; end if;
+  if plan_row.valid_days is not null then
+    v_expires := now() + (plan_row.valid_days || ' days')::interval;
+  end if;
+  loop
+    v_code := upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 10));
+    exit when not exists (
+      select 1 from public.patient_memberships membership
+       where membership.clinic_id = p_clinic_id and membership.membership_code = v_code
+    );
+  end loop;
+  insert into public.patient_memberships
+    (clinic_id, patient_id, plan_id, membership_code, credits_total, credits_remaining, starts_at, expires_at, source, note)
+  values
+    (p_clinic_id, p_patient_id, p_plan_id, v_code, plan_row.credits_total, plan_row.credits_total, now(), v_expires, p_source, nullif(btrim(p_note), ''))
+  returning id into v_id;
+  insert into public.membership_ledger
+    (clinic_id, membership_id, patient_id, kind, credits_delta, reference_type, actor_id, note)
+  values
+    (p_clinic_id, v_id, p_patient_id, 'grant', plan_row.credits_total, 'manual', p_actor_user_id, p_note);
+  return query select v_id, v_code, v_expires, plan_row.credits_total;
+end;
+$$;
+
+create or replace function public.grant_paid_membership_from_order(
+  p_clinic_id uuid,
+  p_payment_order_id uuid
+)
+returns table (membership_id uuid, membership_code text, expires_at timestamptz, credits_remaining integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  order_row record;
+  plan_row record;
+  existing record;
+  v_id uuid;
+  v_code text;
+  v_expires timestamptz;
+begin
+  select payment_order.id, payment_order.status, payment_order.clinic_id, payment_order.patient_id, payment_order.membership_plan_id
+    into order_row
+    from public.payment_orders payment_order
+   where payment_order.id = p_payment_order_id and payment_order.clinic_id = p_clinic_id
+   for update;
+  if not found or order_row.membership_plan_id is null or order_row.patient_id is null then
+    raise exception 'membership payment order not found';
+  end if;
+  if order_row.status <> 'paid' then raise exception 'membership payment is not paid'; end if;
+  select membership.id, membership.membership_code, membership.expires_at, membership.credits_remaining
+    into existing
+    from public.patient_memberships membership
+   where membership.payment_order_id = p_payment_order_id;
+  if found then
+    return query select existing.id, existing.membership_code, existing.expires_at, existing.credits_remaining;
+    return;
+  end if;
+  select plan.* into plan_row
+    from public.membership_plans plan
+   where plan.id = order_row.membership_plan_id and plan.clinic_id = p_clinic_id;
+  if not found then raise exception 'membership plan not found'; end if;
+  if not exists (
+    select 1 from public.patients patient
+     where patient.id = order_row.patient_id and patient.clinic_id = p_clinic_id and patient.active
+  ) then raise exception 'patient not found'; end if;
+  if plan_row.valid_days is not null then
+    v_expires := now() + (plan_row.valid_days || ' days')::interval;
+  end if;
+  loop
+    v_code := upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 10));
+    exit when not exists (
+      select 1 from public.patient_memberships membership
+       where membership.clinic_id = p_clinic_id and membership.membership_code = v_code
+    );
+  end loop;
+  insert into public.patient_memberships
+    (clinic_id, patient_id, plan_id, payment_order_id, membership_code, credits_total, credits_remaining, starts_at, expires_at, source, note)
+  values
+    (p_clinic_id, order_row.patient_id, order_row.membership_plan_id, p_payment_order_id, v_code, plan_row.credits_total, plan_row.credits_total, now(), v_expires, 'purchase', 'membership payment purchase')
+  returning id into v_id;
+  insert into public.membership_ledger
+    (clinic_id, membership_id, patient_id, kind, credits_delta, reference_type, reference_id, note)
+  values
+    (p_clinic_id, v_id, order_row.patient_id, 'grant', plan_row.credits_total, 'payment_order', p_payment_order_id, 'membership payment purchase');
+  return query select v_id, v_code, v_expires, plan_row.credits_total;
+end;
+$$;
+
+create or replace function public.register_for_event_with_terms(
+  p_clinic_id uuid,
+  p_event_id uuid,
+  p_session_id uuid,
+  p_ticket_type_id uuid,
+  p_name text,
+  p_phone text,
+  p_email text default null,
+  p_line_user_id text default null,
+  p_marketing_opt_in boolean default false,
+  p_answers jsonb default '{}'::jsonb,
+  p_access_token text default null,
+  p_discount_code text default null,
+  p_membership_code text default null,
+  p_form_id uuid default null,
+  p_form_version integer default null,
+  p_terms_version integer default null,
+  p_terms_accepted_at timestamptz default null,
+  p_patient_id uuid default null
+)
+returns table (registration_id uuid, registration_no text, registration_status text, payment_status text, amount integer, discount_amount integer, membership_applied boolean, checkin_token text)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  registration_result record;
+begin
+  if p_patient_id is not null and not exists (
+    select 1 from public.patients patient
+     where patient.id = p_patient_id and patient.clinic_id = p_clinic_id and patient.active
+  ) then
+    raise exception 'patient is not valid for this brand';
+  end if;
+
+  select * into registration_result from public.register_for_event_with_benefits(
+    p_clinic_id, p_event_id, p_session_id, p_ticket_type_id, p_name, p_phone, p_email, p_line_user_id,
+    p_marketing_opt_in, p_answers, p_access_token, p_discount_code, p_membership_code, p_form_id, p_form_version
+  );
+  update public.registrations registration
+     set terms_version = p_terms_version,
+         terms_accepted_at = p_terms_accepted_at,
+         patient_id = p_patient_id
+   where registration.id = registration_result.registration_id
+     and registration.clinic_id = p_clinic_id;
+  update public.discount_redemptions redemption
+     set patient_id = p_patient_id
+   where redemption.clinic_id = p_clinic_id
+     and redemption.registration_id = registration_result.registration_id;
+  return query select
+    registration_result.registration_id,
+    registration_result.registration_no,
+    registration_result.registration_status,
+    registration_result.payment_status,
+    registration_result.amount,
+    registration_result.discount_amount,
+    registration_result.membership_applied,
+    registration_result.checkin_token;
+end;
+$$;
+
+create or replace function public.reschedule_appointment(
+  p_clinic_id uuid,
+  p_old_appointment_id uuid,
+  p_mode text,
+  p_doctor_id uuid,
+  p_start_at timestamptz default null,
+  p_template_id uuid default null,
+  p_date date default null,
+  p_service_id uuid default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  old_appt record;
+  new_appointment_id uuid;
+  v_service_id uuid;
+begin
+  select appointment.patient_id, appointment.visit_type, appointment.is_self_pay,
+         appointment.membership_id, appointment.service_id, appointment.status
+    into old_appt
+    from public.appointments appointment
+   where appointment.id = p_old_appointment_id and appointment.clinic_id = p_clinic_id
+   for update;
+  if not found then raise exception 'appointment not found'; end if;
+  if old_appt.status not in ('booked', 'confirmed') then raise exception 'appointment cannot be rescheduled'; end if;
+  v_service_id := coalesce(p_service_id, old_appt.service_id);
+
+  if p_mode = 'time' then
+    if p_start_at is null then raise exception 'start_at is required'; end if;
+    new_appointment_id := public.book_time_slot(
+      p_clinic_id, p_doctor_id, old_appt.patient_id, p_start_at,
+      old_appt.visit_type, old_appt.is_self_pay, v_service_id
+    );
+  elsif p_mode = 'number' then
+    if p_template_id is null or p_date is null then raise exception 'template_id and date are required'; end if;
+    select booking.appointment_id into new_appointment_id
+      from public.book_number(
+        p_clinic_id, p_doctor_id, old_appt.patient_id, p_template_id, p_date,
+        old_appt.visit_type, old_appt.is_self_pay, v_service_id
+      ) booking;
+  else
+    raise exception 'invalid booking mode';
+  end if;
+
+  if old_appt.membership_id is not null then
+    perform public.restore_membership_credit(
+      p_clinic_id, old_appt.membership_id, 'appointment', p_old_appointment_id,
+      'rescheduled appointment'
+    );
+    perform public.consume_membership_credit(
+      p_clinic_id, old_appt.membership_id, 'appointment', 'appointment',
+      new_appointment_id, v_service_id, null, 'rescheduled appointment'
+    );
+    update public.appointments appointment
+       set membership_id = old_appt.membership_id,
+           deposit_status = 'waived',
+           deposit_amount = 0,
+           service_id = v_service_id
+     where appointment.id = new_appointment_id and appointment.clinic_id = p_clinic_id;
+  elsif v_service_id is not null then
+    update public.appointments appointment
+       set service_id = v_service_id
+     where appointment.id = new_appointment_id and appointment.clinic_id = p_clinic_id;
+  end if;
+
+  update public.appointments appointment
+     set status = 'cancelled'
+   where appointment.id = p_old_appointment_id and appointment.clinic_id = p_clinic_id;
+  update public.appointment_status_events status_event
+     set note = 'rescheduled appointment'
+   where status_event.id = (
+     select latest_status.id from public.appointment_status_events latest_status
+      where latest_status.appointment_id = p_old_appointment_id
+        and latest_status.clinic_id = p_clinic_id
+        and latest_status.to_status = 'cancelled'
+      order by latest_status.created_at desc
+      limit 1
+   );
+  return new_appointment_id;
+end;
+$$;
+
+create or replace function public.reschedule_service_appointment(
+  p_clinic_id uuid,
+  p_old_appointment_id uuid,
+  p_mode text,
+  p_doctor_id uuid default null,
+  p_service_id uuid default null,
+  p_start_at timestamptz default null,
+  p_template_id uuid default null,
+  p_date date default null
+) returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  old_appt record;
+  new_appointment_id uuid;
+  v_service_id uuid;
+  v_answers jsonb;
+begin
+  select appointment.patient_id, appointment.visit_type, appointment.is_self_pay,
+         appointment.membership_id, appointment.service_id, appointment.booking_answers, appointment.status
+    into old_appt
+    from public.appointments appointment
+   where appointment.id = p_old_appointment_id and appointment.clinic_id = p_clinic_id
+   for update;
+  if not found then raise exception 'appointment not found'; end if;
+  if old_appt.status not in ('booked', 'confirmed') then raise exception 'appointment cannot be rescheduled'; end if;
+
+  v_service_id := coalesce(p_service_id, old_appt.service_id);
+  v_answers := coalesce(old_appt.booking_answers, '{}'::jsonb);
+
+  update public.appointments appointment
+     set status = 'cancelled'
+   where appointment.id = p_old_appointment_id and appointment.clinic_id = p_clinic_id;
+  if p_doctor_id is null and v_service_id is null then raise exception 'service or provider is required'; end if;
+  if p_doctor_id is not null and not exists (
+    select 1 from public.doctors doctor
+     where doctor.id = p_doctor_id and doctor.clinic_id = p_clinic_id and doctor.active
+  ) then raise exception 'doctor is unavailable'; end if;
+  if v_service_id is not null and not exists (
+    select 1 from public.services service
+     where service.id = v_service_id and service.clinic_id = p_clinic_id and service.active
+  ) then raise exception 'service is unavailable'; end if;
+
+  if p_mode = 'time' then
+    if p_start_at is null then raise exception 'start_at is required'; end if;
+    if p_doctor_id is null then
+      new_appointment_id := public.book_service_slot(
+        p_clinic_id, v_service_id, old_appt.patient_id, p_start_at,
+        old_appt.visit_type, old_appt.is_self_pay, v_answers
+      );
+    else
+      new_appointment_id := public.book_time_slot(
+        p_clinic_id, p_doctor_id, old_appt.patient_id, p_start_at,
+        old_appt.visit_type, old_appt.is_self_pay, v_service_id
+      );
+    end if;
+  elsif p_mode = 'number' then
+    if p_template_id is null or p_date is null then raise exception 'template_id and date are required'; end if;
+    if p_doctor_id is null then
+      select booking.appointment_id into new_appointment_id
+        from public.book_service_session(
+          p_clinic_id, v_service_id, old_appt.patient_id, p_template_id, p_date,
+          old_appt.visit_type, old_appt.is_self_pay, v_answers
+        ) booking;
+    else
+      select booking.appointment_id into new_appointment_id
+        from public.book_number(
+          p_clinic_id, p_doctor_id, old_appt.patient_id, p_template_id, p_date,
+          old_appt.visit_type, old_appt.is_self_pay, v_service_id
+        ) booking;
+    end if;
+  else
+    raise exception 'invalid booking mode';
+  end if;
+
+  if old_appt.membership_id is not null then
+    perform public.restore_membership_credit(
+      p_clinic_id, old_appt.membership_id, 'appointment', p_old_appointment_id,
+      'rescheduled appointment'
+    );
+    perform public.consume_membership_credit(
+      p_clinic_id, old_appt.membership_id, 'appointment', 'appointment',
+      new_appointment_id, v_service_id, null, 'rescheduled appointment'
+    );
+    update public.appointments appointment
+       set membership_id = old_appt.membership_id,
+           deposit_status = 'waived',
+           deposit_amount = 0,
+           service_id = v_service_id,
+           booking_answers = v_answers
+     where appointment.id = new_appointment_id and appointment.clinic_id = p_clinic_id;
+  elsif v_service_id is not null then
+    update public.appointments appointment
+       set service_id = v_service_id, booking_answers = v_answers
+     where appointment.id = new_appointment_id and appointment.clinic_id = p_clinic_id;
+  end if;
+
+  update public.appointments appointment
+     set status = 'cancelled'
+   where appointment.id = p_old_appointment_id and appointment.clinic_id = p_clinic_id;
+  update public.appointment_status_events status_event
+     set note = 'rescheduled appointment'
+   where status_event.id = (
+     select latest_status.id from public.appointment_status_events latest_status
+      where latest_status.appointment_id = p_old_appointment_id
+        and latest_status.clinic_id = p_clinic_id
+        and latest_status.to_status = 'cancelled'
+      order by latest_status.created_at desc
+      limit 1
+   );
+  return new_appointment_id;
+end;
+$$;
+
+revoke all on function public.create_brand_with_owner(uuid, uuid, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.create_brand_with_platform_admin(uuid, uuid, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.grant_patient_membership(uuid, uuid, uuid, uuid, text, text) from public, anon, authenticated;
+revoke all on function public.grant_paid_membership_from_order(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.register_for_event_with_terms(uuid, uuid, uuid, uuid, text, text, text, text, boolean, jsonb, text, text, text, uuid, integer, integer, timestamptz, uuid) from public, anon, authenticated;
+revoke all on function public.reschedule_appointment(uuid, uuid, text, uuid, timestamptz, uuid, date, uuid) from public, anon, authenticated;
+revoke all on function public.reschedule_service_appointment(uuid, uuid, text, uuid, uuid, timestamptz, uuid, date) from public, anon, authenticated;
+
+grant execute on function public.create_brand_with_owner(uuid, uuid, text, text, text, text) to service_role;
+grant execute on function public.create_brand_with_platform_admin(uuid, uuid, text, text, text, text) to service_role;
+grant execute on function public.grant_patient_membership(uuid, uuid, uuid, uuid, text, text) to service_role;
+grant execute on function public.grant_paid_membership_from_order(uuid, uuid) to service_role;
+grant execute on function public.register_for_event_with_terms(uuid, uuid, uuid, uuid, text, text, text, text, boolean, jsonb, text, text, text, uuid, integer, integer, timestamptz, uuid) to service_role;
+grant execute on function public.reschedule_appointment(uuid, uuid, text, uuid, timestamptz, uuid, date, uuid) to service_role;
+grant execute on function public.reschedule_service_appointment(uuid, uuid, text, uuid, uuid, timestamptz, uuid, date) to service_role;
+
+commit;
+
+-- Follow up the staging DB lint findings without rewriting an applied migration.
+begin;
+
+alter table public.clinics
+  add column if not exists updated_at timestamptz not null default now();
+drop trigger if exists trg_clinics_touch on public.clinics;
+create trigger trg_clinics_touch
+before update on public.clinics
+for each row execute function public.touch_updated_at();
+
+create or replace function public.record_line_richmenu_publication(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_version_id uuid,
+  p_line_rich_menu_id text,
+  p_kind text default 'published',
+  p_image_sha256 text default null,
+  p_image_width integer default null,
+  p_image_height integer default null
+) returns void
+language plpgsql security definer set search_path = public, extensions
+as $$
+begin
+  if p_kind not in ('published', 'rolled_back') then raise exception 'invalid publication kind'; end if;
+  if not exists (select 1 from public.clinic_members member where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id and member.role in ('owner', 'admin'))
+    then raise exception 'brand admin access required'; end if;
+  if nullif(btrim(coalesce(p_line_rich_menu_id, '')), '') is null then raise exception 'LINE Rich Menu ID is required'; end if;
+  perform pg_advisory_xact_lock(hashtext('richmenu-publication:' || p_clinic_id::text));
+  if not exists (select 1 from public.line_richmenu_versions version where version.id = p_version_id and version.clinic_id = p_clinic_id) then
+    raise exception 'Rich Menu version not found';
+  end if;
+  update public.line_richmenu_versions
+     set status = 'archived', updated_at = now()
+   where clinic_id = p_clinic_id and status = 'published' and id <> p_version_id;
+  update public.line_richmenu_versions
+     set status = 'published', line_rich_menu_id = btrim(p_line_rich_menu_id),
+         image_sha256 = coalesce(p_image_sha256, image_sha256),
+         image_width = coalesce(p_image_width, image_width),
+         image_height = coalesce(p_image_height, image_height),
+         validation_errors = '[]'::jsonb, published_at = now(), updated_at = now()
+   where id = p_version_id and clinic_id = p_clinic_id;
+  insert into public.line_richmenu (clinic_id, published_id, published_version_id, draft_version_id, updated_at)
+  values (p_clinic_id, btrim(p_line_rich_menu_id), p_version_id, p_version_id, now())
+  on conflict (clinic_id) do update set
+    published_id = excluded.published_id,
+    published_version_id = excluded.published_version_id,
+    draft_version_id = excluded.draft_version_id,
+    updated_at = now();
+  insert into public.line_richmenu_publication_events (clinic_id, version_id, kind, actor_id, line_rich_menu_id)
+  values (p_clinic_id, p_version_id, p_kind, p_actor_user_id, btrim(p_line_rich_menu_id));
+end;
+$$;
+
+create or replace function public.finish_line_richmenu_schedule(
+  p_schedule_id uuid,
+  p_action text,
+  p_success boolean,
+  p_error text default null
+) returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  schedule_row public.line_richmenu_schedules%rowtype;
+  current_version_id uuid;
+  restore_line_id text;
+begin
+  if coalesce(auth.role(), '') <> 'service_role' then raise exception 'service role required'; end if;
+  if p_action not in ('activate', 'expire') then raise exception 'invalid Rich Menu schedule action'; end if;
+
+  select * into schedule_row from public.line_richmenu_schedules schedule
+   where schedule.id = p_schedule_id for update;
+  if not found then raise exception 'Rich Menu schedule not found'; end if;
+  if (p_action = 'activate' and schedule_row.status <> 'activating')
+     or (p_action = 'expire' and schedule_row.status <> 'expiring') then
+    raise exception 'Rich Menu schedule is not claimed for this action';
+  end if;
+
+  if not p_success then
+    update public.line_richmenu_schedules schedule
+       set status = case
+         when schedule.attempt_count >= 5 then 'failed'
+         when p_action = 'activate' then 'scheduled'
+         else 'active'
+       end,
+       claimed_at = null,
+       last_error = left(coalesce(p_error, 'Rich Menu schedule failed'), 1000),
+       updated_at = now()
+     where schedule.id = p_schedule_id;
+    insert into public.line_richmenu_publication_events (clinic_id, version_id, kind, error, metadata)
+    values (
+      schedule_row.clinic_id, schedule_row.version_id, 'schedule_failed',
+      left(coalesce(p_error, 'Rich Menu schedule failed'), 1000),
+      jsonb_build_object('schedule_id', schedule_row.id, 'action', p_action, 'attempt', schedule_row.attempt_count)
+    );
+    return;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtext('richmenu-publication:' || schedule_row.clinic_id::text));
+  select menu.published_version_id
+    into current_version_id
+    from public.line_richmenu menu
+   where menu.clinic_id = schedule_row.clinic_id for update;
+
+  if p_action = 'activate' then
+    update public.line_richmenu_versions version
+       set status = 'archived', updated_at = now()
+     where version.clinic_id = schedule_row.clinic_id
+       and version.status = 'published'
+       and version.id <> schedule_row.version_id;
+    update public.line_richmenu_versions version
+       set status = 'published', published_at = now(), updated_at = now()
+     where version.id = schedule_row.version_id and version.clinic_id = schedule_row.clinic_id;
+    insert into public.line_richmenu (clinic_id, published_id, published_version_id, draft_version_id, updated_at)
+    select schedule_row.clinic_id, version.line_rich_menu_id, version.id, version.id, now()
+      from public.line_richmenu_versions version
+     where version.id = schedule_row.version_id
+    on conflict (clinic_id) do update set
+      published_id = excluded.published_id,
+      published_version_id = excluded.published_version_id,
+      draft_version_id = excluded.draft_version_id,
+      updated_at = now();
+    update public.line_richmenu_schedules schedule
+       set status = 'active', previous_version_id = coalesce(schedule.previous_version_id, current_version_id),
+           activated_at = now(), claimed_at = null, last_error = null, updated_at = now()
+     where schedule.id = p_schedule_id;
+    insert into public.line_richmenu_publication_events (clinic_id, version_id, kind, line_rich_menu_id, metadata)
+    select schedule_row.clinic_id, schedule_row.version_id, 'scheduled_published',
+           version.line_rich_menu_id, jsonb_build_object('schedule_id', schedule_row.id)
+      from public.line_richmenu_versions version where version.id = schedule_row.version_id;
+  else
+    if current_version_id is distinct from schedule_row.version_id then
+      update public.line_richmenu_schedules schedule
+         set status = 'completed', completed_at = now(), claimed_at = null,
+             last_error = 'manual publication superseded this schedule', updated_at = now()
+       where schedule.id = p_schedule_id;
+      return;
+    end if;
+
+    update public.line_richmenu_versions version
+       set status = 'archived', updated_at = now()
+     where version.id = schedule_row.version_id and version.clinic_id = schedule_row.clinic_id;
+    select version.line_rich_menu_id into restore_line_id
+      from public.line_richmenu_versions version
+     where version.id = schedule_row.previous_version_id
+       and version.clinic_id = schedule_row.clinic_id;
+    if schedule_row.previous_version_id is not null and restore_line_id is not null then
+      update public.line_richmenu_versions version
+         set status = 'published', published_at = now(), updated_at = now()
+       where version.id = schedule_row.previous_version_id and version.clinic_id = schedule_row.clinic_id;
+    end if;
+    update public.line_richmenu menu
+       set published_id = restore_line_id,
+           published_version_id = case when restore_line_id is null then null else schedule_row.previous_version_id end,
+           updated_at = now()
+     where menu.clinic_id = schedule_row.clinic_id;
+    update public.line_richmenu_schedules schedule
+       set status = 'completed', completed_at = now(), claimed_at = null,
+           last_error = null, updated_at = now()
+     where schedule.id = p_schedule_id;
+    insert into public.line_richmenu_publication_events (clinic_id, version_id, kind, line_rich_menu_id, metadata)
+    values (
+      schedule_row.clinic_id, schedule_row.version_id, 'schedule_completed',
+      restore_line_id, jsonb_build_object('schedule_id', schedule_row.id, 'restored_version_id', schedule_row.previous_version_id)
+    );
+  end if;
+end;
+$$;
+
+create or replace function public.offer_next_appointment_waitlist(
+  p_clinic_id uuid,
+  p_target_key text,
+  p_offer_minutes integer default 15
+) returns table (waitlist_id uuid, appointment_id uuid, patient_id uuid, offer_expires_at timestamptz)
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  candidate record;
+  booking record;
+  v_appointment_id uuid;
+  v_offer_expires timestamptz;
+  v_error text;
+begin
+  if p_offer_minutes not between 5 and 1440 then raise exception 'invalid waitlist offer duration'; end if;
+  perform pg_advisory_xact_lock(hashtext('appointment-waitlist:' || p_clinic_id::text || ':' || p_target_key));
+  for candidate in
+    select * from public.appointment_waitlist_entries
+     where clinic_id = p_clinic_id and target_key = p_target_key and status = 'waiting'
+     order by position, created_at
+     for update skip locked
+  loop
+    v_appointment_id := null;
+    v_error := null;
+    begin
+      if candidate.booking_mode = 'time' then
+        if candidate.doctor_id is null then
+          v_appointment_id := public.book_service_slot(
+            candidate.clinic_id, candidate.service_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, candidate.booking_answers
+          );
+        elsif candidate.service_id is null then
+          v_appointment_id := public.book_time_slot(
+            candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, null
+          );
+        else
+          v_appointment_id := public.book_time_slot_for_service(
+            candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, candidate.service_id
+          );
+        end if;
+      elsif candidate.doctor_id is null then
+        select * into booking from public.book_service_session(
+          candidate.clinic_id, candidate.service_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, candidate.booking_answers
+        );
+        v_appointment_id := booking.appointment_id;
+      elsif candidate.service_id is null then
+        select * into booking from public.book_number(
+          candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, null
+        );
+        v_appointment_id := booking.appointment_id;
+      else
+        select * into booking from public.book_number_for_service(
+          candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, candidate.service_id
+        );
+        v_appointment_id := booking.appointment_id;
+      end if;
+    exception when others then
+      v_error := sqlerrm;
+    end;
+
+    if v_appointment_id is null then
+      insert into public.appointment_waitlist_events (clinic_id, waitlist_id, target_key, kind, from_status, to_status, error)
+      values (candidate.clinic_id, candidate.id, candidate.target_key, 'promotion_failed', candidate.status, candidate.status, v_error);
+      if v_error like '%憿遛%' or v_error like '%capacity%' or v_error like '%resource is unavailable%' then
+        return;
+      end if;
+      update public.appointment_waitlist_entries set status = 'expired' where id = candidate.id;
+      continue;
+    end if;
+
+    v_offer_expires := now() + (p_offer_minutes || ' minutes')::interval;
+    update public.appointments
+       set waitlist_entry_id = candidate.id,
+           booking_answers = candidate.booking_answers,
+           note = concat_ws(E'\n', nullif(note, ''), 'waitlist offer')
+     where id = v_appointment_id and clinic_id = candidate.clinic_id;
+    update public.appointment_waitlist_entries
+       set status = 'offered', appointment_id = v_appointment_id,
+           offered_at = now(), offer_expires_at = v_offer_expires
+     where id = candidate.id and clinic_id = candidate.clinic_id;
+    return query select candidate.id, v_appointment_id, candidate.patient_id, v_offer_expires;
+    return;
+  end loop;
+end;
+$$;
+
+revoke all on function public.record_line_richmenu_publication(uuid, uuid, uuid, text, text, text, integer, integer) from public, anon, authenticated;
+revoke all on function public.finish_line_richmenu_schedule(uuid, text, boolean, text) from public, anon, authenticated;
+revoke all on function public.offer_next_appointment_waitlist(uuid, text, integer) from public, anon, authenticated;
+grant execute on function public.record_line_richmenu_publication(uuid, uuid, uuid, text, text, text, integer, integer) to service_role;
+grant execute on function public.finish_line_richmenu_schedule(uuid, text, boolean, text) to service_role;
+grant execute on function public.offer_next_appointment_waitlist(uuid, text, integer) to service_role;
+
+commit;
+
+-- Preserve a waiting entry when the target is still full. The applied 006
+-- migration contained a mojibake replacement for the Chinese capacity marker.
+begin;
+
+create or replace function public.offer_next_appointment_waitlist(
+  p_clinic_id uuid,
+  p_target_key text,
+  p_offer_minutes integer default 15
+) returns table (waitlist_id uuid, appointment_id uuid, patient_id uuid, offer_expires_at timestamptz)
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  candidate record;
+  booking record;
+  v_appointment_id uuid;
+  v_offer_expires timestamptz;
+  v_error text;
+begin
+  if p_offer_minutes not between 5 and 1440 then raise exception 'invalid waitlist offer duration'; end if;
+  perform pg_advisory_xact_lock(hashtext('appointment-waitlist:' || p_clinic_id::text || ':' || p_target_key));
+  for candidate in
+    select * from public.appointment_waitlist_entries
+     where clinic_id = p_clinic_id and target_key = p_target_key and status = 'waiting'
+     order by position, created_at
+     for update skip locked
+  loop
+    v_appointment_id := null;
+    v_error := null;
+    begin
+      if candidate.booking_mode = 'time' then
+        if candidate.doctor_id is null then
+          v_appointment_id := public.book_service_slot(
+            candidate.clinic_id, candidate.service_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, candidate.booking_answers
+          );
+        elsif candidate.service_id is null then
+          v_appointment_id := public.book_time_slot(
+            candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, null
+          );
+        else
+          v_appointment_id := public.book_time_slot_for_service(
+            candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.requested_start_at,
+            candidate.visit_type, candidate.is_self_pay, candidate.service_id
+          );
+        end if;
+      elsif candidate.doctor_id is null then
+        select * into booking from public.book_service_session(
+          candidate.clinic_id, candidate.service_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, candidate.booking_answers
+        );
+        v_appointment_id := booking.appointment_id;
+      elsif candidate.service_id is null then
+        select * into booking from public.book_number(
+          candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, null
+        );
+        v_appointment_id := booking.appointment_id;
+      else
+        select * into booking from public.book_number_for_service(
+          candidate.clinic_id, candidate.doctor_id, candidate.patient_id, candidate.template_id,
+          candidate.requested_date, candidate.visit_type, candidate.is_self_pay, candidate.service_id
+        );
+        v_appointment_id := booking.appointment_id;
+      end if;
+    exception when others then
+      v_error := sqlerrm;
+    end;
+
+    if v_appointment_id is null then
+      insert into public.appointment_waitlist_events (clinic_id, waitlist_id, target_key, kind, from_status, to_status, error)
+      values (candidate.clinic_id, candidate.id, candidate.target_key, 'promotion_failed', candidate.status, candidate.status, v_error);
+      if v_error like '%額滿%'
+         or v_error like '%capacity%'
+         or v_error like '%slot is full%'
+         or v_error like '%session is full%'
+         or v_error like '%resource is unavailable%' then
+        return;
+      end if;
+      update public.appointment_waitlist_entries
+         set status = 'expired'
+       where id = candidate.id and clinic_id = candidate.clinic_id;
+      continue;
+    end if;
+
+    v_offer_expires := now() + (p_offer_minutes || ' minutes')::interval;
+    update public.appointments
+       set waitlist_entry_id = candidate.id,
+           booking_answers = candidate.booking_answers,
+           note = concat_ws(E'\n', nullif(note, ''), 'waitlist offer')
+     where id = v_appointment_id and clinic_id = candidate.clinic_id;
+    update public.appointment_waitlist_entries
+       set status = 'offered', appointment_id = v_appointment_id,
+           offered_at = now(), offer_expires_at = v_offer_expires
+     where id = candidate.id and clinic_id = candidate.clinic_id;
+    return query select candidate.id, v_appointment_id, candidate.patient_id, v_offer_expires;
+    return;
+  end loop;
+end;
+$$;
+
+revoke all on function public.offer_next_appointment_waitlist(uuid, text, integer) from public, anon, authenticated;
+grant execute on function public.offer_next_appointment_waitlist(uuid, text, integer) to service_role;
+
+commit;
+
+-- Final replay of migration 202608110008 after all compatibility definitions.
+begin;
+
+alter table public.platform_admins add column if not exists access_type text;
+alter table public.platform_admins add column if not exists permissions text[];
+update public.platform_admins set access_type = coalesce(access_type, 'system_admin'), permissions = coalesce(permissions, '{}'::text[]);
+alter table public.platform_admins alter column access_type set default 'employee';
+alter table public.platform_admins alter column access_type set not null;
+alter table public.platform_admins alter column permissions set default '{}'::text[];
+alter table public.platform_admins alter column permissions set not null;
+alter table public.platform_admins drop constraint if exists platform_admins_access_type_check;
+alter table public.platform_admins add constraint platform_admins_access_type_check check (access_type in ('system_admin', 'employee'));
+alter table public.platform_admins drop constraint if exists platform_admins_permissions_check;
+alter table public.platform_admins add constraint platform_admins_permissions_check check (permissions <@ array['platform.overview', 'brands.manage', 'entitlements.manage', 'operations.view', 'reports.view', 'audit.view', 'settings.view']::text[]);
+
+alter table public.clinic_members add column if not exists access_type text;
+alter table public.clinic_members add column if not exists permissions text[];
+update public.clinic_members
+set access_type = coalesce(access_type, case when role in ('owner', 'admin') then 'brand_admin' else 'employee' end),
+    permissions = coalesce(permissions, case when role in ('owner', 'admin') then array['brand.manage', 'operations.manage']::text[] when role = 'provider' then array['provider.assigned']::text[] else array['operations.manage']::text[] end);
+alter table public.clinic_members alter column access_type set default 'employee';
+alter table public.clinic_members alter column access_type set not null;
+alter table public.clinic_members alter column permissions set default '{}'::text[];
+alter table public.clinic_members alter column permissions set not null;
+alter table public.clinic_members drop constraint if exists clinic_members_access_type_check;
+alter table public.clinic_members add constraint clinic_members_access_type_check check (access_type in ('brand_admin', 'employee'));
+alter table public.clinic_members drop constraint if exists clinic_members_permissions_check;
+alter table public.clinic_members add constraint clinic_members_permissions_check check (permissions <@ array['brand.manage', 'operations.manage', 'provider.assigned']::text[]);
+
+create or replace function public.create_brand_with_owner(
+  p_actor_user_id uuid, p_source_clinic_id uuid, p_name text, p_slug text,
+  p_phone text default null, p_address text default null
+) returns table (clinic_id uuid, clinic_name text, clinic_slug text)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id uuid;
+  v_name text := btrim(coalesce(p_name, ''));
+  v_slug text := lower(btrim(coalesce(p_slug, '')));
+begin
+  if not exists (select 1 from public.clinic_members member where member.clinic_id = p_source_clinic_id and member.user_id = p_actor_user_id and member.access_type = 'brand_admin') then raise exception '無權限建立品牌'; end if;
+  if v_name = '' or length(v_name) > 120 then raise exception '品牌名稱格式錯誤'; end if;
+  if v_slug !~ '^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$' then raise exception '品牌短網址格式錯誤'; end if;
+  insert into public.clinics (name, slug, phone, address) values (v_name, v_slug, nullif(btrim(p_phone), ''), nullif(btrim(p_address), '')) returning id into v_id;
+  insert into public.clinic_settings (clinic_id) values (v_id) on conflict on constraint clinic_settings_pkey do nothing;
+  insert into public.clinic_members (clinic_id, user_id, role, access_type, permissions) values (v_id, p_actor_user_id, 'owner', 'brand_admin', array['brand.manage', 'operations.manage']::text[]);
+  return query select v_id, v_name, v_slug;
+exception when unique_violation then raise exception '品牌短網址已存在' using errcode = '23505';
+end;
+$$;
+
+create or replace function public.create_brand_with_platform_admin(
+  p_actor_user_id uuid, p_owner_user_id uuid, p_name text, p_slug text,
+  p_phone text default null, p_address text default null
+) returns table (clinic_id uuid, owner_user_id uuid)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_clinic_id uuid;
+  v_name text := btrim(coalesce(p_name, ''));
+  v_slug text := lower(btrim(coalesce(p_slug, '')));
+begin
+  if not exists (
+    select 1 from public.platform_admins platform_member
+     where platform_member.user_id = p_actor_user_id and platform_member.active
+       and (platform_member.access_type = 'system_admin' or 'brands.manage' = any(platform_member.permissions))
+  ) then raise exception 'system brand management permission required'; end if;
+  if v_name = '' or length(v_name) > 120 then raise exception 'invalid brand name'; end if;
+  if v_slug !~ '^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$' then raise exception 'invalid brand slug'; end if;
+  if not exists (select 1 from auth.users auth_user where auth_user.id = p_owner_user_id) then raise exception 'brand administrator user not found'; end if;
+  insert into public.clinics (name, slug, phone, address, active) values (v_name, v_slug, nullif(btrim(p_phone), ''), nullif(btrim(p_address), ''), true) returning id into v_clinic_id;
+  insert into public.clinic_members (clinic_id, user_id, role, access_type, permissions)
+  values (v_clinic_id, p_owner_user_id, 'owner', 'brand_admin', array['brand.manage', 'operations.manage']::text[])
+  on conflict on constraint clinic_members_pkey do update set role = 'owner', access_type = 'brand_admin', permissions = array['brand.manage', 'operations.manage']::text[];
+  return query select v_clinic_id, p_owner_user_id;
+exception when unique_violation then raise exception 'brand slug already exists' using errcode = '23505';
+end;
+$$;
+
+revoke all on function public.create_brand_with_owner(uuid, uuid, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.create_brand_with_platform_admin(uuid, uuid, text, text, text, text) from public, anon, authenticated;
+grant execute on function public.create_brand_with_owner(uuid, uuid, text, text, text, text) to service_role;
+grant execute on function public.create_brand_with_platform_admin(uuid, uuid, text, text, text, text) to service_role;
+
+commit;
+
+-- Final brand configuration permission boundary. Operational employees retain
+-- read access needed for daily work; configuration writes require brand.manage.
+-- Align configuration writes with the explicit brand permission model.
+-- Operational staff may read schedule context for daily work, but only a
+-- brand administrator or an employee with brand.manage may change it.
+begin;
+
+drop policy if exists doctors_nonprovider_manage on public.doctors;
+drop policy if exists doctors_brand_manage on public.doctors;
+create policy doctors_brand_manage on public.doctors for all to authenticated
+using (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = doctors.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+)
+with check (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = doctors.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+);
+
+drop policy if exists schedule_templates_nonprovider_manage on public.schedule_templates;
+drop policy if exists schedule_templates_brand_manage on public.schedule_templates;
+create policy schedule_templates_brand_manage on public.schedule_templates for all to authenticated
+using (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = schedule_templates.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+)
+with check (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = schedule_templates.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+  and (schedule_templates.doctor_id is not null or schedule_templates.service_id is not null)
+  and (
+    schedule_templates.doctor_id is null
+    or exists (
+      select 1 from public.doctors doctor
+       where doctor.id = schedule_templates.doctor_id
+         and doctor.clinic_id = schedule_templates.clinic_id
+         and doctor.active
+    )
+  )
+  and (
+    schedule_templates.service_id is null
+    or exists (
+      select 1 from public.services service
+       where service.id = schedule_templates.service_id
+         and service.clinic_id = schedule_templates.clinic_id
+         and service.active
+    )
+  )
+);
+
+drop policy if exists schedule_exceptions_nonprovider_manage on public.schedule_exceptions;
+drop policy if exists schedule_exceptions_brand_manage on public.schedule_exceptions;
+create policy schedule_exceptions_brand_manage on public.schedule_exceptions for all to authenticated
+using (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = schedule_exceptions.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+)
+with check (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = schedule_exceptions.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+  and (schedule_exceptions.doctor_id is not null or schedule_exceptions.service_id is not null)
+  and (
+    schedule_exceptions.doctor_id is null
+    or exists (
+      select 1 from public.doctors doctor
+       where doctor.id = schedule_exceptions.doctor_id
+         and doctor.clinic_id = schedule_exceptions.clinic_id
+         and doctor.active
+    )
+  )
+  and (
+    schedule_exceptions.service_id is null
+    or exists (
+      select 1 from public.services service
+       where service.id = schedule_exceptions.service_id
+         and service.clinic_id = schedule_exceptions.clinic_id
+         and service.active
+    )
+  )
+);
+
+drop policy if exists services_manage on public.services;
+drop policy if exists services_brand_manage on public.services;
+create policy services_brand_manage on public.services for all to authenticated
+using (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = services.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+)
+with check (
+  exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = services.clinic_id
+       and member.user_id = auth.uid()
+       and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  )
+);
+
+commit;
+
+-- Final replay of migration 202608120001 after all compatibility definitions.
+-- Fix time-mode service bookings: book_time_slot does not persist template_id,
+-- so the service wrapper must resolve the already-validated schedule segment
+-- from the appointment's Taipei date and time.
+begin;
+
+create or replace function public.book_time_slot_for_service(
+  p_clinic_id uuid, p_doctor_id uuid, p_patient_id uuid, p_start_at timestamptz,
+  p_visit_type text default 'return', p_is_self_pay boolean default false, p_service_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_id uuid;
+  v_appointment record;
+  v_settings record;
+  v_segment record;
+  v_end_at timestamptz;
+  v_minutes integer;
+  v_date date;
+  v_time time;
+begin
+  v_id := public.book_time_slot(p_clinic_id, p_doctor_id, p_patient_id, p_start_at, p_visit_type, p_is_self_pay, p_service_id);
+  if p_service_id is null then return v_id; end if;
+
+  select * into v_settings from public.clinic_settings where clinic_id = p_clinic_id;
+  select * into v_appointment from public.appointments where id = v_id and clinic_id = p_clinic_id for update;
+  v_minutes := public.service_booking_minutes(
+    p_clinic_id,
+    p_service_id,
+    greatest(1, extract(epoch from (v_appointment.end_at - v_appointment.start_at))::integer / 60),
+    p_visit_type,
+    coalesce(v_settings.first_visit_extends, false),
+    v_settings.first_visit_minutes
+  );
+  v_end_at := v_appointment.start_at + (v_minutes || ' minutes')::interval;
+  v_date := (v_appointment.start_at at time zone 'Asia/Taipei')::date;
+  v_time := (v_appointment.start_at at time zone 'Asia/Taipei')::time;
+
+  select segment.start_time, segment.end_time
+    into v_segment
+    from (
+      select template.start_time, template.end_time
+        from public.schedule_templates template
+       where template.clinic_id = p_clinic_id
+         and template.doctor_id = p_doctor_id
+         and template.weekday = extract(dow from v_date)
+         and template.active
+         and v_time >= template.start_time
+         and v_time < template.end_time
+         and not exists (
+           select 1
+             from public.schedule_exceptions exception
+            where exception.clinic_id = p_clinic_id
+              and exception.doctor_id = p_doctor_id
+              and exception.date = v_date
+              and exception.is_closed
+              and exception.start_time is null
+         )
+      union all
+      select exception.start_time, exception.end_time
+        from public.schedule_exceptions exception
+       where exception.clinic_id = p_clinic_id
+         and exception.doctor_id = p_doctor_id
+         and exception.date = v_date
+         and not exception.is_closed
+         and v_time >= exception.start_time
+         and v_time < exception.end_time
+    ) segment
+   limit 1;
+
+  if v_segment.end_time is null
+     or v_end_at > ((v_date + v_segment.end_time) at time zone 'Asia/Taipei') then
+    raise exception 'service duration exceeds schedule segment';
+  end if;
+  if exists (
+    select 1
+      from public.appointments appointment
+     where appointment.id <> v_id
+       and appointment.clinic_id = p_clinic_id
+       and appointment.doctor_id = p_doctor_id
+       and appointment.status in ('booked', 'confirmed', 'done')
+       and appointment.start_at < v_end_at
+       and appointment.end_at > v_appointment.start_at
+  ) then
+    raise exception 'service duration slot is full';
+  end if;
+  if not public.service_resources_available(
+    p_clinic_id,
+    p_service_id,
+    v_appointment.start_at,
+    v_end_at,
+    v_id
+  ) then
+    raise exception 'service resource is unavailable';
+  end if;
+
+  update public.appointments
+     set end_at = v_end_at
+   where id = v_id
+     and clinic_id = p_clinic_id;
+  return v_id;
+end;
+$$;
+
+revoke all on function public.book_time_slot_for_service(uuid, uuid, uuid, timestamptz, text, boolean, uuid)
+  from public, anon, authenticated;
+grant execute on function public.book_time_slot_for_service(uuid, uuid, uuid, timestamptz, text, boolean, uuid)
+  to service_role;
+
+commit;
+
+-- Final replay of migration 202608130005: adoption metrics and first-stage operational tooling.
+-- Adoption metrics and first-stage operational tooling.
+-- All tenant-scoped data is keyed by clinic_id. Anonymous access is denied.
+begin;
+
+create table if not exists public.clinic_activation_metrics (
+  clinic_id uuid primary key references public.clinics(id) on delete cascade,
+  measurement_started_at timestamptz not null default now(),
+  first_bookable_at timestamptz,
+  first_booking_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.trial_brand_observations (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  status text not null default 'active' check (status in ('active', 'completed')),
+  started_at timestamptz not null default now(),
+  ended_at timestamptz,
+  started_by uuid references auth.users(id) on delete set null,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check ((status = 'active' and ended_at is null) or (status = 'completed' and ended_at is not null))
+);
+create unique index if not exists trial_brand_observations_one_active_idx
+  on public.trial_brand_observations (clinic_id) where status = 'active';
+
+create table if not exists public.admin_product_events (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  event_name text not null check (event_name in (
+    'settings_view', 'settings_exit', 'settings_submit',
+    'permission_denied', 'permission_help_requested'
+  )),
+  session_id text not null,
+  actor_scope text not null default 'brand_employee' check (actor_scope in ('brand_admin', 'brand_employee', 'system_admin', 'system_employee')),
+  pathname text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  check (length(session_id) between 8 and 128),
+  check (pathname is null or length(pathname) <= 240),
+  check (pg_column_size(metadata) <= 4096)
+);
+create index if not exists admin_product_events_clinic_time_idx
+  on public.admin_product_events (clinic_id, created_at desc);
+create index if not exists admin_product_events_clinic_name_idx
+  on public.admin_product_events (clinic_id, event_name, created_at desc);
+
+create table if not exists public.data_import_jobs (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  entity text not null check (entity in ('patients', 'services', 'memberships')),
+  idempotency_key text not null,
+  status text not null default 'running' check (status in ('running', 'completed', 'failed')),
+  total_rows integer not null default 0 check (total_rows >= 0 and total_rows <= 500),
+  imported_rows integer not null default 0 check (imported_rows >= 0),
+  failed_rows integer not null default 0 check (failed_rows >= 0),
+  error_summary jsonb not null default '[]'::jsonb,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  completed_at timestamptz,
+  unique (clinic_id, idempotency_key),
+  check (length(idempotency_key) between 8 and 128),
+  check (pg_column_size(error_summary) <= 16384)
+);
+create index if not exists data_import_jobs_clinic_time_idx
+  on public.data_import_jobs (clinic_id, created_at desc);
+
+create table if not exists public.channel_test_runs (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  channel text not null check (channel in ('line', 'liff', 'email', 'payment', 'domain')),
+  status text not null check (status in ('passed', 'warning', 'failed')),
+  checks jsonb not null default '[]'::jsonb,
+  ran_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  check (pg_column_size(checks) <= 16384)
+);
+create index if not exists channel_test_runs_clinic_time_idx
+  on public.channel_test_runs (clinic_id, channel, created_at desc);
+
+create table if not exists public.handoff_tasks (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  title text not null,
+  category text not null default 'other' check (category in ('appointment', 'payment', 'customer', 'channel', 'other')),
+  status text not null default 'open' check (status in ('open', 'in_progress', 'done')),
+  priority text not null default 'normal' check (priority in ('low', 'normal', 'high')),
+  due_at timestamptz,
+  assigned_to uuid references auth.users(id) on delete set null,
+  related_appointment_id uuid references public.appointments(id) on delete set null,
+  note text,
+  created_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (length(title) between 1 and 160),
+  check (note is null or length(note) <= 1000)
+);
+create index if not exists handoff_tasks_clinic_filter_idx
+  on public.handoff_tasks (clinic_id, status, priority, due_at, created_at desc);
+
+create table if not exists public.feature_interest_signals (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  feature_key text not null check (feature_key in (
+    'calendar_sync', 'refund_reconciliation', 'pos_inventory', 'commission',
+    'multilingual', 'white_label'
+  )),
+  interest text not null check (interest in ('unknown', 'interested', 'not_interested', 'quoted', 'won')),
+  willingness_monthly integer check (willingness_monthly is null or willingness_monthly >= 0),
+  note text,
+  recorded_by uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (clinic_id, feature_key),
+  check (note is null or length(note) <= 1000)
+);
+
+alter table public.clinic_activation_metrics enable row level security;
+alter table public.trial_brand_observations enable row level security;
+alter table public.admin_product_events enable row level security;
+alter table public.data_import_jobs enable row level security;
+alter table public.channel_test_runs enable row level security;
+alter table public.handoff_tasks enable row level security;
+alter table public.feature_interest_signals enable row level security;
+
+revoke all on table public.clinic_activation_metrics from public, anon, authenticated;
+revoke all on table public.trial_brand_observations from public, anon, authenticated;
+revoke all on table public.admin_product_events from public, anon, authenticated;
+revoke all on table public.data_import_jobs from public, anon, authenticated;
+revoke all on table public.channel_test_runs from public, anon, authenticated;
+revoke all on table public.feature_interest_signals from public, anon, authenticated;
+revoke all on table public.handoff_tasks from public, anon;
+
+drop policy if exists handoff_tasks_member on public.handoff_tasks;
+create policy handoff_tasks_member on public.handoff_tasks for all to authenticated
+using (
+  exists (
+    select 1 from public.clinic_members member
+    where member.clinic_id = handoff_tasks.clinic_id
+      and member.user_id = auth.uid()
+      and (
+        member.access_type = 'brand_admin'
+        or 'operations.manage' = any(member.permissions)
+        or 'brand.manage' = any(member.permissions)
+      )
+  )
+)
+with check (
+  exists (
+    select 1 from public.clinic_members member
+    where member.clinic_id = handoff_tasks.clinic_id
+      and member.user_id = auth.uid()
+      and (
+        member.access_type = 'brand_admin'
+        or 'operations.manage' = any(member.permissions)
+        or 'brand.manage' = any(member.permissions)
+      )
+  )
+);
+
+drop trigger if exists trg_clinic_activation_metrics_touch on public.clinic_activation_metrics;
+create trigger trg_clinic_activation_metrics_touch before update on public.clinic_activation_metrics
+for each row execute function public.touch_updated_at();
+drop trigger if exists trg_trial_brand_observations_touch on public.trial_brand_observations;
+create trigger trg_trial_brand_observations_touch before update on public.trial_brand_observations
+for each row execute function public.touch_updated_at();
+drop trigger if exists trg_handoff_tasks_touch on public.handoff_tasks;
+create trigger trg_handoff_tasks_touch before update on public.handoff_tasks
+for each row execute function public.touch_updated_at();
+drop trigger if exists trg_feature_interest_signals_touch on public.feature_interest_signals;
+create trigger trg_feature_interest_signals_touch before update on public.feature_interest_signals
+for each row execute function public.touch_updated_at();
+
+create or replace function public.refresh_clinic_activation_metric(p_clinic_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_is_bookable boolean;
+begin
+  insert into public.clinic_activation_metrics (clinic_id)
+  values (p_clinic_id)
+  on conflict (clinic_id) do nothing;
+
+  select
+    coalesce(settings.public_booking_enabled, false)
+    and exists (
+      select 1 from public.services service
+      where service.clinic_id = p_clinic_id and service.active
+    )
+    and exists (
+      select 1 from public.schedule_templates template
+      where template.clinic_id = p_clinic_id and template.active
+    )
+  into v_is_bookable
+  from public.clinic_settings settings
+  where settings.clinic_id = p_clinic_id;
+
+  if coalesce(v_is_bookable, false) then
+    update public.clinic_activation_metrics
+       set first_bookable_at = coalesce(first_bookable_at, now())
+     where clinic_id = p_clinic_id;
+  end if;
+end;
+$$;
+
+create or replace function public.refresh_clinic_activation_from_row()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_clinic_id uuid;
+begin
+  v_clinic_id := coalesce(new.clinic_id, old.clinic_id);
+  perform public.refresh_clinic_activation_metric(v_clinic_id);
+  return coalesce(new, old);
+end;
+$$;
+
+create or replace function public.seed_clinic_activation_metric()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  insert into public.clinic_activation_metrics (clinic_id) values (new.id)
+  on conflict (clinic_id) do nothing;
+  return new;
+end;
+$$;
+
+create or replace function public.record_first_clinic_booking()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if new.status <> 'cancelled' then
+    insert into public.clinic_activation_metrics (clinic_id, first_booking_at)
+    values (new.clinic_id, coalesce(new.created_at, now()))
+    on conflict (clinic_id) do update
+      set first_booking_at = coalesce(public.clinic_activation_metrics.first_booking_at, excluded.first_booking_at);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_clinic_seed_activation_metric on public.clinics;
+create trigger trg_clinic_seed_activation_metric after insert on public.clinics
+for each row execute function public.seed_clinic_activation_metric();
+drop trigger if exists trg_clinic_settings_activation on public.clinic_settings;
+create trigger trg_clinic_settings_activation after insert or update of public_booking_enabled on public.clinic_settings
+for each row execute function public.refresh_clinic_activation_from_row();
+drop trigger if exists trg_services_activation on public.services;
+create trigger trg_services_activation after insert or update of active or delete on public.services
+for each row execute function public.refresh_clinic_activation_from_row();
+drop trigger if exists trg_schedule_templates_activation on public.schedule_templates;
+create trigger trg_schedule_templates_activation after insert or update of active or delete on public.schedule_templates
+for each row execute function public.refresh_clinic_activation_from_row();
+drop trigger if exists trg_appointments_first_booking on public.appointments;
+create trigger trg_appointments_first_booking after insert on public.appointments
+for each row execute function public.record_first_clinic_booking();
+
+insert into public.clinic_activation_metrics (clinic_id)
+select id from public.clinics
+on conflict (clinic_id) do nothing;
+select public.refresh_clinic_activation_metric(id) from public.clinics;
+update public.clinic_activation_metrics metric
+set first_booking_at = first_row.first_booking_at
+from (
+  select clinic_id, min(created_at) as first_booking_at
+  from public.appointments
+  where status <> 'cancelled'
+  group by clinic_id
+) first_row
+where metric.clinic_id = first_row.clinic_id
+  and metric.first_booking_at is null;
+
+create or replace function public.execute_data_import(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_entity text,
+  p_idempotency_key text,
+  p_rows jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_job_id uuid;
+  v_row jsonb;
+  v_index integer := 0;
+  v_imported integer := 0;
+  v_failed integer := 0;
+  v_errors jsonb := '[]'::jsonb;
+  v_patient_id uuid;
+  v_plan_id uuid;
+  v_membership_id uuid;
+  v_name text;
+  v_phone text;
+  v_credits integer;
+  v_code text;
+  v_allowed boolean;
+  v_max integer;
+  v_existing integer;
+begin
+  if p_entity not in ('patients', 'services', 'memberships') then raise exception 'unsupported import entity'; end if;
+  if p_idempotency_key !~ '^[A-Za-z0-9_-]{8,128}$' then raise exception 'invalid idempotency key'; end if;
+  if jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) = 0 or jsonb_array_length(p_rows) > 500 then
+    raise exception 'import rows must contain 1 to 500 items';
+  end if;
+  if not exists (
+    select 1 from public.clinic_members member
+    where member.clinic_id = p_clinic_id
+      and member.user_id = p_actor_user_id
+      and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))
+  ) then raise exception 'brand management permission required'; end if;
+
+  insert into public.data_import_jobs (clinic_id, entity, idempotency_key, total_rows, created_by)
+  values (p_clinic_id, p_entity, p_idempotency_key, jsonb_array_length(p_rows), p_actor_user_id)
+  on conflict (clinic_id, idempotency_key) do nothing
+  returning id into v_job_id;
+  if v_job_id is null then
+    select id into v_job_id from public.data_import_jobs
+    where clinic_id = p_clinic_id and idempotency_key = p_idempotency_key;
+    return v_job_id;
+  end if;
+
+  select allow_multi_patient_per_phone, max_patients_per_phone
+  into v_allowed, v_max
+  from public.clinic_settings where clinic_id = p_clinic_id;
+
+  for v_row in select value from jsonb_array_elements(p_rows)
+  loop
+    v_index := v_index + 1;
+    begin
+      if jsonb_typeof(v_row) <> 'object' then raise exception 'row must be an object'; end if;
+      if p_entity = 'patients' then
+        v_name := btrim(coalesce(v_row->>'name', ''));
+        v_phone := regexp_replace(coalesce(v_row->>'phone', ''), '[^0-9+]', '', 'g');
+        if v_name = '' or length(v_name) > 120 then raise exception 'invalid name'; end if;
+        if length(v_phone) < 8 or length(v_phone) > 20 then raise exception 'invalid phone'; end if;
+        select id into v_patient_id from public.patients
+        where clinic_id = p_clinic_id and phone = v_phone and lower(name) = lower(v_name) and active
+        order by created_at limit 1;
+        if v_patient_id is null then
+          select count(*) into v_existing from public.patients where clinic_id = p_clinic_id and phone = v_phone and active;
+          if (not coalesce(v_allowed, false) and v_existing > 0) or (coalesce(v_allowed, false) and v_existing >= greatest(1, coalesce(v_max, 1))) then
+            raise exception 'phone patient limit reached';
+          end if;
+          insert into public.patients (clinic_id, name, phone, birthday, email, marketing_opt_in)
+          values (
+            p_clinic_id, v_name, v_phone,
+            case when coalesce(v_row->>'birthday', '') ~ '^\d{4}-\d{2}-\d{2}$' then (v_row->>'birthday')::date else null end,
+            nullif(btrim(v_row->>'email'), ''), coalesce((v_row->>'marketing_opt_in')::boolean, false)
+          ) returning id into v_patient_id;
+        end if;
+      elsif p_entity = 'services' then
+        v_name := btrim(coalesce(v_row->>'name', ''));
+        if v_name = '' or length(v_name) > 120 then raise exception 'invalid service name'; end if;
+        if exists (select 1 from public.services where clinic_id = p_clinic_id and lower(name) = lower(v_name) and active) then
+          raise exception 'service already exists';
+        end if;
+        insert into public.services (clinic_id, name, category, description, duration_minutes, buffer_minutes, booking_target, active)
+        values (
+          p_clinic_id, v_name, nullif(btrim(v_row->>'category'), ''), nullif(btrim(v_row->>'description'), ''),
+          case when coalesce(v_row->>'duration_minutes', '') ~ '^\d+$' then greatest(1, (v_row->>'duration_minutes')::integer) else null end,
+          case when coalesce(v_row->>'buffer_minutes', '') ~ '^\d+$' then greatest(0, (v_row->>'buffer_minutes')::integer) else 0 end,
+          case when v_row->>'booking_target' in ('provider_required', 'provider_optional', 'resource_only') then v_row->>'booking_target' else 'provider_required' end,
+          true
+        );
+      else
+        v_name := btrim(coalesce(v_row->>'patient_name', ''));
+        v_phone := regexp_replace(coalesce(v_row->>'patient_phone', ''), '[^0-9+]', '', 'g');
+        select id into v_patient_id from public.patients
+        where clinic_id = p_clinic_id and phone = v_phone and lower(name) = lower(v_name) and active
+        order by created_at limit 1;
+        if v_patient_id is null then raise exception 'patient not found'; end if;
+        select id into v_plan_id from public.membership_plans
+        where clinic_id = p_clinic_id and lower(name) = lower(btrim(coalesce(v_row->>'plan_name', ''))) and active
+        order by created_at limit 1;
+        if v_plan_id is null then raise exception 'membership plan not found'; end if;
+        v_credits := case when coalesce(v_row->>'credits_remaining', '') ~ '^\d+$' then (v_row->>'credits_remaining')::integer else 0 end;
+        if v_credits <= 0 then raise exception 'credits must be positive'; end if;
+        v_code := 'MIG-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 12));
+        insert into public.patient_memberships (
+          clinic_id, patient_id, plan_id, membership_code, credits_total, credits_remaining,
+          expires_at, source, note
+        ) values (
+          p_clinic_id, v_patient_id, v_plan_id, v_code, v_credits, v_credits,
+          case when coalesce(v_row->>'expires_at', '') ~ '^\d{4}-\d{2}-\d{2}$' then ((v_row->>'expires_at') || 'T23:59:59+08:00')::timestamptz else null end,
+          'migration', 'CSV 匯入'
+        ) returning id into v_membership_id;
+        insert into public.membership_ledger (
+          clinic_id, membership_id, patient_id, kind, credits_delta, reference_type,
+          idempotency_key, actor_id, note
+        ) values (
+          p_clinic_id, v_membership_id, v_patient_id, 'grant', v_credits, 'migration',
+          p_idempotency_key || ':' || v_index::text, p_actor_user_id, 'CSV 匯入初始堂數'
+        );
+      end if;
+      v_imported := v_imported + 1;
+    exception when others then
+      v_failed := v_failed + 1;
+      v_errors := v_errors || jsonb_build_array(jsonb_build_object('row', v_index, 'reason', left(sqlerrm, 240)));
+    end;
+  end loop;
+
+  update public.data_import_jobs
+     set status = 'completed', imported_rows = v_imported, failed_rows = v_failed,
+         error_summary = v_errors, completed_at = now()
+   where id = v_job_id;
+  return v_job_id;
+exception when others then
+  if v_job_id is not null then
+    update public.data_import_jobs
+       set status = 'failed', failed_rows = greatest(1, failed_rows),
+           error_summary = jsonb_build_array(jsonb_build_object('row', 0, 'reason', left(sqlerrm, 240))),
+           completed_at = now()
+     where id = v_job_id;
+  end if;
+  raise;
+end;
+$$;
+
+revoke all on function public.refresh_clinic_activation_metric(uuid) from public, anon, authenticated;
+revoke all on function public.refresh_clinic_activation_from_row() from public, anon, authenticated;
+revoke all on function public.seed_clinic_activation_metric() from public, anon, authenticated;
+revoke all on function public.record_first_clinic_booking() from public, anon, authenticated;
+revoke all on function public.execute_data_import(uuid, uuid, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.refresh_clinic_activation_metric(uuid) to service_role;
+grant execute on function public.refresh_clinic_activation_from_row() to service_role;
+grant execute on function public.seed_clinic_activation_metric() to service_role;
+grant execute on function public.record_first_clinic_booking() to service_role;
+grant execute on function public.execute_data_import(uuid, uuid, text, text, jsonb) to service_role;
+
+commit;
+
+-- Final replay of migration 202608130006: guarded three-brand observations.
+-- Enforce the three-brand trial observation limit atomically.
+begin;
+
+create or replace function public.start_trial_brand_observation(
+  p_actor_user_id uuid,
+  p_clinic_id uuid,
+  p_notes text default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_id uuid;
+begin
+  if not exists (
+    select 1 from public.platform_admins member
+    where member.user_id = p_actor_user_id and member.active
+      and (member.access_type = 'system_admin' or 'brands.manage' = any(member.permissions))
+  ) then raise exception 'system brand management permission required'; end if;
+  if not exists (select 1 from public.clinics where id = p_clinic_id and active) then raise exception 'active brand not found'; end if;
+  if length(coalesce(p_notes, '')) > 1000 then raise exception 'notes too long'; end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('trial-brand-observations', 0));
+  select id into v_id from public.trial_brand_observations where clinic_id = p_clinic_id and status = 'active';
+  if v_id is not null then return v_id; end if;
+  if (select count(*) from public.trial_brand_observations where status = 'active') >= 3 then
+    raise exception 'only three trial brands may be active';
+  end if;
+  insert into public.trial_brand_observations (clinic_id, started_by, notes)
+  values (p_clinic_id, p_actor_user_id, nullif(btrim(p_notes), ''))
+  returning id into v_id;
+  return v_id;
+end;
+$$;
+
+create or replace function public.complete_trial_brand_observation(
+  p_actor_user_id uuid,
+  p_observation_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if not exists (
+    select 1 from public.platform_admins member
+    where member.user_id = p_actor_user_id and member.active
+      and (member.access_type = 'system_admin' or 'brands.manage' = any(member.permissions))
+  ) then raise exception 'system brand management permission required'; end if;
+  update public.trial_brand_observations
+     set status = 'completed', ended_at = now()
+   where id = p_observation_id and status = 'active';
+  if not found then raise exception 'active trial observation not found'; end if;
+end;
+$$;
+
+revoke all on function public.start_trial_brand_observation(uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.complete_trial_brand_observation(uuid, uuid) from public, anon, authenticated;
+grant execute on function public.start_trial_brand_observation(uuid, uuid, text) to service_role;
+grant execute on function public.complete_trial_brand_observation(uuid, uuid) to service_role;
+
+commit;
+
+-- Final replay of migration 202608130007: booking growth features.
+-- Second-stage booking growth: consent snapshots, service add-ons and recurring bookings.
+begin;
+
+alter table public.clinic_settings add column if not exists recurring_booking_enabled boolean not null default false;
+alter table public.clinic_settings add column if not exists max_recurring_occurrences integer not null default 8;
+alter table public.clinic_settings drop constraint if exists clinic_settings_recurring_occurrences_check;
+alter table public.clinic_settings add constraint clinic_settings_recurring_occurrences_check
+  check (max_recurring_occurrences between 2 and 12);
+
+create table if not exists public.service_addons (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  service_id uuid not null references public.services(id) on delete cascade,
+  name text not null,
+  description text,
+  duration_minutes integer not null default 0 check (duration_minutes between 0 and 480),
+  price integer not null default 0 check (price between 0 and 1000000),
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  check (length(name) between 1 and 120),
+  check (description is null or length(description) <= 500)
+);
+create index if not exists service_addons_service_idx on public.service_addons (clinic_id, service_id, active, sort_order, created_at);
+
+create table if not exists public.appointment_series (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  patient_id uuid not null references public.patients(id) on delete restrict,
+  service_id uuid not null references public.services(id) on delete restrict,
+  recurrence_rule text not null default 'weekly' check (recurrence_rule = 'weekly'),
+  occurrence_count integer not null check (occurrence_count between 2 and 12),
+  interval_weeks integer not null default 1 check (interval_weeks between 1 and 4),
+  created_at timestamptz not null default now()
+);
+create index if not exists appointment_series_clinic_idx on public.appointment_series (clinic_id, created_at desc);
+
+alter table public.appointments add column if not exists series_id uuid references public.appointment_series(id) on delete set null;
+alter table public.appointments add column if not exists series_sequence integer;
+alter table public.appointments add column if not exists booking_form_snapshot jsonb not null default '[]'::jsonb;
+alter table public.appointments add column if not exists addons_snapshot jsonb not null default '[]'::jsonb;
+alter table public.appointments add column if not exists addons_amount integer not null default 0;
+alter table public.appointments drop constraint if exists appointments_booking_form_snapshot_check;
+alter table public.appointments add constraint appointments_booking_form_snapshot_check check (jsonb_typeof(booking_form_snapshot) = 'array');
+alter table public.appointments drop constraint if exists appointments_addons_snapshot_check;
+alter table public.appointments add constraint appointments_addons_snapshot_check check (jsonb_typeof(addons_snapshot) = 'array');
+alter table public.appointments drop constraint if exists appointments_addons_amount_check;
+alter table public.appointments add constraint appointments_addons_amount_check check (addons_amount >= 0);
+alter table public.appointments drop constraint if exists appointments_series_sequence_check;
+alter table public.appointments add constraint appointments_series_sequence_check check ((series_id is null and series_sequence is null) or (series_id is not null and series_sequence > 0));
+create index if not exists appointments_series_idx on public.appointments (clinic_id, series_id, series_sequence) where series_id is not null;
+
+alter table public.service_addons enable row level security;
+alter table public.appointment_series enable row level security;
+revoke all on table public.service_addons from public, anon;
+revoke all on table public.appointment_series from public, anon;
+
+drop policy if exists service_addons_brand_manage on public.service_addons;
+create policy service_addons_brand_manage on public.service_addons for all to authenticated
+using (exists (select 1 from public.clinic_members member where member.clinic_id = service_addons.clinic_id and member.user_id = auth.uid() and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions))))
+with check (
+  exists (select 1 from public.clinic_members member where member.clinic_id = service_addons.clinic_id and member.user_id = auth.uid() and (member.access_type = 'brand_admin' or 'brand.manage' = any(member.permissions)))
+  and exists (select 1 from public.services service where service.id = service_addons.service_id and service.clinic_id = service_addons.clinic_id)
+);
+drop policy if exists appointment_series_member_read on public.appointment_series;
+create policy appointment_series_member_read on public.appointment_series for select to authenticated
+using (exists (select 1 from public.clinic_members member where member.clinic_id = appointment_series.clinic_id and member.user_id = auth.uid()));
+
+drop trigger if exists trg_service_addons_touch on public.service_addons;
+create trigger trg_service_addons_touch before update on public.service_addons
+for each row execute function public.touch_updated_at();
+
+create or replace function public.apply_appointment_addons(
+  p_clinic_id uuid,
+  p_appointment_id uuid,
+  p_service_id uuid,
+  p_addon_ids uuid[]
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_ids uuid[] := array(select distinct id from unnest(coalesce(p_addon_ids, '{}'::uuid[])) as id order by id);
+  v_count integer;
+  v_minutes integer;
+  v_amount integer;
+  v_snapshot jsonb;
+  v_appt record;
+  v_settings record;
+  v_segment record;
+  v_date date;
+  v_time time;
+  v_new_end timestamptz;
+  v_used integer;
+begin
+  select count(*), coalesce(sum(duration_minutes), 0), coalesce(sum(price), 0),
+         coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name, 'duration_minutes', duration_minutes, 'price', price) order by sort_order, created_at), '[]'::jsonb)
+    into v_count, v_minutes, v_amount, v_snapshot
+    from public.service_addons
+   where clinic_id = p_clinic_id and service_id = p_service_id and active and id = any(v_ids);
+  if v_count <> cardinality(v_ids) then raise exception 'one or more add-ons are invalid'; end if;
+  select * into v_appt from public.appointments where id = p_appointment_id and clinic_id = p_clinic_id and service_id = p_service_id for update;
+  if not found then raise exception 'appointment not found'; end if;
+  select * into v_settings from public.clinic_settings where clinic_id = p_clinic_id;
+  if v_settings.booking_mode = 'time' and v_minutes > 0 then
+    v_date := (v_appt.start_at at time zone 'Asia/Taipei')::date;
+    v_time := (v_appt.start_at at time zone 'Asia/Taipei')::time;
+    select segment.end_time, segment.capacity into v_segment
+      from (
+        select template.end_time, template.capacity
+          from public.schedule_templates template
+         where template.clinic_id = p_clinic_id and template.active
+           and template.weekday = extract(dow from v_date)
+           and v_time >= template.start_time and v_time < template.end_time
+           and ((v_appt.doctor_id is not null and template.doctor_id = v_appt.doctor_id and (template.service_id is null or template.service_id = p_service_id))
+             or (v_appt.doctor_id is null and template.doctor_id is null and template.service_id = p_service_id))
+           and not exists (select 1 from public.schedule_exceptions closed where closed.clinic_id = p_clinic_id and closed.date = v_date and closed.is_closed and closed.start_time is null and ((v_appt.doctor_id is not null and closed.doctor_id = v_appt.doctor_id and (closed.service_id is null or closed.service_id = p_service_id)) or (v_appt.doctor_id is null and closed.doctor_id is null and closed.service_id = p_service_id)))
+        union all
+        select exception.end_time, coalesce(exception.capacity, 1)
+          from public.schedule_exceptions exception
+         where exception.clinic_id = p_clinic_id and exception.date = v_date and not exception.is_closed
+           and v_time >= exception.start_time and v_time < exception.end_time
+           and ((v_appt.doctor_id is not null and exception.doctor_id = v_appt.doctor_id and (exception.service_id is null or exception.service_id = p_service_id))
+             or (v_appt.doctor_id is null and exception.doctor_id is null and exception.service_id = p_service_id))
+      ) segment
+      limit 1;
+    if not found then raise exception 'appointment schedule segment not found'; end if;
+    v_new_end := v_appt.end_at + (v_minutes || ' minutes')::interval;
+    if v_new_end > ((v_date + v_segment.end_time) at time zone 'Asia/Taipei') then raise exception 'add-on duration exceeds schedule'; end if;
+    perform pg_advisory_xact_lock(hashtextextended('appointment-options:' || p_clinic_id::text || ':' || coalesce(v_appt.doctor_id::text, p_service_id::text) || ':' || v_date::text, 0));
+    select count(*) into v_used from public.appointments appointment
+     where appointment.id <> p_appointment_id and appointment.clinic_id = p_clinic_id
+       and appointment.status in ('booked', 'confirmed', 'done')
+       and appointment.start_at < v_new_end and appointment.end_at > v_appt.start_at
+       and ((v_appt.doctor_id is not null and appointment.doctor_id = v_appt.doctor_id)
+         or (v_appt.doctor_id is null and appointment.doctor_id is null and appointment.service_id = p_service_id));
+    if v_used >= v_segment.capacity then raise exception 'add-on duration slot is full'; end if;
+    if not public.service_resources_available(p_clinic_id, p_service_id, v_appt.start_at, v_new_end, p_appointment_id) then raise exception 'service resource is unavailable'; end if;
+    update public.appointments set end_at = v_new_end, addons_snapshot = v_snapshot, addons_amount = v_amount where id = p_appointment_id;
+  else
+    update public.appointments set addons_snapshot = v_snapshot, addons_amount = v_amount where id = p_appointment_id;
+  end if;
+end;
+$$;
+
+create or replace function public.book_time_slot_with_options(
+  p_clinic_id uuid, p_service_id uuid, p_doctor_id uuid, p_patient_id uuid, p_start_at timestamptz,
+  p_visit_type text default 'return', p_is_self_pay boolean default false, p_membership_code text default null,
+  p_booking_answers jsonb default '{}'::jsonb, p_booking_form_snapshot jsonb default '[]'::jsonb,
+  p_addon_ids uuid[] default '{}'::uuid[]
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare v_id uuid;
+begin
+  if jsonb_typeof(coalesce(p_booking_answers, '{}'::jsonb)) <> 'object' or jsonb_typeof(coalesce(p_booking_form_snapshot, '[]'::jsonb)) <> 'array' then raise exception 'invalid booking form data'; end if;
+  if p_doctor_id is null then
+    if nullif(btrim(p_membership_code), '') is null then
+      v_id := public.book_service_slot(p_clinic_id, p_service_id, p_patient_id, p_start_at, p_visit_type, p_is_self_pay, p_booking_answers);
+    else
+      v_id := public.book_service_slot_with_membership(p_clinic_id, p_service_id, p_patient_id, p_start_at, p_visit_type, p_is_self_pay, p_membership_code, p_booking_answers);
+    end if;
+  else
+    if nullif(btrim(p_membership_code), '') is null then
+      v_id := public.book_time_slot_for_service(p_clinic_id, p_doctor_id, p_patient_id, p_start_at, p_visit_type, p_is_self_pay, p_service_id);
+    else
+      v_id := public.book_time_slot_with_membership_for_service(p_clinic_id, p_doctor_id, p_patient_id, p_start_at, p_visit_type, p_is_self_pay, p_membership_code, p_service_id);
+    end if;
+    update public.appointments set booking_answers = coalesce(p_booking_answers, '{}'::jsonb) where id = v_id and clinic_id = p_clinic_id;
+  end if;
+  perform public.apply_appointment_addons(p_clinic_id, v_id, p_service_id, p_addon_ids);
+  update public.appointments set booking_form_snapshot = coalesce(p_booking_form_snapshot, '[]'::jsonb) where id = v_id and clinic_id = p_clinic_id;
+  return v_id;
+end;
+$$;
+
+create or replace function public.book_number_with_options(
+  p_clinic_id uuid, p_service_id uuid, p_doctor_id uuid, p_patient_id uuid, p_template_id uuid, p_date date,
+  p_visit_type text default 'return', p_is_self_pay boolean default false, p_membership_code text default null,
+  p_booking_answers jsonb default '{}'::jsonb, p_booking_form_snapshot jsonb default '[]'::jsonb,
+  p_addon_ids uuid[] default '{}'::uuid[]
+)
+returns table (appointment_id uuid, queue_number integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare v_row record;
+begin
+  if jsonb_typeof(coalesce(p_booking_answers, '{}'::jsonb)) <> 'object' or jsonb_typeof(coalesce(p_booking_form_snapshot, '[]'::jsonb)) <> 'array' then raise exception 'invalid booking form data'; end if;
+  if p_doctor_id is null then
+    if nullif(btrim(p_membership_code), '') is null then
+      select row.appointment_id, row.queue_number into v_row from public.book_service_session(p_clinic_id, p_service_id, p_patient_id, p_template_id, p_date, p_visit_type, p_is_self_pay, p_booking_answers) row;
+    else
+      select row.appointment_id, row.queue_number into v_row from public.book_service_session_with_membership(p_clinic_id, p_service_id, p_patient_id, p_template_id, p_date, p_visit_type, p_is_self_pay, p_membership_code, p_booking_answers) row;
+    end if;
+  else
+    if nullif(btrim(p_membership_code), '') is null then
+      select row.appointment_id, row.queue_number into v_row from public.book_number_for_service(p_clinic_id, p_doctor_id, p_patient_id, p_template_id, p_date, p_visit_type, p_is_self_pay, p_service_id) row;
+    else
+      select row.appointment_id, row.queue_number into v_row from public.book_number_with_membership_for_service(p_clinic_id, p_doctor_id, p_patient_id, p_template_id, p_date, p_visit_type, p_is_self_pay, p_membership_code, p_service_id) row;
+    end if;
+    update public.appointments set booking_answers = coalesce(p_booking_answers, '{}'::jsonb) where id = v_row.appointment_id and clinic_id = p_clinic_id;
+  end if;
+  perform public.apply_appointment_addons(p_clinic_id, v_row.appointment_id, p_service_id, p_addon_ids);
+  update public.appointments set booking_form_snapshot = coalesce(p_booking_form_snapshot, '[]'::jsonb) where id = v_row.appointment_id and clinic_id = p_clinic_id;
+  return query select v_row.appointment_id::uuid, v_row.queue_number::integer;
+end;
+$$;
+
+create or replace function public.book_recurring_appointments(
+  p_clinic_id uuid, p_service_id uuid, p_doctor_id uuid, p_patient_id uuid,
+  p_start_at timestamptz, p_template_id uuid, p_date date,
+  p_visit_type text, p_is_self_pay boolean, p_membership_code text,
+  p_booking_answers jsonb, p_booking_form_snapshot jsonb, p_addon_ids uuid[],
+  p_occurrence_count integer, p_interval_weeks integer default 1
+)
+returns table (appointment_id uuid, occurrence_number integer, queue_number integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_settings record;
+  v_series_id uuid;
+  v_index integer;
+  v_id uuid;
+  v_queue integer;
+  v_row record;
+begin
+  select * into v_settings from public.clinic_settings where clinic_id = p_clinic_id;
+  if not found or not coalesce(v_settings.recurring_booking_enabled, false) then raise exception 'recurring booking is disabled'; end if;
+  if coalesce(v_settings.deposit_enabled, false) then raise exception 'recurring booking is unavailable while deposit is enabled'; end if;
+  if p_occurrence_count < 2 or p_occurrence_count > least(12, coalesce(v_settings.max_recurring_occurrences, 8)) then raise exception 'invalid recurring occurrence count'; end if;
+  if p_interval_weeks < 1 or p_interval_weeks > 4 then raise exception 'invalid recurring interval'; end if;
+  insert into public.appointment_series (clinic_id, patient_id, service_id, occurrence_count, interval_weeks)
+  values (p_clinic_id, p_patient_id, p_service_id, p_occurrence_count, p_interval_weeks)
+  returning id into v_series_id;
+  for v_index in 1..p_occurrence_count loop
+    v_queue := null;
+    if v_settings.booking_mode = 'time' then
+      if p_start_at is null then raise exception 'recurring time booking requires start time'; end if;
+      v_id := public.book_time_slot_with_options(p_clinic_id, p_service_id, p_doctor_id, p_patient_id, p_start_at + ((v_index - 1) * p_interval_weeks || ' weeks')::interval, p_visit_type, p_is_self_pay, p_membership_code, p_booking_answers, p_booking_form_snapshot, p_addon_ids);
+    else
+      if p_template_id is null or p_date is null then raise exception 'recurring session booking requires template and date'; end if;
+      select row.appointment_id, row.queue_number into v_row from public.book_number_with_options(p_clinic_id, p_service_id, p_doctor_id, p_patient_id, p_template_id, p_date + ((v_index - 1) * p_interval_weeks * 7), p_visit_type, p_is_self_pay, p_membership_code, p_booking_answers, p_booking_form_snapshot, p_addon_ids) row;
+      v_id := v_row.appointment_id; v_queue := v_row.queue_number;
+    end if;
+    update public.appointments set series_id = v_series_id, series_sequence = v_index where id = v_id and clinic_id = p_clinic_id;
+    appointment_id := v_id; occurrence_number := v_index; queue_number := v_queue;
+    return next;
+  end loop;
+end;
+$$;
+
+revoke all on function public.apply_appointment_addons(uuid, uuid, uuid, uuid[]) from public, anon, authenticated;
+revoke all on function public.book_time_slot_with_options(uuid, uuid, uuid, uuid, timestamptz, text, boolean, text, jsonb, jsonb, uuid[]) from public, anon, authenticated;
+revoke all on function public.book_number_with_options(uuid, uuid, uuid, uuid, uuid, date, text, boolean, text, jsonb, jsonb, uuid[]) from public, anon, authenticated;
+revoke all on function public.book_recurring_appointments(uuid, uuid, uuid, uuid, timestamptz, uuid, date, text, boolean, text, jsonb, jsonb, uuid[], integer, integer) from public, anon, authenticated;
+grant execute on function public.apply_appointment_addons(uuid, uuid, uuid, uuid[]) to service_role;
+grant execute on function public.book_time_slot_with_options(uuid, uuid, uuid, uuid, timestamptz, text, boolean, text, jsonb, jsonb, uuid[]) to service_role;
+grant execute on function public.book_number_with_options(uuid, uuid, uuid, uuid, uuid, date, text, boolean, text, jsonb, jsonb, uuid[]) to service_role;
+grant execute on function public.book_recurring_appointments(uuid, uuid, uuid, uuid, timestamptz, uuid, date, text, boolean, text, jsonb, jsonb, uuid[], integer, integer) to service_role;
+
+commit;
+
+-- Shared API rate limiting for multi-instance production deployments.
+begin;
+
+create table if not exists public.api_rate_limit_buckets (
+  bucket_key text primary key,
+  window_started_at timestamptz not null,
+  request_count integer not null check (request_count > 0),
+  expires_at timestamptz not null,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_api_rate_limit_buckets_expires_at
+  on public.api_rate_limit_buckets (expires_at);
+
+alter table public.api_rate_limit_buckets enable row level security;
+revoke all on table public.api_rate_limit_buckets from public, anon, authenticated;
+grant select, insert, update, delete on table public.api_rate_limit_buckets to service_role;
+
+create or replace function public.consume_api_rate_limit(
+  p_bucket_key text,
+  p_limit integer,
+  p_window_seconds integer
+)
+returns table (allowed boolean, retry_after_seconds integer)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_now timestamptz := clock_timestamp();
+  v_count integer;
+  v_expires_at timestamptz;
+begin
+  if length(p_bucket_key) <> 64 or p_limit < 1 or p_limit > 10000 or p_window_seconds < 1 or p_window_seconds > 86400 then
+    raise exception 'invalid rate limit arguments';
+  end if;
+
+  insert into public.api_rate_limit_buckets as bucket (
+    bucket_key,
+    window_started_at,
+    request_count,
+    expires_at,
+    updated_at
+  )
+  values (
+    p_bucket_key,
+    v_now,
+    1,
+    v_now + make_interval(secs => p_window_seconds),
+    v_now
+  )
+  on conflict (bucket_key) do update
+  set window_started_at = case when bucket.expires_at <= v_now then v_now else bucket.window_started_at end,
+      request_count = case when bucket.expires_at <= v_now then 1 else bucket.request_count + 1 end,
+      expires_at = case when bucket.expires_at <= v_now then v_now + make_interval(secs => p_window_seconds) else bucket.expires_at end,
+      updated_at = v_now
+  returning bucket.request_count, bucket.expires_at into v_count, v_expires_at;
+
+  if random() < 0.01 then
+    delete from public.api_rate_limit_buckets
+     where bucket_key in (
+       select expired.bucket_key
+         from public.api_rate_limit_buckets expired
+        where expired.expires_at < v_now - interval '1 day'
+        order by expired.expires_at
+        limit 100
+     );
+  end if;
+
+  return query
+  select v_count <= p_limit,
+         case when v_count <= p_limit then 0 else greatest(1, ceil(extract(epoch from (v_expires_at - v_now)))::integer) end;
+end;
+$$;
+
+revoke all on function public.consume_api_rate_limit(text, integer, integer) from public, anon, authenticated;
+grant execute on function public.consume_api_rate_limit(text, integer, integer) to service_role;
+
+commit;
+
+-- Aggregate platform usage in PostgreSQL instead of loading every tenant row into Node.js.
+begin;
+
+create or replace function public.get_platform_usage_summary()
+returns table (
+  id uuid,
+  name text,
+  slug text,
+  active boolean,
+  created_at timestamptz,
+  members bigint,
+  services bigint,
+  appointments bigint,
+  registrations bigint,
+  patients bigint
+)
+language sql
+stable
+security invoker
+set search_path = ''
+as $$
+  select
+    clinic.id,
+    clinic.name,
+    clinic.slug,
+    clinic.active,
+    clinic.created_at,
+    coalesce(member_count.total, 0)::bigint as members,
+    coalesce(service_count.total, 0)::bigint as services,
+    coalesce(appointment_count.total, 0)::bigint as appointments,
+    coalesce(registration_count.total, 0)::bigint as registrations,
+    coalesce(patient_count.total, 0)::bigint as patients
+  from public.clinics clinic
+  left join (
+    select clinic_id, count(*) as total from public.clinic_members group by clinic_id
+  ) member_count on member_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.services where active group by clinic_id
+  ) service_count on service_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.appointments group by clinic_id
+  ) appointment_count on appointment_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.registrations group by clinic_id
+  ) registration_count on registration_count.clinic_id = clinic.id
+  left join (
+    select clinic_id, count(*) as total from public.patients group by clinic_id
+  ) patient_count on patient_count.clinic_id = clinic.id
+  order by clinic.created_at desc;
+$$;
+
+revoke all on function public.get_platform_usage_summary() from public, anon, authenticated;
+grant execute on function public.get_platform_usage_summary() to service_role;
+
+commit;
+
+-- Final replay of migration 202608130008: add-on aware availability.
+-- Availability must include selected add-on duration, not only the base service.
+begin;
+
+create or replace function public.get_available_service_slots_with_options(
+  p_clinic_id uuid,
+  p_service_id uuid,
+  p_date date,
+  p_visit_type text default 'return',
+  p_doctor_id uuid default null,
+  p_addon_ids uuid[] default '{}'::uuid[]
+)
+returns table (slot_start timestamptz, slot_end timestamptz, remaining integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_weekday smallint := extract(dow from p_date);
+  v_lead integer := coalesce((select min_lead_minutes from public.clinic_settings where clinic_id = p_clinic_id), 30);
+  v_first_extends boolean := coalesce((select first_visit_extends from public.clinic_settings where clinic_id = p_clinic_id), false);
+  v_first_minutes integer := (select first_visit_minutes from public.clinic_settings where clinic_id = p_clinic_id);
+  v_target text;
+  v_ids uuid[] := array(select distinct id from unnest(coalesce(p_addon_ids, '{}'::uuid[])) as id order by id);
+  v_addon_count integer;
+  v_addon_minutes integer;
+  rec record;
+  v_slot_length integer;
+begin
+  if p_visit_type not in ('first', 'return') then raise exception 'invalid visit type'; end if;
+  select booking_target into v_target from public.services where id = p_service_id and clinic_id = p_clinic_id and active;
+  if not found then raise exception 'service not found'; end if;
+  if v_target = 'provider_required' and p_doctor_id is null then raise exception 'provider is required for this service'; end if;
+  if p_doctor_id is not null and not exists (select 1 from public.doctors where id = p_doctor_id and clinic_id = p_clinic_id and active) then raise exception 'provider not found'; end if;
+  select count(*), coalesce(sum(duration_minutes), 0) into v_addon_count, v_addon_minutes
+    from public.service_addons where clinic_id = p_clinic_id and service_id = p_service_id and active and id = any(v_ids);
+  if v_addon_count <> cardinality(v_ids) then raise exception 'one or more add-ons are invalid'; end if;
+
+  for rec in
+    select t.id as template_id, t.start_time, t.end_time, t.slot_minutes, t.capacity
+      from public.schedule_templates t
+     where t.clinic_id = p_clinic_id and t.weekday = v_weekday and t.active
+       and (t.service_id is null or t.service_id = p_service_id)
+       and ((p_doctor_id is not null and t.doctor_id = p_doctor_id) or (p_doctor_id is null and t.doctor_id is null and t.service_id = p_service_id))
+       and not exists (select 1 from public.schedule_exceptions e where e.clinic_id = p_clinic_id and e.date = p_date and e.is_closed and e.start_time is null and ((p_doctor_id is not null and e.doctor_id = p_doctor_id and (e.service_id is null or e.service_id = p_service_id)) or (p_doctor_id is null and e.doctor_id is null and e.service_id = p_service_id)))
+    union all
+    select e.id, e.start_time, e.end_time, coalesce(e.slot_minutes, 15), coalesce(e.capacity, 1)
+      from public.schedule_exceptions e
+     where e.clinic_id = p_clinic_id and e.date = p_date and not e.is_closed
+       and ((p_doctor_id is not null and e.doctor_id = p_doctor_id and (e.service_id is null or e.service_id = p_service_id)) or (p_doctor_id is null and e.doctor_id is null and e.service_id = p_service_id))
+  loop
+    v_slot_length := public.service_booking_minutes(p_clinic_id, p_service_id, rec.slot_minutes, p_visit_type, v_first_extends, v_first_minutes) + v_addon_minutes;
+    return query
+    with candidate as (
+      select ((p_date + rec.start_time + (n || ' minutes')::interval) at time zone 'Asia/Taipei') as starts_at,
+             ((p_date + rec.start_time + ((n + v_slot_length) || ' minutes')::interval) at time zone 'Asia/Taipei') as ends_at
+        from generate_series(0, (extract(epoch from (rec.end_time - rec.start_time)) / 60)::integer - v_slot_length, rec.slot_minutes) as n
+    )
+    select candidate.starts_at, candidate.ends_at, (rec.capacity - count(appointment.id))::integer
+      from candidate
+      left join public.appointments appointment
+        on appointment.clinic_id = p_clinic_id and appointment.status in ('booked', 'confirmed', 'done')
+       and appointment.start_at < candidate.ends_at and appointment.end_at > candidate.starts_at
+       and ((p_doctor_id is not null and appointment.doctor_id = p_doctor_id) or (p_doctor_id is null and appointment.doctor_id is null and appointment.service_id = p_service_id))
+     where candidate.starts_at > now() + (v_lead || ' minutes')::interval
+       and public.service_resources_available(p_clinic_id, p_service_id, candidate.starts_at, candidate.ends_at, null)
+       and not exists (
+         select 1 from public.schedule_exceptions closed
+          where closed.clinic_id = p_clinic_id and closed.date = p_date and closed.is_closed and closed.start_time is not null
+            and ((p_doctor_id is not null and closed.doctor_id = p_doctor_id and (closed.service_id is null or closed.service_id = p_service_id)) or (p_doctor_id is null and closed.doctor_id is null and closed.service_id = p_service_id))
+            and (candidate.starts_at at time zone 'Asia/Taipei')::time < closed.end_time
+            and (candidate.ends_at at time zone 'Asia/Taipei')::time > closed.start_time
+       )
+     group by candidate.starts_at, candidate.ends_at, rec.capacity
+    having rec.capacity - count(appointment.id) > 0
+     order by candidate.starts_at;
+  end loop;
+end;
+$$;
+
+revoke all on function public.get_available_service_slots_with_options(uuid, uuid, date, text, uuid, uuid[]) from public, anon, authenticated;
+grant execute on function public.get_available_service_slots_with_options(uuid, uuid, date, text, uuid, uuid[]) to service_role;
+
+commit;
+
+-- Final replay of migration 202608130009: keep the recurring booking function lint-clean.
+begin;
+
+create or replace function public.book_recurring_appointments(
+  p_clinic_id uuid, p_service_id uuid, p_doctor_id uuid, p_patient_id uuid,
+  p_start_at timestamptz, p_template_id uuid, p_date date,
+  p_visit_type text, p_is_self_pay boolean, p_membership_code text,
+  p_booking_answers jsonb, p_booking_form_snapshot jsonb, p_addon_ids uuid[],
+  p_occurrence_count integer, p_interval_weeks integer default 1
+)
+returns table (appointment_id uuid, occurrence_number integer, queue_number integer)
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_settings record;
+  v_series_id uuid;
+  v_id uuid;
+  v_queue integer;
+  v_row record;
+begin
+  select * into v_settings from public.clinic_settings where clinic_id = p_clinic_id;
+  if not found or not coalesce(v_settings.recurring_booking_enabled, false) then raise exception 'recurring booking is disabled'; end if;
+  if coalesce(v_settings.deposit_enabled, false) then raise exception 'recurring booking is unavailable while deposit is enabled'; end if;
+  if p_occurrence_count < 2 or p_occurrence_count > least(12, coalesce(v_settings.max_recurring_occurrences, 8)) then raise exception 'invalid recurring occurrence count'; end if;
+  if p_interval_weeks < 1 or p_interval_weeks > 4 then raise exception 'invalid recurring interval'; end if;
+  insert into public.appointment_series (clinic_id, patient_id, service_id, occurrence_count, interval_weeks)
+  values (p_clinic_id, p_patient_id, p_service_id, p_occurrence_count, p_interval_weeks)
+  returning id into v_series_id;
+  for v_index in 1..p_occurrence_count loop
+    v_queue := null;
+    if v_settings.booking_mode = 'time' then
+      if p_start_at is null then raise exception 'recurring time booking requires start time'; end if;
+      v_id := public.book_time_slot_with_options(p_clinic_id, p_service_id, p_doctor_id, p_patient_id, p_start_at + ((v_index - 1) * p_interval_weeks || ' weeks')::interval, p_visit_type, p_is_self_pay, p_membership_code, p_booking_answers, p_booking_form_snapshot, p_addon_ids);
+    else
+      if p_template_id is null or p_date is null then raise exception 'recurring session booking requires template and date'; end if;
+      select row.appointment_id, row.queue_number into v_row from public.book_number_with_options(p_clinic_id, p_service_id, p_doctor_id, p_patient_id, p_template_id, p_date + ((v_index - 1) * p_interval_weeks * 7), p_visit_type, p_is_self_pay, p_membership_code, p_booking_answers, p_booking_form_snapshot, p_addon_ids) row;
+      v_id := v_row.appointment_id; v_queue := v_row.queue_number;
+    end if;
+    update public.appointments set series_id = v_series_id, series_sequence = v_index where id = v_id and clinic_id = p_clinic_id;
+    appointment_id := v_id; occurrence_number := v_index; queue_number := v_queue;
+    return next;
+  end loop;
+end;
+$$;
+
+revoke all on function public.book_recurring_appointments(uuid, uuid, uuid, uuid, timestamptz, uuid, date, text, boolean, text, jsonb, jsonb, uuid[], integer, integer) from public, anon, authenticated;
+grant execute on function public.book_recurring_appointments(uuid, uuid, uuid, uuid, timestamptz, uuid, date, text, boolean, text, jsonb, jsonb, uuid[], integer, integer) to service_role;
 
 commit;

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, ok } from "@/lib/http";
 import { requireOperator } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   try {
     const member = await requireOperator();
+    if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) return fail("此品牌未啟用活動與報名", 403);
     const body = (await req.json().catch(() => null)) as { token?: string } | null;
     if (!body?.token) return fail("缺少報到憑證");
     const svc = createServiceClient();

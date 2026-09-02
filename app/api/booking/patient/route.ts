@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
-import { verifyLiffIdToken } from "@/lib/line";
+import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(req: NextRequest) {
   try {
-    const rate = checkRateLimit(req, "booking:patient", 10);
+    const rate = await checkRateLimit(req, "booking:patient", 10);
     if (!rate.allowed) {
       const response = fail("請稍後再試", 429);
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
@@ -38,18 +38,19 @@ export async function POST(req: NextRequest) {
     if (!birthday || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return fail("請填寫出生年月日");
     if (!body.idToken) return fail("缺少 LINE 身分驗證");
 
-    // 驗證 LINE 身分(信任前先驗)
-    let lineUserId: string;
-    try {
-      const profile = await verifyLiffIdToken(body.idToken);
-      lineUserId = profile.sub;
-    } catch (e) {
-      return fail("LINE 身分驗證失敗:" + (e instanceof Error ? e.message : "請重新開啟預約頁"), 401);
-    }
-
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
     if (!clinicId) return fail("缺少品牌設定", 500);
+
+    // 驗證 LINE 身分(信任前先驗)，且 aud 必須符合目前品牌渠道。
+    let lineUserId: string;
+    try {
+      const profile = await verifyClinicLiffIdToken(svc, clinicId, body.idToken);
+      lineUserId = profile.sub;
+    } catch {
+      return fail("LINE 身分驗證失敗，請重新開啟預約頁。", 401);
+    }
+
     const settings = await getClinicSettings(svc, clinicId);
     if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);
     if (!settings) return fail("查無品牌設定", 500);

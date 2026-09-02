@@ -58,8 +58,8 @@ export interface VerifiedLineProfile {
  * 後端驗證 LIFF ID token。
  * 前端送來的 line_user_id 不可信;必須用此函式向 LINE 驗證後才採用回傳的 sub。
  */
-export async function verifyLiffIdToken(idToken: string): Promise<VerifiedLineProfile> {
-  const clientId = process.env.LINE_LOGIN_CHANNEL_ID;
+export async function verifyLiffIdToken(idToken: string, clientIdOverride?: string): Promise<VerifiedLineProfile> {
+  const clientId = clientIdOverride?.trim() || process.env.LINE_LOGIN_CHANNEL_ID;
   if (!clientId) throw new Error("缺少 LINE_LOGIN_CHANNEL_ID");
   if (!idToken) throw new Error("缺少 id_token");
 
@@ -111,6 +111,24 @@ export async function getBotInfo(accessTokenOverride?: string): Promise<LineBotI
   });
   if (!res.ok) throw new Error(`LINE 連線失敗 (${res.status})`);
   return (await res.json()) as LineBotInfo;
+}
+
+export interface LineWebhookEndpointInfo {
+  endpoint: string;
+  active: boolean;
+}
+
+/** 讀取 Messaging API channel 目前的 webhook URL 與啟用狀態。 */
+export async function getWebhookEndpointInfo(accessTokenOverride?: string): Promise<LineWebhookEndpointInfo> {
+  const res = await fetch(`${LINE_API}/channel/webhook/endpoint`, {
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+  });
+  if (!res.ok) throw new Error(`LINE Webhook 設定取得失敗 (${res.status})`);
+  const data = (await res.json()) as Partial<LineWebhookEndpointInfo>;
+  if (typeof data.endpoint !== "string" || typeof data.active !== "boolean") {
+    throw new Error("LINE Webhook 回應格式不正確");
+  }
+  return { endpoint: data.endpoint, active: data.active };
 }
 
 /** 取得推播額度。 */
@@ -187,18 +205,88 @@ export async function setDefaultRichMenu(richMenuId: string, accessTokenOverride
 
 /** 刪除 rich menu。 */
 export async function deleteRichMenu(richMenuId: string, accessTokenOverride?: string): Promise<void> {
-  await fetch(`${LINE_API}/richmenu/${richMenuId}`, {
+  const res = await fetch(`${LINE_API}/richmenu/${richMenuId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
-  }).catch(() => {});
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
 }
 
 /** 取消所有使用者的預設 rich menu。 */
 export async function clearDefaultRichMenu(accessTokenOverride?: string): Promise<void> {
-  await fetch(`${LINE_API}/user/all/richmenu`, {
+  const res = await fetch(`${LINE_API}/user/all/richmenu`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
-  }).catch(() => {});
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`取消預設 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
+export interface RichMenuAliasInfo {
+  richMenuAliasId: string;
+  richMenuId: string;
+}
+
+export async function getRichMenuAlias(aliasId: string, accessTokenOverride?: string): Promise<RichMenuAliasInfo | null> {
+  const res = await fetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`讀取 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  return (await res.json()) as RichMenuAliasInfo;
+}
+
+export async function createRichMenuAlias(aliasId: string, richMenuId: string, accessTokenOverride?: string): Promise<void> {
+  const res = await fetch(`${LINE_API}/richmenu/alias`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+    body: JSON.stringify({ richMenuAliasId: aliasId, richMenuId }),
+  });
+  if (!res.ok) throw new Error(`建立 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
+export async function updateRichMenuAlias(aliasId: string, richMenuId: string, accessTokenOverride?: string): Promise<void> {
+  const res = await fetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+    body: JSON.stringify({ richMenuId }),
+  });
+  if (!res.ok) throw new Error(`更新 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
+export async function deleteRichMenuAlias(aliasId: string, accessTokenOverride?: string): Promise<void> {
+  const res = await fetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+  });
+  if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
+export interface RichMenuInsightSummary {
+  richMenuId: string;
+  metricsFrom?: string;
+  metricsTo?: string;
+  impression?: { metrics: { count: number; uniqueUsers: number } };
+  clicks?: Array<{
+    bounds: { x: number; y: number; width: number; height: number };
+    metrics: { count: number; uniqueUsers: number };
+  }>;
+}
+
+export async function getRichMenuInsightSummary(
+  richMenuId: string,
+  from: string,
+  to: string,
+  accessTokenOverride?: string,
+): Promise<RichMenuInsightSummary> {
+  if (!/^\d{8}$/.test(from) || !/^\d{8}$/.test(to) || from > to) throw new Error("Rich Menu Insights 日期格式錯誤");
+  const query = new URLSearchParams({ from, to });
+  const res = await fetch(`${LINE_API}/insight/richmenu/${encodeURIComponent(richMenuId)}/summary?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`讀取 Rich Menu Insights 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  return (await res.json()) as RichMenuInsightSummary;
 }
 
 /** 主動推播一則或多則訊息給某 line_user_id。 */

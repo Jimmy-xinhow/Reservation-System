@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createServiceClient } from "@/lib/supabase";
-import { PLATFORM_ADD_ONS, requirePlatformAdmin } from "@/lib/platform";
+import { PLATFORM_ADD_ONS, requireSystemPermission } from "@/lib/platform";
 
 function value(fd: FormData, key: string): string {
   return (fd.get(key) ?? "").toString().trim();
@@ -14,7 +14,7 @@ function checked(fd: FormData, key: string): boolean {
 }
 
 export async function createPlatformBrandAction(fd: FormData): Promise<void> {
-  const platform = await requirePlatformAdmin();
+  const platform = await requireSystemPermission("brands.manage");
   const name = value(fd, "name");
   const slug = value(fd, "slug").toLowerCase();
   const ownerEmail = value(fd, "owner_email").toLowerCase();
@@ -23,16 +23,16 @@ export async function createPlatformBrandAction(fd: FormData): Promise<void> {
 
   if (!name || name.length > 120) throw new Error("品牌名稱必須填寫，且不可超過 120 字。");
   if (!/^[a-z0-9]([a-z0-9-]{0,78}[a-z0-9])?$/.test(slug)) throw new Error("品牌代號只能使用小寫英文、數字與連字號。");
-  if (!/^\S+@\S+\.\S+$/.test(ownerEmail)) throw new Error("請填寫有效的品牌負責人 Email。");
+  if (!/^\S+@\S+\.\S+$/.test(ownerEmail)) throw new Error("請填寫有效的品牌管理者 Email。");
   if (phone.length > 80 || address.length > 240) throw new Error("聯絡資料長度超過限制。");
 
   const service = createServiceClient();
   const { data: users, error: listError } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (listError) throw new Error(`查詢品牌負責人失敗：${listError.message}`);
+  if (listError) throw new Error(`查詢品牌管理者失敗：${listError.message}`);
   let owner = users.users.find((user) => user.email?.toLowerCase() === ownerEmail) ?? null;
   if (!owner) {
     const { data, error } = await service.auth.admin.inviteUserByEmail(ownerEmail);
-    if (error || !data.user) throw new Error(`寄送品牌負責人邀請失敗：${error?.message ?? "無法建立使用者"}`);
+    if (error || !data.user) throw new Error(`寄送品牌管理者邀請失敗：${error?.message ?? "無法建立使用者"}`);
     owner = data.user;
   }
 
@@ -50,11 +50,11 @@ export async function createPlatformBrandAction(fd: FormData): Promise<void> {
   }
   if (!data) throw new Error("建立品牌失敗：資料庫沒有回傳品牌資料。");
   revalidatePath("/admin/platform");
-  redirect("/admin/platform?created=1");
+  redirect("/admin/platform?section=brands&created=1");
 }
 
 export async function setPlatformBrandActiveAction(fd: FormData): Promise<void> {
-  await requirePlatformAdmin();
+  await requireSystemPermission("brands.manage");
   const clinicId = value(fd, "clinic_id");
   const active = value(fd, "active") === "true";
   if (!clinicId) throw new Error("缺少品牌識別碼。");
@@ -64,7 +64,7 @@ export async function setPlatformBrandActiveAction(fd: FormData): Promise<void> 
 }
 
 export async function updatePlatformEntitlementAction(fd: FormData): Promise<void> {
-  await requirePlatformAdmin();
+  await requireSystemPermission("entitlements.manage");
   const clinicId = value(fd, "clinic_id");
   const planCode = value(fd, "plan_code");
   const note = value(fd, "note");
@@ -81,4 +81,3 @@ export async function updatePlatformEntitlementAction(fd: FormData): Promise<voi
   if (error) throw new Error(`更新品牌方案失敗：${error.message}`);
   revalidatePath("/admin/platform");
 }
-

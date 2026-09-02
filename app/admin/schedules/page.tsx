@@ -1,5 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { requireNonProvider } from "@/lib/admin"
+import { requireAdmin } from "@/lib/admin"
 import {
   createTemplateAction,
   updateTemplateAction,
@@ -8,7 +8,7 @@ import {
   createDoctorAction,
   updateDoctorAction,
   toggleDoctorAction,
-} from "../actions";
+} from "../schedule-actions";
 import ScheduleEditor from "../_components/ScheduleEditor";
 import EntityManager from "../_components/EntityManager";
 
@@ -38,7 +38,7 @@ interface Template {
 }
 
 export default async function SchedulesPage() {
-const { clinicId } = await requireNonProvider();
+  const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
   const [{ data: doctors }, { data: templates }, { data: services }] = await Promise.all([
     supabase.from("doctors").select("id, name, specialty, active").eq("clinic_id", clinicId).order("name"),

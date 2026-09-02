@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const rate = checkRateLimit(request, "customer:registration-action", 8);
+  const rate = await checkRateLimit(request, "customer:registration-action", 8);
   if (!rate.allowed) return fail("操作次數過多，請稍後再試", 429);
   try {
     const body = await request.json().catch(() => null) as { browser_token?: string; registration_id?: string; action?: string } | null;

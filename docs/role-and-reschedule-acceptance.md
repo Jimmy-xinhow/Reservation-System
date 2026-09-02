@@ -5,8 +5,8 @@
 - `doctor_assignments` 以品牌、醫師、帳號建立明確指派；沒有指派時採 fail-closed，不顯示任何門診資料。
 - provider 在首頁、儀表板與佇列只查詢已指派醫師；首頁顧客電話遮罩。
 - CRM、顧客名單、報名、報表、排程設定、品牌設定等非工作範圍頁面拒絕 provider 直接進入。
-- 管理員可在帳號管理頁設定 provider 的醫師指派；品牌 owner 不可被改角色或移除。
-- `doctor_assignments` 有 RLS：provider 只能讀自己的指派，owner/admin 才能管理指派。
+- 品牌管理者可在帳號管理頁替具「指定服務提供者」權限的品牌員工設定醫師指派；至少保留一位品牌管理者。
+- `doctor_assignments` 有 RLS：具指定服務提供者權限的員工只能讀自己的指派，品牌管理者才可管理人員與指派。
 - 核心 `doctors`、`schedule_templates`、`schedule_exceptions`、`appointments`、`patients`、`patient_records`、`serving_numbers` RLS 會再依指派醫師限縮列範圍；provider 不能直接查同品牌其他醫師資料。
 - provider 只能把被指派預約標記為「完成／未到」；資料庫 trigger 會拒絕改動病患、醫師、時間、金流、備註等其他欄位，叫號控制對 provider 為唯讀。
 

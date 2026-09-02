@@ -99,7 +99,7 @@ export default function RegistrationPaymentPage() {
     <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-6"><Brand subtitle="報名付款" /></header>
       <section className="card space-y-5 p-6 sm:p-8">
-        <div><div className="eyebrow">Payment</div><h1 className="text-xl font-bold text-slate-900">完成報名付款</h1><p className="mt-2 text-sm leading-6 text-slate-500">候補遞補或離開原頁後，可用報名完成頁的報到憑證繼續付款。憑證只用於驗證這一筆報名，不會顯示顧客個資。</p></div>
+        <div><div className="eyebrow">報名付款</div><h1 className="text-xl font-bold text-slate-900">完成報名付款</h1><p className="mt-2 text-sm leading-6 text-slate-500">候補遞補或離開原頁後，可用報名完成頁的報到憑證繼續付款。憑證只用於驗證這一筆報名，不會顯示顧客個資。</p></div>
         {!ready ? <p className="text-sm text-slate-400">載入付款資料中…</p> : <>
           <label className="block text-sm"><span className="label">報到憑證</span><input className="input font-mono" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" placeholder="請貼上報名完成頁的憑證" /></label>
           {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}

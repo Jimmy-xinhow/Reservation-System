@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireNonProvider } from "@/lib/admin";
 import { formatDateTime } from "@/lib/slots";
+import { createServiceClient } from "@/lib/supabase";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ interface RegistrationRow {
 
 interface PaymentRow { status: string; amount: number; }
 interface DeliveryRow { status: string; }
-interface FunnelRow { event_name: string; }
+interface FunnelRow { event_name: string; source: string | null; }
 
 function one<T>(value: Relation<T>): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -87,7 +88,8 @@ function registrationBreakdown(rows: RegistrationRow[]) {
 }
 
 export default async function ReportsPage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
-const { supabase, clinicId, clinicName } = await requireNonProvider();
+  const { supabase, clinicId, clinicName } = await requireNonProvider();
+  const service = createServiceClient();
   const params = await searchParams;
   const today = todayTaipei();
   const from = params.from && /^\d{4}-\d{2}-\d{2}$/.test(params.from) ? params.from : shiftDate(today, -29);
@@ -100,7 +102,7 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
     fetchAllSupabasePages((from, to) => supabase.from("registrations").select("created_at, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
-    fetchAllSupabasePages((from, to) => supabase.from("funnel_events").select("event_name").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("funnel_events").select("event_name, source").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("status", "promoted").gte("updated_at", range.start).lte("updated_at", range.end),
   ]);
@@ -129,12 +131,21 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
   const generatedAt = formatDateTime(new Date().toISOString());
   const funnelCounts = new Map<string, number>();
   for (const row of funnelEventRows) funnelCounts.set(row.event_name, (funnelCounts.get(row.event_name) ?? 0) + 1);
+  const sourceConversions = new Map<string, { views: number; starts: number; successes: number }>();
+  for (const row of funnelEventRows) {
+    const source = row.source?.trim() || "direct";
+    const current = sourceConversions.get(source) ?? { views: 0, starts: 0, successes: 0 };
+    if (row.event_name === "portal_view" || row.event_name === "booking_view") current.views += 1;
+    if (row.event_name === "booking_start") current.starts += 1;
+    if (row.event_name === "booking_success") current.successes += 1;
+    sourceConversions.set(source, current);
+  }
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="eyebrow">Operations</div>
+          <div className="eyebrow">營運分析</div>
           <h1 className="text-2xl font-bold text-slate-900">營運報表</h1>
           <p className="mt-1 text-sm text-slate-500">品牌：{clinicName} · 資料範圍：{normalizedFrom} 至 {normalizedTo} · 時區：Asia/Taipei</p>
           <p className="mt-1 text-xs text-slate-400">最後更新：{generatedAt} · 取消資料保留於明細，但不計入有效名額。</p>
@@ -161,6 +172,8 @@ const { supabase, clinicId, clinicName } = await requireNonProvider();
       </div>
 
       <section className="card space-y-3 p-5"><div><h2 className="font-semibold text-slate-900">顧客漏斗事件</h2><p className="mt-1 text-sm text-slate-500">僅統計匿名事件，不含姓名、電話、LINE ID 或顧客識別碼。</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-5"><FunnelMetric label="入口瀏覽" value={funnelCounts.get("portal_view") ?? 0} /><FunnelMetric label="開始預約" value={funnelCounts.get("booking_start") ?? 0} /><FunnelMetric label="預約成功" value={funnelCounts.get("booking_success") ?? 0} /><FunnelMetric label="開始報名" value={funnelCounts.get("registration_start") ?? 0} /><FunnelMetric label="報名成功" value={funnelCounts.get("registration_success") ?? 0} /></div></section>
+
+      <BreakdownTable title="預約來源轉換（匿名事件）" headers={["來源", "瀏覽", "開始預約", "預約成功", "開始→完成率"]} rows={[...sourceConversions.entries()].sort((a, b) => b[1].successes - a[1].successes || b[1].starts - a[1].starts).map(([source, values]) => [source, String(values.views), String(values.starts), String(values.successes), percent(values.successes, values.starts)])} />
 
       <BreakdownTable title="預約明細分組（日期／服務提供者／服務／狀態／來源）" headers={["日期", "服務提供者", "服務", "狀態", "來源", "筆數"]} rows={bookingRows.map((row) => [row.day, row.provider, row.service, row.status, row.source, String(row.count)])} />
       <BreakdownTable title="報名明細分組（活動／場次／票種／狀態）" headers={["活動", "場次", "票種", "狀態", "筆數"]} rows={registrationBreakdownRows.map((row) => [row.event, row.session, row.ticket, row.status, String(row.count)])} />

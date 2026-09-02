@@ -11,7 +11,11 @@ export interface PublicBrandScope {
 
 function isSharedHost(host: string): boolean {
   if (!host) return true;
-  if (["localhost", "127.0.0.1", "[::1]"].includes(host) || host.endsWith(".vercel.app")) return true;
+  if (
+    ["localhost", "127.0.0.1", "[::1]"].includes(host)
+    || host.endsWith(".vercel.app")
+    || host.endsWith(".up.railway.app")
+  ) return true;
   const configuredHosts = (process.env.PUBLIC_SHARED_HOSTS ?? "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
@@ -24,7 +28,7 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
   const clinicId = scope.clinicId?.trim();
   const host = (scope.host ?? "").split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
   const configuredClinicId = process.env.NEXT_PUBLIC_CLINIC_ID?.trim() || "";
-  if (host) {
+  if (host && !isSharedHost(host)) {
     const { data: domain, error: domainError } = await supabase.from("clinic_domains").select("clinic_id, verified_at").eq("hostname", host).eq("active", true).not("verified_at", "is", null).maybeSingle();
     if (domainError) return null;
     if (domain?.clinic_id) {
@@ -43,7 +47,7 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
       if ((slug && slugClinic?.id !== hostClinicId) || (clinicId && idClinic?.id !== hostClinicId)) return null;
       return hostClinicId;
     }
-    if (!isSharedHost(host)) return null;
+    return null;
   }
   const { data: slugClinic, error: slugError } = slug
     ? await supabase.from("clinics").select("id").eq("slug", slug).eq("active", true).maybeSingle()
@@ -74,9 +78,9 @@ export async function resolvePublicClinicId(req: NextRequest, supabase: Supabase
   return resolvePublicClinicIdFromScope(supabase, {
     clinicSlug: req.nextUrl.searchParams.get("clinic_slug"),
     clinicId: req.nextUrl.searchParams.get("clinic_id"),
-    // Host is the request's actual authority. Do not trust a client-supplied
-    // forwarded host as a tenant selector unless a trusted edge has already
-    // normalized it before the request reaches the app.
-    host: req.headers.get("host"),
+    // nextUrl keeps the request authority normalized by Next.js across local,
+    // Vercel and Railway adapters. Do not trust a client-supplied forwarded
+    // host as a tenant selector.
+    host: req.nextUrl.host || req.headers.get("host"),
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import { deletePatientAction } from "../actions";
+import { deletePatientAction } from "../patient-actions";
 
 function Inner({ name }: { name: string }) {
   const { pending } = useFormStatus();

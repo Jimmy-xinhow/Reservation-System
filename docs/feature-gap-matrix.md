@@ -1,6 +1,6 @@
 # xinhow Booking SaaS 功能落差矩陣
 
-更新日期：2026-08-06
+更新日期：2026-08-13
 
 本表以 `C:\Users\User\Downloads\xinhow-booking-saas-service-brief.html` 的 70 項標準功能、目前程式碼與 `clinic-booking-spec-v3.md` 對照。狀態只代表目前可從 repo 驗證到的程度；外部帳號、金流商店號、LINE／Email 憑證與網域 DNS 不在程式碼內，另列為「外部待驗收」，不宣稱已完成。
 
@@ -10,6 +10,20 @@
 - **部分**：已有資料或流程，但缺少簡報要求的完整管理能力、頁面、欄位或驗收狀態。
 - **未完成**：目前沒有足夠的可操作實作。
 - **外部待驗收**：程式已具備，但需要正式第三方設定或真實資料才能驗證。
+
+## 2026-08-13 產品重整校正
+
+原表主要核對 70 項簡報功能是否已有程式入口，不能證明平台資訊架構、模組啟用與 Rich Menu 生命週期已完成。本次以 `docs/product-restructure-baseline.md` 與 `docs/product-information-architecture.md` 補上產品層基線，並修正以下判定：
+
+| v3／本次目標要求 | 校正後狀態 | 缺口 |
+|---|---|---|
+| 時間制／場次制預約候補 | Staging PASS | 已具獨立資料表、額滿目標查詢、原子加入／遞補／接受／取消／逾時、顧客 LIFF 與瀏覽器操作、後台追蹤，以及 LINE／Email 原子 claim、重試與去重 worker；linked staging 已完成 migration、競態與通知生命週期驗收。 |
+| 六個工作區與設定中心 | 已實作 | 後台導覽已依工作流程收斂，並依品牌模組啟用狀態與成員角色顯示或阻擋功能。 |
+| 權限首頁 | Staging PASS | 產品身份只有系統管理者與品牌管理者；兩層管理者可新增員工並授予工作權限，staging 已驗證導覽、直接網址、server action 與 RLS。 |
+| 七步品牌啟用中心 | 已實作 | 品牌、服務、排程、入口、訊息、收款與上線檢查已納入後台啟用流程；第 7 步只會顯示待驗收，不會因設定齊全就誤標完成。 |
+| 多品牌 LINE／LIFF | 程式完成／外部待驗收 | destination、LINE Login Channel、LIFF ID 與 endpoint 可由品牌後台保存；secret／access token 維持 server-only mapping。後台可驗證 Bot 身分、destination 與 webhook 後寫回 ready／error；正式品牌 channel、手機 LIFF 與實際訊息仍待驗收。 |
+| Rich Menu 發布生命週期與第二批優化 | 程式與 staging DB 完成／外部待驗收 | 已具草稿、版本、模板、實圖熱區疊合、逐格瀏覽器／LIFF 連結測試、圖片與 action 驗證、發布、下架、回復、完整 label、品牌深連結及失敗補償；另完成 Alias、台北時間排程、版本複製／比較與 Insights。正式 channel 正向流程仍待驗收。 |
+| 統一 LIFF 顧客中心 | 已實作 | `/book` 已用單一品牌 LIFF 與 `view` 契約提供預約、紀錄、活動、票券、會員、客服、品牌七個任務，並支援同一 LINE 身分切換連結顧客。 |
 
 ## 一、預約功能（16）
 
@@ -72,17 +86,17 @@
 | # | 簡報功能 | 現況 | 證據／缺口 |
 |---:|---|---|---|
 | 1 | 綠界、藍新標準串接 | 外部待驗收 | provider adapter／設定頁已有；正式商店號與憑證尚未在 repo 內，不能視為正式交易完成。 |
-| 2 | 線上收款與訂金設定 | 部分 | 訂金與 payment settings 已有；正式付款頁／第三方交易需正式帳號驗收。 |
+| 2 | 線上收款與訂金設定 | 外部待驗收 | 訂金、付款設定、公開付款頁與內部狀態生命週期已完成；正式第三方交易需測試商店驗收。 |
 | 3 | 付款完成自動確認預約或報名 | 已實作 | payment webhook／status flow 已存在，需正式交易測試。 |
-| 4 | 未付款自動釋放名額 | 已實作 | payment expiry／release flow 已存在，需排程與正式資料驗收。 |
+| 4 | 未付款自動釋放名額 | Staging PASS | 預約與報名的逾時取消、名額／優惠／套票釋放及重送冪等均已以 staging 資料驗證。 |
 | 5 | 收款紀錄與訂單對照 | 已實作 | payment transaction／registration order 對照資料已存在。 |
 
 ## 五、訊息與入口（9）
 
 | # | 簡報功能 | 現況 | 證據／缺口 |
 |---:|---|---|---|
-| 1 | LINE 身分驗證 | 外部待驗收 | LIFF ID token server 驗證流程已實作；需正式 LIFF／LINE channel 驗證。 |
-| 2 | Rich Menu 入口串接 | 外部待驗收 | `/admin/richmenu` 與 API 已存在；需正式 channel 發布驗收。 |
+| 1 | LINE 身分驗證 | 程式完成／外部待驗收 | LIFF ID token 一律由 server 依品牌 LINE Login Channel 驗證；正式 LIFF／LINE channel 憑證與真實裝置流程尚待驗收。 |
+| 2 | Rich Menu 入口串接 | 程式與 staging DB 完成／外部待驗收 | `/admin/richmenu` 已具草稿、版本、模板、實圖熱區與逐格連結預覽、發布前驗證、發布／下架／回復、Alias、顯示排程、版本複製／比較、成效洞察、完整品牌 LIFF 深連結與失敗補償；正式 channel 發布與 Insights 資料尚待驗收。 |
 | 3 | 預約與報名確認通知 | 已實作 | notification modules 與 delivery logs。 |
 | 4 | 取消與改期通知 | 已實作 | appointment／registration status notification。 |
 | 5 | 候補轉正通知 | 已實作 | registration promotion notification。 |
@@ -96,16 +110,16 @@
 | # | 簡報功能 | 現況 | 證據／缺口 |
 |---:|---|---|---|
 | 1 | 品牌名稱、色系與識別 | 已實作 | clinic profile／brand settings。 |
-| 2 | 專屬預約網址 | 部分 | clinic slug route 已存在；正式品牌網址需實際 tenant 資料驗收。 |
+| 2 | 專屬預約網址 | 已實作 | `clinic_slug` 租戶解析與瀏覽器預約流程已存在；正式品牌自訂 host 仍歸 DNS 外部驗收。 |
 | 3 | 自訂網域 | 外部待驗收 | add／TXT verify flow 已存在；DNS 與實際 domain routing 尚需外部驗收。 |
-| 4 | 官網嵌入式預約元件 | 部分 | embed route 已存在；需以實際第三方網站驗證跨來源、尺寸與錯誤回復。 |
+| 4 | 官網嵌入式預約元件 | 程式完成／外部待驗收 | `/embed/book` 與 `/embed/register` 共用正式瀏覽器流程；仍需以實際第三方網站驗證跨來源、尺寸與錯誤回復。 |
 
 ## 七、管理與報表（7）
 
 | # | 簡報功能 | 現況 | 證據／缺口 |
 |---:|---|---|---|
 | 1 | 團隊成員邀請 | 已實作 | `/admin/users` 與 invite flow。 |
-| 2 | 擁有者、管理員、櫃檯、服務提供者分級權限 | 已實作 | role matrix、RLS、provider assignment。 |
+| 2 | 系統管理者、品牌管理者與員工工作權限 | Staging PASS | 產品身份收斂為兩種管理者；兩層員工使用可配置權限，已驗證導覽、direct route、server action、RLS 與 provider assignment。 |
 | 3 | 顧客資料管理 | 已實作 | `/admin/patients`、tags、notes、timeline。 |
 | 4 | 操作紀錄與異動稽核 | 已實作 | `/admin/audit` 統一查詢預約、報名、付款狀態異動。 |
 | 5 | 時區設定 | 已實作 | default `Asia/Taipei` 與 clinic settings。 |
@@ -123,22 +137,25 @@
 
 ## 優先開發順序
 
-1. **P0（已完成）**：工程後台左側導覽、預約日曆、手動報到、服務規則、資源容量、會員等級、CRM Lite、活動條款與統一稽核。
-2. **P1（目前仍需補強）**：品牌範圍網址與嵌入元件的實際跨來源驗收；正式金流完成後再做套票販售驗收。
-3. **外部驗收**：ECPay／NewebPay 正式交易、LINE／LIFF／Rich Menu、Email provider、自訂網域 DNS、第三方 embed。
+1. **M0／M1**：以產品重整基線及資訊架構契約凍結範圍、路由、角色與模組啟用規則。
+2. **M2**：完成預約候補、多品牌 LINE／LIFF、統一顧客入口與 Rich Menu 版本資料契約。
+3. **M3／M4／M5**：依契約重整後台、啟用中心、Rich Menu 與 LIFF 顧客中心。
+4. **M6／M7**：完成自動化、資安、跨租戶與正式外部渠道驗收。
 
-本次不把既有舊版 queue／叫號功能刪除；它與 v3 scope 有衝突，先保留並在導覽中歸類為既有營運功能，待產品範圍確認後再決定是否隱藏或移除。
+目前狀態：M0 至 M6 的程式、契約與本機介面已完成；M4 第二批 Rich Menu 優化的契約、type-check、production build、實圖熱區與逐格連結瀏覽器驗收均已通過。linked staging 已套用至 `202608130004_brand_configuration_permission_boundaries.sql`，DB lint 為零問題；Railway staging deployment `4c909311-e0b8-4081-907f-9a96e864c36c` 已成功，14 個公開入口及 5 支 Cron 未授權邊界全 PASS。共用登入頁的品牌／平台入口已拆分呈現，同一個真實 staging 測試帳號已驗證可分別導向 `/admin` 與 `/admin/platform`；跨網域 `/embed/book` 在第三方儲存遭拒時也能正常降級。正式 LINE、金流、Email、網域及手機 LINE WebView 驗收由品牌完成後台設定後執行。
+
+既有 queue／叫號資料與相容程式保留，但 `legacy_progress_enabled` 預設關閉；標準預約、報名與後台導覽不依賴也不顯示這個舊版流程。
 # 2026-08-06 開發盤點更新
 
 本段是依目前簡報 70 項功能、SaaS 技術規格 v3 與程式庫現況更新的驗收狀態；原有盤點內容保留，不以外部帳號尚未驗證冒充已完成。
 
 ## 已完成並已接入流程
 
-- SaaS 總後台：平台管理員可建立／停用品牌、邀請品牌擁有者、設定方案與七項加購權益；品牌後台仍以 `clinic_id` 作為相容的租戶鍵。
+- SaaS 總後台：系統管理者可建立／停用品牌、邀請品牌管理者、設定方案與七項加購權益；品牌後台仍以 `clinic_id` 作為相容的租戶鍵。
 - 預約：服務分類、服務時長、緩衝時間、取消／改期提前限制已接到可用時段與預約寫入；場地／設備資源可建立、綁定服務並在時間制與號次制預約檢查容量。
 - 課程／活動：票種銷售期間、條款版本與同意時間快照、個人報名查詢、今日即時報到工作台、集中稽核頁。
 - 會員／CRM Lite：會員資料入口、套票／堂數查看、會員預約扣點既有流程；低餘額與效期提醒 cron、LINE／Email 去重紀錄已加入。
-- 品牌入口：LINE Rich Menu → LIFF 為主，並保留瀏覽器備援、品牌範圍網址與嵌入式報名入口。
+- 品牌入口：LINE Rich Menu → LIFF 為主，並保留瀏覽器備援、品牌範圍網址、嵌入式預約與嵌入式報名入口。
 
 ## 暫不列為本次阻塞
 
@@ -148,11 +165,11 @@
 
 ## 仍需列入後續驗收的外部條件
 
-- 以平台管理員帳號完成第一次 bootstrap，建立第一個品牌與品牌擁有者。
+- 以系統管理者帳號完成第一次 bootstrap，建立第一個品牌與品牌管理者。
 - 正式 Supabase 專案已於 2026-08-06 套用 `migration_saas_platform.sql` 與 `migration_saas_core_gaps.sql`，並以只讀查詢確認新表、RPC 與 RLS。
 - Railway 以 GitHub `main` 自動部署後，使用真實品牌範圍重跑公開入口、後台登入、提醒 cron 與資源容量測試。
 
 ## 目前明確保留的資料與授權事項
 
 - 正式資料庫既有租戶資料仍保留；程式碼預設已改為通用 SaaS，不擅自刪除或改名既有品牌資料。
-- 正式資料庫目前尚未指定平台管理員 bootstrap 帳號；未擅自把既有品牌帳號升級為總後台，以避免未授權擴大權限。
+- 正式資料庫目前尚未指定系統管理者 bootstrap 帳號；未擅自把既有品牌帳號升級為總控台，以避免未授權擴大權限。

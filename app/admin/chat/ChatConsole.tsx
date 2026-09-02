@@ -130,7 +130,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
   }
 
   async function toggleBlock(uid: string, block: boolean) {
-    if (block && !confirm("封鎖後,對方在客服送出的訊息將被忽略(對方不會收到提示)。確定封鎖?")) return;
+    if (block && !confirm("封鎖後，對方在客服送出的訊息將被忽略（對方不會收到提示）。確定封鎖？")) return;
     setErr(null);
     // 樂觀更新
     setThreads((ts) => ts.map((t) => (t.lineUserId === uid ? { ...t, blocked: block } : t)));
@@ -263,7 +263,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
                   }
                 }}
                 rows={1}
-                placeholder="輸入回覆…(Enter 送出,Shift+Enter 換行)"
+                placeholder="輸入回覆…（Enter 送出，Shift+Enter 換行）"
                 className="input max-h-28 min-h-[42px] flex-1 resize-none"
               />
               <button

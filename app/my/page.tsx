@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { formatEventDate } from "@/lib/registration";
 import { formatDateSession, formatTime } from "@/lib/slots";
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
 
 interface PortalData {
   patient: { name: string };
@@ -36,9 +37,7 @@ function storedToken(): string | null {
   const key = tokenKey();
   const source = new URLSearchParams(window.location.search);
   const scope = source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default";
-  return window.localStorage.getItem(key)
-    || window.localStorage.getItem(`booking_browser_token:${scope}`)
-    || window.localStorage.getItem("membership_browser_token");
+  return safeLocalStorageGet(key, `booking_browser_token:${scope}`, "membership_browser_token");
 }
 
 function statusLabel(status: string): string {
@@ -61,7 +60,7 @@ export default function MyCustomerPage() {
       const body = await response.json() as { ok?: boolean; data?: PortalData; error?: string };
       if (!response.ok || !body.ok || !body.data) throw new Error(body.error ?? "顧客資料載入失敗");
       setData(body.data);
-      window.localStorage.setItem(tokenKey(), browserToken);
+      safeLocalStorageSet([[tokenKey(), browserToken]]);
     } catch (loadError) {
       setData(null);
       setError(loadError instanceof Error ? loadError.message : "顧客資料載入失敗");
