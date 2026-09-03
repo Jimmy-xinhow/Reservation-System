@@ -25,7 +25,7 @@ export function AuthCallbackBridge() {
     const target = new URL("/auth/accept-invite", current.origin);
     target.search = current.search;
     target.hash = current.hash;
-    const supabase = createSupabaseBrowser();
+    const supabase = createSupabaseBrowser({ detectSessionInUrl: false });
     void supabase.auth.signOut({ scope: "local" }).finally(() => {
       window.location.replace(target.toString());
     });
