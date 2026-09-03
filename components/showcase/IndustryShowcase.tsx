@@ -56,9 +56,15 @@ function serviceRows(brand: PublicBrandPageData | undefined, fallback: string[][
     String(index + 1).padStart(2, "0"),
     service.name,
     service.description ?? "查看服務內容與可預約時段",
+    "線上預約",
     "查看時段",
-    "↗",
   ]);
+}
+
+function eventSectionCopy(template: PublicBrandPageData["template"]): { eyebrow: string; title: string } {
+  if (template === "beauty") return { eyebrow: "品牌活動與體驗", title: "查看活動日期、名額並完成報名。" };
+  if (template === "fitness") return { eyebrow: "團體課程", title: "選擇場次，查看名額並完成報名。" };
+  return { eyebrow: "活動與課程", title: "選擇日期與場次，完成線上報名。" };
 }
 
 function ReviewBar({ slug }: { slug: ShowcaseSlug }) {
@@ -453,6 +459,7 @@ function EventShowcase({ brand }: LiveProps) {
 function LiveBrandDetails({ brand }: { brand: PublicBrandPageData }) {
   const showEventCards = brand.events.length > 0 && !["education", "event"].includes(brand.template);
   const showServiceCards = brand.services.length > 0 && ["education", "event"].includes(brand.template);
+  const eventCopy = eventSectionCopy(brand.template);
   return (
     <section className={styles.liveBrandDetails} data-template={brand.template} aria-label="品牌完整資訊">
       <div className={styles.liveBrandAbout}>
@@ -472,8 +479,8 @@ function LiveBrandDetails({ brand }: { brand: PublicBrandPageData }) {
       {(showEventCards || showServiceCards) && (
         <div className={styles.liveBrandOffers}>
           <header>
-            <p className={styles.liveBrandEyebrow}>{showEventCards ? "團體課程與活動" : "也可以預約服務"}</p>
-            <h2>{showEventCards ? "選擇場次，查看名額並完成報名。" : "需要個別協助時，也能直接查看可約時段。"}</h2>
+            <p className={styles.liveBrandEyebrow}>{showEventCards ? eventCopy.eyebrow : "也可以預約服務"}</p>
+            <h2>{showEventCards ? eventCopy.title : "需要個別協助時，也能直接查看可約時段。"}</h2>
           </header>
           <div>
             {showEventCards && brand.events.slice(0, 6).map((event, index) => <a key={event.id} href={eventHref(brand, event.slug)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{event.title}</strong><small>{eventMeta(event)}</small><b>查看場次 →</b></a>)}
