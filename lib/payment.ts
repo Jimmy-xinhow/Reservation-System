@@ -143,7 +143,7 @@ function taipeiPaymentTimestamp(): string {
     hourCycle: "h23",
   })
     .format(new Date())
-    .replace(", ", " ");
+    .replace(/\s+/g, " ");
 }
 
 export function createEcpayForm(args: {
