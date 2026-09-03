@@ -143,7 +143,6 @@ function taipeiPaymentTimestamp(): string {
     hourCycle: "h23",
   })
     .format(new Date())
-    .replace(/\//g, "-")
     .replace(", ", " ");
 }
 
