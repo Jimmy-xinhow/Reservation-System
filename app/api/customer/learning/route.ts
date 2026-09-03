@@ -19,6 +19,7 @@ interface RegistrationRow {
   event_id: string;
   status: string;
   payment_status: string;
+  expires_at: string | null;
   events: { title: string } | { title: string }[] | null;
 }
 
@@ -39,9 +40,14 @@ function eventTitle(value: RegistrationRow["events"]): string {
 }
 
 function canAccess(unit: UnitRow, registration: RegistrationRow): boolean {
-  if (!["confirmed", "attended"].includes(registration.status)) return false;
+  const isActivePending = registration.status === "pending"
+    && (!registration.expires_at || new Date(registration.expires_at).getTime() > Date.now());
+  const isConfirmed = ["confirmed", "attended"].includes(registration.status);
+  if (!isActivePending && !isConfirmed) return false;
   if (unit.access_rule === "attended") return registration.status === "attended";
-  if (unit.access_rule === "paid") return ["paid", "not_required"].includes(registration.payment_status);
+  if (unit.access_rule === "paid") {
+    return isConfirmed && ["paid", "not_required"].includes(registration.payment_status);
+  }
   return true;
 }
 
@@ -63,10 +69,10 @@ export async function POST(request: NextRequest) {
 
     const { data: registrationsData, error: registrationsError } = await service
       .from("registrations")
-      .select("id, event_id, status, payment_status, events(title)")
+      .select("id, event_id, status, payment_status, expires_at, events(title)")
       .eq("clinic_id", clinicId)
       .eq("patient_id", patient.id)
-      .in("status", ["confirmed", "attended"]);
+      .in("status", ["pending", "confirmed", "attended"]);
     if (registrationsError) throw new Error(registrationsError.message);
     const registrations = (registrationsData ?? []) as unknown as RegistrationRow[];
     const eventIds = [...new Set(registrations.map((registration) => registration.event_id))];
