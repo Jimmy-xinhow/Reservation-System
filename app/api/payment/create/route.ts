@@ -28,6 +28,13 @@ function requestBaseUrl(req: NextRequest): string {
     try {
       const parsed = new URL(configuredUrl);
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("unsupported protocol");
+      // A loopback APP_URL can only work on a developer machine.  In a hosted
+      // deployment it sends the user back to a private localhost page after
+      // the gateway completes, so use the actual public request origin.
+      if (process.env.NODE_ENV === "production" &&
+        ["localhost", "127.0.0.1", "::1"].includes(parsed.hostname)) {
+        return req.nextUrl.origin;
+      }
       return parsed.origin;
     } catch {
       throw new Error("APP_URL 設定格式不正確");
