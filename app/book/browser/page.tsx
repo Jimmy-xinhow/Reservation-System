@@ -145,6 +145,7 @@ export default function BrowserBookingPage() {
   useEffect(() => {
     if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
     setSlots([]); setSessions([]); setWaitlistSlots([]); setWaitlistSessions([]); setPickedStart(""); setPickedTemplate(""); setJoiningWaitlist(false);
+    setError(null);
     const params = new URLSearchParams({ date, visit_type: visitType, service_id: serviceId });
     if (doctorId) params.set("doctor_id", doctorId);
     if (selectedAddonIds.length > 0) params.set("addon_ids", selectedAddonIds.join(","));
