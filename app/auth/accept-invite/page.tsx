@@ -16,10 +16,51 @@ export default function AcceptInvitePage() {
 
   useEffect(() => {
     let active = true;
-    const supabase = createSupabaseBrowser();
+    // @supabase/ssr 的 browser client 預設是 PKCE；Supabase Dashboard
+    // 寄出的 recovery 信件則會把 access token 放在 URL hash，需明確接手。
+    const supabase = createSupabaseBrowser({ detectSessionInUrl: false });
 
     async function loadInviteSession() {
-      const code = new URLSearchParams(window.location.search).get("code");
+      const callbackUrl = new URL(window.location.href);
+      const code = callbackUrl.searchParams.get("code");
+      const hashParams = new URLSearchParams(callbackUrl.hash.replace(/^#/, ""));
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+
+      if (hashParams.get("error") || hashParams.get("error_code")) {
+        callbackUrl.hash = "";
+        window.history.replaceState(window.history.state, "", callbackUrl.toString());
+        if (active) {
+          setError("密碼連結已失效或已使用，請重新寄送最新的重設密碼信。");
+          setChecking(false);
+        }
+        return;
+      }
+
+      if (accessToken || refreshToken) {
+        if (!accessToken || !refreshToken) {
+          if (active) {
+            setError("密碼連結資料不完整，請重新寄送最新的重設密碼信。");
+            setChecking(false);
+          }
+          return;
+        }
+
+        const { error: hashSessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        callbackUrl.hash = "";
+        window.history.replaceState(window.history.state, "", callbackUrl.toString());
+        if (hashSessionError) {
+          if (active) {
+            setError("密碼連結已失效或已使用，請重新寄送最新的重設密碼信。");
+            setChecking(false);
+          }
+          return;
+        }
+      }
+
       if (code) {
         const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
         if (exchangeError) {
