@@ -44,6 +44,7 @@ export default function LearningPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [scope, setScope] = useState("");
 
   const load = useCallback(async (action?: "complete" | "uncomplete", unitId?: string) => {
     const token = storedToken();
@@ -60,6 +61,7 @@ export default function LearningPage() {
     } finally { setLoading(false); setSaving(null); }
   }, []);
 
+  useEffect(() => { setScope(scopeSuffix()); }, []);
   useEffect(() => { void load(); }, [load]);
 
   async function toggle(unit: Unit) {
@@ -69,9 +71,9 @@ export default function LearningPage() {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-10">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3"><Brand subtitle="學員專區" /><Link href={`/my${scopeSuffix()}`} className="text-sm text-brand-700 hover:underline">返回我的紀錄</Link></header>
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3"><Brand subtitle="學員專區" /><Link href={`/my${scope}`} className="text-sm text-brand-700 hover:underline">返回我的紀錄</Link></header>
       {loading && <p className="card p-8 text-center text-sm text-slate-500">載入學習內容…</p>}
-      {!loading && error && <section className="card space-y-4 p-7 text-center"><h1 className="text-lg font-semibold text-slate-900">目前無法開啟學員專區</h1><p className="text-sm leading-6 text-slate-500">{error}</p><Link href={`/my${scopeSuffix()}`} className="btn btn-primary">前往我的紀錄</Link></section>}
+      {!loading && error && <section className="card space-y-4 p-7 text-center"><h1 className="text-lg font-semibold text-slate-900">目前無法開啟學員專區</h1><p className="text-sm leading-6 text-slate-500">{error}</p><Link href={`/my${scope}`} className="btn btn-primary">前往我的紀錄</Link></section>}
       {!loading && data && <div className="space-y-6">
         <section className="rounded-2xl bg-gradient-to-br from-brand-700 to-brand-900 p-6 text-white"><p className="text-sm text-white/70">歡迎回來，{data.patient.name}</p><h1 className="mt-1 text-2xl font-bold">我的學習內容</h1><p className="mt-2 text-sm leading-6 text-white/80">只顯示已符合報名、付款或報到條件的教材。</p></section>
         {data.courses.length === 0 ? <section className="card p-8 text-center"><h2 className="font-semibold text-slate-900">目前沒有已開放教材</h2><p className="mt-2 text-sm leading-6 text-slate-500">完成課程要求後，教材會自動出現在這裡。</p></section> : data.courses.map((course) => {
