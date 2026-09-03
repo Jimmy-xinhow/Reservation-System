@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createSupabaseBrowser } from "@/lib/supabase-browser";
 
 /**
  * Supabase 的邀請／重設密碼回呼若未指定 redirectTo，會回到 Site URL。
@@ -24,7 +25,10 @@ export function AuthCallbackBridge() {
     const target = new URL("/auth/accept-invite", current.origin);
     target.search = current.search;
     target.hash = current.hash;
-    window.location.replace(target.toString());
+    const supabase = createSupabaseBrowser({ detectSessionInUrl: false });
+    void supabase.auth.signOut({ scope: "local" }).finally(() => {
+      window.location.replace(target.toString());
+    });
   }, []);
 
   return null;
