@@ -155,7 +155,7 @@ export default function BrowserBookingPage() {
 
   async function submit() {
     if (!config || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId) || !date || (!pickedStart && !pickedTemplate) || !name.trim() || !phone.trim() || !birthday || !bookingFieldsReady(selectedService?.booking_fields ?? [], bookingAnswers)) {
-      setError("請完成基本資料與時段選擇");
+      setError("請填寫姓名、電話、出生年月日，並選擇預約時段與必填資料");
       return;
     }
     if (joiningWaitlist && membershipCode.trim()) {
@@ -224,7 +224,7 @@ export default function BrowserBookingPage() {
         {token && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">目前沿用此裝置的預約身分；若修改姓名、電話或出生年月日，送出時會重新驗證新的身分。</p>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm"><span className="label">姓名</span><input className="input" value={name} onChange={(event) => updateIdentity(setName, event.target.value)} autoComplete="name" /></label><label className="text-sm"><span className="label">電話</span><input className="input" value={phone} onChange={(event) => updateIdentity(setPhone, event.target.value)} inputMode="tel" autoComplete="tel" /></label></div>
         <label className="block text-sm"><span className="label">Email（選填，用於提醒）</span><input type="email" className="input" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" /></label>
-        <label className="block text-sm"><span className="label">出生年月日</span><input type="date" className="input" value={birthday} onChange={(event) => updateIdentity(setBirthday, event.target.value)} /></label>
+        <label className="block text-sm"><span className="label">出生年月日 *（用來辨識同一位顧客）</span><input type="date" className="input" value={birthday} onChange={(event) => updateIdentity(setBirthday, event.target.value)} required /></label>
         <label className="block text-sm"><span className="label">套票序號（選填）</span><input className="input uppercase" value={membershipCode} onChange={(event) => setMembershipCode(event.target.value.toUpperCase())} autoComplete="off" /></label>
         <div><span className="label">預約類型</span><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setVisitType("return")} className={`rounded-xl border p-3 text-sm ${visitType === "return" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>再次服務</button><button type="button" onClick={() => setVisitType("first")} className={`rounded-xl border p-3 text-sm ${visitType === "first" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>首次服務</button></div></div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
