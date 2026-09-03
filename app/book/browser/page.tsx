@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { trackFunnelEvent } from "@/lib/funnel-client";
@@ -102,6 +102,7 @@ export default function BrowserBookingPage() {
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const availabilityRequestRef = useRef(0);
   const maxDate = useMemo(() => todayStr(config?.max_advance_days ?? 30), [config?.max_advance_days]);
 
   useEffect(() => {
@@ -143,6 +144,7 @@ export default function BrowserBookingPage() {
   }, [config, selectedService, providerRequired, doctorId]);
 
   useEffect(() => {
+    const requestId = ++availabilityRequestRef.current;
     if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
     setSlots([]); setSessions([]); setWaitlistSlots([]); setWaitlistSessions([]); setPickedStart(""); setPickedTemplate(""); setJoiningWaitlist(false);
     setError(null);
@@ -150,8 +152,14 @@ export default function BrowserBookingPage() {
     if (doctorId) params.set("doctor_id", doctorId);
     if (selectedAddonIds.length > 0) params.set("addon_ids", selectedAddonIds.join(","));
     void api<{ slots?: Slot[]; sessions?: Session[]; waitlist_slots?: Slot[]; waitlist_sessions?: Session[] }>(`/api/booking/availability?${params.toString()}`)
-      .then((value) => { setSlots(value.slots ?? []); setSessions(value.sessions ?? []); setWaitlistSlots(value.waitlist_slots ?? []); setWaitlistSessions(value.waitlist_sessions ?? []); })
-      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : "查詢時段失敗"));
+      .then((value) => {
+        if (requestId !== availabilityRequestRef.current) return;
+        setSlots(value.slots ?? []); setSessions(value.sessions ?? []); setWaitlistSlots(value.waitlist_slots ?? []); setWaitlistSessions(value.waitlist_sessions ?? []);
+      })
+      .catch((loadError) => {
+        if (requestId !== availabilityRequestRef.current) return;
+        setError(loadError instanceof Error ? loadError.message : "查詢時段失敗");
+      });
   }, [config, doctorId, date, visitType, serviceId, providerRequired, selectedAddonIds]);
 
   async function submit() {
