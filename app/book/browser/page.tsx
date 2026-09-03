@@ -179,6 +179,12 @@ export default function BrowserBookingPage() {
     } finally { setLoading(false); }
   }
 
+  function updateIdentity(setter: (value: string) => void, value: string) {
+    // 修改姓名、電話或生日後，不能繼續沿用原本瀏覽器身分，避免畫面資料與實際預約顧客不一致。
+    if (token) setToken(null);
+    setter(value);
+  }
+
   async function payDeposit() {
     if (!result?.appointment_id || !token) return;
     setPaying(true);
@@ -215,9 +221,10 @@ export default function BrowserBookingPage() {
     <Shell>
       <div className="mb-4 flex items-center justify-between gap-3"><div><div className="eyebrow">一般瀏覽器入口</div><h1 className="text-2xl font-bold text-slate-900">瀏覽器預約</h1><p className="mt-1 text-sm text-slate-500">不使用 LINE 也可完成預約。</p></div><Link href={scopeUrl("/book")} className="text-sm text-brand-700">改用 LINE</Link></div>
       <div className="card space-y-5 p-5">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm"><span className="label">姓名</span><input className="input" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" /></label><label className="text-sm"><span className="label">電話</span><input className="input" value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" autoComplete="tel" /></label></div>
+        {token && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">目前沿用此裝置的預約身分；若修改姓名、電話或出生年月日，送出時會重新驗證新的身分。</p>}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm"><span className="label">姓名</span><input className="input" value={name} onChange={(event) => updateIdentity(setName, event.target.value)} autoComplete="name" /></label><label className="text-sm"><span className="label">電話</span><input className="input" value={phone} onChange={(event) => updateIdentity(setPhone, event.target.value)} inputMode="tel" autoComplete="tel" /></label></div>
         <label className="block text-sm"><span className="label">Email（選填，用於提醒）</span><input type="email" className="input" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" /></label>
-        <label className="block text-sm"><span className="label">出生年月日</span><input type="date" className="input" value={birthday} onChange={(event) => setBirthday(event.target.value)} /></label>
+        <label className="block text-sm"><span className="label">出生年月日</span><input type="date" className="input" value={birthday} onChange={(event) => updateIdentity(setBirthday, event.target.value)} /></label>
         <label className="block text-sm"><span className="label">套票序號（選填）</span><input className="input uppercase" value={membershipCode} onChange={(event) => setMembershipCode(event.target.value.toUpperCase())} autoComplete="off" /></label>
         <div><span className="label">預約類型</span><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setVisitType("return")} className={`rounded-xl border p-3 text-sm ${visitType === "return" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>再次服務</button><button type="button" onClick={() => setVisitType("first")} className={`rounded-xl border p-3 text-sm ${visitType === "first" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>首次服務</button></div></div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

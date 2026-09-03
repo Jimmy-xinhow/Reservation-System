@@ -35,7 +35,7 @@ export interface QueueAppt {
 }
 export interface QueueSession {
   key: string;
-  doctorId: string;
+  doctorId: string | null;
   doctorName: string;
   label: string;
   startAt: string;
@@ -50,7 +50,7 @@ export interface QueueSession {
 
 interface SessRow {
   id: string;
-  doctor_id: string;
+  doctor_id: string | null;
   start_time: string;
   end_time: string;
 }
@@ -132,7 +132,7 @@ export async function getQueueForDate(
   // 把每筆約診歸到一個門診段 key
   type Row = {
     id: string;
-    doctor_id: string;
+    doctor_id: string | null;
     template_id: string | null;
     start_at: string;
     queue_number: number | null;
@@ -145,7 +145,7 @@ export async function getQueueForDate(
   };
   const rows = (appts ?? []) as unknown as Row[];
 
-  const groups = new Map<string, { doctorId: string; doctorName: string; rows: Row[] }>();
+  const groups = new Map<string, { doctorId: string | null; doctorName: string; rows: Row[] }>();
   for (const r of rows) {
     let key: string;
     if (mode === "number") {

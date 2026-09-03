@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SubmitButton } from "@/components/SubmitButton";
 
 interface Doctor {
@@ -63,6 +63,7 @@ export default function BookingForm({
   doctors,
   services,
   appointments,
+  clinicSlug,
   defaultDate,
   createAction,
   rescheduleAction,
@@ -71,6 +72,7 @@ export default function BookingForm({
   doctors: Doctor[];
   services: Service[];
   appointments: ApptOption[];
+  clinicSlug?: string;
   defaultDate?: string;
   createAction: ServerAction;
   rescheduleAction: ServerAction;
@@ -94,6 +96,7 @@ export default function BookingForm({
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<PatientHit[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const availabilityRequest = useRef(0);
   const selectedService = services.find((service) => service.id === serviceId) ?? null;
   const providerRequired = !selectedService || selectedService.booking_target === "provider_required";
   const providerOptional = selectedService?.booking_target === "provider_optional";
@@ -155,6 +158,7 @@ export default function BookingForm({
   }
 
   const loadAvail = useCallback(async () => {
+    const request = ++availabilityRequest.current;
     setSlots([]);
     setSessions([]);
     setPicked("");
@@ -164,8 +168,10 @@ export default function BookingForm({
       const params = new URLSearchParams({ date, visit_type: visitType });
       if (doctorId) params.set("doctor_id", doctorId);
       if (serviceId) params.set("service_id", serviceId);
+      if (clinicSlug) params.set("clinic_slug", clinicSlug);
       const res = await fetch(`/api/booking/availability?${params.toString()}`);
       const json = await res.json();
+      if (request !== availabilityRequest.current) return;
       if (!json.ok) {
         setMsg(json.error);
         return;
@@ -173,9 +179,10 @@ export default function BookingForm({
       if (mode === "time") setSlots(json.data.slots ?? []);
       else setSessions(json.data.sessions ?? []);
     } catch {
+      if (request !== availabilityRequest.current) return;
       setMsg("查詢空檔失敗");
     }
-  }, [doctorId, date, mode, providerRequired, serviceId, services.length, visitType]);
+  }, [clinicSlug, doctorId, date, mode, providerRequired, serviceId, services.length, visitType]);
 
   useEffect(() => {
     loadAvail();

@@ -103,6 +103,7 @@ export async function advanceServingAction(fd: FormData) {
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
   const op = str(fd, "op");
+  if (!doctorId) throw new Error("此預約未指定服務提供者，無法使用叫號");
   // 各序列現有最大號(自動模式判斷是否還有現場可插)
   const maxOnline = intOr(fd, "max_online", 0);
   const maxOffline = intOr(fd, "max_offline", 0);
@@ -228,6 +229,7 @@ export async function setQueueAutoAction(fd: FormData) {
   const doctorId = str(fd, "doctor_id");
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
+  if (!doctorId) throw new Error("此預約未指定服務提供者，無法設定叫號規則");
   const { data: doctor, error: doctorError } = await supabase
     .from("doctors")
     .select("id")

@@ -85,6 +85,7 @@ export default async function QueuePage({
 
       <div className="space-y-4">
         {sessions.map((s) => {
+          const queueAvailable = Boolean(s.doctorId);
           const maxOnline = s.online.filter((a) => a.status !== "no_show").length
             ? Math.max(0, ...s.online.map((a) => a.seq))
             : 0;
@@ -94,7 +95,7 @@ export default async function QueuePage({
 
           const hidden = (
             <>
-              <input type="hidden" name="doctor_id" value={s.doctorId} />
+              <input type="hidden" name="doctor_id" value={s.doctorId ?? ""} />
               <input type="hidden" name="date" value={date} />
               <input type="hidden" name="session_key" value={s.key} />
               <input type="hidden" name="max_online" value={maxOnline} />
@@ -106,23 +107,24 @@ export default async function QueuePage({
             <section key={`${s.doctorId}-${s.key}`} className="card overflow-hidden">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
                 <div>
-                  <span className="font-semibold text-slate-900">{s.doctorName}</span>
+                  <span className="font-semibold text-slate-900">{s.doctorName || "未指定服務人員"}</span>
                   <span className="ml-2 text-sm text-slate-400">{s.label}</span>
                 </div>
                 {/* 自動穿插設定 */}
-                {canManageQueue && <form action={setQueueAutoAction} className="flex flex-wrap items-center gap-2 text-sm">
+                {canManageQueue && queueAvailable && <form action={setQueueAutoAction} className="flex flex-wrap items-center gap-2 text-sm">
                   {hidden}<span className="text-slate-500">每</span><input name="auto_every" type="number" min={0} defaultValue={s.autoEvery} className="input w-16 px-2 py-1" />
                   <span className="text-slate-500">位線上插 1 位現場</span><SubmitButton className="btn btn-ghost px-2 py-1 text-xs">儲存</SubmitButton>
                 </form>}
               </div>
 
               {/* 自動下一位(依規則) */}
-              {canManageQueue && <div className="border-b border-slate-100 px-5 py-3">
+              {canManageQueue && queueAvailable && <div className="border-b border-slate-100 px-5 py-3">
                 <form action={advanceServingAction} className="flex flex-wrap items-center gap-3">
                   {hidden}<input type="hidden" name="op" value="auto" /><SubmitButton className="btn btn-primary">自動下一位 →</SubmitButton>
                   <span className="text-xs text-slate-400">{s.autoEvery > 0 ? `自動:每 ${s.autoEvery} 位線上插 1 位現場` : "自動未開啟(等同叫線上)"}</span>
                 </form>
               </div>}
+              {!queueAvailable && <p className="border-b border-amber-100 bg-amber-50 px-5 py-3 text-sm text-amber-800">此預約未指定服務提供者，先完成指派後才能使用叫號；目前仍可在下方更新預約狀態。</p>}
 
               {/* 兩條序列 */}
               <div className="grid gap-0 sm:grid-cols-2">
@@ -135,7 +137,8 @@ export default async function QueuePage({
                   opNext="next_online"
                   opPrev="prev_online"
                   hidden={hidden}
-                  readOnly={!canManageQueue}
+                  readOnly={!canManageQueue || !queueAvailable}
+                  readOnlyMessage={queueAvailable ? undefined : "未指定服務提供者，無法使用叫號；可先回到預約列表完成指派。"}
                 />
                 <StreamPanel
                   title="現場(後台建立)"
@@ -146,12 +149,13 @@ export default async function QueuePage({
                   opNext="next_offline"
                   opPrev="prev_offline"
                   hidden={hidden}
-                  readOnly={!canManageQueue}
+                  readOnly={!canManageQueue || !queueAvailable}
+                  readOnlyMessage={queueAvailable ? undefined : "未指定服務提供者，無法使用叫號；可先回到預約列表完成指派。"}
                   bordered
                 />
               </div>
 
-              {canManageQueue && <div className="border-t border-slate-100 px-5 py-2">
+              {canManageQueue && queueAvailable && <div className="border-t border-slate-100 px-5 py-2">
                 <form action={advanceServingAction}>
                   {hidden}
                   <input type="hidden" name="op" value="reset" />
@@ -176,6 +180,7 @@ function StreamPanel({
   opPrev,
   hidden,
   readOnly,
+  readOnlyMessage,
   bordered,
 }: {
   title: string;
@@ -187,6 +192,7 @@ function StreamPanel({
   opPrev: string;
   hidden: React.ReactNode;
   readOnly: boolean;
+  readOnlyMessage?: string;
   bordered?: boolean;
 }) {
   const curAppt = appts.find((a) => a.seq === current);
@@ -213,7 +219,7 @@ function StreamPanel({
           {hidden}<input type="hidden" name="op" value={opPrev} /><SubmitButton className="btn btn-ghost px-3 text-sm">上一號</SubmitButton>
         </form>
       </div>}
-      {readOnly && <p className="mb-3 text-xs text-slate-400">服務提供者可標記完成／未到，叫號由櫃檯處理。</p>}
+      {readOnly && <p className="mb-3 text-xs text-slate-400">{readOnlyMessage ?? "服務提供者可標記完成／未到，叫號由櫃檯處理。"}</p>}
       <div className="space-y-1">
         {appts.length === 0 && <p className="text-xs text-slate-400">尚無</p>}
         {appts.map((a) => (

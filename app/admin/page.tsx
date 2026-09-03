@@ -102,7 +102,7 @@ export default async function TodayPage({
   let apptQuery = supabase
     .from("appointments")
     .select(
-      "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, doctors(name), patients(name, phone), services(name)",
+      "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, service_id, doctors(name), patients(name, phone), services(name)",
     )
     .eq("clinic_id", clinicId)
     .gte("start_at", dayStart)
@@ -116,7 +116,7 @@ export default async function TodayPage({
     );
   }
 
-  const [{ data: settings }, { data: doctors }, { data: appts }, { data: services }, { data: waitlistData }] = await Promise.all([
+  const [{ data: settings }, { data: doctors }, { data: appts }, { data: services }, { data: waitlistData }, { data: clinic }] = await Promise.all([
     settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
     (() => {
       let query = supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true);
@@ -134,6 +134,8 @@ export default async function TodayPage({
           .eq("requested_date", viewDate)
           .in("status", ["waiting", "offered"])
           .order("position"),
+    // 後台空檔查詢需要明確的品牌 slug；用 server-only client 讀取目前已驗證成員的品牌，避免受 RLS 讀取範圍影響而漏傳租戶識別。
+    createServiceClient().from("clinics").select("slug").eq("id", clinicId).maybeSingle(),
   ]);
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
@@ -219,6 +221,7 @@ export default async function TodayPage({
           doctors={doctors ?? []}
           services={services ?? []}
           appointments={rescheduleOptions}
+          clinicSlug={typeof clinic?.slug === "string" ? clinic.slug : undefined}
           defaultDate={viewDate}
           createAction={createAppointmentAction}
           rescheduleAction={rescheduleAppointmentAction}
