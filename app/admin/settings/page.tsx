@@ -411,6 +411,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <p className="mt-1 text-sm leading-6 text-slate-500">新增網域後，需要到網址服務商完成所有權驗證。DNS 是網址服務商的網域設定；TXT 是用來證明這個網址屬於品牌的驗證文字。</p>
           </div>
           {clinic?.slug && <div className="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm text-brand-900"><p className="font-medium">目前品牌短網址</p><code className="mt-1 block break-all text-xs">/book/browser?clinic_slug={clinic.slug}　／　/register/{clinic.slug}</code></div>}
+          {params.err && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm leading-6 text-red-700">{params.err}</p>}
           <form action={addClinicDomainAction} className="flex flex-col gap-2 sm:flex-row"><input name="hostname" className="input flex-1" placeholder="booking.example.com" required /><SubmitButton className="btn btn-secondary">新增網域</SubmitButton></form>
           {domains.length > 0 ? (
             <div className="space-y-2">{domains.map((domain) => (

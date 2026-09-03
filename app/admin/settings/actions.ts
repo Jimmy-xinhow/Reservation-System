@@ -60,7 +60,7 @@ export async function addClinicDomainAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const hostname = str(fd, "hostname").toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").trim();
   if (!hostname || !/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(hostname)) {
-    throw new Error("請填寫正確網域名稱");
+    redirect(`/admin/settings?section=domain&err=${encodeURIComponent("請填寫正確網域名稱，例如 booking.example.com")}`);
   }
   const verificationToken = `booking-domain-${randomBytes(12).toString("hex")}`;
   const { error } = await supabase.from("clinic_domains").insert({
