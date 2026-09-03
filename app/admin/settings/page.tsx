@@ -43,6 +43,7 @@ interface Settings {
   memberships_enabled: boolean;
   crm_automation_enabled: boolean;
   line_channel_enabled: boolean;
+  beauty_operations_enabled: boolean;
   brand_page_enabled: boolean;
   brand_page_template: BrandPageTemplate;
   brand_page_content: unknown;
@@ -86,7 +87,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   ] = await Promise.all([
     supabase
       .from("clinic_settings")
-      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url")
+      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     supabase
@@ -255,6 +256,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="crm_automation_enabled" defaultChecked={s.crm_automation_enabled} />
             啟用顧客回訪與自動提醒
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" name="beauty_operations_enabled" defaultChecked={s.beauty_operations_enabled} className="mt-1" />
+            <span><span className="block">啟用美業營運</span><span className="block text-xs leading-5 text-slate-500">包含療程紀錄、私密照片、耗材庫存與服務獎金試算；不是完整會計或 POS。</span></span>
           </label>
           <div className="w-full rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
             LINE 官方帳號入口：{s.line_channel_enabled ? "已啟用" : "未啟用"}。連線識別碼與檢查請到 <a href="/admin/line" className="font-medium text-brand-700 underline">LINE 官方帳號連線</a> 管理。

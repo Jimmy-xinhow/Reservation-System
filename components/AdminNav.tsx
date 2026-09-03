@@ -51,6 +51,7 @@ export interface AdminModuleVisibility {
   crm: boolean;
   line: boolean;
   legacy: boolean;
+  beauty: boolean;
 }
 
 const GROUPS: Group[] = [
@@ -71,6 +72,7 @@ const GROUPS: Group[] = [
     label: "活動與報名",
     items: [
       { href: "/admin/events", label: "活動與課程", icon: "event", module: "events" },
+      { href: "/admin/course-content", label: "課程教材", icon: "event", module: "events", adminOnly: true },
       { href: "/admin/registrations", label: "報名名單", icon: "list", module: "events" },
       { href: "/admin/checkin", label: "報名報到", icon: "checkin", module: "events" },
     ],
@@ -79,6 +81,7 @@ const GROUPS: Group[] = [
     label: "顧客與會員",
     items: [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
+      { href: "/admin/beauty", label: "美業營運", icon: "service", module: "beauty" },
       { href: "/admin/memberships", label: "會員與套票", icon: "membership", module: "memberships" },
       { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership", module: "memberships", adminOnly: true },
       { href: "/admin/crm", label: "顧客回訪與自動提醒", icon: "crm", module: "crm", adminOnly: true },
@@ -246,7 +249,7 @@ function NavItem({ item, pathname, unread, close }: { item: Item; pathname: stri
   );
 }
 
-export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platformAccessType = null, platformPermissions = [], hasBrandContext = true, modules = { events: true, memberships: true, crm: true, line: true, legacy: false } }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean; platformAccessType?: PlatformAccessType | null; platformPermissions?: SystemPermission[]; hasBrandContext?: boolean; modules?: AdminModuleVisibility }) {
+export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platformAccessType = null, platformPermissions = [], hasBrandContext = true, modules = { events: true, memberships: true, crm: true, line: true, legacy: false, beauty: false } }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean; platformAccessType?: PlatformAccessType | null; platformPermissions?: SystemPermission[]; hasBrandContext?: boolean; modules?: AdminModuleVisibility }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(chatUnread);

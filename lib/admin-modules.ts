@@ -2,13 +2,14 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type AdminModuleKey = "events" | "memberships" | "crm" | "line";
+export type AdminModuleKey = "events" | "memberships" | "crm" | "line" | "beauty";
 
 interface ModuleSettingsRow {
   events_enabled: boolean;
   memberships_enabled: boolean;
   crm_automation_enabled: boolean;
   line_channel_enabled: boolean;
+  beauty_operations_enabled: boolean;
 }
 
 export async function isAdminModuleEnabled(
@@ -18,7 +19,7 @@ export async function isAdminModuleEnabled(
 ): Promise<boolean> {
   const { data, error } = await supabase
     .from("clinic_settings")
-    .select("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled")
+    .select("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled")
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -27,5 +28,6 @@ export async function isAdminModuleEnabled(
   if (module === "events") return settings.events_enabled;
   if (module === "memberships") return settings.memberships_enabled;
   if (module === "crm") return settings.crm_automation_enabled;
+  if (module === "beauty") return settings.beauty_operations_enabled;
   return settings.line_channel_enabled;
 }

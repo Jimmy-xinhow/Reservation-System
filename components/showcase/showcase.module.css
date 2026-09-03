@@ -2,6 +2,92 @@
 .runtimeImage { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .runtimeLogo { display: block; width: auto; max-width: min(11rem, 42vw); height: auto; max-height: 2.5rem; object-fit: contain; }
 
+/* Shared live-brand continuation — keeps every concept useful beyond the hero. */
+.liveBrandDetails {
+  --live-bg: #f7f6f1;
+  --live-ink: #17252a;
+  --live-muted: #637176;
+  --live-accent: #276d78;
+  --live-line: color-mix(in srgb, var(--live-ink) 18%, transparent);
+  overflow-x: clip;
+  background: var(--live-bg);
+  color: var(--live-ink);
+  font-family: var(--font-showcase-noto-sans-tc), sans-serif;
+}
+.liveBrandDetails[data-template="beauty"] { --live-bg: #ebe8e1; --live-ink: #191918; --live-muted: #67655f; --live-accent: #a8422f; }
+.liveBrandDetails[data-template="fitness"] { --live-bg: #f4f1e9; --live-ink: #121212; --live-muted: #5f625c; --live-accent: #ee3325; }
+.liveBrandDetails[data-template="education"] { --live-bg: #f7f0dc; --live-ink: #221b52; --live-muted: #655f79; --live-accent: #4f28b8; }
+.liveBrandDetails[data-template="wellness"] { --live-bg: #f1eee5; --live-ink: #183a32; --live-muted: #526b65; --live-accent: #c85f3d; }
+.liveBrandDetails[data-template="event"] { --live-bg: #101010; --live-ink: #f5f2e9; --live-muted: #b9b3aa; --live-accent: #ff4e22; }
+.liveBrandDetails[data-template="venue"] { --live-bg: #e5e1d8; --live-ink: #181816; --live-muted: #65625d; --live-accent: #b94e2d; }
+.liveBrandDetails[data-template="consulting"] { --live-bg: #f1efe8; --live-ink: #16262d; --live-muted: #627176; --live-accent: #bc4f38; }
+.liveBrandDetails[data-template="pet-care"] { --live-bg: #f5efe5; --live-ink: #24352f; --live-muted: #66736f; --live-accent: #d46d4c; }
+.liveBrandEyebrow { font-size: .75rem; font-weight: 800; letter-spacing: .14em; color: var(--live-accent); }
+.liveBrandAbout,
+.liveBrandOffers,
+.liveBrandActions,
+.liveBrandFaq,
+.liveBrandDetails > footer { width: min(100%, 76rem); margin-inline: auto; padding: 4.5rem 1.25rem; }
+.liveBrandAbout { display: grid; gap: 2rem; border-bottom: 1px solid var(--live-line); }
+.liveBrandAbout h2,
+.liveBrandOffers h2,
+.liveBrandActions h2,
+.liveBrandFaq h2 { max-width: 18ch; margin-top: .8rem; font: 600 clamp(2rem, 7vw, 4rem)/1.2 var(--font-showcase-noto-serif-tc), serif; letter-spacing: .015em; text-wrap: balance; }
+.liveBrandAbout > div > p:not(.liveBrandEyebrow) { max-width: 42rem; margin-top: 1.25rem; font-size: 1rem; line-height: 1.85; color: var(--live-muted); }
+.liveBrandAbout ul { display: grid; gap: .65rem; margin-top: 1.75rem; }
+.liveBrandAbout li { display: flex; min-height: 2.75rem; align-items: center; gap: .65rem; border-bottom: 1px solid var(--live-line); font-size: .9375rem; font-weight: 700; }
+.liveBrandAbout li span { color: var(--live-accent); }
+.liveBrandAbout figure { position: relative; min-height: 24rem; overflow: hidden; }
+.liveBrandAbout figure img { object-position: center; }
+.liveBrandOffers { border-bottom: 1px solid var(--live-line); }
+.liveBrandOffers > div { display: grid; gap: .75rem; margin-top: 2.25rem; }
+.liveBrandOffers > div > a { display: grid; grid-template-columns: 2.25rem 1fr; gap: .35rem .75rem; min-height: 9rem; padding: 1.2rem; border: 1px solid var(--live-line); color: inherit; transition: transform .2s ease, border-color .2s ease; }
+.liveBrandOffers > div > a:hover { transform: translateY(-2px); border-color: var(--live-accent); }
+.liveBrandOffers a > span { grid-row: 1 / span 3; color: var(--live-accent); font-size: .75rem; font-weight: 800; }
+.liveBrandOffers strong { font-size: 1.15rem; line-height: 1.45; }
+.liveBrandOffers small { color: var(--live-muted); font-size: .875rem; line-height: 1.7; }
+.liveBrandOffers b { align-self: end; font-size: .8125rem; }
+.liveBrandActions { border-bottom: 1px solid var(--live-line); }
+.liveBrandActions nav { display: grid; gap: .75rem; margin-top: 2rem; }
+.liveBrandActions nav a { min-height: 6.5rem; display: flex; flex-direction: column; justify-content: center; padding: 1rem 1.15rem; border: 1px solid var(--live-line); color: inherit; }
+.liveBrandActions nav a:first-child { background: var(--live-ink); color: var(--live-bg); }
+.liveBrandActions nav strong { font-size: 1rem; }
+.liveBrandActions nav span { margin-top: .35rem; font-size: .8125rem; line-height: 1.5; color: var(--live-muted); }
+.liveBrandActions nav a:first-child span { color: color-mix(in srgb, var(--live-bg) 72%, transparent); }
+.liveBrandFaq { display: grid; gap: 2rem; border-bottom: 1px solid var(--live-line); }
+.liveBrandFaq details { border-top: 1px solid var(--live-line); }
+.liveBrandFaq details:last-child { border-bottom: 1px solid var(--live-line); }
+.liveBrandFaq summary { min-height: 4.5rem; display: flex; cursor: pointer; list-style: none; align-items: center; justify-content: space-between; gap: 1rem; font-size: 1rem; font-weight: 750; }
+.liveBrandFaq summary::-webkit-details-marker { display: none; }
+.liveBrandFaq summary span { color: var(--live-accent); font-size: 1.25rem; }
+.liveBrandFaq details p { padding: 0 2rem 1.35rem 0; color: var(--live-muted); font-size: .9375rem; line-height: 1.8; }
+.liveBrandDetails > footer { display: flex; flex-direction: column; gap: 1.5rem; }
+.liveBrandDetails > footer > div { display: flex; flex-direction: column; gap: .5rem; }
+.liveBrandDetails > footer strong { font-size: 1.15rem; }
+.liveBrandDetails > footer span { color: var(--live-muted); font-size: .875rem; line-height: 1.6; }
+.liveBrandDetails > footer nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
+.liveBrandDetails > footer a { min-height: 2.75rem; display: inline-flex; align-items: center; color: inherit; font-size: .875rem; font-weight: 700; border-bottom: 1px solid var(--live-line); }
+
+@media (min-width: 48rem) {
+  .liveBrandAbout,
+  .liveBrandFaq { grid-template-columns: 1.05fr .95fr; align-items: center; gap: 4rem; padding-block: 6rem; }
+  .liveBrandOffers,
+  .liveBrandActions { padding-block: 5.5rem; }
+  .liveBrandOffers > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .liveBrandActions { display: grid; grid-template-columns: .8fr 1.2fr; gap: 3rem; align-items: start; }
+  .liveBrandActions nav { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+  .liveBrandDetails > footer { flex-direction: row; align-items: end; justify-content: space-between; padding-block: 2.5rem; }
+}
+
+@media (min-width: 64rem) {
+  .liveBrandAbout,
+  .liveBrandOffers,
+  .liveBrandActions,
+  .liveBrandFaq,
+  .liveBrandDetails > footer { padding-inline: 2rem; }
+  .liveBrandOffers > div { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 .indexPage,
 .beauty,
 .wellness,

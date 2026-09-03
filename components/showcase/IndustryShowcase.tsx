@@ -29,10 +29,25 @@ function LiveReviewBar({ slug, brand }: { slug: ShowcaseSlug; brand?: PublicBran
   return brand ? null : <ReviewBar slug={slug} />;
 }
 
-function eventHref(brand: PublicBrandPageData | undefined, eventId: string): string {
+function eventHref(brand: PublicBrandPageData | undefined, eventSlug: string): string {
   if (!brand?.links.registration) return brand?.links.primary ?? "#";
-  const separator = brand.links.registration.includes("?") ? "&" : "?";
-  return `${brand.links.registration}${separator}event=${encodeURIComponent(eventId)}`;
+  const query = brand.links.registration.split("?")[1];
+  return `/register/event/${encodeURIComponent(eventSlug)}${query ? `?${query}` : ""}`;
+}
+
+function eventMeta(event: PublicBrandPageData["events"][number]): string {
+  if (!event.nextSessionAt) return event.description ?? "查看場次、票種、名額與報名資訊";
+  const when = new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    month: "numeric",
+    day: "numeric",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(event.nextSessionAt));
+  const capacity = event.nextSessionCapacity ? ` · 容量 ${event.nextSessionCapacity} 人` : "";
+  return `${event.nextSessionName ?? "近期場次"} · ${when}${capacity}`;
 }
 
 function serviceRows(brand: PublicBrandPageData | undefined, fallback: string[][]): string[][] {
@@ -73,7 +88,7 @@ function BeautyShowcase({ brand }: LiveProps) {
     <div className={styles.beauty} data-live-brand={brand ? "true" : undefined}>
       <LiveReviewBar slug="beauty" brand={brand} />
       <header className={styles.beautyNav}>
-        {brand ? <a href={brand.links.records}>My records</a> : <button type="button" aria-label="開啟選單">Menu</button>}
+        {brand ? <a href={brand.links.records}>我的紀錄</a> : <button type="button" aria-label="開啟選單">Menu</button>}
         <Link href="#beauty-top" className={styles.beautyLogo}><BrandWordmark brand={brand}>LUNE<span>HAIR ATELIER</span></BrandWordmark></Link>
         <a href={brand?.links.primary ?? "#beauty-book"}>{content?.primary_cta_label ?? "Book an appointment"}</a>
       </header>
@@ -175,14 +190,14 @@ function WellnessShowcase({ brand }: LiveProps) {
 function FitnessShowcase({ brand }: LiveProps) {
   const content = brand?.content;
   const scheduleRows = brand?.services.length
-    ? brand.services.slice(0, 3).map((service, index) => [String(index + 1).padStart(2, "0"), service.name.toUpperCase(), service.description ?? "公開服務", "查看時段"])
+    ? brand.services.slice(0, 3).map((service, index) => [String(index + 1).padStart(2, "0"), service.name, service.description ?? "公開服務", "查看時段"])
     : [["07:00", "FULL BODY", "NICO", "4 spots"], ["12:20", "CORE + LOWER", "MIA", "Waitlist"], ["18:40", "RUN × LIFT", "JAY", "7 spots"]];
   return (
     <div className={styles.fitness} data-live-brand={brand ? "true" : undefined}>
       <LiveReviewBar slug="fitness" brand={brand} />
       <header className={styles.fitnessNav}>
         <Link href="#fitness-top" className={styles.fitnessLogo}><BrandWordmark brand={brand}>RED<br />LINE</BrandWordmark></Link>
-        <nav>{brand ? <><a href="#brand-page-content">SERVICES</a><a href={brand.links.records}>MY RECORDS</a></> : <><a href="#workout">The workout</a><a href="#schedule">Schedule</a><a href="#coaches">Coaches</a></>}</nav>
+        <nav>{brand ? <><a href="#brand-page-content">服務內容</a>{brand.links.registration && <a href={brand.links.registration}>團體課程</a>}<a href={brand.links.records}>我的紀錄</a></> : <><a href="#workout">The workout</a><a href="#schedule">Schedule</a><a href="#coaches">Coaches</a></>}</nav>
         <a href={brand?.links.primary ?? "#schedule"}>{content?.primary_cta_label ?? "Book your first class"}</a>
       </header>
       <main id="fitness-top">
@@ -192,23 +207,23 @@ function FitnessShowcase({ brand }: LiveProps) {
           <div className={styles.fitnessHeroCopy}>
             <p>{content?.hero_eyebrow ?? "45 MINUTES · COACH LED · YOUR PACE"}</p>
             <h1>{brand ? <>{content?.hero_title}<br /><span>{content?.hero_highlight}</span></> : <>MOVE<br /><span>PAST</span><br />AVERAGE.</>}</h1>
-            <div><a href={brand?.links.primary ?? "#schedule"}>{content?.primary_cta_label ?? "預約第一堂課"}</a><span>SCROLL TO EXPLORE ↓</span></div>
+            <div><a href={brand?.links.primary ?? "#schedule"}>{content?.primary_cta_label ?? "預約第一堂課"}</a><span>{brand ? "向下查看完整內容 ↓" : "SCROLL TO EXPLORE ↓"}</span></div>
           </div>
           <p className={styles.fitnessSideType}>{brand?.name ?? "TAIPEI’S HIGH-ENERGY TRAINING CLUB"}</p>
         </section>
-        <div className={styles.fitnessTicker}>{brand ? <><span>BOOK ONLINE</span><span>REAL-TIME AVAILABILITY</span><span>YOUR PACE</span></> : <><span>RUN × LIFT</span><span>STRENGTH × CONTROL</span><span>MUSIC × COMMUNITY</span></>}</div>
+        <div className={styles.fitnessTicker}>{brand ? <><span>線上預約</span><span>即時名額</span><span>依自己的節奏開始</span></> : <><span>RUN × LIFT</span><span>STRENGTH × CONTROL</span><span>MUSIC × COMMUNITY</span></>}</div>
         <section className={styles.fitnessWorkout} id={brand ? "brand-page-content" : "workout"}>
           <div className={styles.fitnessStatement}>
-            <p>THE FORMAT / 01</p>
+            <p>{brand ? "課程方式 / 01" : "THE FORMAT / 01"}</p>
             <h2>{brand ? <span>{content?.section_title}</span> : <><span>一半心肺。</span><span>一半力量。</span><i>全部由你決定。</i></>}</h2>
             <p>{content?.section_description ?? "教練掌握節奏，你掌握強度。第一次來也能清楚跟上，不需要先成為厲害的人。"}</p>
           </div>
           <figure><ShowcaseImage src={content?.detail_image_url ?? "/showcase/fitness-detail.jpg"} alt={`${brand?.name ?? "REDLINE"} 服務場地`} sizes="(max-width: 768px) 100vw, 48vw" /><figcaption>{brand?.address ?? "THE FLOOR / DAAN STUDIO"}</figcaption></figure>
         </section>
         <section className={styles.fitnessSchedule} id="schedule">
-          <header><span>{brand ? "AVAILABLE SERVICES" : "TODAY · AUG 15"}</span><h2>{brand ? "Pick your service." : "Pick your room."}</h2><a href={brand?.links.primary ?? "#"}>{brand ? content?.primary_cta_label : "完整課表"} ↗</a></header>
+          <header><span>{brand ? "可預約服務" : "TODAY · AUG 15"}</span><h2>{brand ? "選擇適合你的服務。" : "Pick your room."}</h2><a href={brand?.links.booking ?? brand?.links.primary ?? "#"}>{brand ? "查看私人課時段" : "完整課表"} ↗</a></header>
           {scheduleRows.map((row) => (
-            <a href={brand?.links.primary ?? "#"} key={`${row[0]}-${row[1]}`}><strong>{row[0]}</strong><span>{row[1]}</span><span>{row[2]}</span><i>{row[3]}</i><b>BOOK →</b></a>
+            <a href={brand?.links.booking ?? brand?.links.primary ?? "#"} key={`${row[0]}-${row[1]}`}><strong>{row[0]}</strong><span>{row[1]}</span><span>{row[2]}</span><i>{row[3]}</i><b>{brand ? "查看時段 →" : "BOOK →"}</b></a>
           ))}
         </section>
       </main>
@@ -220,7 +235,7 @@ function EducationShowcase({ brand }: LiveProps) {
   const content = brand?.content;
   const liveTracks = brand
     ? (brand.events.length > 0
-      ? brand.events.slice(0, 2).map((event, index) => ({ number: String(index + 1).padStart(2, "0"), title: event.title, meta: event.description ?? "查看場次、名額與報名資訊", href: eventHref(brand, event.id) }))
+      ? brand.events.slice(0, 2).map((event, index) => ({ number: String(index + 1).padStart(2, "0"), title: event.title, meta: eventMeta(event), href: eventHref(brand, event.slug) }))
       : brand.services.slice(0, 2).map((service, index) => ({ number: String(index + 1).padStart(2, "0"), title: service.name, meta: service.description ?? "查看內容與可預約時段", href: brand.links.primary })))
     : [];
   const tracks = liveTracks.length > 0 ? liveTracks : [
@@ -257,7 +272,7 @@ function EducationShowcase({ brand }: LiveProps) {
           </form>}
         </section>
         <section className={styles.educationExplore} id={brand ? "brand-page-content" : "explore"}>
-          <header><p>{brand ? "OPEN FOR REGISTRATION" : "THIS WEEK AT OPENROOM"}</p><h2>{content?.section_title ?? "這週，可以從這裡開始。"}</h2></header>
+          <header><p>{brand ? "目前開放報名" : "THIS WEEK AT OPENROOM"}</p><h2>{content?.section_title ?? "這週，可以從這裡開始。"}</h2></header>
           <div className={styles.educationTracks}>
             <a href={tracks[0].href}><span>{tracks[0].number}</span><strong>{tracks[0].title}</strong><small>{tracks[0].meta}</small><b>查看課程 ↗</b></a>
             <figure><ShowcaseImage src={content?.detail_image_url ?? "/showcase/education-detail.jpg"} alt={`${brand?.name ?? "OPENROOM"} 課程內容`} sizes="(max-width: 768px) 100vw, 36vw" /></figure>
@@ -400,7 +415,7 @@ function EventShowcase({ brand }: LiveProps) {
       <header className={styles.eventNav}>
         <Link href="#event-top"><BrandWordmark brand={brand}>NOCTURNE<span>TAIPEI</span></BrandWordmark></Link>
         <nav>{brand ? <><a href="#brand-page-content">Events</a><a href={brand.links.records}>My tickets</a><a href={brand.links.line ?? brand.links.primary}>Contact</a></> : <><a href="#lineup">Lineup</a><a href="#agenda">Agenda</a><a href="#venue">Venue</a></>}</nav>
-        <a href={featuredEvent ? eventHref(brand, featuredEvent.id) : brand?.links.primary ?? "#tickets"}>{content?.primary_cta_label ?? "Get tickets"} ↗</a>
+        <a href={featuredEvent ? eventHref(brand, featuredEvent.slug) : brand?.links.primary ?? "#tickets"}>{content?.primary_cta_label ?? "Get tickets"} ↗</a>
       </header>
       <main id="event-top">
         <section className={styles.eventHero}>
@@ -410,7 +425,7 @@ function EventShowcase({ brand }: LiveProps) {
           <h1>{brand?.name ?? "NOCTURNE"}</h1>
           <p className={styles.eventEdition}>{content?.hero_eyebrow ?? <>A TWO-NIGHT CONVERGENCE OF<br />MUSIC, LIGHT & DIGITAL CULTURE</>}</p>
           <div className={styles.eventLocation}><span>{brand?.slug?.toUpperCase() ?? "TAIPEI"}</span><span>{brand?.address ?? "SONGSHAN CULTURAL PARK"}</span></div>
-          <a className={styles.eventHeroCta} href={featuredEvent ? eventHref(brand, featuredEvent.id) : brand?.links.primary ?? "#tickets"}>{content?.primary_cta_label ?? "搶先購票"}　↗</a>
+          <a className={styles.eventHeroCta} href={featuredEvent ? eventHref(brand, featuredEvent.slug) : brand?.links.primary ?? "#tickets"}>{content?.primary_cta_label ?? "搶先購票"}　↗</a>
         </section>
         <section className={styles.eventInfo} id={brand ? "brand-page-content" : "tickets"}>
           <div className={styles.eventManifesto}>
@@ -423,7 +438,7 @@ function EventShowcase({ brand }: LiveProps) {
             <h3>{featuredEvent?.title ?? "2-Day Pass"}</h3>
             <strong>{brand ? `${brand.events.length} EVENTS` : "NT$ 2,680"}</strong>
             <dl>{brand ? <><div><dt>狀態</dt><dd>開放報名</dd></div><div><dt>入口</dt><dd>線上完成</dd></div><div><dt>紀錄</dt><dd>隨時查詢</dd></div></> : <><div><dt>日期</dt><dd>9/19–9/20</dd></div><div><dt>入場</dt><dd>16:00</dd></div><div><dt>票量</dt><dd>剩餘 18%</dd></div></>}</dl>
-            <a href={featuredEvent ? eventHref(brand, featuredEvent.id) : brand?.links.primary ?? "#"}>{content?.primary_cta_label ?? "選擇票種"} →</a>
+            <a href={featuredEvent ? eventHref(brand, featuredEvent.slug) : brand?.links.primary ?? "#"}>{content?.primary_cta_label ?? "選擇票種"} →</a>
             <small>{brand ? "實際場次 · 票種 · 名額 · 付款狀態" : "安全付款 · 電子票券 · 活動前可轉讓一次"}</small>
           </aside>
         </section>
@@ -435,15 +450,77 @@ function EventShowcase({ brand }: LiveProps) {
   );
 }
 
+function LiveBrandDetails({ brand }: { brand: PublicBrandPageData }) {
+  const showEventCards = brand.events.length > 0 && !["education", "event"].includes(brand.template);
+  const showServiceCards = brand.services.length > 0 && ["education", "event"].includes(brand.template);
+  return (
+    <section className={styles.liveBrandDetails} data-template={brand.template} aria-label="品牌完整資訊">
+      <div className={styles.liveBrandAbout}>
+        <div>
+          <p className={styles.liveBrandEyebrow}>關於品牌</p>
+          <h2>{brand.content.about_title}</h2>
+          <p>{brand.content.about_description}</p>
+          <ul>
+            {[brand.content.trust_point_1, brand.content.trust_point_2, brand.content.trust_point_3].map((point) => <li key={point}><span>✓</span>{point}</li>)}
+          </ul>
+        </div>
+        <figure>
+          <ShowcaseImage src={brand.content.gallery_image_url} alt={`${brand.name} 品牌服務情境`} sizes="(max-width: 768px) 100vw, 44vw" />
+        </figure>
+      </div>
+
+      {(showEventCards || showServiceCards) && (
+        <div className={styles.liveBrandOffers}>
+          <header>
+            <p className={styles.liveBrandEyebrow}>{showEventCards ? "團體課程與活動" : "也可以預約服務"}</p>
+            <h2>{showEventCards ? "選擇場次，查看名額並完成報名。" : "需要個別協助時，也能直接查看可約時段。"}</h2>
+          </header>
+          <div>
+            {showEventCards && brand.events.slice(0, 6).map((event, index) => <a key={event.id} href={eventHref(brand, event.slug)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{event.title}</strong><small>{eventMeta(event)}</small><b>查看場次 →</b></a>)}
+            {showServiceCards && brand.services.slice(0, 4).map((service, index) => <a key={service.id} href={brand.links.booking ?? brand.links.primary}><span>{String(index + 1).padStart(2, "0")}</span><strong>{service.name}</strong><small>{service.description ?? "查看服務內容與可預約時段"}</small><b>查看時段 →</b></a>)}
+          </div>
+        </div>
+      )}
+
+      <div className={styles.liveBrandActions}>
+        <div><p className={styles.liveBrandEyebrow}>立即開始</p><h2>依照你的目的，直接前往下一步。</h2></div>
+        <nav aria-label="品牌服務入口">
+          {brand.links.booking && <a href={brand.links.booking}><strong>預約服務</strong><span>私人服務與一對一時段</span></a>}
+          {brand.links.registration && <a href={brand.links.registration}><strong>活動／課程報名</strong><span>查看場次、票種與剩餘名額</span></a>}
+          {brand.links.membership && <a href={brand.links.membership}><strong>會員與套票</strong><span>查詢方案、堂數與使用紀錄</span></a>}
+          {brand.links.learning && <a href={brand.links.learning}><strong>學員專區</strong><span>查看已開放教材與學習進度</span></a>}
+          <a href={brand.links.records}><strong>我的紀錄</strong><span>預約、報名、付款與票券</span></a>
+        </nav>
+      </div>
+
+      <div className={styles.liveBrandFaq}>
+        <header><p className={styles.liveBrandEyebrow}>常見問題</p><h2>預約或報名前，先看這裡。</h2></header>
+        <div>
+          <details open><summary>{brand.content.faq_1_question}<span>＋</span></summary><p>{brand.content.faq_1_answer}</p></details>
+          <details><summary>{brand.content.faq_2_question}<span>＋</span></summary><p>{brand.content.faq_2_answer}</p></details>
+        </div>
+      </div>
+
+      <footer>
+        <div><strong>{brand.name}</strong><span>{brand.address ?? "詳細地點請聯絡品牌確認"}</span></div>
+        <nav>{brand.phone && <a href={`tel:${brand.phone}`}>電話聯絡</a>}{brand.links.line && <a href={brand.links.line}>加入 LINE</a>}<a href="#">回到頁首 ↑</a></nav>
+      </footer>
+    </section>
+  );
+}
+
 export function IndustryShowcase({ slug, brand }: { slug: ShowcaseSlug; brand?: PublicBrandPageData }) {
-  switch (slug) {
-    case "beauty": return <BeautyShowcase brand={brand} />;
-    case "wellness": return <WellnessShowcase brand={brand} />;
-    case "fitness": return <FitnessShowcase brand={brand} />;
-    case "education": return <EducationShowcase brand={brand} />;
-    case "consulting": return <ConsultingShowcase brand={brand} />;
-    case "pet-care": return <PetCareShowcase brand={brand} />;
-    case "venue": return <VenueShowcase brand={brand} />;
-    case "event": return <EventShowcase brand={brand} />;
-  }
+  const page = (() => {
+    switch (slug) {
+      case "beauty": return <BeautyShowcase brand={brand} />;
+      case "wellness": return <WellnessShowcase brand={brand} />;
+      case "fitness": return <FitnessShowcase brand={brand} />;
+      case "education": return <EducationShowcase brand={brand} />;
+      case "consulting": return <ConsultingShowcase brand={brand} />;
+      case "pet-care": return <PetCareShowcase brand={brand} />;
+      case "venue": return <VenueShowcase brand={brand} />;
+      case "event": return <EventShowcase brand={brand} />;
+    }
+  })();
+  return <>{page}{brand && <LiveBrandDetails brand={brand} />}</>;
 }

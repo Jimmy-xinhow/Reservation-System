@@ -57,13 +57,25 @@ function activeEvents(rows: Array<Record<string, unknown>>): BrandPageEvent[] {
       return (opensAt === null || opensAt <= now) && (closesAt === null || closesAt > now);
     })
     .slice(0, 3)
-    .map((row) => ({
+    .map((row) => {
+      const sessions = Array.isArray(row.event_sessions)
+        ? row.event_sessions.filter((session): session is Record<string, unknown> => Boolean(session) && typeof session === "object")
+        : [];
+      const nextSession = sessions
+        .filter((session) => session.active === true && typeof session.start_at === "string" && Date.parse(session.start_at) > now)
+        .sort((a, b) => Date.parse(String(a.start_at)) - Date.parse(String(b.start_at)))[0] ?? null;
+      return {
       id: String(row.id),
+      slug: String(row.slug),
       title: String(row.title),
       description: typeof row.description === "string" ? row.description : null,
       coverUrl: typeof row.cover_url === "string" ? row.cover_url : null,
       registrationCloseAt: typeof row.registration_close_at === "string" ? row.registration_close_at : null,
-    }));
+      nextSessionName: nextSession && typeof nextSession.name === "string" ? nextSession.name : null,
+      nextSessionAt: nextSession && typeof nextSession.start_at === "string" ? nextSession.start_at : null,
+      nextSessionCapacity: nextSession && typeof nextSession.capacity === "number" ? nextSession.capacity : null,
+    };
+    });
 }
 
 export async function loadPublicBrandPage(supabase: SupabaseClient, clinicId: string): Promise<PublicBrandPageData | null> {
@@ -82,7 +94,7 @@ export async function loadPublicBrandPage(supabase: SupabaseClient, clinicId: st
       ? supabase.from("services").select("id, name, description").eq("clinic_id", clinicId).eq("active", true).order("created_at").limit(4)
       : Promise.resolve({ data: [], error: null }),
     settings.events_enabled && settings.public_registration_enabled
-      ? supabase.from("events").select("id, title, description, cover_url, registration_open_at, registration_close_at").eq("clinic_id", clinicId).eq("status", "published").eq("access_mode", "public").order("registration_open_at", { ascending: true, nullsFirst: false }).limit(12)
+      ? supabase.from("events").select("id, slug, title, description, cover_url, registration_open_at, registration_close_at, event_sessions(name, start_at, capacity, active)").eq("clinic_id", clinicId).eq("status", "published").eq("access_mode", "public").order("registration_open_at", { ascending: true, nullsFirst: false }).limit(12)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (servicesResult.error || eventsResult.error) return null;
@@ -93,11 +105,15 @@ export async function loadPublicBrandPage(supabase: SupabaseClient, clinicId: st
     description: typeof row.description === "string" ? row.description : null,
   }));
   const events = activeEvents((eventsResult.data ?? []) as Array<Record<string, unknown>>);
+  const content = normalizeBrandPageContent(settings.brand_page_content, settings.brand_page_template);
   const booking = settings.public_booking_enabled ? scopedPath("/book/browser", clinic, clinicId) : null;
   const registration = settings.events_enabled && settings.public_registration_enabled ? scopedPath("/register", clinic, clinicId) : null;
   const membership = settings.memberships_enabled ? scopedPath("/membership", clinic, clinicId) : null;
   const records = scopedPath("/my", clinic, clinicId);
-  const preferred = brandPagePreferredEntry(settings.brand_page_template);
+  const learning = settings.brand_page_template === "education" && settings.events_enabled
+    ? scopedPath("/learn", clinic, clinicId)
+    : null;
+  const preferred = brandPagePreferredEntry(content, settings.brand_page_template);
   const primary = preferred === "registration"
     ? registration ?? booking ?? lineUrl(clinic.line_basic_id) ?? phoneUrl(clinic.phone) ?? records
     : booking ?? registration ?? lineUrl(clinic.line_basic_id) ?? phoneUrl(clinic.phone) ?? records;
@@ -106,6 +122,7 @@ export async function loadPublicBrandPage(supabase: SupabaseClient, clinicId: st
     registration,
     membership,
     records,
+    learning,
     line: lineUrl(clinic.line_basic_id),
     phone: phoneUrl(clinic.phone),
     primary,
@@ -120,7 +137,7 @@ export async function loadPublicBrandPage(supabase: SupabaseClient, clinicId: st
     phone: clinic.phone,
     address: clinic.address,
     intro: clinic.intro,
-    content: normalizeBrandPageContent(settings.brand_page_content, settings.brand_page_template),
+    content,
     services,
     events,
     links,

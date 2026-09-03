@@ -52,7 +52,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: moduleSettings, error: moduleSettingsError } = await member.supabase
     .from("clinic_settings")
-    .select("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, legacy_progress_enabled")
+    .select("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, legacy_progress_enabled, beauty_operations_enabled")
     .eq("clinic_id", member.clinicId)
     .maybeSingle();
   if (moduleSettingsError) throw new Error(moduleSettingsError.message);
@@ -62,6 +62,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     crm: moduleSettings?.crm_automation_enabled === true,
     line: moduleSettings?.line_channel_enabled === true,
     legacy: moduleSettings?.legacy_progress_enabled === true,
+    beauty: moduleSettings?.beauty_operations_enabled === true,
   };
 
   return (

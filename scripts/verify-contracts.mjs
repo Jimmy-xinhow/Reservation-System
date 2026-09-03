@@ -12,7 +12,7 @@ function exists(relativePath) {
   return fs.existsSync(path.join(root, relativePath));
 }
 
-const schema = read("supabase/schema.sql");
+const schema = read("supabase/schema.sql").replace(/\r\n/g, "\n");
 const migrationRegistration = read("supabase/migration_registration_payments.sql");
 const migrationHardening = read("supabase/migration_v3_hardening.sql");
 const migrationBenefits = read("supabase/migration_memberships_coupons.sql");
@@ -47,6 +47,8 @@ const migrationAddonAvailability = read("supabase/migrations/202608130008_addon_
 const migrationRecurringLintFix = read("supabase/migrations/202608130009_recurring_booking_lint_fix.sql");
 const migrationApiRateLimits = read("supabase/migrations/202609020001_api_rate_limits.sql");
 const migrationPlatformReportAggregation = read("supabase/migrations/202609020002_platform_report_aggregation.sql");
+const migrationCourseLearning = read("supabase/migrations/202609030002_course_learning_center.sql");
+const migrationBeautyOperations = read("supabase/migrations/202609030003_beauty_operations.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 const projectReadme = read("README.md");
@@ -70,6 +72,8 @@ const checks = [
   ["public tenant resolver is present", ["lib/public-brand.ts|resolvePublicClinicId"]],
   ["public and fallback routes exist", ["app/register/page.tsx", "app/book/browser/page.tsx", "app/book/browser/my/page.tsx", "app/book/browser/reschedule/page.tsx", "app/book/reschedule/page.tsx", "app/api/booking/browser/start/route.ts", "app/api/booking/browser/my/route.ts", "app/api/booking/reschedule/route.ts", "app/embed/book/page.tsx", "app/embed/register/page.tsx"]],
   ["admin SaaS modules exist", ["app/admin/crm/page.tsx", "app/admin/reports/page.tsx", "app/admin/registrations/page.tsx", "app/admin/checkin/page.tsx", "app/admin/calendar/page.tsx", "app/api/registration/checkin-search/route.ts"]],
+  ["course learning center is registration-gated and server mediated", ["supabase/migrations/202609030002_course_learning_center.sql|create table if not exists public.course_units", "supabase/migrations/202609030002_course_learning_center.sql|create table if not exists public.course_unit_progress", "app/api/customer/learning/route.ts|verifyBrowserBookingToken", "app/api/customer/learning/route.ts|尚未符合這個教材的開放條件", "app/admin/course-content/page.tsx", "app/learn/page.tsx"]],
+  ["beauty operations are optional and privacy bounded", ["supabase/migrations/202609030003_beauty_operations.sql|beauty_operations_enabled", "supabase/migrations/202609030003_beauty_operations.sql|record_inventory_movement", "app/api/admin/beauty-photo/route.ts|public: false", "app/admin/beauty/page.tsx|不是薪資、稅務或會計結算", "app/admin/settings/page.tsx|不是完整會計或 POS"]],
   ["shared login exposes accessible brand and system destinations without granting roles client-side", ["app/admin/login/page.tsx|品牌營運後台", "app/admin/login/page.tsx|系統管理後台", "app/admin/login/page.tsx|實際權限仍由帳號角色在伺服器端判定", "app/admin/login/page.tsx|htmlFor=\"admin-email\"", "app/admin/login/page.tsx|htmlFor=\"admin-password\"", "app/admin/login/page.tsx|/admin/platform", "lib/platform.ts|platform_admins"]],
   ["system administration layer exists and is server-guarded", ["supabase/migration_saas_platform.sql|create table if not exists public.platform_admins", "supabase/migration_saas_platform.sql|create table if not exists public.brand_entitlements", "lib/platform.ts|requirePlatformAdmin", "lib/platform.ts|requireSystemAdmin", "lib/platform.ts|requireSystemPermission", "app/admin/platform/page.tsx", "app/admin/platform/admins/page.tsx", "app/admin/platform/admins/actions.ts", "app/admin/platform/operations/page.tsx", "app/admin/platform/reports/page.tsx", "app/admin/platform/audit/page.tsx", "app/admin/platform/settings/page.tsx", "app/admin/platform/actions.ts", "app/admin/page.tsx|redirect(\"/admin/platform\")", "app/admin/layout.tsx|XINHOW PLATFORM", "components/AdminNav.tsx|系統管理總控台"]],
   ["two management identities and employee permissions are explicit", ["lib/platform-roles.ts|PlatformAccessType = \"system_admin\" | \"employee\"", "lib/platform-roles.ts|SYSTEM_PERMISSION_DEFINITIONS", "lib/access-control.ts|BrandAccessType = \"brand_admin\" | \"employee\"", "lib/access-control.ts|BRAND_PERMISSION_DEFINITIONS", "supabase/migrations/202608110008_two_level_admin_permissions.sql|access_type", "supabase/migrations/202608110008_two_level_admin_permissions.sql|permissions text[]", "app/admin/platform/admins/actions.ts|requireSystemAdmin", "app/admin/users/actions.ts|requireBrandAdmin", "app/admin/layout.tsx|hasDualAdminContext", "app/admin/layout.tsx|<a href=\"/admin/dashboard\"", "app/admin/layout.tsx|<a href=\"/admin/platform\""]],
@@ -496,8 +500,8 @@ invariant(
   !rootLayout.includes("fonts.googleapis.com") && !rootLayout.includes("fonts.gstatic.com"),
 );
 invariant(
-  "new brand onboarding exposes seven readiness steps and blocking reasons",
-  ["1. 品牌資料", "2. 服務／活動", "3. 人員／資源／排班", "4. 預約與報名規則", "5. LINE 官方帳號入口", "6. 通知與付款", "7. 上線前測試"].every((label) =>
+  "new brand onboarding exposes eight readiness steps and blocking reasons",
+  ["1. 品牌資料", "2. 品牌形象頁", "3. 服務／活動", "4. 人員／資源／排班", "5. 預約與報名規則", "6. LINE 官方帳號入口", "7. 通知與付款", "8. 上線前測試"].every((label) =>
     adminDashboard.includes(label),
   ) && adminDashboard.includes('type SetupStatus = "done" | "warning" | "blocked"') &&
     adminDashboard.includes("下一步：") &&
@@ -1634,6 +1638,22 @@ invariant(
     read("lib/richmenu.ts").includes("width: 2500, height: 843") &&
     read("app/admin/richmenu/PublishForm.tsx").includes("套用內建圖稿") &&
     read("app/admin/richmenu/PublishForm.tsx").includes("下載 PNG"),
+);
+invariant(
+  "course learning tables and tenant policies are synchronized",
+  schema.includes("create table if not exists course_units") &&
+    schema.includes("create table if not exists course_unit_progress") &&
+    migrationCourseLearning.includes("alter table public.course_units enable row level security") &&
+    migrationCourseLearning.includes("revoke all on table public.course_units from public, anon"),
+);
+invariant(
+  "beauty inventory movements are atomic and private photos are never public",
+  schema.includes("create or replace function public.record_inventory_movement") &&
+    schema.includes("for update") &&
+    migrationBeautyOperations.includes("beauty_operations_enabled") &&
+    migrationBeautyOperations.includes("grant execute on function public.record_inventory_movement") &&
+    read("app/api/admin/beauty-photo/route.ts").includes("public: false") &&
+    !read("app/api/admin/beauty-photo/route.ts").includes("getPublicUrl"),
 );
 invariant(
   "appointment and waitlist LINE status notifications use task-focused Flex cards",

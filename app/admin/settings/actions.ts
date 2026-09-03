@@ -148,16 +148,20 @@ function safeBrandImageUrl(value: string, label: string): string {
   return parsed.toString();
 }
 
-function brandPageImageUrl(fd: FormData, key: "hero_image_url" | "detail_image_url"): string {
-  return safeBrandImageUrl(brandPageText(fd, key, 1000), key === "hero_image_url" ? "主視覺圖片" : "第二區塊圖片");
+function brandPageImageUrl(fd: FormData, key: "hero_image_url" | "detail_image_url" | "gallery_image_url"): string {
+  const labels = { hero_image_url: "主視覺圖片", detail_image_url: "第二區塊圖片", gallery_image_url: "補充情境圖片" } as const;
+  return safeBrandImageUrl(brandPageText(fd, key, 1000), labels[key]);
 }
 
 export async function updateBrandPageAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
   const rawTemplate = str(fd, "brand_page_template");
   if (!isBrandPageTemplate(rawTemplate)) throw new Error("品牌形象頁模板不存在");
+  const rawPrimaryEntry = str(fd, "primary_entry");
+  if (!["auto", "booking", "registration"].includes(rawPrimaryEntry)) throw new Error("主要入口設定不正確");
 
   const content: BrandPageContent = {
+    primary_entry: rawPrimaryEntry as BrandPageContent["primary_entry"],
     hero_eyebrow: brandPageText(fd, "hero_eyebrow", 80),
     hero_title: brandPageText(fd, "hero_title", 120),
     hero_highlight: brandPageText(fd, "hero_highlight", 120),
@@ -166,8 +170,18 @@ export async function updateBrandPageAction(fd: FormData): Promise<void> {
     secondary_cta_label: brandPageText(fd, "secondary_cta_label", 40, false),
     section_title: brandPageText(fd, "section_title", 160),
     section_description: brandPageText(fd, "section_description", 500),
+    about_title: brandPageText(fd, "about_title", 160),
+    about_description: brandPageText(fd, "about_description", 600),
+    trust_point_1: brandPageText(fd, "trust_point_1", 80),
+    trust_point_2: brandPageText(fd, "trust_point_2", 80),
+    trust_point_3: brandPageText(fd, "trust_point_3", 80),
+    faq_1_question: brandPageText(fd, "faq_1_question", 160),
+    faq_1_answer: brandPageText(fd, "faq_1_answer", 600),
+    faq_2_question: brandPageText(fd, "faq_2_question", 160),
+    faq_2_answer: brandPageText(fd, "faq_2_answer", 600),
     hero_image_url: brandPageImageUrl(fd, "hero_image_url"),
     detail_image_url: brandPageImageUrl(fd, "detail_image_url"),
+    gallery_image_url: brandPageImageUrl(fd, "gallery_image_url"),
   };
   const rawLogoUrl = str(fd, "brand_logo_url");
   if (rawLogoUrl.length > 1000) throw new Error("品牌 Logo 網址過長");
@@ -220,6 +234,7 @@ export async function updateSettingsAction(fd: FormData) {
       events_enabled: eventsEnabled,
       memberships_enabled: bool(fd, "memberships_enabled"),
       crm_automation_enabled: bool(fd, "crm_automation_enabled"),
+      beauty_operations_enabled: bool(fd, "beauty_operations_enabled"),
       public_registration_enabled: eventsEnabled && bool(fd, "public_registration_enabled"),
     })
     .eq("clinic_id", clinicId);

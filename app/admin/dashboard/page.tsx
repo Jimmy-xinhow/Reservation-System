@@ -55,7 +55,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const supabase = await createSupabaseServer();
   const { data: productSettings, error: productSettingsError } = await supabase
     .from("clinic_settings")
-    .select("public_booking_enabled, public_registration_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, email_enabled, deposit_enabled")
+    .select("public_booking_enabled, public_registration_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, email_enabled, deposit_enabled, brand_page_enabled")
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (productSettingsError || !productSettings) throw new Error(productSettingsError?.message ?? "品牌設定載入失敗");
@@ -75,6 +75,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   if (setupReads?.some((result) => result.error)) throw new Error(setupReads.find((result) => result.error)?.error?.message ?? "品牌開通資料載入失敗");
   const setupItems = setupReads ? buildSetupItems({
     brandReady: Boolean(setupReads[0].data?.name && setupReads[0].data?.slug),
+    brandPageReady: productSettings.brand_page_enabled === true && Boolean(setupReads[0].data?.slug),
     serviceReady: (setupReads[1].count ?? 0) > 0 || (productSettings.events_enabled && (setupReads[2].count ?? 0) > 0),
     peopleOrResourcesReady: (setupReads[3].count ?? 0) > 0 || (setupReads[4].count ?? 0) > 0,
     scheduleReady: (setupReads[5].count ?? 0) > 0,
@@ -133,6 +134,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const pendingPayments = activeRegistrations.filter((item) => item.payment_status === "pending").length + payments.filter((item) => item.status === "pending").length;
   const failedDeliveries = deliveries.filter((item) => item.status === "failed").length;
   const noShows = activeAppointments.filter((item) => item.status === "no_show").length + activeRegistrations.filter((item) => item.status === "no_show").length;
+  const publicBrandUrl = setupReads?.[0].data?.slug && productSettings.brand_page_enabled
+    ? `/?clinic_slug=${encodeURIComponent(setupReads[0].data.slug)}`
+    : null;
 
   const days = Array.from({ length: 14 }, (_, i) => shiftDate(winStart, i));
   const perDay = days.map((date) => ({ date, bookings: activeAppointments.filter((item) => taipeiDateString(item.start_at) === date).length, registrations: activeRegistrations.filter((item) => taipeiDateString(item.created_at) === date).length }));
@@ -144,7 +148,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <div className="space-y-6">
       <AutoRefresh seconds={30} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="eyebrow">今日營運</p><h1 className="text-2xl font-bold text-slate-900">{role === "provider" ? "我的今日工作台" : "今日工作台"}</h1><p className="mt-1 text-base text-slate-600">{role === "provider" ? "只顯示已指派給你的預約與今日工作。" : "先處理今天需要行動的事項，再查看營運趨勢。"}</p></div><div className="flex gap-2"><Link href="/admin/calendar" className="btn btn-secondary">查看日曆</Link>{role !== "provider" && <Link href="/admin/reports" className="btn btn-primary">查看報表</Link>}</div></div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="eyebrow">今日營運</p><h1 className="text-2xl font-bold text-slate-900">{role === "provider" ? "我的今日工作台" : "今日工作台"}</h1><p className="mt-1 text-base text-slate-600">{role === "provider" ? "只顯示已指派給你的預約與今日工作。" : "先處理今天需要行動的事項，再查看營運趨勢。"}</p></div><div className="flex flex-wrap gap-2">{publicBrandUrl && <Link href={publicBrandUrl} target="_blank" className="btn btn-secondary">查看品牌形象頁 ↗</Link>}<Link href="/admin/calendar" className="btn btn-secondary">查看日曆</Link>{role !== "provider" && <Link href="/admin/reports" className="btn btn-primary">查看報表</Link>}</div></div>
 
       {params.notice === "permission" && (
         <div role="status" className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
@@ -188,18 +192,19 @@ function BrandSetupGuide({ items }: { items: SetupItem[] }) {
     </details>
   );
 }
-function buildSetupItems(state: { brandReady: boolean; serviceReady: boolean; peopleOrResourcesReady: boolean; scheduleReady: boolean; publicFlowReady: boolean; lineEnabled: boolean; lineReady: boolean; richMenuReady: boolean; notificationReady: boolean; paymentRequired: boolean; paymentReady: boolean; }): SetupItem[] {
+function buildSetupItems(state: { brandReady: boolean; brandPageReady: boolean; serviceReady: boolean; peopleOrResourcesReady: boolean; scheduleReady: boolean; publicFlowReady: boolean; lineEnabled: boolean; lineReady: boolean; richMenuReady: boolean; notificationReady: boolean; paymentRequired: boolean; paymentReady: boolean; }): SetupItem[] {
   const operationsReady = state.brandReady && state.serviceReady && state.peopleOrResourcesReady && state.scheduleReady && state.publicFlowReady;
   const lineLaunchReady = !state.lineEnabled || (state.lineReady && state.richMenuReady);
   const paymentLaunchReady = !state.paymentRequired || state.paymentReady;
   return [
     { label: "1. 品牌資料", href: "/admin/settings?section=brand", status: state.brandReady ? "done" : "blocked", reason: state.brandReady ? "品牌名稱與短網址已完成" : "缺少品牌名稱或短網址" },
-    { label: "2. 服務／活動", href: "/admin/services", status: state.serviceReady ? "done" : "blocked", reason: state.serviceReady ? "已有可營運的服務或活動" : "至少建立一項服務；啟用活動時也可建立活動" },
-    { label: "3. 人員／資源／排班", href: "/admin/schedules", status: state.peopleOrResourcesReady && state.scheduleReady ? "done" : "blocked", reason: !state.peopleOrResourcesReady ? "缺少服務提供者或資源" : state.scheduleReady ? "人員／資源與排班已建立" : "尚未建立可用排班" },
-    { label: "4. 預約與報名規則", href: "/admin/settings?section=booking", status: state.publicFlowReady ? "done" : "warning", reason: state.publicFlowReady ? "至少一個公開流程已開放" : "目前沒有開放預約或報名入口" },
-    { label: "5. LINE 官方帳號入口", href: "/admin/line", status: !state.lineEnabled ? "warning" : state.lineReady && state.richMenuReady ? "done" : "blocked", reason: !state.lineEnabled ? "LINE 入口未啟用，可先使用一般瀏覽器網址" : !state.lineReady ? "LINE 登入與顧客入口尚未完成驗證" : state.richMenuReady ? "LINE 連線與圖文選單已就緒" : "尚未發布 LINE 圖文選單" },
-    { label: "6. 通知與付款", href: "/admin/settings?section=channels", status: state.notificationReady && paymentLaunchReady ? "done" : "warning", reason: !state.notificationReady ? "尚未啟用 LINE 或 Email 通知" : !paymentLaunchReady ? "已要求訂金，但標準金流尚未啟用" : "通知與必要付款設定已完成" },
-    { label: "7. 上線前測試", href: "/admin/audit", status: operationsReady && lineLaunchReady && paymentLaunchReady ? "warning" : "blocked", reason: operationsReady && lineLaunchReady && paymentLaunchReady ? "測試環境已就緒；請完成一次真實預約、通知與付款流程" : "前面的必要設定尚未全部完成" },
+    { label: "2. 品牌形象頁", href: "/admin/settings?section=page", status: state.brandPageReady ? "done" : "warning", reason: state.brandPageReady ? "公開形象頁已啟用，可從工作台直接查看" : "尚未啟用公開形象頁" },
+    { label: "3. 服務／活動", href: "/admin/services", status: state.serviceReady ? "done" : "blocked", reason: state.serviceReady ? "已有可營運的服務或活動" : "至少建立一項服務；啟用活動時也可建立活動" },
+    { label: "4. 人員／資源／排班", href: "/admin/schedules", status: state.peopleOrResourcesReady && state.scheduleReady ? "done" : "blocked", reason: !state.peopleOrResourcesReady ? "缺少服務提供者或資源" : state.scheduleReady ? "人員／資源與排班已建立" : "尚未建立可用排班" },
+    { label: "5. 預約與報名規則", href: "/admin/settings?section=booking", status: state.publicFlowReady ? "done" : "warning", reason: state.publicFlowReady ? "至少一個公開流程已開放" : "目前沒有開放預約或報名入口" },
+    { label: "6. LINE 官方帳號入口", href: "/admin/line", status: !state.lineEnabled ? "warning" : state.lineReady && state.richMenuReady ? "done" : "blocked", reason: !state.lineEnabled ? "LINE 入口未啟用，可先使用一般瀏覽器網址" : !state.lineReady ? "LINE 登入與顧客入口尚未完成驗證" : state.richMenuReady ? "LINE 連線與圖文選單已就緒" : "尚未發布 LINE 圖文選單" },
+    { label: "7. 通知與付款", href: "/admin/settings?section=channels", status: state.notificationReady && paymentLaunchReady ? "done" : "warning", reason: !state.notificationReady ? "尚未啟用 LINE 或 Email 通知" : !paymentLaunchReady ? "已要求訂金，但標準金流尚未啟用" : "通知與必要付款設定已完成" },
+    { label: "8. 上線前測試", href: "/admin/audit", status: operationsReady && lineLaunchReady && paymentLaunchReady ? "warning" : "blocked", reason: operationsReady && lineLaunchReady && paymentLaunchReady ? "測試環境已就緒；請完成一次真實預約、通知與付款流程" : "前面的必要設定尚未全部完成" },
   ];
 }
 function countBy<T>(items: T[], getKey: (item: T) => string): Record<string, number> { return items.reduce<Record<string, number>>((result, item) => { const key = getKey(item); result[key] = (result[key] ?? 0) + 1; return result; }, {}); }
