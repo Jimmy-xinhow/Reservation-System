@@ -119,7 +119,7 @@ function ecpayCheckMac(fields: Record<string, string>, hashKey: string, hashIv: 
     .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
     .map(([key, value]) => `${key}=${value}`)
     .join("&");
-  return createHash("md5")
+  return createHash("sha256")
     .update(ecpayEncode(`HashKey=${hashKey}&${content}&HashIV=${hashIv}`))
     .digest("hex")
     .toUpperCase();
