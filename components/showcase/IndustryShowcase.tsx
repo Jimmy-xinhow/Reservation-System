@@ -196,7 +196,7 @@ function WellnessShowcase({ brand }: LiveProps) {
 function FitnessShowcase({ brand }: LiveProps) {
   const content = brand?.content;
   const scheduleRows = brand?.services.length
-    ? brand.services.slice(0, 3).map((service, index) => [String(index + 1).padStart(2, "0"), service.name, service.description ?? "公開服務", "查看時段"])
+    ? brand.services.slice(0, 3).map((service, index) => [String(index + 1).padStart(2, "0"), service.name, service.description ?? "公開服務", "線上預約"])
     : [["07:00", "FULL BODY", "NICO", "4 spots"], ["12:20", "CORE + LOWER", "MIA", "Waitlist"], ["18:40", "RUN × LIFT", "JAY", "7 spots"]];
   return (
     <div className={styles.fitness} data-live-brand={brand ? "true" : undefined}>
