@@ -27,6 +27,8 @@ const cronRoutes = [
   "/api/cron/marketing",
   "/api/cron/membership",
   "/api/cron/richmenu",
+  "/api/cron/followups",
+  "/api/cron/subscription-freezes",
 ];
 
 async function fetchWithTimeout(path) {
