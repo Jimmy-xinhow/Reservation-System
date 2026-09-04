@@ -142,7 +142,7 @@ export default async function PatientDetailPage({
         <span className="text-sm text-slate-400">未到 {noShow} 次</span>
       </div>
 
-      <section className="admin-metric-strip">
+      <section className="admin-metric-strip grid-cols-2 sm:grid-cols-4">
         <div className="admin-metric"><span className="admin-metric-label">儲值餘額</span><strong className="admin-metric-value">NT${Number(walletData?.balance ?? 0).toLocaleString("zh-TW")}</strong></div>
         <div className="admin-metric"><span className="admin-metric-label">點數餘額</span><strong className="admin-metric-value">{Number(pointData?.points_balance ?? 0).toLocaleString("zh-TW")}</strong></div>
         <div className="admin-metric"><span className="admin-metric-label">有效訂閱</span><strong className="admin-metric-value">{subscriptions.length}</strong></div>
