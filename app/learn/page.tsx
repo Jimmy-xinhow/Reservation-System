@@ -5,82 +5,30 @@ import { useCallback, useEffect, useState } from "react";
 import { Brand } from "@/components/Brand";
 import { safeLocalStorageGet } from "@/lib/browser-storage";
 
-interface Unit {
-  id: string;
-  title: string;
-  summary: string | null;
-  unit_type: "video" | "link" | "download" | "text";
-  content_url: string | null;
-  body: string | null;
-  completed_at: string | null;
-}
-interface Course { event_id: string; title: string; units: Unit[]; }
-interface LearningData { patient: { name: string }; courses: Course[]; }
+interface Assessment { id:string;kind:"quiz"|"assignment";prompt:string;options:string[];passing_score:number; }
+interface Submission { status:"submitted"|"passed"|"revision";score:number|null;feedback:string|null;submission_text:string|null;submitted_at:string; }
+interface Unit { id:string;title:string;summary:string|null;unit_type:"video"|"link"|"download"|"text"|"quiz"|"assignment";content_url:string|null;body:string|null;release_available:boolean;unlock_message:string|null;completed_at:string|null;assessment:Assessment|null;submission:Submission|null; }
+interface Course { event_id:string;title:string;certificate:{certificate_no:string;issued_at:string}|null;units:Unit[]; }
+interface LearningData { patient:{name:string};courses:Course[]; }
+interface ActionPayload { action:"complete"|"uncomplete"|"submit_assessment";unit_id:string;answer_index?:number;submission_text?:string; }
 
-function scopeSuffix(): string {
-  if (typeof window === "undefined") return "";
-  const source = new URLSearchParams(window.location.search);
-  const params = new URLSearchParams();
-  const slug = source.get("clinic_slug")?.trim();
-  const clinicId = source.get("clinic_id")?.trim();
-  if (slug) params.set("clinic_slug", slug);
-  else if (clinicId) params.set("clinic_id", clinicId);
-  return params.toString() ? `?${params.toString()}` : "";
-}
+function scopeSuffix():string{if(typeof window==="undefined")return"";const source=new URLSearchParams(window.location.search);const params=new URLSearchParams();const slug=source.get("clinic_slug")?.trim();const clinicId=source.get("clinic_id")?.trim();if(slug)params.set("clinic_slug",slug);else if(clinicId)params.set("clinic_id",clinicId);return params.toString()?`?${params.toString()}`:"";}
+function storedToken():string|null{if(typeof window==="undefined")return null;const source=new URLSearchParams(window.location.search);const scope=source.get("clinic_slug")?.trim()||source.get("clinic_id")?.trim()||"default";return safeLocalStorageGet(`customer_browser_token:${scope}`,`booking_browser_token:${scope}`,"membership_browser_token");}
+function unitLabel(type:Unit["unit_type"]):string{return{video:"觀看影片",link:"開啟教材",download:"下載教材",text:"閱讀內容",quiz:"線上測驗",assignment:"繳交作業"}[type];}
 
-function storedToken(): string | null {
-  if (typeof window === "undefined") return null;
-  const source = new URLSearchParams(window.location.search);
-  const scope = source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default";
-  return safeLocalStorageGet(`customer_browser_token:${scope}`, `booking_browser_token:${scope}`, "membership_browser_token");
-}
-
-function unitLabel(type: Unit["unit_type"]): string {
-  return { video: "觀看影片", link: "開啟教材", download: "下載教材", text: "閱讀內容" }[type];
-}
-
-export default function LearningPage() {
-  const [data, setData] = useState<LearningData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState<string | null>(null);
-  const [scope, setScope] = useState("");
-
-  const load = useCallback(async (action?: "complete" | "uncomplete", unitId?: string) => {
-    const token = storedToken();
-    if (!token) { setLoading(false); setError("需要先完成一次預約、報名或會員驗證，才能確認學員身分。"); return; }
-    if (!action) setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/customer/learning${scopeSuffix()}`, { method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store", body: JSON.stringify({ browser_token: token, action, unit_id: unitId }) });
-      const body = await response.json() as { ok?: boolean; data?: LearningData; error?: string };
-      if (!response.ok || !body.ok || !body.data) throw new Error(body.error ?? "學習內容載入失敗");
-      setData(body.data);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "學習內容載入失敗");
-    } finally { setLoading(false); setSaving(null); }
-  }, []);
-
-  useEffect(() => { setScope(scopeSuffix()); }, []);
-  useEffect(() => { void load(); }, [load]);
-
-  async function toggle(unit: Unit) {
-    setSaving(unit.id);
-    await load(unit.completed_at ? "uncomplete" : "complete", unit.id);
-  }
-
-  return (
-    <main className="mx-auto min-h-screen w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-10">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3"><Brand subtitle="學員專區" /><Link href={`/my${scope}`} className="text-sm text-brand-700 hover:underline">返回我的紀錄</Link></header>
-      {loading && <p className="card p-8 text-center text-sm text-slate-500">載入學習內容…</p>}
-      {!loading && error && <section className="card space-y-4 p-7 text-center"><h1 className="text-lg font-semibold text-slate-900">目前無法開啟學員專區</h1><p className="text-sm leading-6 text-slate-500">{error}</p><Link href={`/my${scope}`} className="btn btn-primary">前往我的紀錄</Link></section>}
-      {!loading && data && <div className="space-y-6">
-        <section className="rounded-2xl bg-gradient-to-br from-brand-700 to-brand-900 p-6 text-white"><p className="text-sm text-white/70">歡迎回來，{data.patient.name}</p><h1 className="mt-1 text-2xl font-bold">我的學習內容</h1><p className="mt-2 text-sm leading-6 text-white/80">只顯示已符合報名、付款或報到條件的教材。</p></section>
-        {data.courses.length === 0 ? <section className="card p-8 text-center"><h2 className="font-semibold text-slate-900">目前沒有已開放教材</h2><p className="mt-2 text-sm leading-6 text-slate-500">完成課程要求後，教材會自動出現在這裡。</p></section> : data.courses.map((course) => {
-          const completed = course.units.filter((unit) => unit.completed_at).length;
-          return <section key={course.event_id} className="card overflow-hidden"><header className="border-b border-slate-100 p-5"><div className="flex items-end justify-between gap-3"><div><div className="eyebrow">已開放課程</div><h2 className="mt-1 text-xl font-bold text-slate-900">{course.title}</h2></div><span className="text-sm text-slate-500">{completed}／{course.units.length} 完成</span></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-600 transition-all" style={{ width: `${course.units.length ? Math.round((completed / course.units.length) * 100) : 0}%` }} /></div></header><div className="divide-y divide-slate-100">{course.units.map((unit, index) => <article key={unit.id} className="grid gap-4 p-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start"><div className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${unit.completed_at ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{unit.completed_at ? "✓" : index + 1}</div><div className="min-w-0"><h3 className="font-semibold text-slate-900">{unit.title}</h3>{unit.summary && <p className="mt-1 text-sm leading-6 text-slate-500">{unit.summary}</p>}{unit.body && <div className="mt-3 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">{unit.body}</div>}{unit.content_url && <a href={unit.content_url} target="_blank" rel="noreferrer" className="btn btn-secondary mt-3 inline-flex">{unitLabel(unit.unit_type)} ↗</a>}</div><button type="button" disabled={saving === unit.id} onClick={() => void toggle(unit)} className={`btn min-w-28 ${unit.completed_at ? "btn-secondary" : "btn-primary"}`}>{saving === unit.id ? "儲存中…" : unit.completed_at ? "標示未完成" : "標示完成"}</button></article>)}</div></section>;
-        })}
-      </div>}
-    </main>
-  );
+export default function LearningPage(){
+  const [data,setData]=useState<LearningData|null>(null);const [loading,setLoading]=useState(true);const [error,setError]=useState<string|null>(null);const [saving,setSaving]=useState<string|null>(null);const [scope,setScope]=useState("");const [quizAnswers,setQuizAnswers]=useState<Record<string,number>>({});const [assignments,setAssignments]=useState<Record<string,string>>({});
+  const load=useCallback(async(payload?:ActionPayload)=>{const token=storedToken();if(!token){setLoading(false);setError("需要先完成一次預約、報名或會員驗證，才能確認學員身分。");return;}if(!payload)setLoading(true);setError(null);try{const response=await fetch(`/api/customer/learning${scopeSuffix()}`,{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",body:JSON.stringify({browser_token:token,...payload})});const body=await response.json() as {ok?:boolean;data?:LearningData;error?:string};if(!response.ok||!body.ok||!body.data)throw new Error(body.error??"學習內容載入失敗");setData(body.data);}catch(caught){setError(caught instanceof Error?caught.message:"學習內容載入失敗");}finally{setLoading(false);setSaving(null);}},[]);
+  useEffect(()=>{setScope(scopeSuffix());void load();},[load]);
+  async function toggle(unit:Unit){setSaving(unit.id);await load({action:unit.completed_at?"uncomplete":"complete",unit_id:unit.id});}
+  async function submitQuiz(unit:Unit){const answer=quizAnswers[unit.id];if(answer===undefined){setError("請先選擇答案");return;}setSaving(unit.id);await load({action:"submit_assessment",unit_id:unit.id,answer_index:answer});}
+  async function submitAssignment(unit:Unit){const value=(assignments[unit.id]??unit.submission?.submission_text??"").trim();if(value.length<5){setError("作業內容至少需要 5 個字");return;}setSaving(unit.id);await load({action:"submit_assessment",unit_id:unit.id,submission_text:value});}
+  return <main className="mx-auto min-h-screen w-full max-w-4xl px-4 py-6 sm:px-6 sm:py-10"><header className="mb-6 flex flex-wrap items-center justify-between gap-3"><Brand subtitle="學員專區"/><Link href={`/my${scope}`} className="text-sm text-brand-700 hover:underline">返回我的紀錄</Link></header>
+  {loading&&<p className="card p-8 text-center text-sm text-slate-500">載入學習內容…</p>}
+  {!loading&&error&&!data&&<section className="card space-y-4 p-7 text-center"><h1 className="text-lg font-semibold">目前無法開啟學員專區</h1><p className="text-sm text-slate-500">{error}</p><Link href={`/my${scope}`} className="btn btn-primary">前往我的紀錄</Link></section>}
+  {!loading&&data&&<div className="space-y-6"><section className="rounded-2xl bg-gradient-to-br from-brand-700 to-brand-900 p-6 text-white"><p className="text-sm text-white/70">歡迎回來，{data.patient.name}</p><h1 className="mt-1 text-2xl font-bold">我的學習內容</h1><p className="mt-2 text-sm leading-6 text-white/80">依報名、付款、報到與前一單元完成狀況逐步開放。</p></section>{error&&<p className="rounded-lg bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</p>}
+  {data.courses.length===0?<section className="card p-8 text-center"><h2 className="font-semibold">目前沒有可顯示的課程</h2><p className="mt-2 text-sm text-slate-500">完成課程要求後，內容會自動出現在這裡。</p></section>:data.courses.map(course=>{const completed=course.units.filter(unit=>unit.completed_at).length;return <section key={course.event_id} className="card overflow-hidden"><header className="border-b border-slate-100 p-5"><div className="flex flex-wrap items-end justify-between gap-3"><div><div className="eyebrow">已加入課程</div><h2 className="mt-1 text-xl font-bold">{course.title}</h2>{course.certificate&&<p className="mt-2 text-sm font-medium text-emerald-700">完課證書：{course.certificate.certificate_no}</p>}</div><span className="text-sm text-slate-500">{completed}／{course.units.length} 完成</span></div><div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-brand-600" style={{width:`${course.units.length?Math.round(completed/course.units.length*100):0}%`}}/></div></header><div className="divide-y divide-slate-100">{course.units.map((unit,index)=><article key={unit.id} className={`grid gap-4 p-5 sm:grid-cols-[auto_minmax(0,1fr)] ${unit.release_available?"":"bg-slate-50"}`}><div className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold ${unit.completed_at?"bg-emerald-100 text-emerald-700":unit.release_available?"bg-slate-100 text-slate-500":"bg-slate-200 text-slate-400"}`}>{unit.completed_at?"✓":unit.release_available?index+1:"鎖"}</div><div className="min-w-0"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs text-slate-400">{unitLabel(unit.unit_type)}</p><h3 className="font-semibold">{unit.title}</h3></div>{unit.release_available&&!["quiz","assignment"].includes(unit.unit_type)&&<button type="button" disabled={saving===unit.id} onClick={()=>void toggle(unit)} className={`btn ${unit.completed_at?"btn-secondary":"btn-primary"}`}>{saving===unit.id?"儲存中…":unit.completed_at?"標示未完成":"標示完成"}</button>}</div>{unit.summary&&<p className="mt-1 text-sm leading-6 text-slate-500">{unit.summary}</p>}{!unit.release_available&&<p className="mt-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-500">{unit.unlock_message??"尚未開放"}</p>}{unit.release_available&&unit.body&&<div className="mt-3 whitespace-pre-wrap rounded-lg bg-slate-50 p-4 text-sm leading-7 text-slate-700">{unit.body}</div>}{unit.release_available&&unit.content_url&&<a href={unit.content_url} target="_blank" rel="noreferrer" className="btn btn-secondary mt-3 inline-flex">{unitLabel(unit.unit_type)} ↗</a>}
+  {unit.release_available&&unit.assessment?.kind==="quiz"&&<div className="mt-4 rounded-lg border border-slate-200 p-4"><p className="font-medium">{unit.assessment.prompt}</p><div className="mt-3 space-y-2">{unit.assessment.options.map((option,optionIndex)=><label key={optionIndex} className="flex cursor-pointer gap-3 rounded-lg border border-slate-200 p-3 text-sm"><input type="radio" name={`quiz-${unit.id}`} checked={quizAnswers[unit.id]===optionIndex} onChange={()=>setQuizAnswers(current=>({...current,[unit.id]:optionIndex}))}/><span>{option}</span></label>)}</div>{unit.submission?.feedback&&<p className={`mt-3 text-sm ${unit.submission.status==="passed"?"text-emerald-700":"text-amber-700"}`}>{unit.submission.feedback}</p>}<button type="button" disabled={saving===unit.id||unit.submission?.status==="passed"} onClick={()=>void submitQuiz(unit)} className="btn btn-primary mt-3">{unit.submission?.status==="passed"?"已通過":saving===unit.id?"送出中…":"送出答案"}</button></div>}
+  {unit.release_available&&unit.assessment?.kind==="assignment"&&<div className="mt-4 rounded-lg border border-slate-200 p-4"><p className="font-medium">{unit.assessment.prompt}</p><textarea value={assignments[unit.id]??unit.submission?.submission_text??""} onChange={event=>setAssignments(current=>({...current,[unit.id]:event.target.value}))} className="input mt-3 min-h-32" disabled={unit.submission?.status==="passed"} placeholder="在這裡輸入作業內容"/>{unit.submission&&<p className={`mt-2 text-sm ${unit.submission.status==="passed"?"text-emerald-700":unit.submission.status==="revision"?"text-amber-700":"text-slate-500"}`}>{unit.submission.status==="passed"?"作業已通過":unit.submission.status==="revision"?`請修改後重送${unit.submission.feedback?`：${unit.submission.feedback}`:""}`:"作業已送出，等待審核"}</p>}<button type="button" disabled={saving===unit.id||["submitted","passed"].includes(unit.submission?.status??"")} onClick={()=>void submitAssignment(unit)} className="btn btn-primary mt-3">{saving===unit.id?"送出中…":unit.submission?.status==="passed"?"已通過":unit.submission?.status==="submitted"?"等待審核":"送出作業"}</button></div>}</div></article>)}</div></section>;})}</div>}
+  </main>;
 }

@@ -1,4 +1,4 @@
-// Railway cron：依序觸發提醒、行銷、報名／付款逾時與 Rich Menu 排程。
+// Railway cron：依序觸發提醒、行銷、指定回訪、報名／付款逾時與 Rich Menu 排程。
 const secret = process.env.CRON_SECRET;
 if (!secret) {
   console.error("[cron] 缺少 CRON_SECRET");
@@ -11,6 +11,9 @@ const reminderTarget =
 const marketingTarget =
   process.env.CRON_MARKETING_TARGET_URL ||
   (appUrl ? `${appUrl}/api/cron/marketing` : reminderTarget?.replace(/\/api\/cron\/reminders\/?$/, "/api/cron/marketing"));
+const followupTarget =
+  process.env.CRON_FOLLOWUP_TARGET_URL ||
+  (appUrl ? `${appUrl}/api/cron/followups` : reminderTarget?.replace(/\/api\/cron\/reminders\/?$/, "/api/cron/followups"));
 
 const registrationTarget =
   process.env.CRON_REGISTRATION_TARGET_URL ||
@@ -18,8 +21,11 @@ const registrationTarget =
 const richMenuTarget =
   process.env.CRON_RICHMENU_TARGET_URL ||
   (appUrl ? `${appUrl}/api/cron/richmenu` : reminderTarget?.replace(/\/api\/cron\/reminders\/?$/, "/api/cron/richmenu"));
+const subscriptionFreezeTarget =
+  process.env.CRON_SUBSCRIPTION_FREEZE_TARGET_URL ||
+  (appUrl ? `${appUrl}/api/cron/subscription-freezes` : reminderTarget?.replace(/\/api\/cron\/reminders\/?$/, "/api/cron/subscription-freezes"));
 
-if (!reminderTarget || !marketingTarget || !registrationTarget || !richMenuTarget) {
+if (!reminderTarget || !marketingTarget || !followupTarget || !registrationTarget || !richMenuTarget || !subscriptionFreezeTarget) {
   console.error("[cron] 缺少 APP_URL 或 Cron endpoint URL");
   process.exit(1);
 }
@@ -27,8 +33,10 @@ if (!reminderTarget || !marketingTarget || !registrationTarget || !richMenuTarge
 const targets = [
   ["reminders", reminderTarget],
   ["marketing", marketingTarget],
+  ["followups", followupTarget],
   ["registration", registrationTarget],
   ["richmenu", richMenuTarget],
+  ["subscription-freezes", subscriptionFreezeTarget],
 ];
 
 let failed = false;

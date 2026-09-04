@@ -49,6 +49,11 @@ const migrationApiRateLimits = read("supabase/migrations/202609020001_api_rate_l
 const migrationPlatformReportAggregation = read("supabase/migrations/202609020002_platform_report_aggregation.sql");
 const migrationCourseLearning = read("supabase/migrations/202609030002_course_learning_center.sql");
 const migrationBeautyOperations = read("supabase/migrations/202609030003_beauty_operations.sql");
+const migrationCheckoutCenter = read("supabase/migrations/202609040001_checkout_center.sql");
+const migrationCustomerValue = read("supabase/migrations/202609040002_customer_value_and_followups.sql");
+const migrationIndustryPacks = read("supabase/migrations/202609040003_industry_packs.sql");
+const migrationCheckoutLintCleanup = read("supabase/migrations/202609040005_checkout_lint_cleanup.sql");
+const migrationCheckoutRegistrationSync = read("supabase/migrations/202609040006_checkout_registration_sync.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 const projectReadme = read("README.md");
@@ -72,8 +77,14 @@ const checks = [
   ["public tenant resolver is present", ["lib/public-brand.ts|resolvePublicClinicId"]],
   ["public and fallback routes exist", ["app/register/page.tsx", "app/book/browser/page.tsx", "app/book/browser/my/page.tsx", "app/book/browser/reschedule/page.tsx", "app/book/reschedule/page.tsx", "app/api/booking/browser/start/route.ts", "app/api/booking/browser/my/route.ts", "app/api/booking/reschedule/route.ts", "app/embed/book/page.tsx", "app/embed/register/page.tsx"]],
   ["admin SaaS modules exist", ["app/admin/crm/page.tsx", "app/admin/reports/page.tsx", "app/admin/registrations/page.tsx", "app/admin/checkin/page.tsx", "app/admin/calendar/page.tsx", "app/api/registration/checkin-search/route.ts"]],
-  ["course learning center is registration-gated and server mediated", ["supabase/migrations/202609030002_course_learning_center.sql|create table if not exists public.course_units", "supabase/migrations/202609030002_course_learning_center.sql|create table if not exists public.course_unit_progress", "app/api/customer/learning/route.ts|verifyBrowserBookingToken", "app/api/customer/learning/route.ts|.in(\"status\", [\"pending\", \"confirmed\", \"attended\"])", "app/api/customer/learning/route.ts|const isRegistered = [\"pending\", \"confirmed\", \"attended\"]", "app/api/customer/learning/route.ts|尚未符合這個教材的開放條件", "app/learn/page.tsx|setScope(scopeSuffix())", "app/learn/page.tsx|href={`/my${scope}`}", "app/admin/course-content/page.tsx"]],
+  ["course learning center is registration-gated and server mediated", ["supabase/migrations/202609030002_course_learning_center.sql|create table if not exists public.course_units", "supabase/migrations/202609030002_course_learning_center.sql|create table if not exists public.course_unit_progress", "app/api/customer/learning/route.ts|verifyBrowserBookingToken", "app/api/customer/learning/route.ts|baseAccess", "app/api/customer/learning/route.ts|尚未符合這個教材的開放條件", "app/learn/page.tsx|setScope(scopeSuffix())", "app/learn/page.tsx|href={`/my${scope}`}", "app/admin/course-content/page.tsx"]],
+  ["industry packs cover beauty procurement, fitness freezes, course assessments, and consent", ["supabase/migrations/202609040003_industry_packs.sql|create table if not exists public.purchase_orders", "supabase/migrations/202609040003_industry_packs.sql|finalize_inventory_stocktake", "supabase/migrations/202609040003_industry_packs.sql|sync_subscription_freezes", "supabase/migrations/202609040003_industry_packs.sql|create table if not exists public.course_assessments", "supabase/migrations/202609040003_industry_packs.sql|create table if not exists public.course_certificates", "supabase/migrations/202609040003_industry_packs.sql|create table if not exists public.customer_document_requests", "supabase/migrations/202609040004_course_unit_content_check.sql|unit_type in ('quiz','assignment') or content_url is not null or body is not null", "app/admin/beauty/supply/page.tsx|採購與盤點", "app/admin/fitness/page.tsx|教室與會籍營運", "app/admin/documents/page.tsx|同意書與電子簽署", "app/api/customer/learning/route.ts|correct_option", "app/api/customer/learning/route.ts|assessment:state.available"]],
+  ["add-on evaluation separates reusable core from external-account dependencies", ["docs/add-on-evaluation-2026-09-04.md|Cal.com", "docs/add-on-evaluation-2026-09-04.md|ERPNext", "docs/add-on-evaluation-2026-09-04.md|Moodle", "docs/add-on-evaluation-2026-09-04.md|syncToken", "docs/add-on-evaluation-2026-09-04.md|不代表外部服務已完成串接", "app/admin/settings/add-ons/page.tsx|等待外部帳號", "app/admin/settings/add-ons/page.tsx|需要規則確認", "components/AdminNav.tsx|擴充功能規劃"]],
   ["beauty operations are optional and privacy bounded", ["supabase/migrations/202609030003_beauty_operations.sql|beauty_operations_enabled", "supabase/migrations/202609030003_beauty_operations.sql|record_inventory_movement", "app/api/admin/beauty-photo/route.ts|public: false", "app/admin/beauty/page.tsx|不是薪資、稅務或會計結算", "app/admin/settings/page.tsx|不是完整會計或 POS"]],
+  ["checkout center is tenant scoped and server mediated", ["supabase/migrations/202609040001_checkout_center.sql|create table if not exists public.sales_orders", "supabase/migrations/202609040001_checkout_center.sql|create table if not exists public.sales_order_items", "supabase/migrations/202609040001_checkout_center.sql|create table if not exists public.sales_payments", "supabase/migrations/202609040001_checkout_center.sql|record_inventory_movement", "supabase/migrations/202609040001_checkout_center.sql|grant execute on function public.create_sales_order", "app/admin/checkout/actions.ts|requireOperator", "app/admin/checkout/actions.ts|createServiceClient().rpc", "app/admin/checkout/page.tsx|結帳中心"]],
+  ["checkout lint cleanup preserves the tenant-scoped function contract", ["supabase/migrations/202609040005_checkout_lint_cleanup.sql|create or replace function public.create_sales_order", "supabase/migrations/202609040005_checkout_lint_cleanup.sql|checkout actor is not allowed", "supabase/migrations/202609040005_checkout_lint_cleanup.sql|grant execute on function public.create_sales_order"]],
+  ["paid checkout orders synchronize their source registration", ["supabase/migrations/202609040006_checkout_registration_sync.sql|v_order.registration_id is not null", "supabase/migrations/202609040006_checkout_registration_sync.sql|set payment_status = 'paid'", "supabase/migrations/202609040006_checkout_registration_sync.sql|status = case when status = 'pending' then 'confirmed'", "supabase/schema.sql|registration is not eligible for checkout payment"]],
+  ["customer value and scheduled follow-ups are ledger based and tenant scoped", ["supabase/migrations/202609040002_customer_value_and_followups.sql|create table if not exists public.customer_wallet_ledger", "supabase/migrations/202609040002_customer_value_and_followups.sql|create table if not exists public.loyalty_ledger", "supabase/migrations/202609040002_customer_value_and_followups.sql|create table if not exists public.patient_subscriptions", "supabase/migrations/202609040002_customer_value_and_followups.sql|create or replace function public.merge_customers", "supabase/schema.sql|create or replace function public.merge_customers", "supabase/migrations/202609040002_customer_value_and_followups.sql|for update skip locked", "app/admin/customer-value/page.tsx|顧客資產與訂閱", "app/admin/followups/actions.ts|new Date(`${value}+08:00`)", "app/admin/followups/page.tsx|指定日期回訪", "app/api/cron/followups/route.ts|claim_due_scheduled_followups"]],
   ["shared login exposes accessible brand and system destinations without granting roles client-side", ["app/admin/login/page.tsx|品牌營運後台", "app/admin/login/page.tsx|系統管理後台", "app/admin/login/page.tsx|實際權限仍由帳號角色在伺服器端判定", "app/admin/login/page.tsx|htmlFor=\"admin-email\"", "app/admin/login/page.tsx|htmlFor=\"admin-password\"", "app/admin/login/page.tsx|/admin/platform", "lib/platform.ts|platform_admins"]],
   ["system administration layer exists and is server-guarded", ["supabase/migration_saas_platform.sql|create table if not exists public.platform_admins", "supabase/migration_saas_platform.sql|create table if not exists public.brand_entitlements", "lib/platform.ts|requirePlatformAdmin", "lib/platform.ts|requireSystemAdmin", "lib/platform.ts|requireSystemPermission", "app/admin/platform/page.tsx", "app/admin/platform/admins/page.tsx", "app/admin/platform/admins/actions.ts", "app/admin/platform/operations/page.tsx", "app/admin/platform/reports/page.tsx", "app/admin/platform/audit/page.tsx", "app/admin/platform/settings/page.tsx", "app/admin/platform/actions.ts", "app/admin/page.tsx|redirect(\"/admin/platform\")", "app/admin/layout.tsx|XINHOW PLATFORM", "components/AdminNav.tsx|系統管理總控台"]],
   ["two management identities and employee permissions are explicit", ["lib/platform-roles.ts|PlatformAccessType = \"system_admin\" | \"employee\"", "lib/platform-roles.ts|SYSTEM_PERMISSION_DEFINITIONS", "lib/access-control.ts|BrandAccessType = \"brand_admin\" | \"employee\"", "lib/access-control.ts|BRAND_PERMISSION_DEFINITIONS", "supabase/migrations/202608110008_two_level_admin_permissions.sql|access_type", "supabase/migrations/202608110008_two_level_admin_permissions.sql|permissions text[]", "app/admin/platform/admins/actions.ts|requireSystemAdmin", "app/admin/users/actions.ts|requireBrandAdmin", "app/admin/layout.tsx|hasDualAdminContext", "app/admin/layout.tsx|<a href=\"/admin/dashboard\"", "app/admin/layout.tsx|<a href=\"/admin/platform\""]],
@@ -492,7 +503,7 @@ invariant(
 invariant(
   "admin onboarding is secondary to today's work and uses plain language",
   adminDashboard.indexOf("今日待處理") < adminDashboard.indexOf("<BrandSetupGuide") &&
-    adminDashboard.includes("<details className=\"card group") &&
+    adminDashboard.includes("<details className=\"admin-section group") &&
     !adminDashboard.includes("smoke test"),
 );
 invariant(
@@ -1180,8 +1191,12 @@ invariant(
   "reports expose required operational dimensions",
   read("app/admin/reports/page.tsx").includes("服務提供者") &&
     read("app/admin/reports/page.tsx").includes("票種") &&
+    read("app/admin/reports/page.tsx").includes('from("sales_payments")') &&
+    read("app/admin/reports/page.tsx").includes('label="後台收款"') &&
     read("app/api/admin/reports/route.ts").includes("services(name)") &&
-    read("app/api/admin/reports/route.ts").includes("event_ticket_types(name)"),
+    read("app/api/admin/reports/route.ts").includes("event_ticket_types(name)") &&
+    read("app/api/admin/reports/route.ts").includes('from("sales_payments")') &&
+    read("app/api/admin/reports/route.ts").includes('["後台收款"'),
 );
 invariant(
   "reports paginate large tenant datasets",
@@ -1654,6 +1669,29 @@ invariant(
     migrationBeautyOperations.includes("grant execute on function public.record_inventory_movement") &&
     read("app/api/admin/beauty-photo/route.ts").includes("public: false") &&
     !read("app/api/admin/beauty-photo/route.ts").includes("getPublicUrl"),
+);
+invariant(
+  "industry pack writes stay server mediated and scheduled states use Taipei time",
+  migrationIndustryPacks.includes("grant execute on function public.receive_purchase_order") &&
+  migrationIndustryPacks.includes("grant execute on function public.freeze_patient_subscription") &&
+    migrationIndustryPacks.includes("now() at time zone 'Asia/Taipei'") &&
+    migrationIndustryPacks.includes("paused_subscription boolean not null default false") &&
+    migrationIndustryPacks.includes("f.paused_subscription") &&
+    read("app/admin/beauty/supply/actions.ts").includes("requireOperator") &&
+    read("app/admin/fitness/actions.ts").includes("requireOperator") &&
+    read("app/admin/documents/actions.ts").includes("randomBytes(32)") &&
+    read("app/sign/[token]/actions.ts").includes('eq("status", "pending")'),
+);
+invariant(
+  "course answers stay server-only and completion issues a certificate",
+  migrationIndustryPacks.includes("create table if not exists public.course_assessment_submissions") &&
+    migrationIndustryPacks.includes("issue_course_certificate_if_complete") &&
+    read("app/api/customer/learning/route.ts").includes('select("id,unit_id,kind,prompt,options,correct_option,passing_score")') &&
+    read("app/api/customer/learning/route.ts").includes("correct_option?:number|null") &&
+    !read("app/learn/page.tsx").includes("correct_option") &&
+    read("app/admin/course-content/actions.ts").includes("reviewCourseAssignmentAction") &&
+    read("app/admin/course-content/actions.ts").includes('from("course_units").select("event_id")') &&
+    !read("app/admin/course-content/actions.ts").includes('from("course_assessment_submissions").select("id,event_id'),
 );
 invariant(
   "appointment and waitlist LINE status notifications use task-focused Flex cards",

@@ -20,7 +20,7 @@
 既有資料庫：
 
 1. 先執行 `supabase migration list` 與 `supabase db push --dry-run --linked`，保存遠端最後版本、`dryRun=true` 及將套用的檔名順序；dry-run 不可當成已套用證據。
-2. 先完成可還原備份，再依 README「既有資料庫 migration 順序」完整執行至 `202609020002_platform_report_aggregation.sql`；其中 `migration_marketing_opt_in_sync.sql`、品牌頁、共用 API 限流與平台聚合報表 migration 都不可跳過。
+2. 先完成可還原備份，再依 README「既有資料庫 migration 順序」完整執行至 `202609040006_checkout_registration_sync.sql`；其中 `migration_marketing_opt_in_sync.sql`、品牌頁、共用 API 限流、平台聚合報表、checkout lint 與報名付款同步 migration 都不可跳過。
 3. 每支 migration 執行一次後重跑同一支，確認可重跑且沒有重複 constraint／policy 錯誤。
 4. 執行 `supabase db lint --linked --schema public --level warning --fail-on warning`；error 或 warning 都必須為零。若仍有名稱歧義、未使用變數或型別問題，不得繼續部署。
 5. 檢查 `reminder_logs.clinic_id`、付款欄位、表單版本、會員 ledger 與所有新表的 row count／NULL。
@@ -110,7 +110,7 @@
 - 瀏覽器：驗證必要欄位、生日精確命中、signed token 過期與跨品牌 token 拒絕。
 - 瀏覽器身分 audit：執行 `railway run npm run audit:staging-browser-identity`，確認本品牌 token 只列出自己的預約、不能取消／改期同品牌他人預約、跨品牌 token 與 URL slug 切換被拒絕、竄改 token 為 401，且臨時資料清理成功。
 - staging 核心 release gate：執行 `railway run npm run audit:staging-core`，一次串行檢查公開 smoke、RLS／角色、預約候補、活動商務、通知與瀏覽器身分共 6 個 gate；任一段失敗即停止，需先確認該 domain audit 已完成臨時資料清理再重跑。
-- 四身分瀏覽器 gate：GitHub Actions 手動執行 `Staging release gate`，在核心 gate 通過後自動跑 `npm run audit:staging-role-ui`；以 1440px 與 390px 驗證兩種管理者可進入人員權限頁、兩種員工只能進入獲授權工作區，且頁面沒有水平溢位。此流程只允許 staging，並在結束後清理臨時品牌與帳號。
+- 四身分瀏覽器 gate：GitHub Actions 手動執行 `Staging release gate`，在核心 gate 通過後自動跑 `npm run audit:staging-role-ui`；以 1440px 與 390px 驗證兩種管理者可進入人員權限頁、兩種員工只能進入獲授權工作區，並逐頁檢查結帳、顧客資產、回訪、文件、採購、教室與課程內容沒有整頁水平溢位；桌機工作區需在內容足夠時呈現多欄。此流程只允許 staging，並在結束後清理臨時品牌與帳號。
 - Email：使用 staging 寄件網域與測試信箱，確認提醒、報名狀態與行銷信件的成功／失敗紀錄。
 - 嵌入元件：在另一個測試網站 iframe 開啟，確認 `clinic_slug` 或自訂網域仍正確解析。
 - 自訂網域：新增 DNS TXT、驗證成功後才啟用；未驗證／停用網域不得成為公開品牌入口。

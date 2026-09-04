@@ -125,14 +125,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="admin-page">
+      <div className="admin-page-header">
+        <div>
         <p className="eyebrow">目前位置：品牌後台</p>
-        <h1 className="mt-1 text-xl font-bold text-slate-900">品牌與系統設定</h1>
-        <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">這裡只管理目前選取的品牌。若要替其他使用者開通新品牌，請由系統管理者從「系統總控台」建立並寄送登入邀請。</p>
+        <h1 className="admin-page-title">品牌與系統設定</h1>
+        <p className="admin-page-description">只管理目前選取的品牌；依左側分類完成資料、營運規則與外部渠道設定。</p>
+        </div>
       </div>
 
-      <nav aria-label="品牌設定分類" className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
+      <aside className="border-y border-slate-200 bg-white lg:sticky lg:top-20">
+      <nav aria-label="品牌設定分類" className="divide-y divide-slate-200">
         {SETTINGS_SECTIONS.map((item) => {
           const selected = item.id === activeSection;
           return (
@@ -140,7 +144,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               key={item.id}
               href={`/admin/settings?section=${item.id}`}
               aria-current={selected ? "page" : undefined}
-              className={`rounded-2xl border px-4 py-3 transition ${selected ? "border-brand-300 bg-brand-50 shadow-sm" : "border-slate-200 bg-white hover:border-brand-200 hover:bg-slate-50"}`}
+              className={`block border-l-2 px-4 py-3 transition ${selected ? "border-brand-600 bg-brand-50" : "border-transparent hover:bg-slate-50"}`}
             >
               <span className={`block text-sm font-semibold ${selected ? "text-brand-800" : "text-slate-800"}`}>{item.label}</span>
               <span className="mt-1 block text-xs leading-5 text-slate-500">{item.description}</span>
@@ -149,12 +153,14 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         })}
       </nav>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="divide-y divide-slate-200 border-t border-slate-200">
         <SettingStatus label="LINE 官方帳號" value={!s.line_channel_enabled ? "未啟用" : lineReady ? "已驗證" : "待完成驗證"} ready={lineReady} href="/admin/line" />
         <SettingStatus label="標準金流" value={!payment?.active ? "未啟用" : paymentSecretConfigured ? "已啟用" : "缺少密鑰"} ready={payment?.active === true && paymentSecretConfigured} href="/admin/settings?section=channels" />
         <SettingStatus label="Email 提醒" value={!s.email_enabled ? "未啟用" : emailConfigured ? "已啟用" : "缺少寄件設定"} ready={s.email_enabled && emailConfigured} href="/admin/settings?section=channels" />
         <SettingStatus label="自訂網域" value={domains.some((item) => item.active) ? "已驗證" : domains.length ? "待驗證" : "尚未新增"} ready={domains.some((item) => item.active)} href="/admin/settings?section=domain" />
       </div>
+      </aside>
+      <div className="min-w-0 space-y-5">
 
       {activeSection === "advanced" && <form action={createBrandAction} className="card space-y-4 border-brand-100 bg-brand-50/40 p-5">
         <div>
@@ -465,22 +471,24 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               寄件人網域需先在 Resend 完成驗證;顧客需在「顧客查詢」建檔留有 Email 才會收到。
         </p>
       </form>}
+      </div>
+      </div>
     </div>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset className="card p-5">
-      <legend className="px-2 text-sm font-semibold text-brand-700">{title}</legend>
-      <div className="flex flex-wrap items-end gap-4">{children}</div>
+    <fieldset className="border-b border-slate-200 bg-white px-4 py-5 last:border-b-0">
+      <legend className="px-0 text-sm font-semibold text-slate-900">{title}</legend>
+      <div className="mt-3 flex flex-wrap items-end gap-4">{children}</div>
     </fieldset>
   );
 }
 
 function SettingStatus({ label, value, ready, href }: { label: string; value: string; ready: boolean; href: string }) {
   return (
-    <Link href={href} className="card flex items-center justify-between gap-3 p-4 transition hover:-translate-y-0.5 hover:border-brand-200">
+    <Link href={href} className="flex items-center justify-between gap-3 px-4 py-3 transition hover:bg-slate-50">
       <div><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-sm font-semibold text-slate-900">{value}</p></div>
       <span className={`badge ${ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{ready ? "就緒" : "待處理"}</span>
     </Link>

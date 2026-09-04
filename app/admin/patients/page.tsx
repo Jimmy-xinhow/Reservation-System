@@ -125,13 +125,13 @@ export default async function PatientsPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold text-slate-900">{segmentName ? `分眾顧客：${segmentName}` : "顧客查詢"}</h1>
+    <div className="admin-page">
+      <div className="admin-page-header">
+        <div><p className="eyebrow">顧客與會員</p><h1 className="admin-page-title">{segmentName ? `分眾顧客：${segmentName}` : "顧客名單"}</h1><p className="admin-page-description">集中搜尋顧客、查看預約紀錄、標籤與可服務狀態。</p></div>
         {segmentId && <Link href="/admin/patients" className="btn btn-ghost text-sm">清除分眾篩選</Link>}
       </div>
 
-      <form className="card flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
+      <form className="admin-toolbar">
         <label className="w-full max-w-md text-sm"><span className="label">搜尋顧客</span><input name="q" defaultValue={keyword} placeholder="姓名、電話或生日（月日四碼）" className="input" /><span className="help-text block">生日例如 3 月 8 日，可輸入 0308。</span></label>
         {segmentId && <input type="hidden" name="segment_id" value={segmentId} />}
         <SubmitButton className="btn btn-primary">搜尋</SubmitButton>
@@ -142,7 +142,7 @@ export default async function PatientsPage({
         )}
       </form>
 
-      <div className="card overflow-x-auto">
+      <div className="admin-table-shell">
         <table className="tbl">
           <thead>
             <tr>
@@ -198,7 +198,7 @@ export default async function PatientsPage({
                     <div className="flex items-center gap-3">
                       <Link
                         href={`/admin/patients/${p.id}`}
-                        className="text-xs font-medium text-brand-600 hover:underline"
+                        className="admin-inline-action text-brand-700"
                       >
                         詳情
                       </Link>

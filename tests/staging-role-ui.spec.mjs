@@ -9,6 +9,16 @@ const baseUrl = (process.env.STAGING_BASE_URL ?? process.env.PUBLIC_APP_URL ?? "
 
 let fixture;
 
+const denseBrandWorkspaces = [
+  ["/admin/checkout", "結帳中心"],
+  ["/admin/customer-value", "顧客資產與訂閱"],
+  ["/admin/followups", "指定日期回訪"],
+  ["/admin/documents", "同意書與電子簽署"],
+  ["/admin/beauty/supply", "採購與盤點"],
+  ["/admin/fitness", "教室與會籍營運"],
+  ["/admin/course-content", "課程內容與學習驗收"],
+];
+
 function runFixture(mode) {
   const result = spawnSync(process.execPath, [fixtureScript, mode], {
     cwd: root,
@@ -29,6 +39,7 @@ async function login(page, identity, entry) {
   await page.getByLabel("Email").fill(account.email);
   await page.getByLabel("密碼").fill(account.password);
   await page.getByRole("button", { name: entry === "platform" ? "登入系統管理後台" : "登入品牌營運後台" }).click();
+  await expect(page).toHaveURL(entry === "platform" ? /\/admin\/platform(?:\?|$)/ : /\/admin\/dashboard(?:\?|$)/);
 }
 
 async function expectNoHorizontalOverflow(page) {
@@ -60,6 +71,22 @@ async function expectNoHorizontalOverflow(page) {
       .filter((item) => item && (item.left < -0.5 || item.right > viewportWidth + 0.5))
       .slice(0, 12);
   })).toEqual([]);
+}
+
+async function expectDenseWorkspaceLayout(page, { paired = false } = {}) {
+  await expectNoHorizontalOverflow(page);
+  const headingSize = await page.locator("h1").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  expect(headingSize).toBeGreaterThanOrEqual(24);
+  expect(headingSize).toBeLessThanOrEqual(28);
+  await expect(page.locator(".admin-shell")).toHaveCSS("font-size", "14px");
+  const helperText = page.locator(".admin-shell .text-xs").first();
+  if (await helperText.count()) await expect(helperText).toHaveCSS("font-size", "12px");
+  if (!paired) return;
+  const workspace = page.locator(".admin-workbench-grid, .admin-workbench-grid-wide").first();
+  if (await workspace.count()) {
+    const columnCount = await workspace.evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length);
+    expect(columnCount).toBeGreaterThanOrEqual(2);
+  }
 }
 
 test.describe.configure({ mode: "serial" });
@@ -105,6 +132,31 @@ test("品牌管理者可進入品牌人員頁", async ({ page }) => {
   await page.goto(`${baseUrl}/admin/users`);
   await expect(page.getByRole("heading", { name: "品牌人員與權限" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  const csvResponse = await page.request.get(`${baseUrl}/api/admin/reports?from=2026-09-01&to=2026-09-30`);
+  expect(csvResponse.status()).toBe(200);
+  expect(csvResponse.headers()["content-type"]).toContain("text/csv");
+  expect(csvResponse.headers()["content-disposition"]).toContain("booking-report-2026-09-01-2026-09-30.csv");
+  expect(await csvResponse.text()).toContain('"類型","編號","日期"');
+});
+
+test("品牌管理者的新增營運頁在桌機採緊湊多欄排版", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, "brand-admin", "brand");
+  for (const [pathname, heading] of denseBrandWorkspaces) {
+    await page.goto(`${baseUrl}${pathname}`);
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+    await expectDenseWorkspaceLayout(page, { paired: true });
+  }
+});
+
+test("品牌管理者的新增營運頁在手機不產生頁面橫向溢位", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page, "brand-admin", "brand");
+  for (const [pathname, heading] of denseBrandWorkspaces) {
+    await page.goto(`${baseUrl}${pathname}`);
+    await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+    await expectDenseWorkspaceLayout(page);
+  }
 });
 
 test("品牌員工無法進入品牌人員頁", async ({ page }) => {

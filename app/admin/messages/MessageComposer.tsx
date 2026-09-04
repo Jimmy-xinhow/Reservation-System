@@ -92,7 +92,7 @@ export default function MessageComposer({
                   <button
                     type="button"
                     onClick={() => setCards(cards.filter((_, idx) => idx !== i))}
-                    className="text-xs text-red-500 hover:underline"
+                    className="admin-inline-action text-red-700"
                   >
                     刪除此頁
                   </button>
@@ -206,7 +206,7 @@ function CardEditor({ card, onChange }: { card: MsgCard; onChange: (c: MsgCard) 
             <button
               type="button"
               onClick={() => onChange({ ...card, buttons: card.buttons.filter((_, idx) => idx !== i) })}
-              className="text-xs text-red-500 hover:underline"
+              className="admin-inline-action text-red-700"
             >
               移除
             </button>
@@ -225,7 +225,7 @@ function CardEditor({ card, onChange }: { card: MsgCard; onChange: (c: MsgCard) 
           <button
             type="button"
             onClick={() => onChange({ ...card, buttons: [...card.buttons, { label: "按鈕", action: "booking" }] })}
-            className="text-xs font-medium text-brand-600 hover:underline"
+            className="admin-inline-action text-brand-700"
           >
             ＋ 新增按鈕
           </button>

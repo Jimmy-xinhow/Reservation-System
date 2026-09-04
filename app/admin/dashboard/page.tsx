@@ -4,6 +4,7 @@ import { getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { taipeiDateString } from "@/lib/slots";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { PermissionHelpButton } from "@/components/AdminProductTelemetry";
+import { ScheduleTimeline, TrendLineChart } from "@/components/admin/OperationsCharts";
 
 export const dynamic = "force-dynamic";
 
@@ -24,8 +25,10 @@ const STATUS_COLOR: Record<string, string> = {
 
 interface AppointmentRow {
   start_at: string;
+  end_at: string;
   status: string;
   doctors: { name: string } | null;
+  services: { name: string } | null;
 }
 interface RegistrationRow {
   created_at: string;
@@ -46,6 +49,11 @@ function shiftDate(base: string, days: number): string {
   const d = new Date(`${base}T00:00:00+08:00`);
   d.setDate(d.getDate() + days);
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(d);
+}
+
+function taipeiMinute(value: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(value));
+  return Number(parts.find((part) => part.type === "hour")?.value ?? 0) * 60 + Number(parts.find((part) => part.type === "minute")?.value ?? 0);
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -98,7 +106,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   let appointmentsQuery = supabase
     .from("appointments")
-    .select("start_at, status, doctors(name)")
+    .select("start_at, end_at, status, doctors(name), services(name)")
     .eq("clinic_id", clinicId)
     .gte("start_at", winStartIso)
     .lte("start_at", winEndIso);
@@ -140,15 +148,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const days = Array.from({ length: 14 }, (_, i) => shiftDate(winStart, i));
   const perDay = days.map((date) => ({ date, bookings: activeAppointments.filter((item) => taipeiDateString(item.start_at) === date).length, registrations: activeRegistrations.filter((item) => taipeiDateString(item.created_at) === date).length }));
-  const maxDay = Math.max(1, ...perDay.map((item) => item.bookings + item.registrations));
+  const todayTimeline = todayAppointments.map((item, index) => ({ id: `${item.start_at}-${index}`, label: item.doctors?.name ?? "未指定", service: item.services?.name ?? "未指定服務", status: item.status, startMinute: taipeiMinute(item.start_at), endMinute: taipeiMinute(item.end_at) }));
   const statusCounts = countBy(appointments, (item) => item.status);
   const providerCounts = countBy(activeAppointments, (item) => item.doctors?.name ?? "未指定");
   const maxProvider = Math.max(1, ...Object.values(providerCounts));
 
   return (
-    <div className="space-y-6">
+    <div className="admin-page">
       <AutoRefresh seconds={30} />
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="eyebrow">今日營運</p><h1 className="text-2xl font-bold text-slate-900">{role === "provider" ? "我的今日工作台" : "今日工作台"}</h1><p className="mt-1 text-base text-slate-600">{role === "provider" ? "只顯示已指派給你的預約與今日工作。" : "先處理今天需要行動的事項，再查看營運趨勢。"}</p></div><div className="flex flex-wrap gap-2">{publicBrandUrl && <Link href={publicBrandUrl} target="_blank" className="btn btn-secondary">查看品牌形象頁 ↗</Link>}<Link href="/admin/calendar" className="btn btn-secondary">查看日曆</Link>{role !== "provider" && <Link href="/admin/reports" className="btn btn-primary">查看報表</Link>}</div></div>
+      <div className="admin-page-header"><div><p className="eyebrow">今日營運</p><h1 className="admin-page-title">{role === "provider" ? "我的今日工作台" : "今日工作台"}</h1><p className="admin-page-description">{role === "provider" ? "只顯示已指派給你的預約與今日工作。" : "先處理需要行動的事項，再查看營運趨勢。"}</p></div><div className="flex flex-wrap gap-2">{publicBrandUrl && <Link href={publicBrandUrl} target="_blank" className="btn btn-secondary">品牌形象頁 ↗</Link>}<Link href="/admin/calendar" className="btn btn-secondary">日曆</Link>{role !== "provider" && <Link href="/admin/reports" className="btn btn-primary">報表</Link>}</div></div>
 
       {params.notice === "permission" && (
         <div role="status" className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
@@ -157,27 +165,29 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5"><Stat label="今日預約" value={todayAppointments.length} accent />{eventsEnabled && role !== "provider" && <Stat label="今日活動報名" value={todayRegistrations.length} />}<Stat label="待確認" value={waitingConfirmation} tone={waitingConfirmation ? "warning" : undefined} />{role !== "provider" && <Stat label="待付款" value={pendingPayments} tone={pendingPayments ? "warning" : undefined} />}<Stat label="未來 7 日預約" value={upcomingAppointments.length} /></div>
+      <div className="admin-metric-strip grid-cols-2 sm:grid-cols-5"><Stat label="今日預約" value={todayAppointments.length} accent />{eventsEnabled && role !== "provider" && <Stat label="今日活動報名" value={todayRegistrations.length} />}<Stat label="待確認" value={waitingConfirmation} tone={waitingConfirmation ? "warning" : undefined} />{role !== "provider" && <Stat label="待付款" value={pendingPayments} tone={pendingPayments ? "warning" : undefined} />}<Stat label="未來 7 日預約" value={upcomingAppointments.length} /></div>
 
-      <section className="card space-y-4 p-5"><div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-slate-900">今日待處理</h2><p className="mt-1 text-sm text-slate-500">把需要人工確認或補救的工作集中在這裡。</p></div><span className="text-xs text-slate-400">每 30 秒更新</span></div><div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4"><ActionCard href="/admin" label="待確認預約" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認預約"} tone={waitingConfirmation ? "warning" : "neutral"} />{eventsEnabled && role !== "provider" && <ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款"} tone={pendingPayments ? "warning" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="通知失敗" value={failedDeliveries} description={failedDeliveries ? "查看投遞紀錄" : "近期沒有失敗"} tone={failedDeliveries ? "danger" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="近期未到" value={noShows} description={noShows ? "可檢查回訪與分眾" : "近期沒有未到"} tone={noShows ? "warning" : "neutral"} />}</div></section>
+      <section className="admin-section"><div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">今日待處理</h2><p className="mt-0.5 text-xs text-slate-500">需要人工確認或補救的工作。</p></div><span className="text-xs text-slate-400">每 30 秒更新</span></div><div className="grid divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-4">{<ActionCard href="/admin" label="待確認預約" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認預約"} tone={waitingConfirmation ? "warning" : "neutral"} />}{eventsEnabled && role !== "provider" && <ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款"} tone={pendingPayments ? "warning" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="通知失敗" value={failedDeliveries} description={failedDeliveries ? "查看投遞紀錄" : "近期沒有失敗"} tone={failedDeliveries ? "danger" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="近期未到" value={noShows} description={noShows ? "可檢查回訪與分眾" : "近期沒有未到"} tone={noShows ? "warning" : "neutral"} />}</div></section>
 
       {setupItems.length > 0 && setupItems.some((item) => item.status !== "done") && <BrandSetupGuide items={setupItems} />}
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2"><section className="card p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="font-semibold text-slate-900">預約與報名趨勢</h2><p className="mt-1 text-xs text-slate-500">近 14 日建立／安排數量；深色為今天。</p></div><div className="flex gap-3 text-xs text-slate-500"><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-brand-600" />預約</span><span><i className="mr-1 inline-block h-2 w-2 rounded-full bg-accent-500" />報名</span></div></div><div className="mt-5 flex h-40 items-end gap-1 sm:gap-1.5">{perDay.map((item) => <div key={item.date} className="flex h-full min-w-0 flex-1 flex-col items-center gap-1"><span className="text-[10px] text-slate-500">{item.bookings + item.registrations || ""}</span><div className="flex w-full flex-1 items-end gap-0.5"><div className={`w-1/2 rounded-t ${item.date === today ? "bg-brand-600" : "bg-brand-200"}`} style={{ height: item.bookings ? `${Math.max(5, item.bookings / maxDay * 100)}%` : "2px" }} /><div className={`w-1/2 rounded-t ${item.date === today ? "bg-accent-500" : "bg-accent-200"}`} style={{ height: item.registrations ? `${Math.max(5, item.registrations / maxDay * 100)}%` : "2px" }} /></div><span className={`w-full truncate text-center text-[10px] ${item.date === today ? "font-bold text-brand-700" : "text-slate-400"}`}><span className="sm:hidden">{item.date.slice(8)}</span><span className="hidden sm:inline">{item.date.slice(5)}</span></span></div>)}</div></section><section className="card p-5"><h2 className="mb-4 font-semibold text-slate-900">預約狀態</h2><div className="space-y-2.5">{Object.keys(STATUS_LABEL).map((key) => { const count = statusCounts[key] ?? 0; const total = appointments.length || 1; return <div key={key} className="flex items-center gap-3 text-sm"><span className="w-14 shrink-0 text-slate-600">{STATUS_LABEL[key]}</span><div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className={`h-full ${STATUS_COLOR[key]}`} style={{ width: `${count / total * 100}%` }} /></div><span className="w-8 shrink-0 text-right text-slate-500">{count}</span></div>; })}</div></section></div>
+      <div className="admin-workbench-grid"><section className="admin-section p-4"><div><h2 className="font-semibold text-slate-900">預約與報名趨勢</h2><p className="mt-1 text-xs text-slate-500">近 14 日數量曲線，可直接辨識尖峰與低谷。</p></div><TrendLineChart data={perDay} today={today} /></section><section className="admin-section p-4"><div><h2 className="font-semibold text-slate-900">今日人員排程</h2><p className="mt-1 text-xs text-slate-500">甘特式時間軸顯示服務人員佔用區間與狀態。</p></div><ScheduleTimeline items={todayTimeline} /></section></div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2"><section className="card p-5"><h2 className="mb-4 font-semibold text-slate-900">服務提供者分佈</h2>{Object.keys(providerCounts).length === 0 ? <p className="text-sm text-slate-400">尚無資料</p> : <div className="space-y-2.5">{Object.entries(providerCounts).map(([name, count]) => <div key={name} className="flex items-center gap-3 text-sm"><span className="w-24 shrink-0 truncate text-slate-600">{name}</span><div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-accent-500" style={{ width: `${count / maxProvider * 100}%` }} /></div><span className="w-8 shrink-0 text-right text-slate-500">{count}</span></div>)}</div>}</section><section className="card p-5"><h2 className="mb-4 font-semibold text-slate-900">資料範圍摘要</h2><div className="space-y-2 text-sm"><SummaryLine label="可管理顧客" value={role === "provider" ? "依指派範圍" : `${patientCount ?? 0} 人`} /><SummaryLine label="近期付款成功" value={`${payments.filter((item) => item.status === "paid").length} 筆`} /><SummaryLine label="通知已送達" value={`${deliveries.filter((item) => item.status === "sent").length} 筆`} /><SummaryLine label="資料時間範圍" value={`${winStart} 至 ${winEnd}`} /></div></section></div>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2"><section className="admin-section p-4"><h2 className="mb-4 font-semibold text-slate-900">預約狀態</h2><div className="space-y-2.5">{Object.keys(STATUS_LABEL).map((key) => { const count = statusCounts[key] ?? 0; const total = appointments.length || 1; return <div key={key} className="flex items-center gap-3 text-sm"><span className="w-14 shrink-0 text-slate-600">{STATUS_LABEL[key]}</span><div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100"><div className={`h-full ${STATUS_COLOR[key]}`} style={{ width: `${count / total * 100}%` }} /></div><span className="w-8 shrink-0 text-right text-slate-500">{count}</span></div>; })}</div></section><section className="admin-section p-4"><h2 className="mb-4 font-semibold text-slate-900">服務提供者分佈</h2>{Object.keys(providerCounts).length === 0 ? <p className="text-sm text-slate-400">尚無資料</p> : <div className="space-y-2.5">{Object.entries(providerCounts).map(([name, count]) => <div key={name} className="flex items-center gap-3 text-sm"><span className="w-24 shrink-0 truncate text-slate-600">{name}</span><div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-accent-500" style={{ width: `${count / maxProvider * 100}%` }} /></div><span className="w-8 shrink-0 text-right text-slate-500">{count}</span></div>)}</div>}</section></div>
+
+      <section className="admin-section p-5"><h2 className="mb-4 font-semibold text-slate-900">資料範圍摘要</h2><div className="grid gap-x-8 text-sm sm:grid-cols-2 xl:grid-cols-4"><SummaryLine label="可管理顧客" value={role === "provider" ? "依指派範圍" : `${patientCount ?? 0} 人`} /><SummaryLine label="近期付款成功" value={`${payments.filter((item) => item.status === "paid").length} 筆`} /><SummaryLine label="通知已送達" value={`${deliveries.filter((item) => item.status === "sent").length} 筆`} /><SummaryLine label="資料時間範圍" value={`${winStart} 至 ${winEnd}`} /></div></section>
     </div>
   );
 }
 
-function Stat({ label, value, accent, tone }: { label: string; value: number | string; accent?: boolean; tone?: "warning" }) { return <div className={`card p-4 ${accent ? "bg-gradient-to-br from-brand-500 to-accent-600 text-white" : tone === "warning" ? "border-amber-200 bg-amber-50" : ""}`}><div className={`text-xs ${accent ? "text-white/80" : "text-slate-500"}`}>{label}</div><div className={`mt-1 text-2xl font-bold ${accent ? "text-white" : tone === "warning" ? "text-amber-700" : "text-slate-900"}`}>{value}</div></div>; }
-function ActionCard({ href, label, value, description, tone }: { href: string; label: string; value: number; description: string; tone: "warning" | "danger" | "neutral" }) { return <Link href={href} className={`rounded-xl border p-4 transition hover:-translate-y-0.5 ${tone === "danger" ? "border-red-200 bg-red-50" : tone === "warning" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}><div className="flex items-center justify-between gap-2"><span className="text-sm font-medium text-slate-700">{label}</span><span className={`text-2xl font-bold ${tone === "danger" ? "text-red-700" : tone === "warning" ? "text-amber-700" : "text-slate-900"}`}>{value}</span></div><p className="mt-2 text-xs leading-5 text-slate-500">{description}</p></Link>; }
+function Stat({ label, value, accent, tone }: { label: string; value: number | string; accent?: boolean; tone?: "warning" }) { return <div className={`admin-metric ${tone === "warning" ? "bg-amber-50" : accent ? "border-t-2 border-t-brand-600" : ""}`}><div className="admin-metric-label">{label}</div><div className={`admin-metric-value ${tone === "warning" ? "text-amber-700" : ""}`}>{value}</div></div>; }
+function ActionCard({ href, label, value, description, tone }: { href: string; label: string; value: number; description: string; tone: "warning" | "danger" | "neutral" }) { return <Link href={href} className={`flex min-h-20 items-center gap-3 px-4 py-3 transition hover:bg-slate-50 ${tone === "danger" ? "text-red-700" : tone === "warning" ? "text-amber-800" : "text-slate-800"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${tone === "danger" ? "bg-red-500" : tone === "warning" ? "bg-amber-500" : "bg-slate-300"}`} /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="mt-0.5 block text-xs leading-5 text-slate-500">{description}</span></span><strong className="text-xl tabular-nums">{value}</strong></Link>; }
 function SummaryLine({ label, value }: { label: string; value: string }) { return <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0"><span className="text-slate-500">{label}</span><span className="font-medium text-slate-800">{value}</span></div>; }
 function BrandSetupGuide({ items }: { items: SetupItem[] }) {
   const next = items.find((item) => item.status === "blocked") ?? items.find((item) => item.status === "warning");
   const completed = items.filter((item) => item.status === "done").length;
   return (
-    <details className="card group border-brand-100 bg-brand-50/40">
+    <details className="admin-section group">
       <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
         <div>
           <p className="font-semibold text-slate-900">新品牌上線準備</p>

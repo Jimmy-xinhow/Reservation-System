@@ -76,7 +76,7 @@ export default async function UsersPage() {
                       <option value="employee">品牌員工</option>
                       <option value="brand_admin">品牌管理者</option>
                     </select>
-                    {m.isSelf ? <p className="text-xs text-slate-500">{brandAccessLabel(m.accessType)} · 目前登入帳號不可自行降級</p> : <><BrandPermissionPicker defaults={m.permissions} compact /><SubmitButton className="text-xs font-medium text-brand-600 hover:underline">儲存身分與權限</SubmitButton></>}
+                    {m.isSelf ? <p className="text-xs text-slate-500">{brandAccessLabel(m.accessType)} · 目前登入帳號不可自行降級</p> : <><BrandPermissionPicker defaults={m.permissions} compact /><SubmitButton className="admin-inline-action text-brand-700">儲存身分與權限</SubmitButton></>}
                   </form>
                   {m.permissions.includes("provider.assigned") && (
                     <form action={setDoctorAssignmentsAction} className="mt-2 space-y-1.5 rounded-lg bg-slate-50 p-2">
@@ -99,7 +99,7 @@ export default async function UsersPage() {
                           ))}
                         </div>
                       )}
-                      <SubmitButton className="text-[11px] font-medium text-brand-600 hover:underline">儲存指派</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-brand-700">儲存指派</SubmitButton>
                     </form>
                   )}
                 </td>
@@ -119,7 +119,7 @@ export default async function UsersPage() {
                         placeholder="新密碼"
                         className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-xs"
                       />
-                      <SubmitButton className="text-xs font-medium text-brand-600 hover:underline">更新</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-brand-700">更新</SubmitButton>
                     </form>
                   )}
                 </td>
@@ -129,7 +129,7 @@ export default async function UsersPage() {
                   ) : (
                     <form action={removeStaffAction}>
                       <input type="hidden" name="user_id" value={m.userId} />
-                      <SubmitButton className="text-xs font-medium text-red-600 hover:underline">移除權限</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-red-700">移除權限</SubmitButton>
                     </form>
                   )}
                 </td>

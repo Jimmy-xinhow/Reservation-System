@@ -164,13 +164,15 @@ export default async function TodayPage({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="admin-page">
+      <div className="admin-page-header">
         <div>
-          <h1 className="text-xl font-bold text-slate-900">
+          <p className="eyebrow">預約營運</p>
+          <h1 className="admin-page-title">
             預約列表 · {viewDate}
             {viewDate === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
           </h1>
+          <p className="admin-page-description">先查看與處理當日預約；需要建立或改期時再展開操作區。</p>
         </div>
         <span className="badge bg-brand-50 text-brand-700">
           {settingsUnavailable ? "讀不到設定" : mode === "time" ? "時間制" : "號次制"}
@@ -178,7 +180,7 @@ export default async function TodayPage({
       </div>
 
       {/* 日期切換 */}
-      <div className="flex flex-wrap items-center gap-2 text-sm">
+      <div className="admin-toolbar text-sm">
         <a href={dayLink(shiftDate(viewDate, -1))} className="btn btn-secondary px-3 py-1.5">
           ← 前一天
         </a>
@@ -197,15 +199,22 @@ export default async function TodayPage({
         </p>
       )}
 
+      <details className="admin-section group">
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-semibold text-slate-800">
+          <span>新增或改期預約</span>
+          <span className="text-xs font-medium text-brand-700 group-open:hidden">展開操作</span>
+          <span className="hidden text-xs font-medium text-slate-500 group-open:inline">收合</span>
+        </summary>
+        <div className="border-t border-slate-200 p-4">
       {!canOperate(role) ? (
-        <div className="card space-y-2 p-5">
+        <div className="space-y-2">
           <p className="text-sm font-medium text-slate-700">服務提供者僅能查看已指派的工作資料。</p>
           <p className="text-xs text-slate-500">
             {assignedDoctorIds.length > 0 ? "目前已套用指派範圍；顧客電話已遮罩。" : "目前尚未設定指派範圍，請由品牌管理員在帳號管理中設定。"}
           </p>
         </div>
       ) : (doctors ?? []).length === 0 && (services ?? []).length === 0 ? (
-        <div className="card flex flex-col items-start gap-2 p-5">
+        <div className="flex flex-col items-start gap-2">
           <p className="text-sm text-slate-600">尚未建立服務提供者或服務項目，顧客目前無法預約。</p>
           {canManageBrand ? (
             <a href="/admin/schedules" className="btn btn-primary">
@@ -227,9 +236,11 @@ export default async function TodayPage({
           rescheduleAction={rescheduleAppointmentAction}
         />
       )}
+        </div>
+      </details>
 
       {/* 篩選列 + 筆數 */}
-      <form className="flex flex-wrap items-end gap-3">
+      <form className="admin-toolbar">
         <div>
           <label className="label">日期</label>
           <input type="date" name="date" defaultValue={viewDate} className="input" />
@@ -279,7 +290,7 @@ export default async function TodayPage({
         </section>
       )}
 
-      <div className="card overflow-x-auto">
+      <div className="admin-table-shell">
         <table className="tbl">
           <thead>
             <tr>
@@ -348,14 +359,16 @@ export default async function TodayPage({
                         <option value="waived">免收</option>
                         <option value="refunded">已退</option>
                       </select>
-                      <SubmitButton className="text-xs font-medium text-brand-600 hover:underline">更新</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-brand-700">更新訂金</SubmitButton>
                       <span className="text-xs text-slate-400">${r.deposit_amount}</span>
                     </form>
                   )}
                 </td>
                 <td>
+                  <div className="flex flex-wrap gap-1.5">
+                    {!providerOnly && ["booked", "confirmed", "done"].includes(r.status) && <a href={`/admin/checkout?appointment_id=${r.id}`} className="admin-inline-action text-brand-700">結帳</a>}
                   {r.status !== "cancelled" && r.status !== "done" && (
-                    <div className="flex flex-wrap gap-1.5">
+                    <>
                       {r.status === "booked" && <StatusBtn id={r.id} status="confirmed" label="確認" />}
                       <StatusBtn id={r.id} status="done" label="完成" />
                       <StatusBtn id={r.id} status="no_show" label="未到" />
@@ -365,8 +378,9 @@ export default async function TodayPage({
                           取消
                         </SubmitButton>
                       </form>
-                    </div>
+                    </>
                   )}
+                  </div>
                 </td>
               </tr>
             ))}

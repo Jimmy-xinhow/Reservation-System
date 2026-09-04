@@ -79,6 +79,8 @@ export async function saveCommissionRuleAction(fd: FormData): Promise<void> {
   const doctorId = text(fd, "doctor_id");
   const serviceId = text(fd, "service_id") || null;
   const amount = Math.max(0, Math.round(numberValue(fd, "amount_per_service")));
+  const calculationType = text(fd, "calculation_type") === "percent" ? "percent" : "fixed";
+  const ratePercent = Math.max(0, Math.min(100, numberValue(fd, "rate_percent")));
   if (!doctorId) throw new Error("請選擇服務人員");
   const service = createServiceClient();
   const [{ data: doctor }, serviceResult] = await Promise.all([
@@ -91,8 +93,8 @@ export async function saveCommissionRuleAction(fd: FormData): Promise<void> {
   const { data: existing, error: existingError } = await query.maybeSingle();
   if (existingError) throw new Error(existingError.message);
   const result = existing
-    ? await service.from("beauty_commission_rules").update({ amount_per_service: amount, active: true }).eq("id", existing.id).eq("clinic_id", clinicId)
-    : await service.from("beauty_commission_rules").insert({ clinic_id: clinicId, doctor_id: doctorId, service_id: serviceId, amount_per_service: amount, active: true });
+    ? await service.from("beauty_commission_rules").update({ amount_per_service: amount, calculation_type: calculationType, rate_percent: ratePercent, active: true }).eq("id", existing.id).eq("clinic_id", clinicId)
+    : await service.from("beauty_commission_rules").insert({ clinic_id: clinicId, doctor_id: doctorId, service_id: serviceId, amount_per_service: amount, calculation_type: calculationType, rate_percent: ratePercent, active: true });
   if (result.error) throw new Error(result.error.message);
   revalidatePath("/admin/beauty");
 }

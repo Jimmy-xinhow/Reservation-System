@@ -3,6 +3,9 @@ import { requireNonProvider } from "@/lib/admin";
 import { formatDateTime } from "@/lib/slots";
 import { createServiceClient } from "@/lib/supabase";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { FunnelBarChart, TrendLineChart } from "@/components/admin/OperationsCharts";
+import { auditStatusLabel } from "@/lib/admin-display";
+import { registrationStatusLabel } from "@/lib/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +33,7 @@ interface RegistrationRow {
 }
 
 interface PaymentRow { status: string; amount: number; }
+interface SalesPaymentRow { amount: number; }
 interface DeliveryRow { status: string; }
 interface FunnelRow { event_name: string; source: string | null; }
 
@@ -47,6 +51,16 @@ function shiftDate(date: string, days: number): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(value);
 }
 
+function recentDateSeries(from: string, to: string, limit = 60): string[] {
+  const result: string[] = [];
+  let cursor = to;
+  while (cursor >= from && result.length < limit) {
+    result.unshift(cursor);
+    cursor = shiftDate(cursor, -1);
+  }
+  return result;
+}
+
 function rangeIso(from: string, to: string): { start: string; end: string } {
   return {
     start: new Date(`${from}T00:00:00+08:00`).toISOString(),
@@ -56,6 +70,20 @@ function rangeIso(from: string, to: string): { start: string; end: string } {
 
 function percent(value: number, total: number): string {
   return total === 0 ? "—" : `${((value / total) * 100).toFixed(1)}%`;
+}
+
+function reportSourceLabel(value: string): string {
+  const labels: Record<string, string> = {
+    direct: "直接開啟",
+    offline: "後台建立",
+    online: "線上預約",
+    browser: "一般瀏覽器入口",
+    liff: "LINE 顧客入口",
+    line: "LINE",
+    admin: "後台人員",
+    import: "資料匯入",
+  };
+  return labels[value] ?? value;
 }
 
 function bookingBreakdown(rows: AppointmentRow[]) {
@@ -68,7 +96,7 @@ function bookingBreakdown(rows: AppointmentRow[]) {
     const key = [day, provider, service, row.status, source].join("\u0000");
     const current = grouped.get(key);
     if (current) current.count += 1;
-    else grouped.set(key, { day, provider, service, status: row.status, source, count: 1 });
+    else grouped.set(key, { day, provider, service, status: auditStatusLabel(row.status), source: reportSourceLabel(source), count: 1 });
   }
   return [...grouped.values()].sort((a, b) => a.day.localeCompare(b.day) || a.provider.localeCompare(b.provider));
 }
@@ -82,7 +110,7 @@ function registrationBreakdown(rows: RegistrationRow[]) {
     const key = [event, session, ticket, row.status].join("\u0000");
     const current = grouped.get(key);
     if (current) current.count += 1;
-    else grouped.set(key, { event, session, ticket, status: row.status, count: 1 });
+    else grouped.set(key, { event, session, ticket, status: registrationStatusLabel(row.status), count: 1 });
   }
   return [...grouped.values()].sort((a, b) => a.event.localeCompare(b.event) || a.session.localeCompare(b.session));
 }
@@ -97,10 +125,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const normalizedFrom = from <= to ? from : to;
   const normalizedTo = from <= to ? to : from;
   const range = rangeIso(normalizedFrom, normalizedTo);
-  const [appointments, registrations, payments, deliveries, funnelRows, waitlistResult, promotedResult] = await Promise.all([
+  const [appointments, registrations, payments, salesPayments, deliveries, funnelRows, waitlistResult, promotedResult] = await Promise.all([
     fetchAllSupabasePages((from, to) => supabase.from("appointments").select("start_at, status, membership_id, source, doctors(name), services(name)").eq("clinic_id", clinicId).gte("start_at", range.start).lte("start_at", range.end).order("start_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("registrations").select("created_at, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("sales_payments").select("amount").eq("clinic_id", clinicId).gte("received_at", range.start).lte("received_at", range.end).order("received_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => service.from("funnel_events").select("event_name, source").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
@@ -112,6 +141,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const appointmentRows = appointments as AppointmentRow[];
   const registrationRows = registrations as RegistrationRow[];
   const paymentRows = payments as PaymentRow[];
+  const salesPaymentRows = salesPayments as SalesPaymentRow[];
   const deliveryRows = deliveries as DeliveryRow[];
   const funnelEventRows = funnelRows as FunnelRow[];
   const validAppointmentRows = appointmentRows.filter((row) => ["booked", "confirmed", "done", "no_show"].includes(row.status));
@@ -140,6 +170,19 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     if (row.event_name === "booking_success") current.successes += 1;
     sourceConversions.set(source, current);
   }
+  const trendDays = recentDateSeries(normalizedFrom, normalizedTo);
+  const trendData = trendDays.map((date) => ({
+    date,
+    bookings: appointmentRows.filter((row) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(row.start_at)) === date).length,
+    registrations: registrationRows.filter((row) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(row.created_at)) === date).length,
+  }));
+  const funnelData = [
+    { label: "入口瀏覽", value: funnelCounts.get("portal_view") ?? 0, color: "#2563eb" },
+    { label: "開始預約", value: funnelCounts.get("booking_start") ?? 0, color: "#1d4ed8" },
+    { label: "預約成功", value: funnelCounts.get("booking_success") ?? 0, color: "#059669" },
+    { label: "開始報名", value: funnelCounts.get("registration_start") ?? 0, color: "#c08a18" },
+    { label: "報名成功", value: funnelCounts.get("registration_success") ?? 0, color: "#a16207" },
+  ];
 
   return (
     <div className="space-y-6">
@@ -166,14 +209,17 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <Metric label="報名未到率" value={percent(registrationNoShow, validRegistrationRows.length)} />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">預約與報名摘要</h2><Line label="預約未到（分母：有效預約）" value={`${appointmentNoShow} / ${validAppointmentRows.length}`} /><Line label="報名未到（分母：有效報名）" value={`${registrationNoShow} / ${validRegistrationRows.length}`} /><Line label="報名報到完成" value={registrationAttended} /><Line label="候補筆數" value={waitlistResult.count ?? 0} /><Line label="候補填補率" value={percent(promotedResult.count ?? 0, waitlistResult.count ?? 0)} /><Line label="報名取消" value={registrationRows.filter((row) => row.status === "cancelled").length} /><Line label="套票扣抵" value={`${membershipUses} 次`} /></section>
-        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="付款成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="付款失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
+      <div className="admin-workbench-grid">
+        <section className="admin-section p-4"><div><h2 className="font-semibold text-slate-900">預約與報名走勢</h2><p className="mt-1 text-xs text-slate-500">依日期顯示數量變化；日期範圍較長時顯示最近 60 天。</p></div><TrendLineChart data={trendData} /></section>
+        <section className="admin-section p-4"><div><h2 className="font-semibold text-slate-900">顧客漏斗事件與轉換</h2><p className="mt-1 text-xs text-slate-500">匿名事件，從入口瀏覽到預約或報名完成。</p></div><FunnelBarChart data={funnelData} /></section>
       </div>
 
-      <section className="card space-y-3 p-5"><div><h2 className="font-semibold text-slate-900">顧客漏斗事件</h2><p className="mt-1 text-sm text-slate-500">僅統計匿名事件，不含姓名、電話、LINE ID 或顧客識別碼。</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-5"><FunnelMetric label="入口瀏覽" value={funnelCounts.get("portal_view") ?? 0} /><FunnelMetric label="開始預約" value={funnelCounts.get("booking_start") ?? 0} /><FunnelMetric label="預約成功" value={funnelCounts.get("booking_success") ?? 0} /><FunnelMetric label="開始報名" value={funnelCounts.get("registration_start") ?? 0} /><FunnelMetric label="報名成功" value={funnelCounts.get("registration_success") ?? 0} /></div></section>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">預約與報名摘要</h2><Line label="預約未到（分母：有效預約）" value={`${appointmentNoShow} / ${validAppointmentRows.length}`} /><Line label="報名未到（分母：有效報名）" value={`${registrationNoShow} / ${validRegistrationRows.length}`} /><Line label="報名報到完成" value={registrationAttended} /><Line label="候補筆數" value={waitlistResult.count ?? 0} /><Line label="候補填補率" value={percent(promotedResult.count ?? 0, waitlistResult.count ?? 0)} /><Line label="報名取消" value={registrationRows.filter((row) => row.status === "cancelled").length} /><Line label="套票扣抵" value={`${membershipUses} 次`} /></section>
+        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="線上金流成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="後台收款" value={`${salesPaymentRows.length} 筆 · NT$${salesPaymentRows.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="線上金流失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
+      </div>
 
-      <BreakdownTable title="預約來源轉換（匿名事件）" headers={["來源", "瀏覽", "開始預約", "預約成功", "開始→完成率"]} rows={[...sourceConversions.entries()].sort((a, b) => b[1].successes - a[1].successes || b[1].starts - a[1].starts).map(([source, values]) => [source, String(values.views), String(values.starts), String(values.successes), percent(values.successes, values.starts)])} />
+      <BreakdownTable title="預約來源轉換（匿名事件）" headers={["來源", "瀏覽", "開始預約", "預約成功", "開始→完成率"]} rows={[...sourceConversions.entries()].sort((a, b) => b[1].successes - a[1].successes || b[1].starts - a[1].starts).map(([source, values]) => [reportSourceLabel(source), String(values.views), String(values.starts), String(values.successes), percent(values.successes, values.starts)])} />
 
       <BreakdownTable title="預約明細分組（日期／服務提供者／服務／狀態／來源）" headers={["日期", "服務提供者", "服務", "狀態", "來源", "筆數"]} rows={bookingRows.map((row) => [row.day, row.provider, row.service, row.status, row.source, String(row.count)])} />
       <BreakdownTable title="報名明細分組（活動／場次／票種／狀態）" headers={["活動", "場次", "票種", "狀態", "筆數"]} rows={registrationBreakdownRows.map((row) => [row.event, row.session, row.ticket, row.status, String(row.count)])} />
@@ -183,7 +229,6 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 }
 
 function Metric({ label, value }: { label: string; value: number | string }) { return <div className="card p-4"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-2xl font-bold text-slate-900">{value}</div></div>; }
-function FunnelMetric({ label, value }: { label: string; value: number }) { return <div className="rounded-xl border border-slate-100 bg-slate-50 p-3"><div className="text-xs text-slate-500">{label}</div><div className="mt-1 text-xl font-bold text-slate-900">{value}</div></div>; }
 function Line({ label, value }: { label: string; value: number | string }) { return <div className="flex items-center justify-between border-b border-slate-100 py-2 text-sm last:border-0"><span className="text-slate-500">{label}</span><span className="font-medium text-slate-800">{value}</span></div>; }
 function BreakdownTable({ title, headers, rows }: { title: string; headers: string[]; rows: string[][] }) {
   return <section className="card overflow-hidden"><div className="border-b border-slate-100 px-5 py-4"><h2 className="font-semibold text-slate-900">{title}</h2></div>{rows.length === 0 ? <p className="px-5 py-6 text-sm text-slate-400">此範圍沒有資料。</p> : <div className="overflow-x-auto"><table className="tbl"><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.join("-")}-${index}`}>{row.map((cell, cellIndex) => <td key={`${index}-${cellIndex}`}>{cell}</td>)}</tr>)}</tbody></table></div>}</section>;
