@@ -32,7 +32,7 @@
 | 套票取消一致性 | 後台、顧客自助與 LINE 取消共用原子取消 RPC 並恢復堂數 | Staging ledger PASS；取消恢復一次且重送冪等 |
 | 新品牌建立 | 系統管理者授權、DB function 原子建立品牌／預設設定／品牌管理者 | 靜態契約 PASS |
 | 會員／套票／優惠碼 | migration、租戶 RLS、原子扣抵、付款失敗釋放、後台管理與預約／報名入口；正式 Supabase 報名／預約扣點與折扣碼交易測試 | PASS；核心交易已實測 |
-| Supabase security advisor | linked project migration 後重新檢查 | DB 函式／RPC 警告已清除；Auth leaked password protection 尚待 Dashboard 啟用 |
+| Supabase security advisor | linked project migration 後重新檢查；Auth Email provider 設定 | DB 函式／RPC 警告已清除；staging 外洩密碼保護已啟用並重新讀取確認 |
 | anon REST 讀取邊界 | 以固定 UUID 合成顧客資料後，由 legacy anon／publishable key 查詢 `patients`、`appointments`、`registrations`、`payment_orders`、`crm_delivery_logs` | 正式 Supabase PASS；全部 HTTP 200 空陣列，測試後品牌／設定／顧客殘留數均為 0 |
 
 ## 2026-08-11 產品重整 M0–M6 增量
