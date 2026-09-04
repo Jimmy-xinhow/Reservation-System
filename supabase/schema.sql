@@ -2057,7 +2057,7 @@ create table if not exists course_units (
   active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (content_url is not null or body is not null)
+  constraint course_units_content_check check (unit_type in ('quiz','assignment') or content_url is not null or body is not null)
 );
 create index if not exists course_units_event_idx on course_units (clinic_id, event_id, active, sort_order);
 

@@ -8,13 +8,18 @@ import { recordCrmInteraction } from "@/lib/crm-interactions";
 function text(fd: FormData, key: string): string { return String(fd.get(key) ?? "").trim(); }
 function refresh(patientId?: string): void { revalidatePath("/admin/followups"); if (patientId) revalidatePath(`/admin/patients/${patientId}`); }
 
+function parseTaipeiDateTimeLocal(value: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)) return new Date(Number.NaN);
+  return new Date(`${value}+08:00`);
+}
+
 export async function createScheduledFollowupAction(fd: FormData): Promise<void> {
   const member = await requireOperator();
   const patientId = text(fd, "patient_id");
   const channel = text(fd, "channel");
   const purpose = text(fd, "purpose");
   const body = text(fd, "body");
-  const scheduled = new Date(text(fd, "scheduled_for"));
+  const scheduled = parseTaipeiDateTimeLocal(text(fd, "scheduled_for"));
   if (!patientId || !["line", "email", "phone", "manual"].includes(channel) || !["service", "marketing"].includes(purpose) || !body || Number.isNaN(scheduled.getTime())) throw new Error("回訪資料不完整");
   const service = createServiceClient();
   const { data: patient, error: patientError } = await service.from("patients").select("id, marketing_opt_in, line_user_id, email").eq("id", patientId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle();
