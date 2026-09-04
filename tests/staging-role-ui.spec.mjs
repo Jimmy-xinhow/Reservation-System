@@ -132,6 +132,11 @@ test("品牌管理者可進入品牌人員頁", async ({ page }) => {
   await page.goto(`${baseUrl}/admin/users`);
   await expect(page.getByRole("heading", { name: "品牌人員與權限" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  const csvResponse = await page.request.get(`${baseUrl}/api/admin/reports?from=2026-09-01&to=2026-09-30`);
+  expect(csvResponse.status()).toBe(200);
+  expect(csvResponse.headers()["content-type"]).toContain("text/csv");
+  expect(csvResponse.headers()["content-disposition"]).toContain("booking-report-2026-09-01-2026-09-30.csv");
+  expect(await csvResponse.text()).toContain('"類型","編號","日期"');
 });
 
 test("品牌管理者的新增營運頁在桌機採緊湊多欄排版", async ({ page }) => {
