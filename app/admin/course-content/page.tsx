@@ -2,68 +2,33 @@ import { requireAdmin } from "@/lib/admin";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { SubmitButton } from "@/components/SubmitButton";
-import { createCourseUnitAction, toggleCourseUnitAction } from "./actions";
+import { createCourseUnitAction, reviewCourseAssignmentAction, toggleCourseUnitAction } from "./actions";
 
 export const dynamic = "force-dynamic";
-
+type Relation<T> = T | T[] | null;
+function one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
 interface EventRow { id: string; title: string; status: string; }
-interface UnitRow {
-  id: string;
-  title: string;
-  summary: string | null;
-  unit_type: "video" | "link" | "download" | "text";
-  access_rule: "registered" | "paid" | "attended";
-  sort_order: number;
-  active: boolean;
-  events: { title: string } | { title: string }[] | null;
-}
+interface UnitRow { id: string; title: string; summary: string | null; unit_type: "video"|"link"|"download"|"text"|"quiz"|"assignment"; access_rule: "registered"|"paid"|"attended"; release_mode: "immediate"|"days_after_registration"|"after_previous"; release_days: number; sort_order: number; active: boolean; events: Relation<{title:string}>; course_assessments: Relation<{kind:string;prompt:string;options:unknown}>; }
+interface SubmissionRow { id:string;status:string;submission_text:string|null;score:number|null;feedback:string|null;submitted_at:string;patients:Relation<{name:string}>;course_units:Relation<{title:string;events:Relation<{title:string}>}>; }
+const TYPE_LABEL: Record<string,string> = { video:"影片",link:"外部連結",download:"下載檔案",text:"文字教材",quiz:"線上測驗",assignment:"作業繳交" };
+const ACCESS_LABEL: Record<string,string> = { registered:"完成報名後",paid:"完成付款後",attended:"完成報到後" };
+function releaseLabel(unit:UnitRow):string { if(unit.release_mode==="days_after_registration")return `報名後第 ${unit.release_days} 天`;if(unit.release_mode==="after_previous")return "完成上一單元後";return "符合資格後立即"; }
 
-function relationTitle(value: UnitRow["events"]): string {
-  return Array.isArray(value) ? value[0]?.title ?? "未命名課程" : value?.title ?? "未命名課程";
-}
-
-const TYPE_LABEL = { video: "影片", link: "外部連結", download: "下載檔案", text: "文字教材" } as const;
-const ACCESS_LABEL = { registered: "完成報名後", paid: "完成付款後", attended: "完成報到後" } as const;
-
-export default async function CourseContentPage() {
-  const { supabase, clinicId } = await requireAdmin();
-  if (!(await isAdminModuleEnabled(supabase, clinicId, "events"))) {
-    return <ModuleDisabled title="課程教材尚未啟用；請先開啟活動與報名模組" />;
-  }
-  const [{ data: events, error: eventsError }, { data: units, error: unitsError }] = await Promise.all([
-    supabase.from("events").select("id, title, status").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
-    supabase.from("course_units").select("id, title, summary, unit_type, access_rule, sort_order, active, events(title)").eq("clinic_id", clinicId).order("sort_order").order("created_at"),
+export default async function CourseContentPage(){
+  const {supabase,clinicId}=await requireAdmin();
+  if(!(await isAdminModuleEnabled(supabase,clinicId,"events")))return <ModuleDisabled title="課程教材尚未啟用；請先開啟活動與報名模組"/>;
+  const [eventsResult,unitsResult,submissionsResult,certificatesResult]=await Promise.all([
+    supabase.from("events").select("id,title,status").eq("clinic_id",clinicId).order("created_at",{ascending:false}),
+    supabase.from("course_units").select("id,title,summary,unit_type,access_rule,release_mode,release_days,sort_order,active,events(title),course_assessments(kind,prompt,options)").eq("clinic_id",clinicId).order("sort_order").order("created_at"),
+    supabase.from("course_assessment_submissions").select("id,status,submission_text,score,feedback,submitted_at,patients(name),course_units(title,events(title))").eq("clinic_id",clinicId).in("status",["submitted","revision","passed"]).order("submitted_at",{ascending:false}).limit(100),
+    supabase.from("course_certificates").select("id,certificate_no,issued_at,patients(name),events(title)").eq("clinic_id",clinicId).order("issued_at",{ascending:false}).limit(30),
   ]);
-  if (eventsError || unitsError) throw new Error(eventsError?.message ?? unitsError?.message ?? "教材載入失敗");
-  const eventRows = (events ?? []) as EventRow[];
-  const unitRows = (units ?? []) as unknown as UnitRow[];
-
-  return (
-    <div className="space-y-6">
-      <header><div className="eyebrow">活動與報名</div><h1 className="text-2xl font-bold text-slate-900">課程教材</h1><p className="mt-1 text-sm leading-6 text-slate-500">把教材綁定既有課程，並設定學員要完成報名、付款或報到後才能查看。</p></header>
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.72fr)]">
-        <div className="card overflow-hidden">
-          <div className="border-b border-slate-100 p-5"><h2 className="font-semibold text-slate-900">目前教材</h2><p className="mt-1 text-sm text-slate-500">順序數字越小，越早顯示。</p></div>
-          {unitRows.length === 0 ? <p className="p-8 text-center text-sm text-slate-500">尚未建立教材單元。</p> : <div className="divide-y divide-slate-100">{unitRows.map((unit) => (
-            <article key={unit.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="badge bg-brand-50 text-brand-700">{relationTitle(unit.events)}</span><span className="text-xs text-slate-400">#{unit.sort_order}</span></div><h3 className="mt-2 font-semibold text-slate-900">{unit.title}</h3>{unit.summary && <p className="mt-1 text-sm leading-6 text-slate-500">{unit.summary}</p>}<p className="mt-2 text-xs text-slate-400">{TYPE_LABEL[unit.unit_type]} · {ACCESS_LABEL[unit.access_rule]}</p></div>
-              <form action={toggleCourseUnitAction}><input type="hidden" name="id" value={unit.id} /><input type="hidden" name="active" value={String(unit.active)} /><SubmitButton className="btn btn-secondary min-w-20">{unit.active ? "停用" : "啟用"}</SubmitButton></form>
-            </article>
-          ))}</div>}
-        </div>
-        <form action={createCourseUnitAction} className="card h-fit space-y-4 p-5">
-          <div><h2 className="font-semibold text-slate-900">新增教材單元</h2><p className="mt-1 text-sm leading-6 text-slate-500">影片與檔案可填外部 HTTPS 網址；簡短內容可直接放文字。</p></div>
-          <label className="block"><span className="label">所屬課程</span><select name="event_id" className="input" required defaultValue=""><option value="" disabled>請選擇課程</option>{eventRows.map((event) => <option key={event.id} value={event.id}>{event.title}{event.status !== "published" ? "（未發布）" : ""}</option>)}</select></label>
-          <label className="block"><span className="label">單元名稱</span><input name="title" className="input" required maxLength={160} placeholder="例如：第 1 章｜建立學習目標" /></label>
-          <label className="block"><span className="label">單元說明</span><textarea name="summary" className="input min-h-24" maxLength={500} placeholder="讓學員知道這一單元會完成什麼。" /></label>
-          <div className="grid gap-4 sm:grid-cols-2"><label><span className="label">教材類型</span><select name="unit_type" className="input" defaultValue="video"><option value="video">影片</option><option value="link">外部連結</option><option value="download">下載檔案</option><option value="text">文字教材</option></select></label><label><span className="label">開放條件</span><select name="access_rule" className="input" defaultValue="paid"><option value="registered">完成報名後</option><option value="paid">完成付款後</option><option value="attended">完成報到後</option></select></label></div>
-          <label className="block"><span className="label">教材網址（選填）</span><input type="url" name="content_url" className="input" placeholder="https://…" /></label>
-          <label className="block"><span className="label">文字內容（選填）</span><textarea name="body" className="input min-h-28" maxLength={10000} placeholder="課前提醒、作業說明或講義摘要。" /></label>
-          <label className="block"><span className="label">顯示順序</span><input type="number" name="sort_order" min={0} max={999} defaultValue={10} className="input" /></label>
-          <SubmitButton className="btn btn-primary w-full" disabled={eventRows.length === 0}>建立教材單元</SubmitButton>
-          {eventRows.length === 0 && <p className="text-xs leading-5 text-amber-700">請先建立一項活動或課程。</p>}
-        </form>
-      </section>
-    </div>
-  );
+  const error=eventsResult.error??unitsResult.error??submissionsResult.error??certificatesResult.error;if(error)throw new Error(error.message);
+  const events=(eventsResult.data??[]) as EventRow[];const units=(unitsResult.data??[]) as unknown as UnitRow[];const submissions=(submissionsResult.data??[]) as unknown as SubmissionRow[];
+  return <div className="admin-page"><div className="admin-page-header"><div><p className="eyebrow">線上課程產業包</p><h1 className="admin-page-title">課程內容與學習驗收</h1><p className="admin-page-description">教材可依付款、報到與學習進度分段開放；測驗自動判分，作業由管理者審核，完成全部單元後自動發證。</p></div></div>
+  <section className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]"><div className="admin-table-shell"><div className="admin-section-header"><h2 className="font-semibold">教材與關卡</h2><span className="text-xs text-slate-500">順序小的先顯示</span></div><table className="tbl"><thead><tr><th>課程／單元</th><th>內容</th><th>開放方式</th><th>狀態</th></tr></thead><tbody>{units.map(unit=><tr key={unit.id}><td><span className="text-xs text-brand-700">{one(unit.events)?.title}</span><div className="font-medium">#{unit.sort_order} {unit.title}</div>{unit.summary&&<div className="max-w-md text-xs text-slate-400">{unit.summary}</div>}</td><td>{TYPE_LABEL[unit.unit_type]}{one(unit.course_assessments)&&<div className="max-w-xs text-xs text-slate-400">{one(unit.course_assessments)?.prompt}</div>}</td><td>{ACCESS_LABEL[unit.access_rule]}<div className="text-xs text-slate-400">{releaseLabel(unit)}</div></td><td><form action={toggleCourseUnitAction}><input type="hidden" name="id" value={unit.id}/><input type="hidden" name="active" value={String(unit.active)}/><SubmitButton className="btn btn-secondary">{unit.active?"停用":"啟用"}</SubmitButton></form></td></tr>)}{units.length===0&&<tr><td colSpan={4} className="py-10 text-center text-sm text-slate-400">尚未建立教材單元</td></tr>}</tbody></table></div>
+  <form action={createCourseUnitAction} className="admin-section self-start p-4"><h2 className="font-semibold">新增教材／測驗／作業</h2><div className="mt-3 space-y-3"><label className="block"><span className="label">所屬課程</span><select name="event_id" className="input" required defaultValue=""><option value="" disabled>選擇課程</option>{events.map(event=><option key={event.id} value={event.id}>{event.title}{event.status!=="published"?"（未發布）":""}</option>)}</select></label><label className="block"><span className="label">單元名稱</span><input name="title" className="input" required maxLength={160}/></label><label className="block"><span className="label">單元說明</span><textarea name="summary" className="input min-h-20" maxLength={500}/></label><div className="grid grid-cols-2 gap-3"><label><span className="label">內容類型</span><select name="unit_type" className="input" defaultValue="video"><option value="video">影片</option><option value="link">外部連結</option><option value="download">下載檔案</option><option value="text">文字教材</option><option value="quiz">線上測驗</option><option value="assignment">作業繳交</option></select></label><label><span className="label">基本資格</span><select name="access_rule" className="input" defaultValue="paid"><option value="registered">完成報名後</option><option value="paid">完成付款後</option><option value="attended">完成報到後</option></select></label></div><div className="grid grid-cols-2 gap-3"><label><span className="label">分段開放</span><select name="release_mode" className="input" defaultValue="immediate"><option value="immediate">立即開放</option><option value="days_after_registration">報名後指定天數</option><option value="after_previous">完成上一單元後</option></select></label><label><span className="label">報名後第幾天</span><input name="release_days" type="number" min="0" max="3650" defaultValue="0" className="input"/></label></div><label className="block"><span className="label">教材網址（影片／連結／下載）</span><input name="content_url" type="url" className="input" placeholder="https://…"/></label><label className="block"><span className="label">文字教材</span><textarea name="body" className="input min-h-24" maxLength={10000}/></label><div className="rounded-lg border border-slate-200 p-3"><p className="text-sm font-semibold">測驗設定（選「線上測驗」時填寫）</p><label className="mt-2 block"><span className="label">題目</span><textarea name="quiz_prompt" className="input min-h-20" maxLength={3000}/></label><label className="mt-2 block"><span className="label">選項（每行一個）</span><textarea name="quiz_options" className="input min-h-24" placeholder={"選項一\n選項二\n選項三"}/></label><label className="mt-2 block"><span className="label">正確答案編號</span><input name="quiz_correct_option" type="number" min="1" max="20" className="input" placeholder="例如 2"/></label></div><label className="block rounded-lg border border-slate-200 p-3"><span className="label">作業要求（選「作業繳交」時填寫）</span><textarea name="assignment_prompt" className="input min-h-24" maxLength={5000}/></label><label className="block"><span className="label">顯示順序</span><input name="sort_order" type="number" min="0" max="999" defaultValue="10" className="input"/></label><SubmitButton className="btn btn-primary w-full" disabled={events.length===0}>建立單元</SubmitButton></div></form></section>
+  <section className="admin-table-shell"><div className="admin-section-header"><div><h2 className="font-semibold">作業審核</h2><p className="text-xs text-slate-500">測驗由系統自動判分；文字作業在這裡通過或要求修改。</p></div></div><table className="tbl"><thead><tr><th>學員／課程</th><th>作業內容</th><th>狀態</th><th>審核</th></tr></thead><tbody>{submissions.map(submission=>{const patient=one(submission.patients);const unit=one(submission.course_units);const course=unit?one(unit.events):null;return <tr key={submission.id}><td>{patient?.name}<div className="text-xs text-slate-400">{course?.title} · {unit?.title}</div></td><td><p className="max-w-xl whitespace-pre-wrap text-sm">{submission.submission_text||"測驗作答"}</p>{submission.feedback&&<p className="mt-1 text-xs text-amber-700">回覆：{submission.feedback}</p>}</td><td><span className="badge bg-slate-100 text-slate-600">{submission.status==="submitted"?"待審核":submission.status==="passed"?"已通過":"待修改"}</span></td><td>{submission.submission_text&&submission.status!=="passed"?<form action={reviewCourseAssignmentAction} className="flex min-w-72 gap-2"><input type="hidden" name="submission_id" value={submission.id}/><input name="feedback" className="input" placeholder="回覆（選填）"/><SubmitButton name="result" value="revision" className="btn btn-secondary">退回</SubmitButton><SubmitButton name="result" value="passed" className="btn btn-primary">通過</SubmitButton></form>:"—"}</td></tr>})}{submissions.length===0&&<tr><td colSpan={4} className="py-10 text-center text-sm text-slate-400">尚無測驗或作業提交</td></tr>}</tbody></table></section>
+  {(certificatesResult.data??[]).length>0&&<section className="admin-table-shell"><div className="admin-section-header"><h2 className="font-semibold">最近完課證書</h2></div><table className="tbl"><thead><tr><th>證書編號</th><th>學員</th><th>課程</th><th>發證時間</th></tr></thead><tbody>{(certificatesResult.data??[]).map(certificate=><tr key={certificate.id}><td className="font-mono text-xs">{certificate.certificate_no}</td><td>{one(certificate.patients)?.name}</td><td>{one(certificate.events)?.title}</td><td>{new Date(certificate.issued_at).toLocaleString("zh-TW",{timeZone:"Asia/Taipei"})}</td></tr>)}</tbody></table></section>}
+  </div>;
 }

@@ -22,9 +22,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     return (
       <div className="admin-shell min-h-screen bg-[#f1f4ff]">
         <AdminNav role="owner" isPlatformAdmin platformAccessType={platformAdmin.accessType} platformPermissions={platformAdmin.permissions} hasBrandContext={Boolean(member)} />
-        <div className="min-h-screen lg:pl-72">
+        <div className="min-h-screen lg:pl-64">
           <header className="sticky top-0 z-20 border-b border-indigo-100 bg-white/95 backdrop-blur">
-            <div className="mx-auto flex min-h-[68px] max-w-[1440px] flex-wrap items-center gap-2 px-4 py-2 pl-16 sm:flex-nowrap sm:gap-3 sm:px-6 sm:pl-16 lg:px-8 lg:pl-8">
+            <div className="mx-auto flex min-h-14 max-w-[1600px] flex-wrap items-center gap-2 px-4 py-2 pl-16 sm:flex-nowrap sm:gap-3 sm:px-6 sm:pl-16 lg:px-6 lg:pl-6">
               <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#18245b] text-sm font-bold tracking-wide text-white shadow-sm sm:h-10 sm:w-10">XP</div>
                 <div className="min-w-0">
@@ -43,7 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </div>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-[1440px] p-4 sm:p-6 lg:p-8">{children}</main>
+          <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-5 lg:p-6">{children}</main>
         </div>
       </div>
     );
@@ -69,9 +69,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="admin-shell min-h-screen bg-[#f5f8fb]">
       <AdminProductTelemetry />
       <AdminNav role={member.role} isPlatformAdmin={Boolean(platformAdmin)} platformAccessType={platformAdmin?.accessType} platformPermissions={platformAdmin?.permissions} hasBrandContext modules={modules} />
-      <div className="min-h-screen lg:pl-72">
+      <div className="min-h-screen lg:pl-64">
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto flex min-h-[68px] max-w-[1440px] flex-wrap items-center gap-2 px-4 py-2 pl-16 sm:gap-3 sm:px-6 sm:pl-16 lg:flex-nowrap lg:px-8 lg:pl-8">
+          <div className="mx-auto flex min-h-14 max-w-[1600px] flex-wrap items-center gap-2 px-4 py-2 pl-16 sm:gap-3 sm:px-6 sm:pl-16 lg:flex-nowrap lg:px-6 lg:pl-6">
             <div className="min-w-0 flex-1 overflow-hidden"><Brand name={member.clinicName} subtitle="管理後台" /></div>
             {member.clinics.length > 1 && (
               <form action={setActiveClinicAction} className="order-3 flex w-full items-center gap-2 sm:order-none sm:w-auto">
@@ -91,7 +91,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1440px] p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-5 lg:p-6">{children}</main>
       </div>
     </div>
   );

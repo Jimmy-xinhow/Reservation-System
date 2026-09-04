@@ -249,12 +249,75 @@ body {
   .inline-action {
     @apply inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-medium;
   }
+
+  .admin-page {
+    @apply space-y-5;
+  }
+  .admin-page-header {
+    @apply flex flex-col gap-3 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between;
+  }
+  .admin-page-title {
+    @apply text-2xl font-bold tracking-[-0.02em] text-slate-950;
+  }
+  .admin-page-description {
+    @apply mt-1 max-w-3xl text-sm leading-6 text-slate-600;
+  }
+  .admin-toolbar {
+    @apply flex flex-wrap items-end gap-2 border-y border-slate-200 bg-white px-3 py-3;
+  }
+  .admin-table-shell {
+    @apply overflow-x-auto border-y border-slate-200 bg-white;
+  }
+  .admin-section {
+    @apply border-y border-slate-200 bg-white;
+  }
+  .admin-section-header {
+    @apply flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between;
+  }
+  .admin-metric-strip {
+    @apply grid border-y border-slate-200 bg-white;
+  }
+  .admin-metric {
+    @apply min-w-0 border-b border-slate-200 px-4 py-3 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0;
+  }
+  .admin-metric-label {
+    @apply text-xs font-medium text-slate-500;
+  }
+  .admin-metric-value {
+    @apply mt-1 text-xl font-bold tabular-nums text-slate-950;
+  }
+  .admin-inline-action {
+    @apply inline-flex min-h-8 items-center rounded px-2 text-xs font-medium text-slate-700 hover:bg-slate-100;
+  }
 }
 
 /* 後台可讀性基準：內文 16px、輔助文字至少 14px，並維持 AA 對比。 */
 .admin-shell {
-  font-size: 1rem;
+  --admin-border: #d8e0e8;
+  --admin-muted: #5d6b7a;
+  --admin-ink: #16202b;
+  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  font-size: 0.875rem;
   line-height: 1.5;
+  color: var(--admin-ink);
+}
+
+.admin-shell .card {
+  border-radius: 8px;
+  border-color: var(--admin-border);
+  box-shadow: none;
+}
+
+.admin-shell .btn,
+.admin-shell .input,
+.admin-shell .pill {
+  border-radius: 6px;
+}
+
+.admin-shell .btn,
+.admin-shell .input {
+  min-height: 2.5rem;
+  font-size: 0.875rem;
 }
 
 .admin-shell .text-xs {
@@ -264,8 +327,8 @@ body {
 
 .admin-shell .text-\[10px\],
 .admin-shell .text-\[11px\] {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .admin-shell main h1 {
@@ -276,6 +339,35 @@ body {
 
 .admin-shell main h2 {
   line-height: 1.35;
+}
+
+.admin-shell .eyebrow {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.admin-shell .tbl thead {
+  background: #f1f5f9;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #475569;
+}
+
+.admin-shell .tbl th {
+  height: 2.5rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.75rem;
+}
+
+.admin-shell .tbl td {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.admin-shell .tbl :where(a, button) {
+  min-height: 2rem;
 }
 
 .admin-shell :where(button, input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea) {

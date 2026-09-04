@@ -1,8 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireOperator } from "@/lib/admin";
+import { redirect } from "next/navigation";
+import { requireAdmin, requireOperator } from "@/lib/admin";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
+import { createServiceClient } from "@/lib/supabase";
 
 function str(fd: FormData, key: string): string {
   return (fd.get(key) ?? "").toString().trim();
@@ -143,4 +145,20 @@ export async function deletePatientRecordAction(fd: FormData) {
     .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/patients/${patientId}`);
+}
+
+export async function mergePatientAction(fd: FormData): Promise<void> {
+  const member = await requireAdmin();
+  const sourcePatientId = str(fd, "source_patient_id");
+  const targetPatientId = str(fd, "target_patient_id");
+  if (str(fd, "confirmed") !== "yes") throw new Error("請先確認要將重複顧客合併到保留資料");
+  if (!sourcePatientId || !targetPatientId || sourcePatientId === targetPatientId) throw new Error("請選擇不同的保留顧客");
+  const { data, error } = await createServiceClient().rpc("merge_customers", { p_clinic_id: member.clinicId, p_actor_user_id: member.user.id, p_source_patient_id: sourcePatientId, p_target_patient_id: targetPatientId });
+  if (error) {
+    if (error.message.includes("different LINE")) throw new Error("兩筆資料綁定不同 LINE 帳號，為避免誤合併已停止操作");
+    throw new Error(error.message);
+  }
+  if (typeof data !== "string") throw new Error("顧客合併失敗");
+  revalidatePath("/admin/patients");
+  redirect(`/admin/patients/${encodeURIComponent(data)}`);
 }

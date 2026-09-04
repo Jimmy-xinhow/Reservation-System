@@ -11,7 +11,7 @@ export default async function ServicesPage() {
   const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
   const [{ data, error }, { data: addonData, error: addonError }] = await Promise.all([
-    supabase.from("services").select("id, name, category, description, duration_minutes, buffer_minutes, booking_target, booking_fields, active").eq("clinic_id", clinicId).order("created_at"),
+    supabase.from("services").select("id, name, category, description, price, duration_minutes, buffer_minutes, booking_target, booking_fields, active").eq("clinic_id", clinicId).order("created_at"),
     supabase.from("service_addons").select("id, service_id, name, description, duration_minutes, price, active").eq("clinic_id", clinicId).order("sort_order").order("created_at"),
   ]);
   if (error || addonError) throw new Error(error?.message ?? addonError?.message ?? "讀取服務設定失敗");

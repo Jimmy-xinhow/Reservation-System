@@ -64,6 +64,7 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/calendar", label: "預約日曆", icon: "calendar" },
       { href: "/admin", label: "預約列表", icon: "list", exact: true },
+      { href: "/admin/checkout", label: "結帳中心", icon: "membership" },
       { href: "/admin/handoff", label: "交班待辦", icon: "checkin" },
       { href: "/admin/queue", label: "舊版服務進度", icon: "queue", module: "legacy" },
     ],
@@ -72,6 +73,7 @@ const GROUPS: Group[] = [
     label: "活動與報名",
     items: [
       { href: "/admin/events", label: "活動與課程", icon: "event", module: "events" },
+      { href: "/admin/fitness", label: "教室與會籍營運", icon: "calendar", module: "events" },
       { href: "/admin/course-content", label: "課程教材", icon: "event", module: "events", adminOnly: true },
       { href: "/admin/registrations", label: "報名名單", icon: "list", module: "events" },
       { href: "/admin/checkin", label: "報名報到", icon: "checkin", module: "events" },
@@ -82,9 +84,13 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
       { href: "/admin/beauty", label: "美業營運", icon: "service", module: "beauty" },
+      { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list", module: "beauty" },
+      { href: "/admin/documents", label: "同意書與簽署", icon: "list" },
       { href: "/admin/memberships", label: "會員與套票", icon: "membership", module: "memberships" },
+      { href: "/admin/customer-value", label: "儲值、點數與訂閱", icon: "membership", module: "memberships" },
       { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership", module: "memberships", adminOnly: true },
       { href: "/admin/crm", label: "顧客回訪與自動提醒", icon: "crm", module: "crm", adminOnly: true },
+      { href: "/admin/followups", label: "指定日期回訪", icon: "message", module: "crm" },
     ],
   },
   {
@@ -104,7 +110,8 @@ const GROUPS: Group[] = [
     label: "設定中心",
     adminOnly: true,
     items: [
-      { href: "/admin/settings", label: "品牌與規則", icon: "settings" },
+      { href: "/admin/settings", label: "品牌與規則", icon: "settings", exact: true },
+      { href: "/admin/settings/add-ons", label: "擴充功能規劃", icon: "settings" },
       { href: "/admin/import", label: "匯入顧客與預約資料", icon: "list" },
       { href: "/admin/channels", label: "通知與付款測試", icon: "line" },
       { href: "/admin/services", label: "服務與方案", icon: "service" },
@@ -190,17 +197,17 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
   }, [activeGroupLabel]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#071c2e] text-white">
-      <div className={`border-b border-white/10 px-5 py-5 ${mode === "platform" ? "bg-[#18245b]" : "bg-[#071c2e]"}`}>
+    <div className="flex h-full min-h-0 flex-col bg-[#0b2132] text-white">
+      <div className={`border-b border-white/10 px-4 py-4 ${mode === "platform" ? "bg-[#18245b]" : "bg-[#0b2132]"}`}>
         <div className="flex items-center gap-3">
-          <div className={`flex h-9 w-9 items-center justify-center rounded-xl text-sm font-bold tracking-wide ${mode === "platform" ? "bg-white text-[#18245b]" : "bg-[#1f79d1] text-white"}`}>{mode === "platform" ? "XP" : "XH"}</div>
+          <div className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-bold tracking-wide ${mode === "platform" ? "bg-white text-[#18245b]" : "bg-[#1f79d1] text-white"}`}>{mode === "platform" ? "XP" : "XH"}</div>
           <div>
             <div className="text-sm font-semibold tracking-wide">{mode === "platform" ? "XINHOW PLATFORM" : "XINHOW"}</div>
             <div className="mt-0.5 text-xs text-slate-400">{mode === "platform" ? "系統管理總控台" : "品牌營運後台"}</div>
           </div>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3">
         {groups.map((group, index) => {
           const groupOpen = openGroup === group.label;
           const groupId = `${navId}-group-${index}`;
@@ -214,11 +221,11 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
                 aria-expanded={groupOpen}
                 aria-controls={groupId}
                 onClick={() => setOpenGroup(groupOpen ? null : group.label)}
-                className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 text-left text-xs font-semibold tracking-[0.08em] text-slate-300 transition-colors hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+                className="flex min-h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[11px] font-semibold tracking-[0.06em] text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
               >
                 <span className={`transition-transform ${groupOpen ? "rotate-90" : ""}`} aria-hidden="true">›</span>
                 <span className="flex-1">{group.label}</span>
-                <span className="text-xs font-normal tracking-normal text-slate-400">{group.items.length}</span>
+                <span className="sr-only">{group.items.length} 個功能</span>
               </button>
               {groupOpen && <div id={groupId} className="mt-1 space-y-1">{group.items.map((item) => <NavItem key={item.href} item={item} pathname={pathname} unread={unread} close={close} />)}</div>}
             </div>
@@ -238,8 +245,8 @@ function NavItem({ item, pathname, unread, close }: { item: Item; pathname: stri
       href={item.href}
       onClick={close}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400 ${
-        active ? "bg-[#1f79d1] font-semibold text-white shadow-sm" : "text-slate-300 hover:bg-white/10 hover:text-white"
+      className={`flex min-h-10 items-center gap-3 rounded-md border-l-2 px-3 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400 ${
+        active ? "border-[#46a4ef] bg-white/10 font-semibold text-white" : "border-transparent text-slate-300 hover:bg-white/5 hover:text-white"
       }`}
     >
       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
@@ -308,11 +315,11 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platfo
         aria-label="開啟後台選單"
         aria-expanded={mobileOpen}
         onClick={() => setMobileOpen(true)}
-        className="fixed left-3 top-3 z-30 inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-[#071c2e] text-white shadow-lg lg:hidden"
+        className="fixed left-3 top-3 z-30 inline-flex min-h-10 min-w-10 items-center justify-center rounded-md bg-[#071c2e] text-white shadow-lg lg:hidden"
       >
         <Icon name="menu" />
       </button>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 shadow-xl lg:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-950/20 lg:block">
         <NavigationContent groups={groups} unread={unread} close={() => undefined} mode={mode} />
       </aside>
       {mobileOpen && (

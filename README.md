@@ -188,7 +188,7 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
 
 ### (b) Cron 服務(提醒、報名與行銷排程)
 
-Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders` 會由同一支腳本依序呼叫提醒、會員通知、報名付款逾時／通知、CRM Lite 行銷與 Rich Menu 排程五個 endpoint:
+Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders` 會由同一支腳本依序呼叫預約提醒、CRM Lite 行銷、指定日期回訪、報名付款逾時／通知與 Rich Menu 排程五個 endpoint:
 
 1. 由同一個 repo **再建一個服務**(或用 Railway 的 Cron 功能),設定:
    - **Custom Start Command**:`npm run reminders`(即 `node scripts/trigger-reminders.mjs`,跑完即退出)
@@ -196,13 +196,15 @@ Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders`
    - **Variables**:
      - `CRON_SECRET`(與 web 服務相同)
      - `APP_URL`(web 服務的公開網址,例如 `https://your-app.up.railway.app`)
-      — 或分別改設 `CRON_TARGET_URL`、`CRON_MARKETING_TARGET_URL`、`CRON_REGISTRATION_TARGET_URL`、`CRON_RICHMENU_TARGET_URL` 指定完整 endpoint。
+      — 或分別改設 `CRON_TARGET_URL`、`CRON_MARKETING_TARGET_URL`、`CRON_FOLLOWUP_TARGET_URL`、`CRON_REGISTRATION_TARGET_URL`、`CRON_RICHMENU_TARGET_URL`、`CRON_SUBSCRIPTION_FREEZE_TARGET_URL` 指定完整 endpoint。
 
 2. 腳本會帶 `Authorization: Bearer <CRON_SECRET>` 依序打:
    - `${APP_URL}/api/cron/reminders`
    - `${APP_URL}/api/cron/marketing`
+   - `${APP_URL}/api/cron/followups`
    - `${APP_URL}/api/cron/registration`
    - `${APP_URL}/api/cron/richmenu`
+   - `${APP_URL}/api/cron/subscription-freezes`
 
    五個 endpoint 全部成功才回 0；任一失敗會保留錯誤輸出並回 1。
 
@@ -215,7 +217,7 @@ Railway **不會** 讀 `vercel.json`,所以排程另外做。`npm run reminders`
 
 ### Vercel Cron 排程
 
-`vercel.json` 使用 UTC：`/api/cron/reminders` 為 `0 * * * *`（台北每小時整點）、`/api/cron/marketing` 為 `30 * * * *`（台北每小時 30 分）、`/api/cron/registration` 為 `*/15 * * * *`（台北每 15 分鐘）。
+`vercel.json` 使用 UTC：`/api/cron/reminders` 為 `0 * * * *`（台北每小時整點）、`/api/cron/marketing` 為 `30 * * * *`（台北每小時 30 分）、`/api/cron/followups`、`/api/cron/registration` 與 `/api/cron/richmenu` 為 `*/5 * * * *`（每 5 分鐘）；`/api/cron/subscription-freezes` 為 `5 16 * * *`（台北每日 00:05），用來切換會籍凍結與恢復狀態。
 
 ### (c) 部署後回填 LINE 設定
 
@@ -307,5 +309,11 @@ vercel.json               (僅 Vercel 用;Railway 不讀)
 35. `supabase/migrations/202608150001_brand_page_templates.sql`
 36. `supabase/migrations/202609020001_api_rate_limits.sql`
 37. `supabase/migrations/202609020002_platform_report_aggregation.sql`
+38. `supabase/migrations/202609030001_allow_unassigned_appointment_operations.sql`
+39. `supabase/migrations/202609030002_course_learning_center.sql`
+40. `supabase/migrations/202609030003_beauty_operations.sql`
+41. `supabase/migrations/202609040001_checkout_center.sql`
+42. `supabase/migrations/202609040002_customer_value_and_followups.sql`
+43. `supabase/migrations/202609040003_industry_packs.sql`
 
 每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣，`202608060001_customer_portal_identity.sql` 會把活動報名接到統一顧客入口，`202608060002_funnel_events.sql` 只保存匿名漏斗事件，`202608060003_registration_patient_transaction.sql` 讓報名與顧客關聯在同一個 DB transaction 完成，`202608060004_cross_industry_booking_foundation.sql` 新增服務目標、共用服務排程與服務客製欄位，`202608060005_isolate_legacy_progress.sql` 將舊版服務進度設為明確 opt-in，`202608060006_service_reschedule_transaction.sql` 讓免指定服務提供者的預約也能原子改期，`202608060007_reschedule_same_day_fix.sql` 修正同日改期時舊預約佔位造成的誤判，`202608110001_product_modules_line_richmenu.sql` 新增品牌標準模組開關、品牌級 LINE／LIFF 中繼資料及 Rich Menu 版本生命週期；它不保存任何 LINE secret 或 access token。`202608110002_appointment_waitlist.sql` 將時間制／場次制預約候補與活動候補分離，並以原子鎖、預留預約、逾時釋放及投遞佇列建立可恢復的生命週期；`202608110003_appointment_waitlist_surfaces.sql` 另外提供已額滿目標查詢及通知佇列的原子 claim／retry／finish，讓正常可預約時段與候補入口保持分離；`202608110004_richmenu_optimization.sql` 新增同品牌複合外鍵保護的 Alias、顯示排程、版本複製與可重試排程 RPC；`202608110005_db_lint_hardening.sql` 修正品牌建立、會員發放、報名與改期函式的 PL/pgSQL 名稱歧義；`202608110006_db_lint_followup.sql` 修正 staging lint 找到的 Rich Menu／候補函式並補齊品牌更新時間；`202608110007_waitlist_capacity_error_fix.sql` 修正 `006` 中的額滿判斷亂碼，避免滿額時誤將候補標記失效；`202608110008_two_level_admin_permissions.sql` 將產品管理身份收斂為系統管理者與品牌管理者，並加入系統／品牌員工的明確權限欄位。`202608120001` 修正免指定提供者的時間制預約時段判定，`202608120002` 消除 provider 顧客資料 policy recursion，`202608130001` 修正活動報名流水號，`202608130002` 對跨服務共用資源的容量競爭加鎖，`202608130003` 補齊訂金逾時的 failed 狀態，`202608130004` 將品牌設定頁、server action 與 RLS 收斂為 `brand.manage`，`202608130005` 建立三品牌採用指標、CSV 匯入、渠道測試、交班與付費意願資料契約，`202608130006` 原子限制同時最多三個試用品牌，`202608130007` 加入服務加購、表單快照與每週重複預約交易，`202608130008` 讓可預約時段包含加購服務所增加的時間，`202608150001` 加入可設定的品牌公開頁模板與內容，`202609020001` 加入跨執行個體共用的 API 限流，`202609020002` 以資料庫聚合回傳平台使用量。舊版角色值僅保留為 RLS 相容映射。以上均維持原有 service-role 權限。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `supabase db lint --linked --schema public --level warning --fail-on warning`、`npm test`、`npm run typecheck` 與 `npm run build`；任一項失敗都不得發布。
