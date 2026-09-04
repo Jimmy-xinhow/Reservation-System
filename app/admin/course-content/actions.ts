@@ -73,12 +73,14 @@ export async function reviewCourseAssignmentAction(fd: FormData): Promise<void> 
   const submissionId = text(fd, "submission_id");
   const result = text(fd, "result");
   if (!submissionId || !["passed", "revision"].includes(result)) throw new Error("作業審核資料不正確");
-  const { data: submission, error: findError } = await service.from("course_assessment_submissions").select("id,event_id,unit_id,registration_id,patient_id").eq("id", submissionId).eq("clinic_id", member.clinicId).maybeSingle();
+  const { data: submission, error: findError } = await service.from("course_assessment_submissions").select("id,unit_id,registration_id,patient_id").eq("id", submissionId).eq("clinic_id", member.clinicId).maybeSingle();
   if (findError || !submission) throw new Error(findError?.message ?? "找不到作業提交紀錄");
+  const { data: unit, error: unitError } = await service.from("course_units").select("event_id").eq("id", submission.unit_id).eq("clinic_id", member.clinicId).maybeSingle();
+  if (unitError || !unit) throw new Error(unitError?.message ?? "找不到作業所屬課程單元");
   const { error } = await service.from("course_assessment_submissions").update({ status: result, score: result === "passed" ? 100 : 0, feedback: text(fd, "feedback").slice(0, 2000) || null, reviewed_by: member.user.id, reviewed_at: new Date().toISOString() }).eq("id", submission.id).eq("clinic_id", member.clinicId);
   if (error) throw new Error(error.message);
   if (result === "passed") {
-    const { error: progressError } = await service.from("course_unit_progress").upsert({ clinic_id: member.clinicId, event_id: submission.event_id, unit_id: submission.unit_id, registration_id: submission.registration_id, patient_id: submission.patient_id, completed_at: new Date().toISOString() }, { onConflict: "registration_id,unit_id" });
+    const { error: progressError } = await service.from("course_unit_progress").upsert({ clinic_id: member.clinicId, event_id: unit.event_id, unit_id: submission.unit_id, registration_id: submission.registration_id, patient_id: submission.patient_id, completed_at: new Date().toISOString() }, { onConflict: "registration_id,unit_id" });
     if (progressError) throw new Error(progressError.message);
     const { error: certificateError } = await service.rpc("issue_course_certificate_if_complete", { p_clinic_id: member.clinicId, p_registration_id: submission.registration_id });
     if (certificateError) throw new Error(certificateError.message);
