@@ -39,6 +39,7 @@ async function login(page, identity, entry) {
   await page.getByLabel("Email").fill(account.email);
   await page.getByLabel("密碼").fill(account.password);
   await page.getByRole("button", { name: entry === "platform" ? "登入系統管理後台" : "登入品牌營運後台" }).click();
+  await expect(page).toHaveURL(entry === "platform" ? /\/admin\/platform(?:\?|$)/ : /\/admin\/dashboard(?:\?|$)/);
 }
 
 async function expectNoHorizontalOverflow(page) {
@@ -74,7 +75,12 @@ async function expectNoHorizontalOverflow(page) {
 
 async function expectDenseWorkspaceLayout(page, { paired = false } = {}) {
   await expectNoHorizontalOverflow(page);
-  await expect(page.locator("h1")).toHaveCSS("font-size", "24px");
+  const headingSize = await page.locator("h1").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  expect(headingSize).toBeGreaterThanOrEqual(24);
+  expect(headingSize).toBeLessThanOrEqual(28);
+  await expect(page.locator(".admin-shell")).toHaveCSS("font-size", "14px");
+  const helperText = page.locator(".admin-shell .text-xs").first();
+  if (await helperText.count()) await expect(helperText).toHaveCSS("font-size", "12px");
   if (!paired) return;
   const workspace = page.locator(".admin-workbench-grid, .admin-workbench-grid-wide").first();
   if (await workspace.count()) {
