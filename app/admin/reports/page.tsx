@@ -4,6 +4,8 @@ import { formatDateTime } from "@/lib/slots";
 import { createServiceClient } from "@/lib/supabase";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { FunnelBarChart, TrendLineChart } from "@/components/admin/OperationsCharts";
+import { auditStatusLabel } from "@/lib/admin-display";
+import { registrationStatusLabel } from "@/lib/registration";
 
 export const dynamic = "force-dynamic";
 
@@ -70,6 +72,20 @@ function percent(value: number, total: number): string {
   return total === 0 ? "—" : `${((value / total) * 100).toFixed(1)}%`;
 }
 
+function reportSourceLabel(value: string): string {
+  const labels: Record<string, string> = {
+    direct: "直接開啟",
+    offline: "後台建立",
+    online: "線上預約",
+    browser: "一般瀏覽器入口",
+    liff: "LINE 顧客入口",
+    line: "LINE",
+    admin: "後台人員",
+    import: "資料匯入",
+  };
+  return labels[value] ?? value;
+}
+
 function bookingBreakdown(rows: AppointmentRow[]) {
   const grouped = new Map<string, { day: string; provider: string; service: string; status: string; source: string; count: number }>();
   for (const row of rows) {
@@ -80,7 +96,7 @@ function bookingBreakdown(rows: AppointmentRow[]) {
     const key = [day, provider, service, row.status, source].join("\u0000");
     const current = grouped.get(key);
     if (current) current.count += 1;
-    else grouped.set(key, { day, provider, service, status: row.status, source, count: 1 });
+    else grouped.set(key, { day, provider, service, status: auditStatusLabel(row.status), source: reportSourceLabel(source), count: 1 });
   }
   return [...grouped.values()].sort((a, b) => a.day.localeCompare(b.day) || a.provider.localeCompare(b.provider));
 }
@@ -94,7 +110,7 @@ function registrationBreakdown(rows: RegistrationRow[]) {
     const key = [event, session, ticket, row.status].join("\u0000");
     const current = grouped.get(key);
     if (current) current.count += 1;
-    else grouped.set(key, { event, session, ticket, status: row.status, count: 1 });
+    else grouped.set(key, { event, session, ticket, status: registrationStatusLabel(row.status), count: 1 });
   }
   return [...grouped.values()].sort((a, b) => a.event.localeCompare(b.event) || a.session.localeCompare(b.session));
 }
@@ -203,7 +219,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
         <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="線上金流成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="後台收款" value={`${salesPaymentRows.length} 筆 · NT$${salesPaymentRows.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="線上金流失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
       </div>
 
-      <BreakdownTable title="預約來源轉換（匿名事件）" headers={["來源", "瀏覽", "開始預約", "預約成功", "開始→完成率"]} rows={[...sourceConversions.entries()].sort((a, b) => b[1].successes - a[1].successes || b[1].starts - a[1].starts).map(([source, values]) => [source, String(values.views), String(values.starts), String(values.successes), percent(values.successes, values.starts)])} />
+      <BreakdownTable title="預約來源轉換（匿名事件）" headers={["來源", "瀏覽", "開始預約", "預約成功", "開始→完成率"]} rows={[...sourceConversions.entries()].sort((a, b) => b[1].successes - a[1].successes || b[1].starts - a[1].starts).map(([source, values]) => [reportSourceLabel(source), String(values.views), String(values.starts), String(values.successes), percent(values.successes, values.starts)])} />
 
       <BreakdownTable title="預約明細分組（日期／服務提供者／服務／狀態／來源）" headers={["日期", "服務提供者", "服務", "狀態", "來源", "筆數"]} rows={bookingRows.map((row) => [row.day, row.provider, row.service, row.status, row.source, String(row.count)])} />
       <BreakdownTable title="報名明細分組（活動／場次／票種／狀態）" headers={["活動", "場次", "票種", "狀態", "筆數"]} rows={registrationBreakdownRows.map((row) => [row.event, row.session, row.ticket, row.status, String(row.count)])} />
