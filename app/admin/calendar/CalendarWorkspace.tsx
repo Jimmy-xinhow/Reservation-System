@@ -7,6 +7,7 @@ import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin, { type DateClickArg } from "@fullcalendar/interaction";
 import listPlugin from "@fullcalendar/list";
+import luxonPlugin from "@fullcalendar/luxon3";
 import zhTwLocale from "@fullcalendar/core/locales/zh-tw";
 import type { EventClickArg, EventInput, EventSourceFuncArg } from "@fullcalendar/core";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -136,7 +137,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
         {loading && <div className="calendar-loading"><span />載入日曆資料</div>}
         <FullCalendar
           ref={calendarRef}
-          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin]}
+          plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin, listPlugin, luxonPlugin]}
           locales={[zhTwLocale]}
           locale="zh-tw"
           timeZone="Asia/Taipei"
@@ -151,8 +152,9 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
           moreLinkText={(count) => `另 ${count} 筆`}
           nowIndicator
           allDaySlot={false}
-          slotMinTime="07:00:00"
-          slotMaxTime="22:00:00"
+          slotMinTime="00:00:00"
+          slotMaxTime="24:00:00"
+          scrollTime="08:00:00"
           slotDuration="00:30:00"
           expandRows
           height="auto"
