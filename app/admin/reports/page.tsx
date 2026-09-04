@@ -30,6 +30,7 @@ interface RegistrationRow {
 }
 
 interface PaymentRow { status: string; amount: number; }
+interface SalesPaymentRow { amount: number; }
 interface DeliveryRow { status: string; }
 interface FunnelRow { event_name: string; source: string | null; }
 
@@ -97,10 +98,11 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const normalizedFrom = from <= to ? from : to;
   const normalizedTo = from <= to ? to : from;
   const range = rangeIso(normalizedFrom, normalizedTo);
-  const [appointments, registrations, payments, deliveries, funnelRows, waitlistResult, promotedResult] = await Promise.all([
+  const [appointments, registrations, payments, salesPayments, deliveries, funnelRows, waitlistResult, promotedResult] = await Promise.all([
     fetchAllSupabasePages((from, to) => supabase.from("appointments").select("start_at, status, membership_id, source, doctors(name), services(name)").eq("clinic_id", clinicId).gte("start_at", range.start).lte("start_at", range.end).order("start_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("registrations").select("created_at, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("sales_payments").select("amount").eq("clinic_id", clinicId).gte("received_at", range.start).lte("received_at", range.end).order("received_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => service.from("funnel_events").select("event_name, source").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
@@ -112,6 +114,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const appointmentRows = appointments as AppointmentRow[];
   const registrationRows = registrations as RegistrationRow[];
   const paymentRows = payments as PaymentRow[];
+  const salesPaymentRows = salesPayments as SalesPaymentRow[];
   const deliveryRows = deliveries as DeliveryRow[];
   const funnelEventRows = funnelRows as FunnelRow[];
   const validAppointmentRows = appointmentRows.filter((row) => ["booked", "confirmed", "done", "no_show"].includes(row.status));
@@ -168,7 +171,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
 
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">預約與報名摘要</h2><Line label="預約未到（分母：有效預約）" value={`${appointmentNoShow} / ${validAppointmentRows.length}`} /><Line label="報名未到（分母：有效報名）" value={`${registrationNoShow} / ${validRegistrationRows.length}`} /><Line label="報名報到完成" value={registrationAttended} /><Line label="候補筆數" value={waitlistResult.count ?? 0} /><Line label="候補填補率" value={percent(promotedResult.count ?? 0, waitlistResult.count ?? 0)} /><Line label="報名取消" value={registrationRows.filter((row) => row.status === "cancelled").length} /><Line label="套票扣抵" value={`${membershipUses} 次`} /></section>
-        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="付款成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="付款失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
+        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="線上金流成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="後台收款" value={`${salesPaymentRows.length} 筆 · NT$${salesPaymentRows.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="線上金流失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
       </div>
 
       <section className="card space-y-3 p-5"><div><h2 className="font-semibold text-slate-900">顧客漏斗事件</h2><p className="mt-1 text-sm text-slate-500">僅統計匿名事件，不含姓名、電話、LINE ID 或顧客識別碼。</p></div><div className="grid grid-cols-2 gap-3 sm:grid-cols-5"><FunnelMetric label="入口瀏覽" value={funnelCounts.get("portal_view") ?? 0} /><FunnelMetric label="開始預約" value={funnelCounts.get("booking_start") ?? 0} /><FunnelMetric label="預約成功" value={funnelCounts.get("booking_success") ?? 0} /><FunnelMetric label="開始報名" value={funnelCounts.get("registration_start") ?? 0} /><FunnelMetric label="報名成功" value={funnelCounts.get("registration_success") ?? 0} /></div></section>

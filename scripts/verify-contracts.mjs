@@ -1191,8 +1191,12 @@ invariant(
   "reports expose required operational dimensions",
   read("app/admin/reports/page.tsx").includes("服務提供者") &&
     read("app/admin/reports/page.tsx").includes("票種") &&
+    read("app/admin/reports/page.tsx").includes('from("sales_payments")') &&
+    read("app/admin/reports/page.tsx").includes('label="後台收款"') &&
     read("app/api/admin/reports/route.ts").includes("services(name)") &&
-    read("app/api/admin/reports/route.ts").includes("event_ticket_types(name)"),
+    read("app/api/admin/reports/route.ts").includes("event_ticket_types(name)") &&
+    read("app/api/admin/reports/route.ts").includes('from("sales_payments")') &&
+    read("app/api/admin/reports/route.ts").includes('["後台收款"'),
 );
 invariant(
   "reports paginate large tenant datasets",
