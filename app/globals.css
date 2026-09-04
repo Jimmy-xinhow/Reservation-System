@@ -263,7 +263,7 @@ body {
     @apply mt-1 max-w-2xl text-sm leading-6 text-slate-600;
   }
   .admin-toolbar {
-    @apply flex flex-wrap items-end gap-2 border-y border-slate-200 bg-white px-3 py-3;
+    @apply flex w-full flex-wrap items-end gap-2 border-y border-slate-200 bg-white px-3 py-3 sm:w-fit;
   }
   .admin-table-shell {
     @apply overflow-x-auto border-y border-slate-200 bg-white;
@@ -284,7 +284,7 @@ body {
     @apply text-xs font-medium text-slate-500;
   }
   .admin-metric-value {
-    @apply mt-1 text-xl font-bold tabular-nums text-slate-950;
+    @apply mt-1 block text-xl font-bold tabular-nums text-slate-950;
   }
   .admin-inline-action {
     @apply inline-flex min-h-8 items-center rounded px-2 text-xs font-medium text-slate-700 hover:bg-slate-100;
