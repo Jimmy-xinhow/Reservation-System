@@ -359,7 +359,7 @@ export default async function TodayPage({
                         <option value="waived">免收</option>
                         <option value="refunded">已退</option>
                       </select>
-                      <SubmitButton className="text-xs font-medium text-brand-600 hover:underline">更新</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-brand-700">更新訂金</SubmitButton>
                       <span className="text-xs text-slate-400">${r.deposit_amount}</span>
                     </form>
                   )}

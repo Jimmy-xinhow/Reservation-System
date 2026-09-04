@@ -116,21 +116,21 @@ export default function EntityManager({
                     <button
                       type="button"
                       onClick={() => edit(it)}
-                      className="text-xs font-medium text-brand-600 hover:underline"
+                      className="admin-inline-action text-brand-700"
                     >
                       編輯
                     </button>
                     <form action={toggleAction}>
                       <input type="hidden" name="id" value={it.id} />
                       <input type="hidden" name="active" value={String(it.active)} />
-                      <SubmitButton className="text-xs font-medium text-slate-600 hover:underline">
+                      <SubmitButton className="admin-inline-action">
                         {it.active ? "停用" : "啟用"}
                       </SubmitButton>
                     </form>
                     {deleteAction && (
                       <form action={deleteAction}>
                         <input type="hidden" name="id" value={it.id} />
-                        <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
+                        <SubmitButton className="admin-inline-action text-red-700">刪除</SubmitButton>
                       </form>
                     )}
                   </div>

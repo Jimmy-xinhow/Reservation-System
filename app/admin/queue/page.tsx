@@ -159,7 +159,7 @@ export default async function QueuePage({
                 <form action={advanceServingAction}>
                   {hidden}
                   <input type="hidden" name="op" value="reset" />
-                  <SubmitButton className="text-xs text-slate-400 hover:text-red-600">重設此診叫號</SubmitButton>
+                  <SubmitButton className="admin-inline-action text-red-700">重設此診叫號</SubmitButton>
                 </form>
               </div>}
             </section>

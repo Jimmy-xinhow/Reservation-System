@@ -113,7 +113,7 @@ export default async function ExceptionsPage() {
                 <td>
                   <form action={deleteExceptionAction}>
                     <input type="hidden" name="id" value={e.id} />
-                    <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
+                    <SubmitButton className="admin-inline-action text-red-700">刪除</SubmitButton>
                   </form>
                 </td>
               </tr>

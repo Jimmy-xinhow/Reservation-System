@@ -49,7 +49,7 @@ export default function ResourceManager({ resources, services, assignments, crea
         <SubmitButton className="btn btn-primary self-end">儲存綁定</SubmitButton>
       </form>
       <div className="mt-5 divide-y divide-slate-100 border-t border-slate-100">
-        {assignments.length === 0 ? <p className="py-5 text-sm text-slate-500">尚未設定服務資源綁定。</p> : assignments.map((assignment) => <div key={assignment.id} className="flex items-center justify-between gap-3 py-3 text-sm"><span>{assignment.service_name} → {assignment.resource_name} × {assignment.quantity}</span><form action={removeAction}><input type="hidden" name="id" value={assignment.id} /><SubmitButton className="inline-action text-xs text-red-600">解除</SubmitButton></form></div>)}
+        {assignments.length === 0 ? <p className="py-5 text-sm text-slate-500">尚未設定服務資源綁定。</p> : assignments.map((assignment) => <div key={assignment.id} className="flex items-center justify-between gap-3 py-3 text-sm"><span>{assignment.service_name} → {assignment.resource_name} × {assignment.quantity}</span><form action={removeAction}><input type="hidden" name="id" value={assignment.id} /><SubmitButton className="admin-inline-action text-red-700">解除</SubmitButton></form></div>)}
       </div>
     </section>
   </div>;

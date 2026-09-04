@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { SHOWCASE_TEMPLATES, type ShowcaseSlug } from "@/lib/showcase-templates";
 import type { PublicBrandPageData } from "@/lib/brand-page";
+import { LiveBrandPage } from "@/components/brand-page/LiveBrandPage";
 import styles from "./showcase.module.css";
 
 type LiveProps = { brand?: PublicBrandPageData };
@@ -517,6 +518,7 @@ function LiveBrandDetails({ brand }: { brand: PublicBrandPageData }) {
 }
 
 export function IndustryShowcase({ slug, brand }: { slug: ShowcaseSlug; brand?: PublicBrandPageData }) {
+  if (brand) return <LiveBrandPage brand={brand} />;
   const page = (() => {
     switch (slug) {
       case "beauty": return <BeautyShowcase brand={brand} />;

@@ -227,27 +227,27 @@ export default function ScheduleEditor({
                     <button
                       type="button"
                       onClick={() => editFrom(t)}
-                      className="text-xs font-medium text-brand-600 hover:underline"
+                      className="admin-inline-action text-brand-700"
                     >
                       編輯
                     </button>
                     <button
                       type="button"
                       onClick={() => copyFrom(t)}
-                      className="text-xs font-medium text-slate-600 hover:underline"
+                      className="admin-inline-action"
                     >
                       複製
                     </button>
                     <form action={toggleAction}>
                       <input type="hidden" name="id" value={t.id} />
                       <input type="hidden" name="active" value={String(t.active)} />
-                      <SubmitButton className="text-xs font-medium text-slate-600 hover:underline">
+                      <SubmitButton className="admin-inline-action">
                         {t.active ? "停用" : "啟用"}
                       </SubmitButton>
                     </form>
                     <form action={deleteAction}>
                       <input type="hidden" name="id" value={t.id} />
-                      <SubmitButton className="text-xs font-medium text-red-600 hover:underline">刪除</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-red-700">刪除</SubmitButton>
                     </form>
                   </div>
                 </td>

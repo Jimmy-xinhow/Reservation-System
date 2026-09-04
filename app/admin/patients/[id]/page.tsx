@@ -289,7 +289,7 @@ export default async function PatientDetailPage({
                     <form action={deletePatientRecordAction}>
                       <input type="hidden" name="id" value={rec.id} />
                       <input type="hidden" name="patient_id" value={p.id} />
-                      <SubmitButton className="text-xs text-red-500 hover:underline">刪除</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-red-700">刪除</SubmitButton>
                     </form>
                   </div>
                   <p className="whitespace-pre-wrap text-sm text-slate-700">{rec.content}</p>
