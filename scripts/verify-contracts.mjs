@@ -67,6 +67,20 @@ const checks = [
   ["hardening trigger and queue functions are in consolidated schema", ["record_appointment_status_event", "record_registration_status_event", "promote_waitlist_for_session", "expire_registration_payments"]],
   ["dynamic RLS includes new tenant tables", ["registration_answers", "appointment_status_events", "appointment_notification_logs", "registration_notification_logs", "payment_status_events"]],
   ["server-only secret boundaries exist", ["lib/email.ts|import \"server-only\"", "lib/payment.ts|import \"server-only\"", "lib/registration-notifications.ts|import \"server-only\"", "lib/appointment-notifications.ts|import \"server-only\"", "lib/browser-booking.ts|import \"server-only\""]],
+  ["brand payment credentials are owner-managed and encrypted at rest", [
+    "supabase/migrations/202609060002_payment_secret_self_service.sql|create extension if not exists supabase_vault with schema vault",
+    "supabase/migrations/202609060002_payment_secret_self_service.sql|create table if not exists public.clinic_payment_secret_refs",
+    "supabase/migrations/202609060002_payment_secret_self_service.sql|member.access_type = 'brand_admin'",
+    "supabase/migrations/202609060002_payment_secret_self_service.sql|vault.create_secret",
+    "supabase/migrations/202609060002_payment_secret_self_service.sql|revoke all on function public.get_clinic_payment_secrets(uuid) from public, anon, authenticated",
+    "supabase/schema.sql|create or replace function public.save_clinic_payment_configuration",
+    "app/admin/settings/actions.ts|requireBrandAdmin",
+    "app/admin/settings/actions.ts|save_clinic_payment_configuration",
+    "app/admin/settings/page.tsx|name=\"hash_key\" type=\"password\"",
+    "app/admin/settings/page.tsx|name=\"hash_iv\" type=\"password\"",
+    "lib/payment.ts|vaultPaymentSecretsForClinic",
+    "lib/payment.ts|?? environmentPaymentSecretsForClinic",
+  ]],
   ["unexpected API errors are generic and traceable", ["lib/http.ts|if (status >= 500)", "lib/http.ts|error_id: errorId", "lib/http.ts|系統暫時無法完成操作", "lib/http.ts|detail: message.replace"]],
   ["LINE identity failures do not expose provider details", ["app/api/booking/reserve/route.ts|LINE 身分驗證失敗，請重新開啟預約頁。", "app/api/booking/reschedule/route.ts|LINE 身分驗證失敗，請重新開啟預約頁。", "app/api/customer/portal/route.ts|LINE 身分驗證失敗，請重新開啟頁面。"]],
   ["public API rate limiting is shared, atomic, and privacy-safe", ["supabase/migrations/202609020001_api_rate_limits.sql|on conflict (bucket_key) do update", "supabase/migrations/202609020001_api_rate_limits.sql|alter table public.api_rate_limit_buckets enable row level security", "supabase/migrations/202609020001_api_rate_limits.sql|grant execute on function public.consume_api_rate_limit", "lib/rate-limit.ts|createHash(\"sha256\")", "lib/rate-limit.ts|shared store unavailable; using local fallback", "lib/rate-limit.ts|MAX_LOCAL_BUCKETS"]],
@@ -273,11 +287,12 @@ invariant(
     envExample.includes("STAGING_BASE_URL="),
 );
 
+const paymentSettingsColumns = schema.match(/create table if not exists clinic_payment_settings \(([\s\S]*?)\n\);/)?.[1] ?? "";
 invariant(
-  "payment and email secrets are not schema columns",
+  "payment and email secrets are not ordinary settings columns",
   !schema.includes("resend_api_key text") &&
-    !schema.includes("hash_key text") &&
-    !schema.includes("hash_iv text") &&
+    !paymentSettingsColumns.includes("hash_key") &&
+    !paymentSettingsColumns.includes("hash_iv") &&
     schema.includes("drop column if exists resend_api_key") &&
     schema.includes("drop column if exists hash_key") &&
     migrationHardening.includes("drop column if exists resend_api_key") &&

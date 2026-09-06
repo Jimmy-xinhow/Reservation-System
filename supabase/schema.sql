@@ -9417,3 +9417,87 @@ create or replace function public.freeze_patient_subscription(p_clinic_id uuid,p
 create or replace function public.sync_subscription_freezes() returns integer language plpgsql security definer set search_path=public,extensions as $$ declare changed integer:=0;row_count integer;today_taipei date:=(now()at time zone'Asia/Taipei')::date;begin update public.subscription_freezes f set status='active',paused_subscription=(select subscription.status='active'from public.patient_subscriptions subscription where subscription.id=f.subscription_id)where f.status='scheduled'and f.starts_on<=today_taipei and f.ends_on>=today_taipei;get diagnostics row_count=row_count;changed:=changed+row_count;update public.patient_subscriptions subscription set status='paused',paused_at=coalesce(subscription.paused_at,now())where subscription.status='active'and exists(select 1 from public.subscription_freezes f where f.subscription_id=subscription.id and f.status='active'and f.paused_subscription);update public.subscription_freezes set status='completed'where status in('scheduled','active')and ends_on<today_taipei;get diagnostics row_count=row_count;changed:=changed+row_count;update public.patient_subscriptions subscription set status='active',paused_at=null where subscription.status='paused'and not exists(select 1 from public.subscription_freezes f where f.subscription_id=subscription.id and f.status='active'and f.paused_subscription)and exists(select 1 from public.subscription_freezes f where f.subscription_id=subscription.id and f.status='completed'and f.paused_subscription);return changed;end;$$;revoke all on function public.sync_subscription_freezes() from public,anon,authenticated;grant execute on function public.sync_subscription_freezes() to service_role;
 create or replace function public.issue_course_certificate_if_complete(p_clinic_id uuid,p_registration_id uuid) returns text language plpgsql security definer set search_path=public,extensions as $$ declare registration public.registrations%rowtype;required_count integer;completed_count integer;certificate text;begin select * into registration from public.registrations where id=p_registration_id and clinic_id=p_clinic_id and status in('confirmed','attended');if not found then return null;end if;select count(*)into required_count from public.course_units where clinic_id=p_clinic_id and event_id=registration.event_id and active;select count(*)into completed_count from public.course_unit_progress where clinic_id=p_clinic_id and event_id=registration.event_id and registration_id=p_registration_id;if required_count=0 or completed_count<required_count then return null;end if;insert into public.course_certificates(clinic_id,event_id,registration_id,patient_id)values(p_clinic_id,registration.event_id,p_registration_id,registration.patient_id)on conflict(registration_id)do nothing;select certificate_no into certificate from public.course_certificates where registration_id=p_registration_id;return certificate;end;$$;revoke all on function public.issue_course_certificate_if_complete(uuid,uuid) from public,anon,authenticated;grant execute on function public.issue_course_certificate_if_complete(uuid,uuid) to service_role;
 commit;
+
+-- Brand payment secret self-service. Canonical migration:
+-- supabase/migrations/202609060002_payment_secret_self_service.sql
+begin;
+create extension if not exists supabase_vault with schema vault;
+create table if not exists public.clinic_payment_secret_refs (
+  clinic_id uuid primary key references public.clinics(id) on delete restrict,
+  hash_key_secret_id uuid not null,
+  hash_iv_secret_id uuid not null,
+  configured_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users(id) on delete set null
+);
+drop trigger if exists trg_clinic_payment_secret_refs_touch on public.clinic_payment_secret_refs;
+create trigger trg_clinic_payment_secret_refs_touch before update on public.clinic_payment_secret_refs for each row execute function public.touch_updated_at();
+alter table public.clinic_payment_secret_refs enable row level security;
+revoke all on table public.clinic_payment_secret_refs from public, anon, authenticated;
+grant select, insert, update on table public.clinic_payment_secret_refs to service_role;
+
+create or replace function public.save_clinic_payment_configuration(
+  p_clinic_id uuid,
+  p_actor_user_id uuid,
+  p_provider text,
+  p_merchant_id text,
+  p_environment text,
+  p_active boolean,
+  p_hash_key text default null,
+  p_hash_iv text default null
+) returns timestamptz language plpgsql security definer set search_path = public, vault, pg_temp as $$
+declare
+  v_hash_key text := nullif(btrim(p_hash_key), '');
+  v_hash_iv text := nullif(btrim(p_hash_iv), '');
+  v_hash_key_id uuid;
+  v_hash_iv_id uuid;
+  v_hash_key_name text := format('clinic.%s.payment.hash_key', p_clinic_id);
+  v_hash_iv_name text := format('clinic.%s.payment.hash_iv', p_clinic_id);
+  v_saved_at timestamptz := now();
+begin
+  if not exists (
+    select 1 from public.clinic_members member
+     where member.clinic_id = p_clinic_id
+       and member.user_id = p_actor_user_id
+       and (member.access_type = 'brand_admin' or (member.access_type is null and member.role in ('owner', 'admin')))
+  ) then raise exception 'payment settings actor is not a brand administrator'; end if;
+  if p_provider not in ('ecpay', 'newebpay') then raise exception 'invalid payment provider'; end if;
+  if p_environment not in ('test', 'production') then raise exception 'invalid payment environment'; end if;
+  if nullif(btrim(p_merchant_id), '') is null then raise exception 'merchant id is required'; end if;
+  if (v_hash_key is null) <> (v_hash_iv is null) then raise exception 'hash key and hash iv must be updated together'; end if;
+  if v_hash_key is not null and (
+    (p_provider = 'ecpay' and (length(v_hash_key) <> 16 or length(v_hash_iv) <> 16))
+    or (p_provider = 'newebpay' and (length(v_hash_key) <> 32 or length(v_hash_iv) <> 16))
+  ) then raise exception 'payment credential length is invalid'; end if;
+  insert into public.clinic_payment_settings (clinic_id, provider, merchant_id, environment, active, updated_at)
+  values (p_clinic_id, p_provider, btrim(p_merchant_id), p_environment, coalesce(p_active, false), v_saved_at)
+  on conflict (clinic_id) do update set provider=excluded.provider, merchant_id=excluded.merchant_id, environment=excluded.environment, active=excluded.active, updated_at=excluded.updated_at;
+  if v_hash_key is not null then
+    select secret.id into v_hash_key_id from vault.secrets secret where secret.name = v_hash_key_name limit 1;
+    if v_hash_key_id is null then v_hash_key_id := vault.create_secret(v_hash_key, v_hash_key_name, 'Payment HashKey for one clinic');
+    else perform vault.update_secret(v_hash_key_id, v_hash_key, v_hash_key_name, 'Payment HashKey for one clinic'); end if;
+    select secret.id into v_hash_iv_id from vault.secrets secret where secret.name = v_hash_iv_name limit 1;
+    if v_hash_iv_id is null then v_hash_iv_id := vault.create_secret(v_hash_iv, v_hash_iv_name, 'Payment HashIV for one clinic');
+    else perform vault.update_secret(v_hash_iv_id, v_hash_iv, v_hash_iv_name, 'Payment HashIV for one clinic'); end if;
+    insert into public.clinic_payment_secret_refs (clinic_id, hash_key_secret_id, hash_iv_secret_id, configured_at, updated_at, updated_by)
+    values (p_clinic_id, v_hash_key_id, v_hash_iv_id, v_saved_at, v_saved_at, p_actor_user_id)
+    on conflict (clinic_id) do update set hash_key_secret_id=excluded.hash_key_secret_id, hash_iv_secret_id=excluded.hash_iv_secret_id, updated_at=excluded.updated_at, updated_by=excluded.updated_by;
+  end if;
+  return v_saved_at;
+end;
+$$;
+
+create or replace function public.get_clinic_payment_secrets(p_clinic_id uuid)
+returns table (hash_key text, hash_iv text)
+language sql security definer set search_path = public, vault, pg_temp as $$
+  select hash_key_secret.decrypted_secret, hash_iv_secret.decrypted_secret
+    from public.clinic_payment_secret_refs refs
+    join vault.decrypted_secrets hash_key_secret on hash_key_secret.id = refs.hash_key_secret_id
+    join vault.decrypted_secrets hash_iv_secret on hash_iv_secret.id = refs.hash_iv_secret_id
+   where refs.clinic_id = p_clinic_id;
+$$;
+revoke all on function public.save_clinic_payment_configuration(uuid, uuid, text, text, text, boolean, text, text) from public, anon, authenticated;
+grant execute on function public.save_clinic_payment_configuration(uuid, uuid, text, text, text, boolean, text, text) to service_role;
+revoke all on function public.get_clinic_payment_secrets(uuid) from public, anon, authenticated;
+grant execute on function public.get_clinic_payment_secrets(uuid) to service_role;
+commit;

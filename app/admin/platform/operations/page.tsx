@@ -16,6 +16,7 @@ export default async function PlatformOperationsPage() {
     { count: failedAppointmentNotifications, error: failedAppointmentError },
     { count: failedRegistrationNotifications, error: failedRegistrationError },
     { count: activePaymentSettings, error: paymentSettingsError },
+    { count: vaultPaymentSecretCount, error: paymentSecretError },
     { count: unprocessedWebhooks, error: webhookError },
   ] = await Promise.all([
     service.from("clinics").select("id", { count: "exact", head: true }).eq("active", true),
@@ -24,15 +25,16 @@ export default async function PlatformOperationsPage() {
     service.from("appointment_notification_logs").select("id", { count: "exact", head: true }).eq("status", "failed"),
     service.from("registration_notification_logs").select("id", { count: "exact", head: true }).eq("status", "failed"),
     service.from("clinic_payment_settings").select("id", { count: "exact", head: true }).eq("active", true),
+    service.from("clinic_payment_secret_refs").select("clinic_id", { count: "exact", head: true }),
     service.from("payment_webhook_events").select("id", { count: "exact", head: true }).is("processed_at", null),
   ]);
-  const errors = [activeBrandsError, inactiveBrandsError, failedCrmError, failedAppointmentError, failedRegistrationError, paymentSettingsError, webhookError].filter(Boolean);
+  const errors = [activeBrandsError, inactiveBrandsError, failedCrmError, failedAppointmentError, failedRegistrationError, paymentSettingsError, paymentSecretError, webhookError].filter(Boolean);
   if (errors.length > 0) throw new Error(`讀取平台健康狀態失敗：${errors[0]?.message ?? "未知錯誤"}`);
 
   const checks: HealthCheck[] = [
     { label: "各品牌 LINE 連線資料", description: "各品牌 LINE 帳號都有對應的訊息授權與驗證資料", configured: Boolean(process.env.LINE_CHANNEL_SECRETS_JSON && process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON) },
     { label: "Email 寄送服務", description: "品牌 Email 所需的私密授權資料只保存在伺服器", configured: Boolean(process.env.RESEND_API_KEYS_JSON || process.env.RESEND_API_KEY) },
-    { label: "標準付款連線資料", description: "綠界／藍新的私密付款設定只保存在伺服器", configured: Boolean(process.env.PAYMENT_SECRETS_JSON) },
+    { label: "標準付款連線資料", description: "綠界／藍新的私密付款設定只保存在伺服器安全區", configured: (vaultPaymentSecretCount ?? 0) > 0 || Boolean(process.env.PAYMENT_SECRETS_JSON) },
     { label: "自動排程驗證資料", description: "提醒、報名與行銷自動化的排程驗證", configured: Boolean(process.env.CRON_SECRET) },
   ];
   const warningCount = (failedCrm ?? 0) + (failedAppointmentNotifications ?? 0) + (failedRegistrationNotifications ?? 0);

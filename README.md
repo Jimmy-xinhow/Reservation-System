@@ -105,7 +105,7 @@ values ('<clinic_id>', '<auth_user_id>', 'admin', 'brand_admin', array['brand.ma
 | `RESEND_API_KEYS_JSON` | 多品牌 `clinic_id` → Resend API key JSON；僅 server environment，不寫入資料庫 |
 | `RESEND_EMAIL_FROM_JSON` | 多品牌 `clinic_id` → 寄件人 JSON；僅 server environment，寄件人只由部署環境設定 |
 | `RESEND_API_KEY` / `RESEND_EMAIL_FROM` | 單品牌相容 fallback；僅 server environment |
-| `PAYMENT_SECRETS_JSON` | 多品牌 `clinic_id` → `{hashKey,hashIv}` JSON；僅 server environment，不寫入資料庫 |
+| `PAYMENT_SECRETS_JSON` | 舊品牌／首次部署的金流密鑰備援；新設定由品牌管理者在後台單向寫入 Supabase Vault |
 | `REGISTRATION_TOKEN_ENCRYPTION_KEY` | 報名通知重試用 AES-GCM 加密金鑰（至少 32 字元）；僅 server environment，不寫入資料庫 |
 | `LINE_LOGIN_CHANNEL_ID` | LIFF 所屬 channel id(驗 ID token 用) |
 | `NEXT_PUBLIC_LIFF_ID` | 顧客端 LIFF ID |
@@ -170,7 +170,7 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
    - `LINE_LOGIN_CHANNEL_ID`
    - `LINE_CHANNEL_ACCESS_TOKENS_JSON` / `LINE_CHANNEL_SECRETS_JSON`
    - `RESEND_API_KEYS_JSON` / `RESEND_EMAIL_FROM_JSON`
-   - `PAYMENT_SECRETS_JSON`
+   - `PAYMENT_SECRETS_JSON`（選填；僅供既有品牌或首次部署備援）
    - `BROWSER_BOOKING_SECRET`
    - `REGISTRATION_TOKEN_ENCRYPTION_KEY`
    - `CRON_SECRET`(長亂數)
@@ -183,6 +183,8 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
    - `NEXT_PUBLIC_LIFF_ID`
 
 3. 在 Settings → Networking 產生公開網域(Generate Domain),取得類似 `https://your-app.up.railway.app` 的網址。
+
+品牌金流不需要交付 Railway 權限。品牌管理者可到「品牌與系統設定 → 付款與通知」輸入 Merchant ID、HashKey 與 HashIV；密鑰會單向寫入 Supabase Vault，儲存後只顯示是否完成，不會把完整內容回填到瀏覽器。綠界密鑰長度為 16／16 碼，藍新為 32／16 碼。
 
 > `NEXT_PUBLIC_*` 在 build 階段就會被內嵌進前端,改值後需 **重新部署** 才生效。
 

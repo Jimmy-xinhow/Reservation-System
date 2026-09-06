@@ -4,8 +4,9 @@ import { randomBytes } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin, requireBrandAdmin } from "@/lib/admin";
 import { isBrandPageTemplate, type BrandPageContent } from "@/lib/brand-page";
+import { createServiceClient } from "@/lib/supabase";
 
 function str(fd: FormData, key: string): string {
   return (fd.get(key) ?? "").toString().trim();
@@ -32,28 +33,37 @@ export async function updateEmailSettingsAction(fd: FormData) {
   revalidatePath("/admin/settings");
 }
 
-/** 保存非機密金流識別資料；HashKey／HashIV 等密鑰不得進資料庫。 */
+/** 品牌管理者可自行更新金流設定；密鑰只會送往 Supabase Vault，不會回傳到前端。 */
 export async function updatePaymentSettingsAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { user, clinicId } = await requireBrandAdmin();
   const provider = str(fd, "provider");
   if (provider !== "ecpay" && provider !== "newebpay") throw new Error("金流商錯誤");
   const environment = str(fd, "environment") === "production" ? "production" : "test";
   const merchantId = str(fd, "merchant_id");
   if (!merchantId) throw new Error("請填寫金流服務提供的商店代號（Merchant ID）");
+  const hashKey = str(fd, "hash_key");
+  const hashIv = str(fd, "hash_iv");
+  if (Boolean(hashKey) !== Boolean(hashIv)) throw new Error("HashKey 與 HashIV 必須一起填寫；若不更換，兩欄都留空");
+  if (hashKey) {
+    const expectedHashKeyLength = provider === "ecpay" ? 16 : 32;
+    if (hashKey.length !== expectedHashKeyLength || hashIv.length !== 16) {
+      throw new Error(`${provider === "ecpay" ? "綠界" : "藍新"}的 HashKey 必須是 ${expectedHashKeyLength} 碼，HashIV 必須是 16 碼`);
+    }
+  }
 
-  const { error } = await supabase.from("clinic_payment_settings").upsert(
-    {
-      clinic_id: clinicId,
-      provider,
-      merchant_id: merchantId,
-      environment,
-      active: bool(fd, "active"),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "clinic_id" },
-  );
+  const { error } = await createServiceClient().rpc("save_clinic_payment_configuration", {
+    p_clinic_id: clinicId,
+    p_actor_user_id: user.id,
+    p_provider: provider,
+    p_merchant_id: merchantId,
+    p_environment: environment,
+    p_active: bool(fd, "active"),
+    p_hash_key: hashKey || null,
+    p_hash_iv: hashIv || null,
+  });
   if (error) throw new Error(error.message);
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/channels");
 }
 
 export async function addClinicDomainAction(fd: FormData) {

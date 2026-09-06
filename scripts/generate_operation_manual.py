@@ -499,7 +499,7 @@ def build_document() -> Document:
     )
     add_manual_screen(
         doc, "4. 付款與通知", "09-brand-settings-channels.png", "圖 9　付款與通知：LINE、標準金流與 Email 分區", "三個外部渠道各自顯示狀態與必要條件；一個渠道失敗不應阻斷另一渠道。",
-        ["先到 LINE 設定完成渠道驗證。", "需要線上訂金時選綠界或藍新、測試／正式環境與 Merchant ID。", "HashKey／HashIV 由部署環境提供，不會回填到畫面。", "Email 提醒需部署 Resend 金鑰與已驗證寄件網域。", "每個渠道完成後都要記錄一次實際測試結果。"],
+        ["先到 LINE 設定完成渠道驗證。", "需要線上訂金時選綠界或藍新、測試／正式環境與 Merchant ID。", "品牌管理者在付款設定輸入 HashKey／HashIV；系統加密保存，儲存後不會回填完整內容。", "Email 提醒需部署 Resend 金鑰與已驗證寄件網域。", "每個渠道完成後都要記錄一次實際測試結果。"],
     )
     add_manual_screen(
         doc, "5. 團隊與品牌員工權限", "10-brand-permissions.png", "圖 10　品牌團隊：品牌管理者與品牌員工細權限", "品牌管理者不可自行降級；其他帳號統一為品牌員工，權限以工作內容授予。",
@@ -719,7 +719,7 @@ def build_document() -> Document:
         ("新 Rich Menu 手機沒有立刻出現", "重新開啟 LINE 聊天室；預設選單變更可能需要短暫時間。請勿用桌面版 LINE 當最終驗收。"),
         ("預約頁沒有時段", "依序檢查服務啟用、人員／資源、同日排程、例外日期、前置時間、最大預約天數、容量與公開入口。"),
         ("通知只有一個渠道失敗", "LINE 與 Email 獨立記錄與重試。先看 failed／skipped 原因，不要把另一渠道也關閉。"),
-        ("金流啟用後仍顯示缺少密鑰", "Merchant ID 可在後台保存，但 HashKey／HashIV 必須由 server environment 提供。"),
+        ("金流啟用後仍顯示缺少密鑰", "請由品牌管理者到『付款與通知』同時輸入 HashKey 與 HashIV，再執行渠道檢查。"),
         ("系統總控台與品牌後台怎麼切換", "同時具兩層權限的帳號，右上角才會顯示切換按鈕；返回品牌後台會進入今日工作台。"),
     ]
     for question, answer in qa:

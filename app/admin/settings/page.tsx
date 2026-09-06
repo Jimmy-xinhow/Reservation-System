@@ -5,7 +5,8 @@ import { createBrandAction } from "../actions";
 import { addClinicDomainAction, updateBrandPageAction, updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction, updatePaymentSettingsAction, verifyClinicDomainAction } from "./actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { emailConfigForClinic } from "@/lib/email";
-import { paymentSecretsForClinic } from "@/lib/payment";
+import { getPaymentSecretStatus } from "@/lib/payment";
+import { createServiceClient } from "@/lib/supabase";
 import { BrandPageEditor } from "./BrandPageEditor";
 import { isBrandPageTemplate, normalizeBrandPageContent, type BrandPageTemplate } from "@/lib/brand-page";
 
@@ -76,7 +77,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const activeSection: SettingsSectionId = SETTINGS_SECTIONS.some((item) => item.id === requestedSection)
     ? requestedSection as SettingsSectionId
     : "brand";
-  const { clinicId } = await requireAdmin();
+  const { clinicId, accessType } = await requireAdmin();
   const supabase = await createSupabaseServer();
   const [
     { data, error: settingsError },
@@ -84,6 +85,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     { data: paymentData, error: paymentError },
     { data: domainData, error: domainError },
     { data: lineChannelData, error: lineChannelError },
+    paymentSecretStatus,
   ] = await Promise.all([
     supabase
       .from("clinic_settings")
@@ -102,6 +104,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       .maybeSingle(),
     supabase.from("clinic_domains").select("id, hostname, verification_token, verified_at, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
     supabase.from("clinic_line_channels").select("verification_status, liff_id").eq("clinic_id", clinicId).maybeSingle(),
+    getPaymentSecretStatus(createServiceClient(), clinicId),
   ]);
   if (settingsError || clinicError || paymentError || domainError || lineChannelError) {
     throw new Error(settingsError?.message ?? clinicError?.message ?? paymentError?.message ?? domainError?.message ?? lineChannelError?.message ?? "品牌設定載入失敗");
@@ -112,7 +115,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const domains = (domainData ?? []) as ClinicDomain[];
   const lineChannel = lineChannelData as LineChannelStatus | null;
   const emailConfigured = Boolean(emailConfigForClinic(clinicId));
-  const paymentSecretConfigured = Boolean(paymentSecretsForClinic(clinicId));
+  const canManagePaymentSecrets = accessType === "brand_admin";
   const lineReady = s?.line_channel_enabled === true && lineChannel?.verification_status === "ready" && Boolean(lineChannel.liff_id);
 
   if (!s) {
@@ -155,7 +158,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <div className="divide-y divide-slate-200 border-t border-slate-200">
         <SettingStatus label="LINE 官方帳號" value={!s.line_channel_enabled ? "未啟用" : lineReady ? "已驗證" : "待完成驗證"} ready={lineReady} href="/admin/line" />
-        <SettingStatus label="標準金流" value={!payment?.active ? "未啟用" : paymentSecretConfigured ? "已啟用" : "缺少密鑰"} ready={payment?.active === true && paymentSecretConfigured} href="/admin/settings?section=channels" />
+        <SettingStatus label="標準金流" value={!payment?.active ? "未啟用" : paymentSecretStatus.configured ? "已啟用" : "缺少密鑰"} ready={payment?.active === true && paymentSecretStatus.configured} href="/admin/settings?section=channels" />
         <SettingStatus label="Email 提醒" value={!s.email_enabled ? "未啟用" : emailConfigured ? "已啟用" : "缺少寄件設定"} ready={s.email_enabled && emailConfigured} href="/admin/settings?section=channels" />
         <SettingStatus label="自訂網域" value={domains.some((item) => item.active) ? "已驗證" : domains.length ? "待驗證" : "尚未新增"} ready={domains.some((item) => item.active)} href="/admin/settings?section=domain" />
       </div>
@@ -401,18 +404,37 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {activeSection === "channels" && <form action={updatePaymentSettingsAction} className="card space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">標準金流</h2>
-          <p className="help-text">支援綠界與藍新標準付款。付款密鑰只保存在伺服器，不會寫入一般資料表或顯示在畫面；退款、對帳與其他金流另行報價。</p>
+          <p className="help-text">支援綠界與藍新標準付款。品牌管理者可直接在這裡完成串接；付款密鑰會加密保存，儲存後不會再顯示完整內容。</p>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <label className="text-sm"><span className="label">金流商</span><select name="provider" defaultValue={payment?.provider ?? "ecpay"} className="input"><option value="ecpay">綠界 ECPay</option><option value="newebpay">藍新 NewebPay</option></select></label>
-          <label className="text-sm"><span className="label">環境</span><select name="environment" defaultValue={payment?.environment ?? "test"} className="input"><option value="test">測試</option><option value="production">正式</option></select></label>
-          <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" name="active" defaultChecked={payment?.active ?? false} />啟用付款</label>
-        </div>
-        <label className="block text-sm"><span className="label">商店代號（Merchant ID）</span><input name="merchant_id" className="input" defaultValue={payment?.merchant_id ?? ""} required /><span className="help-text block">由綠界或藍新提供，用來辨認收款商店。</span></label>
-        <p className={`text-sm ${paymentSecretConfigured ? "text-emerald-700" : "text-amber-700"}`}>
-          金流密鑰狀態：{paymentSecretConfigured ? "已在伺服器安全設定 ✓" : "尚未設定"}
+        <fieldset disabled={!canManagePaymentSecrets} className="space-y-4 disabled:opacity-65">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <label className="text-sm"><span className="label">金流商</span><select name="provider" defaultValue={payment?.provider ?? "ecpay"} className="input"><option value="ecpay">綠界 ECPay</option><option value="newebpay">藍新 NewebPay</option></select></label>
+            <label className="text-sm"><span className="label">環境</span><select name="environment" defaultValue={payment?.environment ?? "test"} className="input"><option value="test">測試</option><option value="production">正式</option></select></label>
+            <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" name="active" defaultChecked={payment?.active ?? false} />啟用付款</label>
+          </div>
+          <label className="block text-sm"><span className="label">商店代號（Merchant ID）</span><input name="merchant_id" className="input" defaultValue={payment?.merchant_id ?? ""} required /><span className="help-text block">由綠界或藍新提供，用來辨認收款商店。</span></label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="label">HashKey（第一組驗證密鑰）</span>
+              <input name="hash_key" type="password" className="input" autoComplete="new-password" spellCheck={false} minLength={16} maxLength={32} />
+              <span className="help-text block">綠界為 16 碼；藍新為 32 碼。已設定時留空不會覆蓋。</span>
+            </label>
+            <label className="block text-sm">
+              <span className="label">HashIV（第二組驗證密鑰）</span>
+              <input name="hash_iv" type="password" className="input" autoComplete="new-password" spellCheck={false} minLength={16} maxLength={16} />
+              <span className="help-text block">綠界與藍新皆為 16 碼；必須與 HashKey 一起更新。</span>
+            </label>
+          </div>
+          <SubmitButton className="btn btn-primary">安全儲存並更新串接</SubmitButton>
+        </fieldset>
+        {!canManagePaymentSecrets && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">只有品牌管理者可以變更付款帳號與密鑰。</p>}
+        <p className={`text-sm ${paymentSecretStatus.configured ? "text-emerald-700" : "text-amber-700"}`}>
+          金流密鑰狀態：{paymentSecretStatus.source === "vault"
+            ? "已由品牌後台安全設定 ✓"
+            : paymentSecretStatus.source === "environment"
+              ? "已由舊版部署設定提供；下次輸入新密鑰後會改由品牌後台管理 ✓"
+              : "尚未設定"}
         </p>
-        <SubmitButton className="btn btn-primary">儲存金流設定</SubmitButton>
       </form>}
 
       {activeSection === "domain" && (

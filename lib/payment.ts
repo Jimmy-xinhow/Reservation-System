@@ -26,6 +26,12 @@ interface PaymentSecret {
   hashIv: string;
 }
 
+export interface PaymentSecretStatus {
+  configured: boolean;
+  source: "vault" | "environment" | "none";
+  updatedAt: string | null;
+}
+
 function paymentSecretMap(): Record<string, PaymentSecret> {
   const raw = process.env.PAYMENT_SECRETS_JSON;
   if (!raw) return {};
@@ -45,9 +51,32 @@ function paymentSecretMap(): Record<string, PaymentSecret> {
   }
 }
 
-export function paymentSecretsForClinic(clinicId: string): PaymentSecret | null {
+function environmentPaymentSecretsForClinic(clinicId: string): PaymentSecret | null {
   const secret = paymentSecretMap()[clinicId];
   return secret?.hashKey && secret.hashIv ? secret : null;
+}
+
+async function vaultPaymentSecretsForClinic(supabase: SupabaseClient, clinicId: string): Promise<PaymentSecret | null> {
+  const { data, error } = await supabase.rpc("get_clinic_payment_secrets", { p_clinic_id: clinicId });
+  if (error) throw new Error(error.message);
+  const row = Array.isArray(data) ? data[0] as Record<string, unknown> | undefined : undefined;
+  if (typeof row?.hash_key !== "string" || typeof row.hash_iv !== "string") return null;
+  return { hashKey: row.hash_key, hashIv: row.hash_iv };
+}
+
+export async function getPaymentSecretStatus(
+  supabase: SupabaseClient,
+  clinicId: string,
+): Promise<PaymentSecretStatus> {
+  const { data, error } = await supabase
+    .from("clinic_payment_secret_refs")
+    .select("updated_at")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (data) return { configured: true, source: "vault", updatedAt: data.updated_at as string };
+  if (environmentPaymentSecretsForClinic(clinicId)) return { configured: true, source: "environment", updatedAt: null };
+  return { configured: false, source: "none", updatedAt: null };
 }
 
 const ECPAY_TEST = "https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5";
@@ -69,7 +98,7 @@ export async function getPaymentSettings(supabase: SupabaseClient, clinicId: str
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return withPaymentSecrets(data as Omit<PaymentSettings, "hash_key" | "hash_iv">);
+  return await withPaymentSecrets(supabase, data as Omit<PaymentSettings, "hash_key" | "hash_iv">);
 }
 
 export async function getPaymentSettingsByMerchant(
@@ -86,11 +115,15 @@ export async function getPaymentSettingsByMerchant(
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return null;
-  return withPaymentSecrets(data as Omit<PaymentSettings, "hash_key" | "hash_iv">);
+  return await withPaymentSecrets(supabase, data as Omit<PaymentSettings, "hash_key" | "hash_iv">);
 }
 
-function withPaymentSecrets(data: Omit<PaymentSettings, "hash_key" | "hash_iv">): PaymentSettings {
-  const secret = paymentSecretsForClinic(data.clinic_id);
+async function withPaymentSecrets(
+  supabase: SupabaseClient,
+  data: Omit<PaymentSettings, "hash_key" | "hash_iv">,
+): Promise<PaymentSettings> {
+  const secret = await vaultPaymentSecretsForClinic(supabase, data.clinic_id)
+    ?? environmentPaymentSecretsForClinic(data.clinic_id);
   return { ...data, hash_key: secret?.hashKey ?? null, hash_iv: secret?.hashIv ?? null };
 }
 
