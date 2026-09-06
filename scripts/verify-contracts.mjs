@@ -1031,6 +1031,8 @@ invariant(
   "browser booking does not preselect one provider when several are available",
   browserBookingPage.includes("value.doctors.length === 1") &&
     browserBookingPage.includes("config.doctors.length === 1") &&
+    browserBookingPage.includes('providerRequired ? "請選擇服務提供者" : "不指定，由系統安排"') &&
+    browserBookingPage.includes("required={providerRequired}") &&
     browserBookingPage.includes("}, [serviceId]);") &&
     browserReschedulePage.includes("config.doctors.length === 1") &&
     reschedulePage.includes("config.doctors.length === 1"),
