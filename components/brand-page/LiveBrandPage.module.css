@@ -113,6 +113,10 @@
   .header nav { display: none; }
   .headerCta { min-height: 40px; padding-inline: 14px; }
   .splitHero, .courseHero { grid-template-columns: 1fr; min-height: auto; border-inline: 0; }
+  .courseHero { position: relative; display: block; padding-top: min(72vw, 420px); }
+  .courseHero .heroImage { position: absolute; inset: 0 0 auto; min-height: min(72vw, 420px); }
+  .courseHero .heroCopy { position: relative; z-index: 1; min-height: 0; margin: -44px 14px 0; padding: 48px 22px 52px; border: 1px solid var(--line); background: color-mix(in srgb, var(--paper) 96%, white); }
+  .courseHero .heroImage figcaption { bottom: 58px; }
   .heroCopy { width: 100%; min-width: 0; min-height: 540px; padding: 72px 24px 54px; }
   .heroCopy h1 { width: 100%; max-width: 100%; overflow-wrap: anywhere; font-size: clamp(46px, 14vw, 72px); }
   .heroDescription { width: 100%; overflow-wrap: anywhere; }
