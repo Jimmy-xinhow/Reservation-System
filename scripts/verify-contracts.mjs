@@ -539,6 +539,7 @@ const paymentResultPage = read("app/payment/result/page.tsx");
 const paymentEcpayApi = read("app/api/payment/ecpay/notify/route.ts");
 const paymentNewebpayApi = read("app/api/payment/newebpay/notify/route.ts");
 const paymentWebhook = read("lib/payment-webhook.ts");
+const paymentLib = read("lib/payment.ts");
 const paymentOrderLookup = read("lib/payment-order-lookup.ts");
 const appointmentNotifications = read("lib/appointment-notifications.ts");
 const registrationNotifications = read("lib/registration-notifications.ts");
@@ -992,6 +993,14 @@ invariant(
     paymentStatusApi.includes("rateLimitResponse") &&
     paymentResultPage.includes("/api/payment/status") &&
     read("app/register/page.tsx").includes("localStorage.setItem(`registration:")
+);
+invariant(
+  "ECPay callbacks verify empty response fields and redirect to the public app origin",
+  paymentLib.includes('.filter(([key]) => key.toLowerCase() !== "checkmacvalue")') &&
+    !paymentLib.includes('key.toLowerCase() !== "checkmacvalue" && value !== ""') &&
+    paymentReturnApi.includes("function resultBaseUrl") &&
+    paymentReturnApi.includes("process.env.APP_URL") &&
+    paymentReturnApi.includes('new URL("/payment/result", resultBaseUrl(req))'),
 );
 invariant(
   "public cancellation and payment creation are rate limited",

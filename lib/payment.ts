@@ -115,7 +115,9 @@ function ecpayEncode(value: string): string {
 
 function ecpayCheckMac(fields: Record<string, string>, hashKey: string, hashIv: string): string {
   const content = Object.entries(fields)
-    .filter(([key, value]) => key.toLowerCase() !== "checkmacvalue" && value !== "")
+    // 綠界回傳的空值欄位仍屬於「已傳遞參數」，必須參與檢查碼計算。
+    // 只排除 CheckMacValue 本身，否則付款結果與 ReturnURL 都會驗章失敗。
+    .filter(([key]) => key.toLowerCase() !== "checkmacvalue")
     .sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase()))
     .map(([key, value]) => `${key}=${value}`)
     .join("&");

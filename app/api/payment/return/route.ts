@@ -26,8 +26,21 @@ function validOrder(value: string | null): string | null {
   return value && /^[A-Za-z0-9_-]{8,64}$/.test(value) ? value : null;
 }
 
+function resultBaseUrl(req: NextRequest): string {
+  const configured = process.env.APP_URL?.trim();
+  if (!configured) return req.nextUrl.origin;
+  try {
+    const parsed = new URL(configured);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("unsupported protocol");
+    return parsed.origin;
+  } catch {
+    return req.nextUrl.origin;
+  }
+}
+
 function resultRedirect(req: NextRequest, order: string, provider: Provider, state: string, clinicSlug: string | null): NextResponse {
-  const url = new URL("/payment/result", req.url);
+  // Railway 會把應用程式內部 request URL 顯示成 localhost:8080；結果頁必須使用公開 APP_URL。
+  const url = new URL("/payment/result", resultBaseUrl(req));
   url.searchParams.set("order", order);
   url.searchParams.set("provider", provider);
   url.searchParams.set("state", state);
