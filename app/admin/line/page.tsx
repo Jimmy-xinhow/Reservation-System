@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { getBotInfo, getLineCredentialStatus, getQuota, lineAccessTokenForDestination, type LineBotInfo } from "@/lib/line";
 import { requireAdmin } from "@/lib/admin";
@@ -67,21 +68,33 @@ export default async function LinePage({
     .limit(1)
     .maybeSingle();
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <p className="eyebrow">顧客入口設定</p>
-        <h1 className="text-2xl font-bold text-slate-900">LINE 官方帳號連線</h1>
-        <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">依照下方順序完成連線、網址設定與測試。一般操作只需要看白話步驟；識別碼與伺服器設定集中在「進階技術設定」。</p>
-      </div>
+  const isConnected = Boolean(clinicToken && bot && !connectionFailed);
+  const isVerified = channel?.verification_status === "ready";
+  const isEntryReady = settings?.line_channel_enabled === true && Boolean(channel?.liff_id);
 
-      <section className="card p-5 sm:p-6">
-        <h2 className="font-semibold text-slate-900">照順序完成 3 件事</h2>
-        <ol className="mt-4 grid gap-3 lg:grid-cols-3">
-          <SetupStep number="1" title="選擇連線方式" detail="多數品牌先用共用連線；有自己的 LINE Developers 渠道時再選品牌獨立連線。" />
-          <SetupStep number="2" title="貼上兩個網址" detail="把本頁產生的訊息接收網址與顧客入口網址貼到 LINE Developers。" />
-          <SetupStep number="3" title="檢查並實際測試" detail="先按「重新檢查連線」，再用 LINE 手機完成登入、圖文選單點擊與測試訊息。" />
-        </ol>
+  return (
+    <div className="admin-page">
+      <header className="admin-page-header">
+        <div>
+          <p className="eyebrow">顧客溝通</p>
+          <h1 className="admin-page-title">LINE 互動中心</h1>
+          <p className="admin-page-description">先確認連線，再管理顧客會看到的入口與訊息。技術識別碼與密鑰收在下方設定區。</p>
+        </div>
+        <nav className="admin-toolbar" aria-label="LINE 快速操作">
+          <Link href="/admin/richmenu" className="admin-inline-action"><LineIcon name="grid" />圖文選單</Link>
+          <Link href="/admin/line-templates" className="admin-inline-action"><LineIcon name="template" />訊息內容</Link>
+          <Link href="/admin/messages" className="admin-inline-action"><LineIcon name="send" />發送紀錄</Link>
+          <Link href="/admin/channels" className="admin-inline-action"><LineIcon name="check" />完整檢查</Link>
+        </nav>
+      </header>
+
+      <section className="admin-section" aria-label="LINE 設定進度">
+        <div className="admin-section-header"><div><h2 className="font-semibold text-slate-950">照順序完成 3 件事</h2><p className="mt-1 text-xs text-slate-500">綠色勾選代表可繼續使用；未完成時往下依說明設定。</p></div></div>
+        <div className="grid sm:grid-cols-3">
+          <ConnectionStep number="1" title="官方帳號連線" ready={isConnected} detail={bot ? `${bot.displayName} ${bot.basicId ?? ""}` : "需要授權資料"} />
+          <ConnectionStep number="2" title="系統連線檢查" ready={isVerified} detail={isVerified ? "系統檢查已通過" : "等待重新檢查"} />
+          <ConnectionStep number="3" title="顧客入口" ready={isEntryReady} detail={isEntryReady ? "LINE 入口已啟用" : "需要啟用並填入 LIFF"} />
+        </div>
       </section>
 
       {test === "ok" && (
@@ -109,43 +122,31 @@ export default async function LinePage({
         </p>
       )}
 
-      {/* 即時連線狀態 */}
-      <section className="card p-5">
-        <h2 className="mb-3 font-semibold text-slate-900">連線狀態</h2>
-        {!clinicToken ? (
-          <p className="text-sm text-slate-600">目前品牌尚未設定 LINE 訊息授權資料，因此無法檢查連線。</p>
-        ) : connectionFailed ? (
-          <p className="rounded-xl bg-red-50 px-3 py-3 text-sm leading-6 text-red-700">目前無法連上 LINE。請先檢查伺服器授權資料，再重新整理本頁。</p>
-        ) : bot ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              {bot.pictureUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={bot.pictureUrl} alt="" className="h-10 w-10 rounded-full" />
-              )}
-              <div>
-                <div className="font-medium text-slate-900">{bot.displayName}</div>
-                <div className="text-xs text-slate-500">{bot.basicId}</div>
-              </div>
-              <span className="badge ml-auto bg-accent-500/10 text-accent-600">已連線 ✓</span>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <span className="badge bg-slate-100 text-slate-600">
-                推播額度:{quota?.type === "limited" ? `${quota.value} 則/月` : "無上限"}
-              </span>
-              <span
-                className={`badge ${bot.chatMode === "bot" ? "bg-accent-500/10 text-accent-600" : "bg-amber-50 text-amber-700"}`}
-              >
-                回應模式：{bot.chatMode === "bot" ? "聊天機器人 ✓" : "需要調整"}
-              </span>
-            </div>
-            {bot.chatMode !== "bot" && (
-              <p className="rounded-xl bg-amber-50 px-3 py-3 text-sm leading-6 text-amber-800">
-                目前不是聊天機器人模式，顧客按下「確認／取消」後系統可能收不到。請到 LINE 官方帳號管理後台的「設定 → 回應設定」，改為「聊天機器人」並開啟 Webhook（讓 LINE 把顧客操作傳回本系統的功能）。
-              </p>
-            )}
+      <section className="admin-workbench-grid-wide">
+        <div className="admin-section">
+          <div className="admin-section-header">
+            <div><h2 className="font-semibold text-slate-950">顧客訊息旅程</h2><p className="mt-1 text-xs text-slate-500">系統會在這些時間點自動帶入品牌、日期與操作按鈕。</p></div>
+            <Link href="/admin/line-templates" className="admin-inline-action"><LineIcon name="edit" />編輯訊息內容</Link>
           </div>
-        ) : null}
+          <div className="divide-y divide-slate-200">
+            <JourneyRow event="預約成立" timing="顧客送出預約後" content="日期、服務、查看／取消入口" status={isConnected ? "可發送" : "待連線"} />
+            <JourneyRow event="行前提醒" timing="品牌設定的行前時間" content="開始時間、地點、注意事項" status={isConnected ? "可發送" : "待連線"} />
+            <JourneyRow event="預約異動" timing="確認、改期或取消時" content="最新狀態與顧客紀錄入口" status={isConnected ? "可發送" : "待連線"} />
+            <JourneyRow event="候補通知" timing="釋出名額時" content="場次資訊與限時確認入口" status={isConnected ? "可發送" : "待連線"} />
+            <JourneyRow event="付款結果" timing="金流回傳結果後" content="金額、付款狀態與訂單紀錄" status={isConnected ? "可發送" : "待連線"} />
+          </div>
+        </div>
+
+        <aside className="admin-section">
+          <div className="admin-section-header"><div><h2 className="font-semibold text-slate-950">顧客手機預覽</h2><p className="mt-1 text-xs text-slate-500">預覽訊息的層級與主要動作，不顯示真實顧客資料。</p></div></div>
+          <LineMessagePreview botName={bot?.displayName ?? "品牌官方帳號"} pictureUrl={bot?.pictureUrl} />
+          <div className="border-t border-slate-200 px-4 py-3">
+            {!clinicToken ? <p className="text-sm text-amber-700">尚未設定 LINE 訊息授權，請完成下方連線設定。</p>
+              : connectionFailed ? <p className="text-sm text-red-700">目前無法連上 LINE，請重新檢查授權資料。</p>
+                : bot ? <div className="flex flex-wrap items-center gap-2 text-xs"><span className="badge bg-emerald-50 text-emerald-700">官方帳號已連線</span><span className="badge bg-slate-100 text-slate-600">{quota?.type === "limited" ? `每月 ${quota.value} 則` : "推播無上限"}</span><span className={`badge ${bot.chatMode === "bot" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{bot.chatMode === "bot" ? "可接收顧客操作" : "回應模式需調整"}</span></div> : null}
+          </div>
+          {bot && bot.chatMode !== "bot" && <p className="mx-4 mb-4 border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">請到 LINE 官方帳號管理後台開啟「聊天機器人」與 Webhook，否則系統收不到顧客按鈕操作。</p>}
+        </aside>
       </section>
 
       <form action={updateLineChannelSettingsAction} className="card space-y-5 p-5">
@@ -319,11 +320,60 @@ function CopyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function SetupStep({ number, title, detail }: { number: string; title: string; detail: string }) {
+function ConnectionStep({ number, title, detail, ready }: { number: string; title: string; detail: string; ready: boolean }) {
   return (
-    <li className="flex gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-bold text-white">{number}</span>
-      <div><p className="font-medium text-slate-900">{title}</p><p className="mt-1 text-sm leading-6 text-slate-600">{detail}</p></div>
-    </li>
+    <div className="flex min-w-0 items-center gap-3 border-b border-slate-200 px-4 py-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
+      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold ${ready ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600"}`}>{ready ? "✓" : number}</span>
+      <div className="min-w-0"><p className="font-semibold text-slate-900">{title}</p><p className="mt-0.5 truncate text-xs text-slate-500">{detail}</p></div>
+    </div>
   );
+}
+
+function JourneyRow({ event, timing, content, status }: { event: string; timing: string; content: string; status: string }) {
+  const ready = status === "可發送";
+  return (
+    <div className="grid gap-1 px-4 py-3 sm:grid-cols-[8rem_minmax(9rem,.8fr)_minmax(12rem,1fr)_auto] sm:items-center sm:gap-3">
+      <strong className="text-sm text-slate-900">{event}</strong>
+      <span className="text-xs leading-5 text-slate-600">{timing}</span>
+      <span className="text-xs leading-5 text-slate-500">{content}</span>
+      <span className={`badge w-fit ${ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{status}</span>
+    </div>
+  );
+}
+
+function LineMessagePreview({ botName, pictureUrl }: { botName: string; pictureUrl?: string }) {
+  return (
+    <div className="bg-[#dfe8ef] p-4">
+      <div className="mx-auto max-w-[19rem] overflow-hidden rounded-[1.4rem] border-[6px] border-slate-800 bg-[#dfe8ef] shadow-sm">
+        <div className="flex items-center gap-2 bg-white px-3 py-2">
+          {pictureUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={pictureUrl} alt="" className="h-7 w-7 rounded-full" />
+          ) : <span className="grid h-7 w-7 place-items-center rounded-full bg-[#06c755] text-xs font-bold text-white">L</span>}
+          <strong className="truncate text-xs text-slate-900">{botName}</strong>
+        </div>
+        <div className="space-y-2 p-3">
+          <div className="w-[88%] overflow-hidden rounded-lg bg-white shadow-sm">
+            <div className="h-1.5 bg-[#06c755]" />
+            <div className="p-3">
+              <p className="text-[10px] font-semibold text-[#06a743]">預約已成立</p>
+              <p className="mt-1.5 text-sm font-bold text-slate-900">您的預約已保留</p>
+              <dl className="mt-2 space-y-1 text-[10px] text-slate-600"><div className="flex justify-between gap-2"><dt>時間</dt><dd className="font-medium text-slate-800">9 月 12 日 14:30</dd></div><div className="flex justify-between gap-2"><dt>服務</dt><dd className="font-medium text-slate-800">專業服務體驗</dd></div></dl>
+              <div className="mt-3 grid grid-cols-2 gap-1.5"><span className="grid min-h-8 place-items-center rounded border border-[#06c755] text-[10px] font-semibold text-[#079c45]">查看預約</span><span className="grid min-h-8 place-items-center rounded bg-[#06c755] text-[10px] font-semibold text-white">聯絡品牌</span></div>
+            </div>
+          </div>
+          <p className="text-center text-[9px] text-slate-500">這是版面預覽，不會送出訊息</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LineIcon({ name }: { name: string }) {
+  const path = name === "grid" ? <><rect x="4" y="4" width="6" height="6" rx="1" /><rect x="14" y="4" width="6" height="6" rx="1" /><rect x="4" y="14" width="6" height="6" rx="1" /><rect x="14" y="14" width="6" height="6" rx="1" /></>
+    : name === "template" ? <><rect x="4" y="3" width="16" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /></>
+      : name === "send" ? <path d="m3 11 18-8-8 18-2-8-8-2Zm8 2 4-4" />
+        : name === "edit" ? <><path d="m4 20 4.5-1 10-10-3.5-3.5-10 10L4 20Z" /><path d="m13.5 7 3.5 3.5" /></>
+          : <><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16 9" /></>;
+  return <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-current" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{path}</svg>;
 }

@@ -6,7 +6,7 @@ export const SHOWCASE_TEMPLATES = [
     name: "LUNE Hair Atelier",
     direction: "時尚編輯",
     reference: "Hershesons",
-    image: "/showcase/beauty-hero.jpg",
+    image: "/showcase/elan-skincare-hero-v2.webp",
     palette: ["#ebe8e1", "#171714", "#a8422f"],
   },
   {
@@ -26,7 +26,7 @@ export const SHOWCASE_TEMPLATES = [
     name: "REDLINE Training Club",
     direction: "品牌戰役",
     reference: "Barry’s / solidcore",
-    image: "/showcase/fitness-hero.jpg",
+    image: "/showcase/forme-pilates-hero-v2.webp",
     palette: ["#0b0b0b", "#f12b20", "#e9ff4f"],
   },
   {
@@ -36,7 +36,7 @@ export const SHOWCASE_TEMPLATES = [
     name: "OPENROOM 學習所",
     direction: "探索導向",
     reference: "Outschool / Domestika",
-    image: "/showcase/education-hero.jpg",
+    image: "/showcase/openroom-course-hero-v2.webp",
     palette: ["#f4efdf", "#4426a8", "#ffdc57"],
   },
   {

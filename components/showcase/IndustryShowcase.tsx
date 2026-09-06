@@ -30,6 +30,16 @@ function LiveReviewBar({ slug, brand }: { slug: ShowcaseSlug; brand?: PublicBran
   return brand ? null : <ReviewBar slug={slug} />;
 }
 
+function LiveActionBar({ brand }: { brand?: PublicBrandPageData }) {
+  if (!brand) return null;
+  return (
+    <aside className={styles.liveActionBar} aria-label="快速操作">
+      <a href={brand.links.records}>我的紀錄</a>
+      <a href={brand.links.primary}>{brand.content.primary_cta_label} →</a>
+    </aside>
+  );
+}
+
 function eventHref(brand: PublicBrandPageData | undefined, eventSlug: string): string {
   if (!brand?.links.registration) return brand?.links.primary ?? "#";
   const query = brand.links.registration.split("?")[1];
@@ -107,15 +117,19 @@ function BeautyShowcase({ brand }: LiveProps) {
             <h1>{content?.hero_title ?? "Hair,"}<br /><em>{content?.hero_highlight ?? "considered."}</em></h1>
             <div>
               <span>{content?.hero_description ?? "剪裁、色彩與護理，由髮型師從你的日常開始設計。"}</span>
-              <a href={brand?.links.primary ?? "#beauty-book"}>{content?.primary_cta_label ?? "查看服務與時段"} ↗</a>
+              <nav className={styles.beautyHeroActions} aria-label="品牌快速操作">
+                <a href={brand?.links.primary ?? "#beauty-book"}>{content?.primary_cta_label ?? "查看服務與時段"} ↗</a>
+                <a href={brand?.links.secondary ?? "#beauty-book"}>{content?.secondary_cta_label ?? "認識我們"}</a>
+              </nav>
             </div>
           </div>
           <figure className={styles.beautyHeroImage}>
-            <ShowcaseImage src={content?.hero_image_url ?? "/showcase/beauty-hero.jpg"} alt={`${brand?.name ?? "LUNE"} 品牌主視覺`} priority sizes="(max-width: 768px) 100vw, 62vw" />
+            <ShowcaseImage src={content?.hero_image_url ?? "/showcase/elan-skincare-hero-v2.webp"} alt={`${brand?.name ?? "LUNE"} 品牌主視覺`} priority sizes="(max-width: 768px) 100vw, 62vw" />
             <figcaption>{brand?.name ?? "THE QUIET CUT — COLLECTION 04"}</figcaption>
           </figure>
           <span className={styles.beautyEdition}>{brand ? `${brand.name} / BRAND EDITION` : "LUNE / EDITION 04"}</span>
         </section>
+        {brand && <div className={styles.beautyTrust}><span>{content?.trust_point_1}</span><span>{content?.trust_point_2}</span><span>{content?.trust_point_3}</span><span>預約後可查詢與管理</span></div>}
 
         <section className={styles.beautyServices} id={brand ? "brand-page-content" : "beauty-book"}>
           <header>
@@ -131,13 +145,14 @@ function BeautyShowcase({ brand }: LiveProps) {
               ))}
             </div>
             <figure>
-              <ShowcaseImage src={content?.detail_image_url ?? "/showcase/beauty-detail.jpg"} alt={`${brand?.name ?? "LUNE"} 品牌空間`} sizes="(max-width: 768px) 100vw, 36vw" />
+              <ShowcaseImage src={content?.detail_image_url ?? "/showcase/elan-skincare-detail-v2.webp"} alt={`${brand?.name ?? "LUNE"} 品牌空間`} sizes="(max-width: 768px) 100vw, 36vw" />
               <figcaption>{brand?.address ? `FIND US — ${brand.address}` : "FIND US — 大安區安和路二段 27 號"}</figcaption>
             </figure>
           </div>
         </section>
       </main>
       <footer className={styles.beautyFooter}><span>{brand?.name ?? "LUNE HAIR ATELIER"}</span><span>{brand ? [brand.phone, brand.address].filter(Boolean).join("　") : "Instagram　Line　02 2700 2727"}</span></footer>
+      <LiveActionBar brand={brand} />
     </div>
   );
 }
@@ -209,12 +224,12 @@ function FitnessShowcase({ brand }: LiveProps) {
       </header>
       <main id="fitness-top">
         <section className={styles.fitnessHero}>
-          <ShowcaseImage src={content?.hero_image_url ?? "/showcase/fitness-hero.jpg"} alt={`${brand?.name ?? "REDLINE"} 品牌主視覺`} priority sizes="100vw" />
+          <ShowcaseImage src={content?.hero_image_url ?? "/showcase/forme-pilates-hero-v2.webp"} alt={`${brand?.name ?? "REDLINE"} 品牌主視覺`} priority sizes="100vw" />
           <div className={styles.fitnessShade} />
           <div className={styles.fitnessHeroCopy}>
             <p>{content?.hero_eyebrow ?? "45 MINUTES · COACH LED · YOUR PACE"}</p>
             <h1>{brand ? <>{content?.hero_title}<br /><span>{content?.hero_highlight}</span></> : <>MOVE<br /><span>PAST</span><br />AVERAGE.</>}</h1>
-            <div><a href={brand?.links.primary ?? "#schedule"}>{content?.primary_cta_label ?? "預約第一堂課"}</a><span>{brand ? "向下查看完整內容 ↓" : "SCROLL TO EXPLORE ↓"}</span></div>
+            <div><a href={brand?.links.primary ?? "#schedule"}>{content?.primary_cta_label ?? "預約第一堂課"}</a>{brand?.links.registration ? <a href={brand.links.registration} className={styles.fitnessSecondary}>查看團體課</a> : <span>{brand ? "向下查看完整內容 ↓" : "SCROLL TO EXPLORE ↓"}</span>}</div>
           </div>
           <p className={styles.fitnessSideType}>{brand?.name ?? "TAIPEI’S HIGH-ENERGY TRAINING CLUB"}</p>
         </section>
@@ -225,7 +240,7 @@ function FitnessShowcase({ brand }: LiveProps) {
             <h2>{brand ? <span>{content?.section_title}</span> : <><span>一半心肺。</span><span>一半力量。</span><i>全部由你決定。</i></>}</h2>
             <p>{content?.section_description ?? "教練掌握節奏，你掌握強度。第一次來也能清楚跟上，不需要先成為厲害的人。"}</p>
           </div>
-          <figure><ShowcaseImage src={content?.detail_image_url ?? "/showcase/fitness-detail.jpg"} alt={`${brand?.name ?? "REDLINE"} 服務場地`} sizes="(max-width: 768px) 100vw, 48vw" /><figcaption>{brand?.address ?? "THE FLOOR / DAAN STUDIO"}</figcaption></figure>
+          <figure><ShowcaseImage src={content?.detail_image_url ?? "/showcase/forme-pilates-detail-v2.webp"} alt={`${brand?.name ?? "REDLINE"} 服務場地`} sizes="(max-width: 768px) 100vw, 48vw" /><figcaption>{brand?.address ?? "THE FLOOR / DAAN STUDIO"}</figcaption></figure>
         </section>
         <section className={styles.fitnessSchedule} id="schedule">
           <header><span>{brand ? "可預約服務" : "TODAY · AUG 15"}</span><h2>{brand ? "選擇適合你的服務。" : "Pick your room."}</h2><a href={brand?.links.booking ?? brand?.links.primary ?? "#"}>{brand ? "查看私人課時段" : "完整課表"} ↗</a></header>
@@ -234,6 +249,7 @@ function FitnessShowcase({ brand }: LiveProps) {
           ))}
         </section>
       </main>
+      <LiveActionBar brand={brand} />
     </div>
   );
 }
@@ -265,12 +281,13 @@ function EducationShowcase({ brand }: LiveProps) {
             <p>{content?.hero_description ?? "為 6–15 歲孩子設計的小班課。從動畫、自然觀察到創意寫作，讓興趣有地方繼續長大。"}</p>
           </div>
           <figure className={styles.educationHeroImage}>
-            <ShowcaseImage src={content?.hero_image_url ?? "/showcase/education-hero.jpg"} alt={`${brand?.name ?? "OPENROOM"} 品牌主視覺`} priority sizes="(max-width: 768px) 100vw, 50vw" />
+            <ShowcaseImage src={content?.hero_image_url ?? "/showcase/openroom-course-hero-v2.webp"} alt={`${brand?.name ?? "OPENROOM"} 品牌主視覺`} priority sizes="(max-width: 768px) 100vw, 50vw" />
             <span>{brand ? `${brand.events.length || brand.services.length}\nOPEN` : <>6–15<br />YEARS</>}</span>
           </figure>
-          {brand ? <div className={styles.educationSearch}>
-            <label><span>目前公開內容</span><input value={`${brand.events.length} 個活動／${brand.services.length} 項服務`} readOnly /></label>
-            <label><span>線上入口</span><input value="即時讀取現有系統資料" readOnly /></label>
+          {brand ? <div className={styles.educationTrustBar}>
+            <span><strong>{brand.events.length}</strong> 門公開課程</span>
+            <span><strong>{brand.services.length}</strong> 項可預約服務</span>
+            <span>報名與付款狀態可追蹤</span>
             <Link href={brand.links.primary}>{content?.primary_cta_label ?? "探索課程"} →</Link>
           </div> : <form className={styles.educationSearch}>
             <label><span>孩子想探索什麼？</span><input type="text" placeholder="動畫、科學、寫作⋯" /></label>
@@ -282,11 +299,12 @@ function EducationShowcase({ brand }: LiveProps) {
           <header><p>{brand ? "目前開放報名" : "THIS WEEK AT OPENROOM"}</p><h2>{content?.section_title ?? "這週，可以從這裡開始。"}</h2></header>
           <div className={styles.educationTracks}>
             <a href={tracks[0].href}><span>{tracks[0].number}</span><strong>{tracks[0].title}</strong><small>{tracks[0].meta}</small><b>查看課程 ↗</b></a>
-            <figure><ShowcaseImage src={content?.detail_image_url ?? "/showcase/education-detail.jpg"} alt={`${brand?.name ?? "OPENROOM"} 課程內容`} sizes="(max-width: 768px) 100vw, 36vw" /></figure>
+            <figure><ShowcaseImage src={content?.detail_image_url ?? "/showcase/openroom-course-detail-v2.webp"} alt={`${brand?.name ?? "OPENROOM"} 課程內容`} sizes="(max-width: 768px) 100vw, 36vw" /></figure>
             <a href={tracks[1]?.href ?? brand?.links.primary ?? "#"}><span>{tracks[1]?.number ?? "02"}</span><strong>{tracks[1]?.title ?? content?.section_title ?? "查看所有課程"}</strong><small>{tracks[1]?.meta ?? content?.section_description ?? "進入公開課程與活動列表"}</small><b>查看課程 ↗</b></a>
           </div>
         </section>
       </main>
+      <LiveActionBar brand={brand} />
     </div>
   );
 }

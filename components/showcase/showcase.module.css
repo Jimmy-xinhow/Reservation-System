@@ -67,6 +67,7 @@
 .liveBrandDetails > footer span { color: var(--live-muted); font-size: .875rem; line-height: 1.6; }
 .liveBrandDetails > footer nav { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; }
 .liveBrandDetails > footer a { min-height: 2.75rem; display: inline-flex; align-items: center; color: inherit; font-size: .875rem; font-weight: 700; border-bottom: 1px solid var(--live-line); }
+.liveActionBar { display: none; }
 
 @media (min-width: 48rem) {
   .liveBrandAbout,
@@ -237,11 +238,15 @@
 .beautyCopy h1 { margin-top: 1rem; font: 500 clamp(3.5rem, 16vw, 8.7rem)/.82 var(--font-showcase-playfair-display), var(--font-showcase-noto-serif-tc), serif; letter-spacing: -.065em; }
 .beautyCopy h1 em { color: #a8422f; font-weight: 500; }
 .beautyCopy > div { display: grid; gap: 1.25rem; margin-top: 2.25rem; font-size: .875rem; line-height: 1.7; }
-.beautyCopy > div a { width: fit-content; min-height: 2.75rem; display: inline-flex; align-items: center; padding-bottom: .4rem; border-bottom: 1px solid; font-weight: 600; }
+.beautyHeroActions { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; }
+.beautyHeroActions a { width: fit-content; min-height: 2.75rem; display: inline-flex; align-items: center; padding-bottom: .4rem; border-bottom: 1px solid; font-weight: 600; }
+.beautyHeroActions a:last-child { color: #6c675e; }
 .beautyHeroImage { position: relative; min-height: 48svh; overflow: hidden; }
 .beautyHeroImage img { object-fit: cover; object-position: center 38%; filter: saturate(.78) contrast(1.03); }
 .beautyHeroImage figcaption { position: absolute; inset: auto .75rem .75rem auto; padding: .5rem .7rem; background: #ebe8e1; font-size: .55rem; letter-spacing: .12em; }
 .beautyEdition { display: none; }
+.beautyTrust { display: grid; grid-template-columns: 1fr 1fr; border-block: 1px solid #88847b; }
+.beautyTrust span { min-height: 3.5rem; display: grid; place-items: center; padding: .65rem; border: solid #88847b; border-width: 0 1px 1px 0; text-align: center; font-size: .6875rem; font-weight: 700; }
 .beautyServices { padding: 4.5rem 1.25rem; background: #191918; color: #edeae3; }
 .beautyServices header h2 { max-width: 12em; margin-top: 1.25rem; font: 500 clamp(2.15rem, 7vw, 4.35rem)/1.28 var(--font-showcase-noto-serif-tc), "Songti TC", serif; letter-spacing: .035em; text-wrap: balance; }
 .beautyServiceBody { margin-top: 3rem; }
@@ -321,6 +326,7 @@
 .fitnessHeroCopy h1 span { color: #f12b20; }
 .fitnessHeroCopy > div { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 2rem; }
 .fitnessHeroCopy > div a { min-height: 3.25rem; display: inline-flex; align-items: center; padding: 0 1rem; background: #e9ff4f; color: #0b0b0b; font-size: .75rem; font-weight: 900; }
+.fitnessHeroCopy > div .fitnessSecondary { border: 1px solid rgba(255,255,255,.68); background: rgba(0,0,0,.28); color: #fff; backdrop-filter: blur(4px); }
 .fitnessHeroCopy > div span { font-size: .55rem; letter-spacing: .1em; }
 .fitnessSideType { display: none; }
 .fitnessTicker { min-height: 3.75rem; display: flex; align-items: center; justify-content: space-around; gap: 1.25rem; overflow: hidden; padding: 0 1rem; background: #f12b20; font: 400 1rem/1 var(--font-showcase-archivo-black), sans-serif; white-space: nowrap; }
@@ -368,6 +374,10 @@
 .educationSearch label span { display: block; margin-bottom: .4rem; font-size: .625rem; font-weight: 800; }
 .educationSearch input, .educationSearch select { width: 100%; min-height: 3rem; padding: 0 .75rem; border: 1px solid #7b7461; background: transparent; font-size: 1rem; outline: none; }
 .educationSearch button, .educationSearch > a { min-height: 3.25rem; display: inline-flex; align-items: center; justify-content: center; padding-inline: 1rem; background: #4426a8; color: #fff; font-size: .8125rem; font-weight: 800; }
+.educationTrustBar { display: grid; gap: 0; margin: 1.5rem 1rem 0; border: 2px solid #211b37; background: #f4efdf; box-shadow: .35rem .35rem 0 #4426a8; }
+.educationTrustBar span { min-height: 3.25rem; display: flex; align-items: center; gap: .35rem; padding: .75rem 1rem; border-bottom: 1px solid #8e876f; font-size: .75rem; font-weight: 700; }
+.educationTrustBar span strong { color: #e44b34; font-size: 1rem; }
+.educationTrustBar > a { min-height: 3.25rem; display: flex; align-items: center; justify-content: center; padding-inline: 1rem; background: #4426a8; color: #fff; font-size: .8125rem; font-weight: 800; }
 .educationExplore { padding: 5rem 1rem; }
 .educationExplore header h2 { max-width: 12em; margin-top: 1rem; font: 400 clamp(2.4rem, 7vw, 4.5rem)/1.2 var(--font-showcase-huninn), var(--font-showcase-noto-sans-tc), sans-serif; letter-spacing: .025em; text-wrap: balance; }
 .educationTracks { margin-top: 2.5rem; border-top: 2px solid #211b37; }
@@ -582,6 +592,12 @@
   }
 
   .beautyServices header h2 { font-size: clamp(2rem, 9vw, 2.55rem); }
+  .beauty[data-live-brand="true"],
+  .fitness[data-live-brand="true"],
+  .education[data-live-brand="true"] { padding-bottom: 4.5rem; }
+  .liveActionBar { position: fixed; inset: auto 0 0; z-index: 40; display: grid; grid-template-columns: .75fr 1.25fr; gap: .5rem; padding: .65rem .75rem calc(.65rem + env(safe-area-inset-bottom)); border-top: 1px solid rgba(15,23,42,.16); background: rgba(255,255,255,.94); box-shadow: 0 -8px 24px rgba(15,23,42,.1); backdrop-filter: blur(12px); font-family: var(--font-showcase-noto-sans-tc), sans-serif; }
+  .liveActionBar a { min-height: 2.9rem; display: grid; place-items: center; border: 1px solid #334155; color: #0f172a; font-size: .8125rem; font-weight: 800; }
+  .liveActionBar a:last-child { background: #0f172a; color: #fff; }
   .consultingExpertise header h2 { max-width: 8em; }
   .venueStory header h2 { max-width: 8.5em; }
 }
@@ -607,6 +623,8 @@
   .beautyCopy { display: flex; flex-direction: column; justify-content: flex-end; padding: 3vw 2.5vw 4vw; }
   .beautyCopy h1 { font-size: clamp(4.2rem, 8.5vw, 8.6rem); }
   .beautyHeroImage { min-height: inherit; }
+  .beautyTrust { grid-template-columns: repeat(4, 1fr); }
+  .beautyTrust span { border-bottom: 0; }
   .beautyEdition { display: block; position: absolute; left: calc(38% - 1.8rem); top: 2rem; z-index: 1; writing-mode: vertical-rl; font-size: .55rem; letter-spacing: .13em; color: #fff; }
   .beautyServices { padding: 8rem 4vw; }
   .beautyServices header { display: grid; grid-template-columns: 30% 1fr; }
@@ -648,6 +666,9 @@
   .educationHeroImage { min-height: 100%; margin-left: 0; border-block: 0; transform: none; }
   .educationSearch { position: absolute; left: 4vw; right: 4vw; bottom: 2rem; z-index: 2; grid-template-columns: 1.7fr 1fr auto; align-items: end; margin: 0; padding: 1.1rem; }
   .educationSearch button, .educationSearch > a { padding-inline: 1.5rem; }
+  .educationTrustBar { position: absolute; left: 4vw; right: 4vw; bottom: 2rem; z-index: 2; grid-template-columns: repeat(3, minmax(0,1fr)) auto; align-items: stretch; margin: 0; }
+  .educationTrustBar span { border-right: 1px solid #8e876f; border-bottom: 0; }
+  .educationTrustBar > a { padding-inline: 1.5rem; white-space: nowrap; }
   .educationExplore { padding: 8rem 5vw; }
   .educationTracks { display: grid; grid-template-columns: 1fr .72fr 1fr; align-items: stretch; }
   .educationTracks > a { min-height: 30rem; padding: 1.5rem; border-right: 2px solid #211b37; }
