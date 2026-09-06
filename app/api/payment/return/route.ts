@@ -10,6 +10,7 @@ import { processPaymentWebhook } from "@/lib/payment-webhook";
 import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/registration-notifications";
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { findPaymentOrderByMerchant } from "@/lib/payment-order-lookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,27 +36,15 @@ function resultRedirect(req: NextRequest, order: string, provider: Provider, sta
 }
 
 async function notifyRegistrationForPayment(svc: SupabaseClient, clinicId: string, provider: Provider, merchantOrderNo: string): Promise<void> {
-  const { data: order, error } = await svc
-    .from("payment_orders")
-    .select("registration_id, status")
-    .eq("clinic_id", clinicId)
-    .eq("provider", provider)
-    .eq("merchant_order_no", merchantOrderNo)
-    .maybeSingle();
-  if (error || !order?.registration_id) return;
+  const order = await findPaymentOrderByMerchant(svc, clinicId, provider, merchantOrderNo).catch(() => null);
+  if (!order?.registration_id) return;
   const kind = notificationKindForStatus(order.status === "paid" ? "confirmed" : order.status === "failed" ? "cancelled" : "");
   if (kind) await notifyRegistrationStatus(svc, String(order.registration_id), kind);
 }
 
 async function notifyAppointmentForPayment(svc: SupabaseClient, clinicId: string, provider: Provider, merchantOrderNo: string): Promise<void> {
-  const { data: order, error } = await svc
-    .from("payment_orders")
-    .select("appointment_id, status")
-    .eq("clinic_id", clinicId)
-    .eq("provider", provider)
-    .eq("merchant_order_no", merchantOrderNo)
-    .maybeSingle();
-  if (error || !order?.appointment_id) return;
+  const order = await findPaymentOrderByMerchant(svc, clinicId, provider, merchantOrderNo).catch(() => null);
+  if (!order?.appointment_id) return;
   const kind = order.status === "paid" ? "confirmed" : order.status === "failed" ? "cancelled" : null;
   if (kind) await notifyAppointmentStatus(svc, String(order.appointment_id), kind);
 }

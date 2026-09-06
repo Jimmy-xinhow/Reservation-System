@@ -539,6 +539,7 @@ const paymentResultPage = read("app/payment/result/page.tsx");
 const paymentEcpayApi = read("app/api/payment/ecpay/notify/route.ts");
 const paymentNewebpayApi = read("app/api/payment/newebpay/notify/route.ts");
 const paymentWebhook = read("lib/payment-webhook.ts");
+const paymentOrderLookup = read("lib/payment-order-lookup.ts");
 const appointmentNotifications = read("lib/appointment-notifications.ts");
 const registrationNotifications = read("lib/registration-notifications.ts");
 const registrationCredentials = read("lib/registration-credentials.ts");
@@ -882,12 +883,23 @@ invariant(
 );
 invariant(
   "payment webhooks stay bound to the verified merchant brand",
-  paymentWebhook.includes('.eq("clinic_id", event.clinicId)') &&
+  paymentWebhook.includes("findPaymentOrderByMerchant(supabase, event.clinicId") &&
+    paymentOrderLookup.includes('.eq("clinic_id", clinicId)') &&
+    paymentOrderLookup.includes('.eq("provider", provider)') &&
     paymentReturnApi.includes("clinicId: settings.clinic_id") &&
     paymentEcpayApi.includes("clinicId: settings.clinic_id") &&
     paymentNewebpayApi.includes("clinicId: settings.clinic_id") &&
     paymentReturnApi.includes("notifyRegistrationForPayment(svc, settings.clinic_id") &&
     paymentReturnApi.includes("notifyAppointmentForPayment(svc, settings.clinic_id"),
+);
+invariant(
+  "payment retries rotate one-time merchant numbers and retain callback lookup history",
+  paymentCreateApi.includes("nextMerchantOrderNo") &&
+    paymentCreateApi.includes("addMerchantOrderToHistory") &&
+    paymentCreateApi.includes('.eq("merchant_order_no", existingOrder.merchant_order_no)') &&
+    paymentOrderLookup.includes("_merchant_order_history") &&
+    paymentOrderLookup.includes('.contains("provider_payload"') &&
+    paymentWebhook.includes("mergePaymentProviderEvent"),
 );
 invariant(
   "payment webhook retries reconcile downstream registration state",

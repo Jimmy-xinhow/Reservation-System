@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PaymentProvider } from "./payment";
+import { findPaymentOrderByMerchant, mergePaymentProviderEvent } from "./payment-order-lookup";
 
 export interface VerifiedPaymentEvent {
   provider: PaymentProvider;
@@ -24,6 +25,8 @@ interface PaymentOrderState {
   amount: number;
   status: string;
   provider: string;
+  merchant_order_no: string;
+  provider_payload: Record<string, unknown>;
 }
 
 async function reconcilePaymentState(supabase: SupabaseClient, order: PaymentOrderState, success: boolean): Promise<void> {
@@ -85,14 +88,7 @@ export async function processPaymentWebhook(
     throw new Error("付款回呼欄位錯誤");
   }
 
-  const { data: order, error: orderError } = await supabase
-    .from("payment_orders")
-    .select("id, clinic_id, registration_id, appointment_id, membership_plan_id, patient_id, amount, status, provider")
-    .eq("provider", event.provider)
-    .eq("clinic_id", event.clinicId)
-    .eq("merchant_order_no", event.merchantOrderNo)
-    .maybeSingle();
-  if (orderError) throw new Error(orderError.message);
+  const order = await findPaymentOrderByMerchant(supabase, event.clinicId, event.provider, event.merchantOrderNo);
   if (!order) throw new Error("找不到付款訂單");
   if (Number(order.amount) !== event.amount) throw new Error("付款金額不一致");
 
@@ -135,7 +131,11 @@ export async function processPaymentWebhook(
   // 條件式更新是第二道冪等門；同時到達的不同回呼只有一個能轉移 pending。
   const { data: transitioned, error: updateError } = await supabase
     .from("payment_orders")
-    .update({ status: nextStatus, provider_payload: event.payload, updated_at: new Date().toISOString() })
+    .update({
+      status: nextStatus,
+      provider_payload: mergePaymentProviderEvent(order.provider_payload, event.merchantOrderNo, event.payload),
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", order.id)
     .eq("status", "pending")
     .select("id")
