@@ -129,8 +129,10 @@
   .about figure { min-height: 72vw; }
   .courseProof { gap: 12px; }
   .studioHero { min-height: 720px; }
+  .studioHero > img { object-position: 72% center; }
   .studioHero .heroCopy { min-height: 720px; padding: 90px 24px 120px; }
-  .studioShade { background: linear-gradient(180deg, rgba(5, 19, 18, .84), rgba(5, 19, 18, .56) 62%, rgba(5, 19, 18, .86)); }
+  .studioHero .heroCopy h1 { text-shadow: 0 2px 18px rgba(0,0,0,.34); }
+  .studioShade { background: linear-gradient(180deg, rgba(5, 19, 18, .2), rgba(5, 19, 18, .5) 54%, rgba(5, 19, 18, .9)); }
   .studioMeta { left: 24px; right: 24px; justify-content: space-between; gap: 10px; }
   .finalCta { align-items: flex-start; flex-direction: column; border-inline: 0; }
   .footer { align-items: flex-start; flex-direction: column; padding-bottom: 100px; }
