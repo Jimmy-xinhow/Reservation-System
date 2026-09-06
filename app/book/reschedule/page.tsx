@@ -170,7 +170,7 @@ export default function ReschedulePage() {
 
   useEffect(() => {
     if (!config || !appointment || !providerRequired || doctorId) return;
-    setDoctorId(config.doctors[0]?.id ?? "");
+    if (config.doctors.length === 1) setDoctorId(config.doctors[0].id);
   }, [appointment, config, doctorId, providerRequired]);
 
   const loadAvailability = useCallback(async () => {

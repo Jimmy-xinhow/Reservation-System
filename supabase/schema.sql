@@ -4764,6 +4764,14 @@ grant execute on function public.cancel_registration_for_customer(uuid, uuid, uu
 
 commit;
 
+-- Keep upgraded databases aligned with the owner role written by the current
+-- brand-creation functions.
+begin;
+alter table public.clinic_members drop constraint if exists clinic_members_role_check;
+alter table public.clinic_members add constraint clinic_members_role_check
+  check (role in ('owner', 'admin', 'frontdesk', 'provider', 'staff'));
+commit;
+
 -- Forward declarations for the later checkout replay. Customer value functions below
 -- reference these tables, while the complete indexes, policies and RPCs are replayed last.
 create table if not exists public.sales_orders (
