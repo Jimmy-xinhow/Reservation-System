@@ -1029,6 +1029,12 @@ invariant(
     read("app/register/page.tsx").includes("localStorage.setItem(`registration:")
 );
 invariant(
+  "brand settings LINE summary uses the same shared-or-brand resolver as runtime checks",
+  read("app/admin/settings/page.tsx").includes("getClinicLineChannelContext(service, clinicId)") &&
+    read("app/admin/settings/page.tsx").includes("lineChannelContext.verificationStatus === \"ready\"") &&
+    read("app/admin/settings/page.tsx").includes("Boolean(lineChannelContext.liffId)"),
+);
+invariant(
   "channel credential functions are service-role only and browser forms never prefill secrets",
   migrationChannelSecrets.includes("grant execute on function public.save_clinic_line_credentials(uuid, uuid, text, text) to service_role") &&
     migrationChannelSecrets.includes("grant execute on function public.save_clinic_email_configuration(uuid, uuid, boolean, text, text) to service_role") &&

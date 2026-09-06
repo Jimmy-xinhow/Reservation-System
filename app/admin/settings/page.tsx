@@ -9,6 +9,7 @@ import { getPaymentSecretStatus } from "@/lib/payment";
 import { createServiceClient } from "@/lib/supabase";
 import { BrandPageEditor } from "./BrandPageEditor";
 import { isBrandPageTemplate, normalizeBrandPageContent, type BrandPageTemplate } from "@/lib/brand-page";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
 
 export const dynamic = "force-dynamic";
 
@@ -58,8 +59,6 @@ interface PaymentSettings {
   active: boolean;
 }
 interface ClinicDomain { id: string; hostname: string; verification_token: string | null; verified_at: string | null; active: boolean; }
-interface LineChannelStatus { verification_status: string | null; liff_id: string | null; }
-
 type SettingsSectionId = "brand" | "page" | "booking" | "channels" | "domain" | "advanced";
 
 const SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string; description: string }> = [
@@ -85,7 +84,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     { data: clinicData, error: clinicError },
     { data: paymentData, error: paymentError },
     { data: domainData, error: domainError },
-    { data: lineChannelData, error: lineChannelError },
+    lineChannelContext,
     paymentSecretStatus,
     emailCredentialStatus,
   ] = await Promise.all([
@@ -105,21 +104,20 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     supabase.from("clinic_domains").select("id, hostname, verification_token, verified_at, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
-    supabase.from("clinic_line_channels").select("verification_status, liff_id").eq("clinic_id", clinicId).maybeSingle(),
+    getClinicLineChannelContext(service, clinicId),
     getPaymentSecretStatus(service, clinicId),
     getEmailCredentialStatus(service, clinicId),
   ]);
-  if (settingsError || clinicError || paymentError || domainError || lineChannelError) {
-    throw new Error(settingsError?.message ?? clinicError?.message ?? paymentError?.message ?? domainError?.message ?? lineChannelError?.message ?? "品牌設定載入失敗");
+  if (settingsError || clinicError || paymentError || domainError) {
+    throw new Error(settingsError?.message ?? clinicError?.message ?? paymentError?.message ?? domainError?.message ?? "品牌設定載入失敗");
   }
   const s = data as Settings | null;
   const clinic = clinicData as Clinic | null;
   const payment = paymentData as PaymentSettings | null;
   const domains = (domainData ?? []) as ClinicDomain[];
-  const lineChannel = lineChannelData as LineChannelStatus | null;
   const emailConfigured = emailCredentialStatus.configured;
   const canManageSecrets = accessType === "brand_admin";
-  const lineReady = s?.line_channel_enabled === true && lineChannel?.verification_status === "ready" && Boolean(lineChannel.liff_id);
+  const lineReady = lineChannelContext.enabled && lineChannelContext.verificationStatus === "ready" && Boolean(lineChannelContext.liffId);
 
   if (!s) {
     return (
