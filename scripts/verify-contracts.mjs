@@ -1028,6 +1028,14 @@ invariant(
     bookingPageSource.includes("<BookingTimeStep"),
 );
 invariant(
+  "browser booking does not preselect one provider when several are available",
+  browserBookingPage.includes("value.doctors.length === 1") &&
+    browserBookingPage.includes("config.doctors.length === 1") &&
+    browserBookingPage.includes("}, [serviceId]);") &&
+    browserReschedulePage.includes("config.doctors.length === 1") &&
+    reschedulePage.includes("config.doctors.length === 1"),
+);
+invariant(
   "public brand identity is not hardcoded to the legacy clinic",
   bookingConfigApi.includes('select("name")') &&
     bookingConfigApi.includes("clinic_name") &&

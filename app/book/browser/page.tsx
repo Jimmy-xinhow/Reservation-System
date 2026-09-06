@@ -112,7 +112,13 @@ export default function BrowserBookingPage() {
       const source = new URLSearchParams(window.location.search);
       const requestedDoctor = source.get("doctor_id")?.trim() ?? "";
       const requestedService = source.get("service_id")?.trim() ?? "";
-      setDoctorId(value.doctors.some((doctor) => doctor.id === requestedDoctor) ? requestedDoctor : value.doctors[0]?.id ?? "");
+      setDoctorId(
+        value.doctors.some((doctor) => doctor.id === requestedDoctor)
+          ? requestedDoctor
+          : value.doctors.length === 1
+            ? value.doctors[0].id
+            : "",
+      );
       setServiceId(value.services.some((service) => service.id === requestedService) ? requestedService : value.services[0]?.id ?? "");
     }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "載入失敗"));
   }, []);
@@ -137,11 +143,14 @@ export default function BrowserBookingPage() {
   useEffect(() => {
     if (!config) return;
     if (selectedService && !providerRequired) setDoctorId("");
-    else if (selectedService && providerRequired && !doctorId) setDoctorId(config.doctors[0]?.id ?? "");
+    else if (selectedService && providerRequired && !doctorId && config.doctors.length === 1) setDoctorId(config.doctors[0].id);
+  }, [config, selectedService, providerRequired, doctorId]);
+
+  useEffect(() => {
     setBookingAnswers({});
     setSelectedAddonIds([]);
     setRecurrenceCount(1);
-  }, [config, selectedService, providerRequired, doctorId]);
+  }, [serviceId]);
 
   useEffect(() => {
     const requestId = ++availabilityRequestRef.current;
