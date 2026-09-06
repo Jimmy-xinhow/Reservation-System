@@ -1,27 +1,28 @@
 import { headers } from "next/headers";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getBotInfo, getQuota, lineAccessTokenForDestination, type LineBotInfo } from "@/lib/line";
+import { getBotInfo, getLineCredentialStatus, getQuota, lineAccessTokenForDestination, type LineBotInfo } from "@/lib/line";
 import { requireAdmin } from "@/lib/admin";
-import { sendTestPushAction, updateLineChannelSettingsAction, verifyLineChannelSettingsAction } from "../line-actions";
+import { saveLineCredentialsAction, sendTestPushAction, updateLineChannelSettingsAction, verifyLineChannelSettingsAction } from "../line-actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { createServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
-// 品牌管理員可保存非機密識別資料並觸發 server-side 渠道驗證。
-// 機密一律走環境變數,這裡不儲存、不顯示任何金鑰內容。
+// 品牌管理員可保存公開識別資料，並將機密單向送往 server-side Vault。
 export default async function LinePage({
   searchParams,
 }: {
-    searchParams: Promise<{ test?: string; saved?: string; verified?: string }>;
+    searchParams: Promise<{ test?: string; saved?: string; verified?: string; credentials?: string }>;
 }) {
-  const { clinicId } = await requireAdmin();
-  const { test, saved, verified } = await searchParams;
+  const { clinicId, accessType } = await requireAdmin();
+  const { test, saved, verified, credentials } = await searchParams;
 
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-app.up.railway.app";
   const proto = h.get("x-forwarded-proto") ?? "https";
   const base = `${proto}://${host}`;
   const supabase = await createSupabaseServer();
+  const service = createServiceClient();
   const [{ data: clinic }, { data: settings }, { data: channel }] = await Promise.all([
     supabase.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
     supabase.from("clinic_settings").select("line_channel_enabled").eq("clinic_id", clinicId).maybeSingle(),
@@ -33,23 +34,18 @@ export default async function LinePage({
   ]);
   let clinicToken: string | null = null;
   try {
-    clinicToken = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+    clinicToken = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
   } catch {
     clinicToken = null;
   }
+  const credentialStatus = await getLineCredentialStatus(
+    service,
+    clinicId,
+    clinic?.line_destination as string | undefined,
+  );
+  const canManageCredentials = accessType === "brand_admin";
 
-  const env = (k: string) => Boolean(process.env[k] && process.env[k]!.length > 0);
-  const vars = [
-    { key: "LINE_CHANNEL_ACCESS_TOKENS_JSON", label: "各品牌的 LINE 訊息授權資料" },
-    { key: "LINE_CHANNEL_SECRETS_JSON", label: "各品牌的 LINE 驗證密鑰" },
-    { key: "LINE_CHANNEL_ACCESS_TOKEN", label: "共用 LINE 訊息授權資料" },
-    { key: "LINE_CHANNEL_SECRET", label: "共用 LINE 驗證密鑰" },
-    { key: "LINE_LOGIN_CHANNEL_ID", label: "共用 LINE 登入渠道編號" },
-    { key: "NEXT_PUBLIC_LIFF_ID", label: "共用 LINE 顧客入口編號" },
-    { key: "CRON_SECRET", label: "自動提醒排程密鑰" },
-  ];
-
-  // 即時連線檢查:用環境變數的 token 去問 LINE
+  // 即時連線檢查：使用目前品牌的 Vault 或相容備援 token 向 LINE 查詢。
   let bot: LineBotInfo | null = null;
   let quota: { type: string; value?: number } | null = null;
   let connectionFailed = false;
@@ -93,6 +89,9 @@ export default async function LinePage({
       )}
       {saved === "1" && (
         <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">LINE 連線設定已儲存，請繼續執行連線檢查。</p>
+      )}
+      {credentials === "saved" && (
+        <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">LINE 授權資料已安全儲存。畫面不會顯示原始內容，請繼續執行連線檢查。</p>
       )}
       {verified === "ok" && (
         <p className="rounded-xl bg-accent-500/10 px-4 py-3 text-sm text-accent-600">
@@ -200,6 +199,62 @@ export default async function LinePage({
         {channel?.last_verified_at && <p className="text-sm text-slate-600">最後檢查：{new Date(channel.last_verified_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</p>}
       </form>
 
+      <form action={saveLineCredentialsAction} className="card space-y-4 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-900">品牌自己的 LINE 授權資料</h2>
+            <p className="help-text max-w-3xl">
+              選擇「品牌自己的 LINE Developers 渠道」時，由品牌管理者在這裡貼上授權資料，不需要再請平台人員修改部署環境。送出後會加密保管，之後不會顯示原始內容。
+            </p>
+          </div>
+          <span className={`badge ${credentialStatus.configured ? "bg-accent-500/10 text-accent-600" : "bg-amber-50 text-amber-700"}`}>
+            {credentialStatus.source === "vault"
+              ? "已由品牌後台安全保管"
+              : credentialStatus.source === "environment"
+                ? "目前由舊版伺服器設定提供"
+                : "尚未設定"}
+          </span>
+        </div>
+        <fieldset
+          disabled={!canManageCredentials || channel?.connection_mode !== "brand" || !clinic?.line_destination}
+          className="grid gap-4 disabled:opacity-60 sm:grid-cols-2"
+        >
+          <div>
+            <label className="label">Channel access token（訊息授權碼）</label>
+            <input
+              type="password"
+              name="line_access_token"
+              className="input font-mono"
+              autoComplete="new-password"
+              minLength={20}
+              maxLength={4096}
+              placeholder={credentialStatus.configured ? "已設定；不更換可留空" : "貼上 LINE Developers 顯示的完整內容"}
+            />
+            <p className="help-text">讓系統代表此官方帳號發送訊息。更換時才需要重新貼上。</p>
+          </div>
+          <div>
+            <label className="label">Channel secret（渠道驗證密鑰）</label>
+            <input
+              type="password"
+              name="line_channel_secret"
+              className="input font-mono"
+              autoComplete="new-password"
+              minLength={32}
+              maxLength={32}
+              pattern="[A-Za-z0-9]{32}"
+              placeholder={credentialStatus.configured ? "已設定；不更換可留空" : "32 碼英數字"}
+            />
+            <p className="help-text">用來確認收到的訊息確實來自 LINE，避免偽造請求。</p>
+          </div>
+          <div className="sm:col-span-2">
+            <SubmitButton className="btn btn-primary">安全儲存 LINE 授權資料</SubmitButton>
+          </div>
+        </fieldset>
+        {!canManageCredentials && <p className="text-sm text-amber-700">只有品牌管理者可以更新授權資料。</p>}
+        {channel?.connection_mode !== "brand" && <p className="text-sm text-slate-600">目前使用平台共用連線；若品牌有自己的 LINE 渠道，請先在上一區改為品牌獨立連線並儲存。</p>}
+        {channel?.connection_mode === "brand" && !clinic?.line_destination && <p className="text-sm text-amber-700">請先在上一區填寫訊息渠道識別碼並儲存，再貼上授權資料。</p>}
+      </form>
+
       <form action={verifyLineChannelSettingsAction} className="card space-y-3 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">檢查連線是否可用</h2>
@@ -223,29 +278,6 @@ export default async function LinePage({
           第一個貼到「Messaging API → Webhook URL」並啟用；第二個貼到 LIFF 應用程式的「Endpoint URL」。Webhook 是 LINE 把顧客操作傳回本系統的接收網址。
         </p>
       </section>
-
-      {/* 環境變數狀態(只顯示有沒有設,不顯示值) */}
-      <details className="card">
-        <summary className="flex min-h-14 cursor-pointer items-center px-5 py-4 font-semibold text-slate-900">進階技術設定：伺服器密鑰狀態</summary>
-        <div className="border-t border-slate-200 px-5 pb-5">
-        <p className="py-4 text-sm leading-6 text-slate-600">這一區提供給部署或技術人員檢查，只顯示是否已設定，不會顯示密鑰內容。</p>
-        <ul className="divide-y divide-slate-100">
-          {vars.map((v) => (
-            <li key={v.key} className="flex items-center justify-between py-2.5 text-sm">
-              <div>
-                <div className="font-medium text-slate-800">{v.label}</div>
-                <code className="text-xs text-slate-600">{v.key}</code>
-              </div>
-              {env(v.key) ? (
-                <span className="badge bg-accent-500/10 text-accent-600">已設定 ✓</span>
-              ) : (
-                <span className="badge bg-red-50 text-red-600">未設定 ✗</span>
-              )}
-            </li>
-          ))}
-        </ul>
-        </div>
-      </details>
 
       {/* 測試推播 */}
       <section className="card p-5">

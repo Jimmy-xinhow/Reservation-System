@@ -20,7 +20,7 @@
 既有資料庫：
 
 1. 先執行 `supabase migration list` 與 `supabase db push --dry-run --linked`，保存遠端最後版本、`dryRun=true` 及將套用的檔名順序；dry-run 不可當成已套用證據。
-2. 先完成可還原備份，再依 README「既有資料庫 migration 順序」完整執行至 `202609040006_checkout_registration_sync.sql`；其中 `migration_marketing_opt_in_sync.sql`、品牌頁、共用 API 限流、平台聚合報表、checkout lint 與報名付款同步 migration 都不可跳過。
+2. 先完成可還原備份，再依 README「既有資料庫 migration 順序」完整執行至 `202609060003_channel_secret_self_service.sql`；其中 `migration_marketing_opt_in_sync.sql`、品牌頁、共用 API 限流、平台聚合報表、checkout lint、報名付款同步與三種外部憑證 Vault migration 都不可跳過。
 3. 每支 migration 執行一次後重跑同一支，確認可重跑且沒有重複 constraint／policy 錯誤。
 4. 執行 `supabase db lint --linked --schema public --level warning --fail-on warning`；error 或 warning 都必須為零。若仍有名稱歧義、未使用變數或型別問題，不得繼續部署。
 5. 檢查 `reminder_logs.clinic_id`、付款欄位、表單版本、會員 ledger 與所有新表的 row count／NULL。

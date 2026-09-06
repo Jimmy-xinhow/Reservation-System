@@ -8,10 +8,18 @@ export const dynamic = "force-dynamic";
 
 export default async function PlatformSettingsPage() {
   const platform = await requireSystemPermission("settings.view");
-  const { count: vaultPaymentSecretCount, error: paymentSecretError } = await createServiceClient()
-    .from("clinic_payment_secret_refs")
-    .select("clinic_id", { count: "exact", head: true });
-  if (paymentSecretError) throw new Error(`讀取金流安全設定狀態失敗：${paymentSecretError.message}`);
+  const service = createServiceClient();
+  const [
+    { count: vaultLineSecretCount, error: lineSecretError },
+    { count: vaultEmailSecretCount, error: emailSecretError },
+    { count: vaultPaymentSecretCount, error: paymentSecretError },
+  ] = await Promise.all([
+    service.from("clinic_line_secret_refs").select("clinic_id", { count: "exact", head: true }),
+    service.from("clinic_email_secret_refs").select("clinic_id", { count: "exact", head: true }),
+    service.from("clinic_payment_secret_refs").select("clinic_id", { count: "exact", head: true }),
+  ]);
+  const secretStatusError = lineSecretError ?? emailSecretError ?? paymentSecretError;
+  if (secretStatusError) throw new Error(`讀取外部渠道安全設定狀態失敗：${secretStatusError.message}`);
   const governanceChecks = [
     { label: "系統帳號身分", value: `目前帳號：${platformAccessLabel(platform.accessType)}`, tone: "good" },
     { label: "多品牌資料隔離", value: "登入身分、品牌範圍與資料庫權限共同保護", tone: "good" },
@@ -20,8 +28,8 @@ export default async function PlatformSettingsPage() {
     { label: "品牌日常設定", value: "由各品牌管理者在品牌後台管理", tone: "note" },
   ];
   const deploymentChecks = [
-    ["多品牌 LINE 憑證對應", Boolean(process.env.LINE_CHANNEL_SECRETS_JSON && process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON)],
-    ["Email 寄送服務", Boolean(process.env.RESEND_API_KEYS_JSON || process.env.RESEND_API_KEY)],
+    ["多品牌 LINE 憑證對應", (vaultLineSecretCount ?? 0) > 0 || Boolean(process.env.LINE_CHANNEL_SECRETS_JSON && process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON)],
+    ["Email 寄送服務", (vaultEmailSecretCount ?? 0) > 0 || Boolean(process.env.RESEND_API_KEYS_JSON || process.env.RESEND_API_KEY)],
     ["標準金流密鑰", (vaultPaymentSecretCount ?? 0) > 0 || Boolean(process.env.PAYMENT_SECRETS_JSON)],
     ["自動排程驗證資料", Boolean(process.env.CRON_SECRET)],
   ] as const;

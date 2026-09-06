@@ -98,13 +98,13 @@ values ('<clinic_id>', '<auth_user_id>', 'admin', 'brand_admin', array['brand.ma
 | `NEXT_PUBLIC_CLINIC_ID` | 相容單品牌部署的預設品牌 id；SaaS 模式不可作為隔離邊界 |
 | `PUBLIC_SHARED_HOSTS` | 允許使用 `NEXT_PUBLIC_CLINIC_ID` fallback 的共享公開 host，逗號分隔；未設定時未知自訂 host 會拒絕 |
 | `PUBLIC_PLATFORM_HOSTS` | 顯示平台官網首頁的正式 host，逗號分隔；其他品牌 host 依租戶解析 |
-| `LINE_CHANNEL_ACCESS_TOKEN` | Messaging API channel access token(推播/回覆) |
-| `LINE_CHANNEL_SECRET` | Messaging API channel secret(驗 webhook 簽章) |
-| `LINE_CHANNEL_ACCESS_TOKENS_JSON` | 多品牌 webhook destination → access token JSON；僅 server environment |
-| `LINE_CHANNEL_SECRETS_JSON` | 多品牌 webhook destination → channel secret JSON；僅 server environment |
-| `RESEND_API_KEYS_JSON` | 多品牌 `clinic_id` → Resend API key JSON；僅 server environment，不寫入資料庫 |
-| `RESEND_EMAIL_FROM_JSON` | 多品牌 `clinic_id` → 寄件人 JSON；僅 server environment，寄件人只由部署環境設定 |
-| `RESEND_API_KEY` / `RESEND_EMAIL_FROM` | 單品牌相容 fallback；僅 server environment |
+| `LINE_CHANNEL_ACCESS_TOKEN` | 平台共用或單品牌相容的 Messaging API token；新增獨立品牌可在後台安全設定 |
+| `LINE_CHANNEL_SECRET` | 平台共用或單品牌相容的 webhook secret；新增獨立品牌可在後台安全設定 |
+| `LINE_CHANNEL_ACCESS_TOKENS_JSON` | 舊版多品牌 destination → token 備援；僅 server environment |
+| `LINE_CHANNEL_SECRETS_JSON` | 舊版多品牌 destination → secret 備援；僅 server environment |
+| `RESEND_API_KEYS_JSON` | 舊版多品牌 `clinic_id` → Resend API key 備援；僅 server environment |
+| `RESEND_EMAIL_FROM_JSON` | 舊版多品牌 `clinic_id` → 寄件人備援；僅 server environment |
+| `RESEND_API_KEY` / `RESEND_EMAIL_FROM` | 平台共用或單品牌相容備援；僅 server environment |
 | `PAYMENT_SECRETS_JSON` | 舊品牌／首次部署的金流密鑰備援；新設定由品牌管理者在後台單向寫入 Supabase Vault |
 | `REGISTRATION_TOKEN_ENCRYPTION_KEY` | 報名通知重試用 AES-GCM 加密金鑰（至少 32 字元）；僅 server environment，不寫入資料庫 |
 | `LINE_LOGIN_CHANNEL_ID` | LIFF 所屬 channel id(驗 ID token 用) |
@@ -129,11 +129,13 @@ values ('<clinic_id>', '<auth_user_id>', 'admin', 'brand_admin', array['brand.ma
    - 系統會驗 `x-line-signature`(HMAC-SHA256 / `LINE_CHANNEL_SECRET`)。
    - 提醒訊息的「確認／取消」按鈕以 postback 回寫預約狀態。
 3. **LIFF**:在對應 channel 新增一個 LIFF app,Endpoint URL 設為 `https://<你的網域>/book`,取得 LIFF ID 填入 `NEXT_PUBLIC_LIFF_ID`;其所屬 channel id 填入 `LINE_LOGIN_CHANNEL_ID`。
-4. 在後台「LINE／LIFF」設定品牌的 connection mode、destination、Login Channel ID、LIFF ID 與 endpoint；獨立品牌渠道缺少任一必要欄位時 fail-closed。
+4. 在後台「LINE 官方帳號連線」選擇連線方式，填入 destination、Login Channel ID、LIFF ID 與 endpoint。品牌獨立渠道再由品牌管理者貼上 Channel access token 與 Channel secret；完整內容單向寫入 Supabase Vault，儲存後不回傳畫面。
 5. 在「Rich Menu」由預約型、活動型或綜合型模板另存草稿，通過圖片／動作／模組／渠道驗證後再發布；系統保留版本、發布事件、下架與回復紀錄，不會先刪除線上舊版。已存在於 LINE 的版本可建立 Alias 頁籤、排定台北時間顯示期間，並以 LINE 官方 Insights 對照匿名預約／報名轉換。
-6. 多品牌 webhook：在各品牌公開設定填入 LINE webhook payload 的 `destination`；若各品牌使用不同 LINE channel，將 destination 對應的 secret／access token 放入 `LINE_CHANNEL_SECRETS_JSON`／`LINE_CHANNEL_ACCESS_TOKENS_JSON`，不可放到前端或資料庫。
+6. 多品牌 webhook：以 LINE payload 的 `destination` 對應品牌。server 優先讀取品牌在 Supabase Vault 的 secret／access token；舊環境的 `LINE_CHANNEL_SECRETS_JSON`／`LINE_CHANNEL_ACCESS_TOKENS_JSON` 只作尚未遷移品牌的備援。
 
-> 多品牌必須同時維護 `clinics.line_destination` 與兩張 credential map；只要任一 map 已啟用，未對應的 destination 會 fail-closed，不會回退到預設品牌 token。Rich Menu 與 webhook 回覆中的 LIFF 連結也會帶入目前品牌的 `clinic_slug`。
+> 品牌獨立渠道必須同時維護 `clinics.line_destination` 與品牌 Vault 憑證；無法對應時會 fail-closed，不會回退到其他品牌 token。Rich Menu 與 webhook 回覆中的 LIFF 連結也會帶入目前品牌的 `clinic_slug`。
+
+Email 同樣由品牌管理者在「品牌與系統設定 → 付款與通知」填入已驗證寄件者與 Resend API key。API key 只進 Supabase Vault，舊環境變數仍可在遷移期間備援。
 
 > 顧客端永不直接連 Supabase:LIFF 頁只呼叫本專案 API route,server 端以 service role 操作。前端送來的 `line_user_id` 一律先用 LIFF ID token 向 LINE 驗證後才採用。
 
@@ -165,11 +167,11 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
 
    **Server-only(務必設,且不可外洩):**
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - `LINE_CHANNEL_ACCESS_TOKEN`
-   - `LINE_CHANNEL_SECRET`
+   - `LINE_CHANNEL_ACCESS_TOKEN`（平台共用或既有單品牌備援）
+   - `LINE_CHANNEL_SECRET`（平台共用或既有單品牌備援）
    - `LINE_LOGIN_CHANNEL_ID`
-   - `LINE_CHANNEL_ACCESS_TOKENS_JSON` / `LINE_CHANNEL_SECRETS_JSON`
-   - `RESEND_API_KEYS_JSON` / `RESEND_EMAIL_FROM_JSON`
+   - `LINE_CHANNEL_ACCESS_TOKENS_JSON` / `LINE_CHANNEL_SECRETS_JSON`（選填；既有多品牌備援）
+   - `RESEND_API_KEYS_JSON` / `RESEND_EMAIL_FROM_JSON`（選填；既有品牌備援）
    - `PAYMENT_SECRETS_JSON`（選填；僅供既有品牌或首次部署備援）
    - `BROWSER_BOOKING_SECRET`
    - `REGISTRATION_TOKEN_ENCRYPTION_KEY`
@@ -321,5 +323,7 @@ vercel.json               (僅 Vercel 用;Railway 不讀)
 45. `supabase/migrations/202609040005_checkout_lint_cleanup.sql`
 46. `supabase/migrations/202609040006_checkout_registration_sync.sql`
 47. `supabase/migrations/202609060001_clinic_member_owner_role_check.sql`
+48. `supabase/migrations/202609060002_payment_secret_self_service.sql`
+49. `supabase/migrations/202609060003_channel_secret_self_service.sql`
 
-每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣，`202608060001_customer_portal_identity.sql` 會把活動報名接到統一顧客入口，`202608060002_funnel_events.sql` 只保存匿名漏斗事件，`202608060003_registration_patient_transaction.sql` 讓報名與顧客關聯在同一個 DB transaction 完成，`202608060004_cross_industry_booking_foundation.sql` 新增服務目標、共用服務排程與服務客製欄位，`202608060005_isolate_legacy_progress.sql` 將舊版服務進度設為明確 opt-in，`202608060006_service_reschedule_transaction.sql` 讓免指定服務提供者的預約也能原子改期，`202608060007_reschedule_same_day_fix.sql` 修正同日改期時舊預約佔位造成的誤判，`202608110001_product_modules_line_richmenu.sql` 新增品牌標準模組開關、品牌級 LINE／LIFF 中繼資料及 Rich Menu 版本生命週期；它不保存任何 LINE secret 或 access token。`202608110002_appointment_waitlist.sql` 將時間制／場次制預約候補與活動候補分離，並以原子鎖、預留預約、逾時釋放及投遞佇列建立可恢復的生命週期；`202608110003_appointment_waitlist_surfaces.sql` 另外提供已額滿目標查詢及通知佇列的原子 claim／retry／finish，讓正常可預約時段與候補入口保持分離；`202608110004_richmenu_optimization.sql` 新增同品牌複合外鍵保護的 Alias、顯示排程、版本複製與可重試排程 RPC；`202608110005_db_lint_hardening.sql` 修正品牌建立、會員發放、報名與改期函式的 PL/pgSQL 名稱歧義；`202608110006_db_lint_followup.sql` 修正 staging lint 找到的 Rich Menu／候補函式並補齊品牌更新時間；`202608110007_waitlist_capacity_error_fix.sql` 修正 `006` 中的額滿判斷亂碼，避免滿額時誤將候補標記失效；`202608110008_two_level_admin_permissions.sql` 將產品管理身份收斂為系統管理者與品牌管理者，並加入系統／品牌員工的明確權限欄位。`202608120001` 修正免指定提供者的時間制預約時段判定，`202608120002` 消除 provider 顧客資料 policy recursion，`202608130001` 修正活動報名流水號，`202608130002` 對跨服務共用資源的容量競爭加鎖，`202608130003` 補齊訂金逾時的 failed 狀態，`202608130004` 將品牌設定頁、server action 與 RLS 收斂為 `brand.manage`，`202608130005` 建立三品牌採用指標、CSV 匯入、渠道測試、交班與付費意願資料契約，`202608130006` 原子限制同時最多三個試用品牌，`202608130007` 加入服務加購、表單快照與每週重複預約交易，`202608130008` 讓可預約時段包含加購服務所增加的時間，`202608150001` 加入可設定的品牌公開頁模板與內容，`202609020001` 加入跨執行個體共用的 API 限流，`202609020002` 以資料庫聚合回傳平台使用量，`202609060001` 讓舊資料庫的成員角色檢查接受目前品牌建立流程使用的 `owner`。舊版角色值僅保留為 RLS 相容映射。以上均維持原有 service-role 權限。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `supabase db lint --linked --schema public --level warning --fail-on warning`、`npm test`、`npm run typecheck` 與 `npm run build`；任一項失敗都不得發布。
+每支 migration 設計為可重跑；`migration_registration_payments.sql` 也會建立 TWD 幣別與付款期限欄位，`migration_v3_hardening.sql` 會加入訂金逾時釋放與狀態稽核，`migration_role_matrix_v4.sql` 會將 authenticated 的讀寫權限收斂到角色矩陣，`202608060001_customer_portal_identity.sql` 會把活動報名接到統一顧客入口，`202608060002_funnel_events.sql` 只保存匿名漏斗事件，`202608060003_registration_patient_transaction.sql` 讓報名與顧客關聯在同一個 DB transaction 完成，`202608060004_cross_industry_booking_foundation.sql` 新增服務目標、共用服務排程與服務客製欄位，`202608060005_isolate_legacy_progress.sql` 將舊版服務進度設為明確 opt-in，`202608060006_service_reschedule_transaction.sql` 讓免指定服務提供者的預約也能原子改期，`202608060007_reschedule_same_day_fix.sql` 修正同日改期時舊預約佔位造成的誤判，`202608110001_product_modules_line_richmenu.sql` 新增品牌標準模組開關、品牌級 LINE／LIFF 中繼資料及 Rich Menu 版本生命週期；它不保存任何 LINE secret 或 access token。`202608110002_appointment_waitlist.sql` 將時間制／場次制預約候補與活動候補分離，並以原子鎖、預留預約、逾時釋放及投遞佇列建立可恢復的生命週期；`202608110003_appointment_waitlist_surfaces.sql` 另外提供已額滿目標查詢及通知佇列的原子 claim／retry／finish，讓正常可預約時段與候補入口保持分離；`202608110004_richmenu_optimization.sql` 新增同品牌複合外鍵保護的 Alias、顯示排程、版本複製與可重試排程 RPC；`202608110005_db_lint_hardening.sql` 修正品牌建立、會員發放、報名與改期函式的 PL/pgSQL 名稱歧義；`202608110006_db_lint_followup.sql` 修正 staging lint 找到的 Rich Menu／候補函式並補齊品牌更新時間；`202608110007_waitlist_capacity_error_fix.sql` 修正 `006` 中的額滿判斷亂碼，避免滿額時誤將候補標記失效；`202608110008_two_level_admin_permissions.sql` 將產品管理身份收斂為系統管理者與品牌管理者，並加入系統／品牌員工的明確權限欄位。`202608120001` 修正免指定提供者的時間制預約時段判定，`202608120002` 消除 provider 顧客資料 policy recursion，`202608130001` 修正活動報名流水號，`202608130002` 對跨服務共用資源的容量競爭加鎖，`202608130003` 補齊訂金逾時的 failed 狀態，`202608130004` 將品牌設定頁、server action 與 RLS 收斂為 `brand.manage`，`202608130005` 建立三品牌採用指標、CSV 匯入、渠道測試、交班與付費意願資料契約，`202608130006` 原子限制同時最多三個試用品牌，`202608130007` 加入服務加購、表單快照與每週重複預約交易，`202608130008` 讓可預約時段包含加購服務所增加的時間，`202608150001` 加入可設定的品牌公開頁模板與內容，`202609020001` 加入跨執行個體共用的 API 限流，`202609020002` 以資料庫聚合回傳平台使用量，`202609060001` 讓舊資料庫的成員角色檢查接受目前品牌建立流程使用的 `owner`，`202609060002` 讓品牌管理者可單向設定綠界／藍新密鑰，`202609060003` 讓品牌管理者可單向設定 LINE／Email 憑證；三種外部憑證皆只在 server 端由 Supabase Vault 解密。舊版角色值僅保留為 RLS 相容映射。以上均維持原有 service-role 權限。若回填 `reminder_logs.clinic_id` 仍有 NULL，必須先修復對應預約資料，不得直接略過 `NOT NULL` 驗證。會員套票採「一堂抵一次預約或一張指定活動票」；優惠碼套用報名票種，兩者不可疊加。執行後跑 `supabase db lint --linked --schema public --level warning --fail-on warning`、`npm test`、`npm run typecheck` 與 `npm run build`；任一項失敗都不得發布。

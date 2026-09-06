@@ -112,7 +112,7 @@ async function runClinic(svc: SupabaseClient, clinicId: string): Promise<{ scann
       let lineAccessError: string | null = null;
       if (automation.channel === "line") {
         try {
-          lineAccessToken = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+          lineAccessToken = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
         } catch (error) {
           lineAccessError = error instanceof Error ? error.message : "LINE access token unavailable";
         }
@@ -186,7 +186,7 @@ async function runAutomation(
       summary.failed += 1;
       continue;
     }
-    const emailConfig = emailConfigForClinic(clinicId);
+    const emailConfig = await emailConfigForClinic(clinicId);
     if (automation.channel === "email" && (!patient.email || !settings.email_enabled || !emailConfig)) {
       await markDelivery(svc, claim, "skipped", "顧客或品牌尚未完成 Email 設定");
       summary.skipped += 1;

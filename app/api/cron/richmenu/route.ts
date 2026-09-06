@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     try {
       const context = await getClinicLineChannelContext(service, job.clinic_id);
       if (!context.enabled || context.verificationStatus !== "ready") throw new Error("品牌 LINE 渠道尚未完成正式驗證");
-      const accessToken = lineAccessTokenForDestination(context.destination ?? undefined);
+      const accessToken = await lineAccessTokenForDestination(context.destination ?? undefined);
       if (job.action === "activate") await setDefaultRichMenu(job.line_rich_menu_id, accessToken);
       else if (job.restore_line_rich_menu_id) await setDefaultRichMenu(job.restore_line_rich_menu_id, accessToken);
       else await clearDefaultRichMenu(accessToken);

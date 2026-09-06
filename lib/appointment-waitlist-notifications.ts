@@ -60,7 +60,7 @@ export async function processAppointmentWaitlistNotificationQueue(
           summary.skipped += 1;
           continue;
         }
-        const token = lineAccessTokenForDestination(row.line_destination ?? undefined);
+        const token = await lineAccessTokenForDestination(row.line_destination ?? undefined);
         const entryUrl = customerEntryUrl("appointments", {
           baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
           clinicSlug: context.clinicSlug,
@@ -87,7 +87,7 @@ export async function processAppointmentWaitlistNotificationQueue(
           summary.skipped += 1;
           continue;
         }
-        const config = emailConfigForClinic(row.clinic_id);
+        const config = await emailConfigForClinic(row.clinic_id);
         if (!config) throw new Error("brand email credentials are unavailable");
         const text = waitlistText(row, null);
         await sendEmail(config, row.email, waitlistSubject(row.kind), `<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:20px"><h2>${escapeHtml(waitlistSubject(row.kind))}</h2><p style="white-space:pre-line">${escapeHtml(text)}</p></div>`);

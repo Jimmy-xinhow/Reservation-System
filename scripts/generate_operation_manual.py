@@ -499,7 +499,7 @@ def build_document() -> Document:
     )
     add_manual_screen(
         doc, "4. 付款與通知", "09-brand-settings-channels.png", "圖 9　付款與通知：LINE、標準金流與 Email 分區", "三個外部渠道各自顯示狀態與必要條件；一個渠道失敗不應阻斷另一渠道。",
-        ["先到 LINE 設定完成渠道驗證。", "需要線上訂金時選綠界或藍新、測試／正式環境與 Merchant ID。", "品牌管理者在付款設定輸入 HashKey／HashIV；系統加密保存，儲存後不會回填完整內容。", "Email 提醒需部署 Resend 金鑰與已驗證寄件網域。", "每個渠道完成後都要記錄一次實際測試結果。"],
+        ["先到 LINE 設定完成渠道驗證。", "需要線上訂金時選綠界或藍新、測試／正式環境與 Merchant ID。", "品牌管理者在付款設定輸入 HashKey／HashIV；系統加密保存，儲存後不會回填完整內容。", "Email 提醒由品牌管理者填入 Resend API key 與已驗證寄件者；系統加密保存授權碼。", "每個渠道完成後都要記錄一次實際測試結果。"],
     )
     add_manual_screen(
         doc, "5. 團隊與品牌員工權限", "10-brand-permissions.png", "圖 10　品牌團隊：品牌管理者與品牌員工細權限", "品牌管理者不可自行降級；其他帳號統一為品牌員工，權限以工作內容授予。",
@@ -580,7 +580,7 @@ def build_document() -> Document:
     add_section_break(doc, "E. LINE 與 Rich Menu 完整流程", "Rich Menu 是顧客任務入口，不是只有一張圖片；正式發布前必須先完成渠道、草稿、圖片、動作與驗證。")
     add_manual_screen(
         doc, "1. LINE／LIFF 渠道設定", "13-line-setup.png", "圖 18　LINE 渠道：啟用、模式、destination、Login Channel、LIFF 與外部驗證", "每品牌保存非機密識別資料；channel secret 與 access token 只存在 server environment。",
-        ["開啟「LINE／LIFF 連線」。", "選共享渠道或品牌獨立渠道。", "填 Webhook destination、LINE Login Channel ID、LIFF ID 與 endpoint path。", "在部署環境設定對應的 channel secret 與 access token。", "按「重新驗證渠道」。", "只有外部驗證成功後，才進入 Rich Menu 發布。"],
+        ["開啟「LINE 官方帳號連線」。", "選平台共用連線或品牌獨立渠道。", "填 Webhook destination、LINE Login Channel ID、LIFF ID 與顧客入口路徑。", "品牌獨立渠道由品牌管理者貼上 Channel access token 與 Channel secret；系統加密保存且不回填。", "按「重新檢查連線」。", "只有外部驗證成功後，才進入圖文選單發布。"],
         "LINE Official Account Manager 與 Messaging API 建立的同一個 Rich Menu 不能互相編修；XINHOW 發布的版本應持續由本平台管理。",
     )
     add_manual_screen(

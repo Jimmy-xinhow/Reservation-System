@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin, requireBrandAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import {
   pushMessages,
@@ -75,7 +75,7 @@ export async function sendTestPushAction(fd: FormData) {
       .eq("id", clinicId)
       .maybeSingle();
     if (error) throw new Error(error.message);
-    const token = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+    const token = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
     await pushMessages(to, [{ type: "text", text: "【品牌】測試推播 ✅ 連線正常。" }], token);
   } catch (e) {
     failed = true;
@@ -264,7 +264,7 @@ async function getRichMenuLineContext(supabase: SupabaseClient, clinicId: string
   if (!context.liffId) throw new Error("此品牌尚未設定 LIFF ID");
   if (requireReady && context.verificationStatus !== "ready") throw new Error("LINE／LIFF 尚未完成正式連線驗證");
   return {
-    accessToken: lineAccessTokenForDestination(context.destination ?? undefined),
+    accessToken: await lineAccessTokenForDestination(context.destination ?? undefined),
     clinicSlug: context.clinicSlug,
     liffId: context.liffId,
     destination: context.destination,
@@ -599,7 +599,7 @@ export async function removeRichMenuAliasAction(fd: FormData) {
     .maybeSingle();
   if (localError) redirectRichMenuFailure("選單頁籤資料暫時無法讀取，請稍後再試。", localError);
   if (!local) redirect(`/admin/richmenu?err=${encodeURIComponent("找不到此品牌的選單頁籤")}`);
-  const aliasAccessToken = lineAccessTokenForDestination(local.channel_destination);
+  const aliasAccessToken = await lineAccessTokenForDestination(local.channel_destination);
   const remoteBefore = await getRichMenuAlias(aliasId, aliasAccessToken);
   await deleteRichMenuAlias(aliasId, aliasAccessToken);
   const { error } = await service
@@ -695,6 +695,49 @@ export async function updateLineChannelSettingsAction(fd: FormData) {
   redirect("/admin/line?saved=1");
 }
 
+/** 品牌管理者單向更新 LINE 憑證；密文只寫入 Supabase Vault，不回傳前端。 */
+export async function saveLineCredentialsAction(fd: FormData) {
+  const { clinicId, user } = await requireBrandAdmin();
+  const accessToken = str(fd, "line_access_token");
+  const channelSecret = str(fd, "line_channel_secret");
+  if (!accessToken && !channelSecret) throw new Error("請至少填寫一項要更新的 LINE 憑證");
+  if (accessToken && (accessToken.length < 20 || accessToken.length > 4096 || /\s/.test(accessToken))) {
+    throw new Error("LINE Channel access token 格式不正確，請完整貼上 LINE Developers 顯示的值");
+  }
+  if (channelSecret && !/^[A-Za-z0-9]{32}$/.test(channelSecret)) {
+    throw new Error("LINE Channel secret 必須是 32 碼英數字");
+  }
+
+  const service = createServiceClient();
+  const [
+    { data: channel, error: channelError },
+    { data: clinic, error: clinicError },
+    { data: existing, error: existingError },
+  ] = await Promise.all([
+    service.from("clinic_line_channels").select("connection_mode").eq("clinic_id", clinicId).maybeSingle(),
+    service.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
+    service.from("clinic_line_secret_refs").select("clinic_id").eq("clinic_id", clinicId).maybeSingle(),
+  ]);
+  if (channelError || clinicError || existingError) throw new Error(channelError?.message ?? clinicError?.message ?? existingError?.message ?? "LINE 設定狀態讀取失敗");
+  if (channel?.connection_mode !== "brand") throw new Error("請先選擇品牌獨立連線並儲存公開識別資料");
+  if (!clinic?.line_destination) throw new Error("請先填寫訊息渠道識別碼並儲存連線設定");
+  if (!existing && (!accessToken || !channelSecret)) {
+    throw new Error("第一次設定時，訊息授權碼與渠道驗證密鑰都必須填寫");
+  }
+
+  const { error } = await service.rpc("save_clinic_line_credentials", {
+    p_clinic_id: clinicId,
+    p_actor_user_id: user.id,
+    p_access_token: accessToken || null,
+    p_channel_secret: channelSecret || null,
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/line");
+  revalidatePath("/admin/channels");
+  revalidatePath("/admin/richmenu");
+  redirect("/admin/line?credentials=saved");
+}
+
 function normalizedWebhookUrl(value: string): string {
   const url = new URL(value);
   const pathname = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
@@ -715,7 +758,7 @@ export async function verifyLineChannelSettingsAction() {
     if (!context.loginChannelId) throw new Error("缺少 LINE Login Channel ID");
     if (!context.liffId) throw new Error("缺少 LIFF ID");
 
-    const token = lineAccessTokenForDestination(context.destination);
+    const token = await lineAccessTokenForDestination(context.destination);
     const [bot, webhook] = await Promise.all([
       getBotInfo(token),
       getWebhookEndpointInfo(token),

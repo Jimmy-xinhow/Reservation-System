@@ -1,6 +1,8 @@
 import "server-only";
 
 import crypto from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase";
 
 const LINE_API = "https://api.line.me/v2/bot";
 const LINE_VERIFY = "https://api.line.me/oauth2/v2.1/verify";
@@ -28,21 +30,92 @@ function credentialMapsConfigured(): boolean {
   return Boolean(process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON?.trim() || process.env.LINE_CHANNEL_SECRETS_JSON?.trim());
 }
 
-export function lineAccessTokenForDestination(destination?: string): string {
-  const map = credentialMap("LINE_CHANNEL_ACCESS_TOKENS_JSON");
-  if (credentialMapsConfigured()) {
-    if (!destination) throw new Error("LINE destination 必須對應品牌 access token");
-    const mapped = map[destination];
-    if (!mapped) throw new Error("此 LINE destination 尚未設定對應 access token");
-    return accessToken(mapped);
-  }
-  return accessToken();
+export interface LineCredentials {
+  accessToken?: string;
+  channelSecret?: string;
+  source: "vault" | "environment";
 }
 
-export function lineSecretForDestination(destination?: string): string | undefined {
-  const map = credentialMap("LINE_CHANNEL_SECRETS_JSON");
-  if (credentialMapsConfigured()) return destination ? map[destination] ?? "" : "";
-  return process.env.LINE_CHANNEL_SECRET;
+export interface LineCredentialStatus {
+  configured: boolean;
+  source: "vault" | "environment" | null;
+}
+
+/**
+ * 品牌憑證以 Supabase Vault 為主；尚未完成後台設定的品牌才使用既有部署變數。
+ * 此函式僅供 server 使用，禁止把回傳值傳進 Client Component。
+ */
+export async function lineCredentialsForDestination(
+  destination?: string,
+  service: SupabaseClient = createServiceClient(),
+): Promise<LineCredentials> {
+  if (destination) {
+    const { data, error } = await service.rpc("get_clinic_line_secrets_by_destination", {
+      p_destination: destination,
+    });
+    if (error) throw new Error(`LINE 憑證讀取失敗: ${error.message}`);
+    const row = (Array.isArray(data) ? data[0] : null) as
+      | { access_token?: unknown; channel_secret?: unknown }
+      | null;
+    if (typeof row?.access_token === "string" && typeof row?.channel_secret === "string") {
+      return {
+        accessToken: row.access_token,
+        channelSecret: row.channel_secret,
+        source: "vault",
+      };
+    }
+  }
+
+  if (credentialMapsConfigured()) {
+    if (!destination) throw new Error("LINE destination 必須對應品牌憑證");
+    return {
+      accessToken: credentialMap("LINE_CHANNEL_ACCESS_TOKENS_JSON")[destination],
+      channelSecret: credentialMap("LINE_CHANNEL_SECRETS_JSON")[destination],
+      source: "environment",
+    };
+  }
+  return {
+    accessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
+    channelSecret: process.env.LINE_CHANNEL_SECRET,
+    source: "environment",
+  };
+}
+
+export async function lineAccessTokenForDestination(destination?: string): Promise<string> {
+  const credentials = await lineCredentialsForDestination(destination);
+  if (!credentials.accessToken) throw new Error("此 LINE 品牌尚未設定 access token");
+  return accessToken(credentials.accessToken);
+}
+
+export async function lineSecretForDestination(destination?: string): Promise<string | undefined> {
+  const credentials = await lineCredentialsForDestination(destination);
+  return credentials.channelSecret;
+}
+
+/** 僅讀取是否已設定，不解密也不回傳任何秘密值。 */
+export async function getLineCredentialStatus(
+  service: SupabaseClient,
+  clinicId: string,
+  destination?: string,
+): Promise<LineCredentialStatus> {
+  const { data, error } = await service
+    .from("clinic_line_secret_refs")
+    .select("access_token_secret_id, channel_secret_secret_id")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (error) throw new Error(`LINE 設定狀態讀取失敗: ${error.message}`);
+  if (data?.access_token_secret_id && data?.channel_secret_secret_id) {
+    return { configured: true, source: "vault" };
+  }
+
+  const environment = credentialMapsConfigured()
+    ? Boolean(
+        destination &&
+          credentialMap("LINE_CHANNEL_ACCESS_TOKENS_JSON")[destination] &&
+          credentialMap("LINE_CHANNEL_SECRETS_JSON")[destination],
+      )
+    : Boolean(process.env.LINE_CHANNEL_ACCESS_TOKEN && process.env.LINE_CHANNEL_SECRET);
+  return { configured: environment, source: environment ? "environment" : null };
 }
 
 export type LineMessage = Record<string, unknown>;

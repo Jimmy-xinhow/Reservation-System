@@ -41,7 +41,7 @@ export async function runChannelTestsAction(): Promise<void> {
   if (!settings.line_channel_enabled) lineChecks.push({ label: "LINE 模組", status: "warning", detail: "品牌尚未啟用 LINE 渠道" });
   else {
     try {
-      const token = lineAccessTokenForDestination(clinic.line_destination ?? undefined);
+      const token = await lineAccessTokenForDestination(clinic.line_destination ?? undefined);
       const bot = await getBotInfo(token);
       lineChecks.push({ label: "Messaging API", status: "passed", detail: `${bot.displayName}（${bot.basicId ?? "無 Basic ID"}）` });
       lineChecks.push({ label: "回應模式", status: bot.chatMode === "bot" ? "passed" : "warning", detail: bot.chatMode === "bot" ? "Bot 模式已啟用" : `目前為 ${bot.chatMode}` });
@@ -59,7 +59,7 @@ export async function runChannelTestsAction(): Promise<void> {
   ];
   runs.push({ channel: "liff", status: summarize(liffChecks), checks: liffChecks });
 
-  const emailConfig = emailConfigForClinic(member.clinicId);
+  const emailConfig = await emailConfigForClinic(member.clinicId);
   const emailChecks: Check[] = !settings.email_enabled
     ? [{ label: "Email 提醒", status: "warning", detail: "品牌尚未啟用 Email" }]
     : [

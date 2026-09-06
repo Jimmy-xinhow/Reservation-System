@@ -3,9 +3,18 @@
 
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase";
+
 export interface EmailConfig {
   apiKey: string;
   from: string;
+}
+
+export interface EmailCredentialStatus {
+  configured: boolean;
+  source: "vault" | "environment" | null;
+  from: string | null;
 }
 
 function envMap(name: "RESEND_API_KEYS_JSON" | "RESEND_EMAIL_FROM_JSON"): Record<string, string> {
@@ -24,12 +33,47 @@ function envMap(name: "RESEND_API_KEYS_JSON" | "RESEND_EMAIL_FROM_JSON"): Record
   }
 }
 
-/** Resend 金鑰只從 server environment 讀取，禁止由 clinic_settings 提供。 */
-export function emailConfigForClinic(clinicId: string): EmailConfig | null {
+/** Resend 金鑰只在 server 端解密；Vault 優先，部署變數作為既有品牌備援。 */
+export async function emailConfigForClinic(
+  clinicId: string,
+  service: SupabaseClient = createServiceClient(),
+): Promise<EmailConfig | null> {
+  const { data, error } = await service.rpc("get_clinic_email_configuration", {
+    p_clinic_id: clinicId,
+  });
+  if (error) throw new Error(`Email 憑證讀取失敗: ${error.message}`);
+  const row = (Array.isArray(data) ? data[0] : null) as
+    | { api_key?: unknown; from_address?: unknown }
+    | null;
+  if (typeof row?.api_key === "string" && typeof row?.from_address === "string") {
+    return { apiKey: row.api_key, from: row.from_address };
+  }
+
   const apiKey = envMap("RESEND_API_KEYS_JSON")[clinicId] ?? process.env.RESEND_API_KEY;
   const from = envMap("RESEND_EMAIL_FROM_JSON")[clinicId] ?? process.env.RESEND_EMAIL_FROM;
   if (!apiKey || !from) return null;
   return { apiKey, from };
+}
+
+/** 僅讀取後台可顯示的設定狀態與寄件者，不解密 API key。 */
+export async function getEmailCredentialStatus(
+  service: SupabaseClient,
+  clinicId: string,
+): Promise<EmailCredentialStatus> {
+  const { data, error } = await service
+    .from("clinic_email_secret_refs")
+    .select("api_key_secret_id, from_address")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (error) throw new Error(`Email 設定狀態讀取失敗: ${error.message}`);
+  if (data?.api_key_secret_id && typeof data.from_address === "string") {
+    return { configured: true, source: "vault", from: data.from_address };
+  }
+
+  const apiKey = envMap("RESEND_API_KEYS_JSON")[clinicId] ?? process.env.RESEND_API_KEY;
+  const from = envMap("RESEND_EMAIL_FROM_JSON")[clinicId] ?? process.env.RESEND_EMAIL_FROM;
+  const configured = Boolean(apiKey && from);
+  return { configured, source: configured ? "environment" : null, from: from ?? null };
 }
 
 export async function sendEmail(

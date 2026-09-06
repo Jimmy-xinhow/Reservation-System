@@ -77,7 +77,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
   let lineAccessError: string | null = null;
   if (rows.some((appointment) => Boolean(appointment.patients?.line_user_id))) {
     try {
-      lineAccessToken = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+      lineAccessToken = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
     } catch (error) {
       lineAccessError = error instanceof Error ? error.message : "LINE access token unavailable";
     }
@@ -106,7 +106,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
   }
   let email = 0;
   let emailFailed = 0;
-  const emailConfig = emailConfigForClinic(clinicId);
+  const emailConfig = await emailConfigForClinic(clinicId);
   if (settings.email_enabled && emailConfig) {
     for (const appointment of rows) {
       const to = appointment.patients?.email;

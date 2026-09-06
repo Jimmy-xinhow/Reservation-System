@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/admin";
 import { createBrandAction } from "../actions";
 import { addClinicDomainAction, updateBrandPageAction, updateSettingsAction, updateClinicProfileAction, updateEmailSettingsAction, updatePaymentSettingsAction, verifyClinicDomainAction } from "./actions";
 import { SubmitButton } from "@/components/SubmitButton";
-import { emailConfigForClinic } from "@/lib/email";
+import { getEmailCredentialStatus } from "@/lib/email";
 import { getPaymentSecretStatus } from "@/lib/payment";
 import { createServiceClient } from "@/lib/supabase";
 import { BrandPageEditor } from "./BrandPageEditor";
@@ -79,6 +79,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     : "brand";
   const { clinicId, accessType } = await requireAdmin();
   const supabase = await createSupabaseServer();
+  const service = createServiceClient();
   const [
     { data, error: settingsError },
     { data: clinicData, error: clinicError },
@@ -86,6 +87,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     { data: domainData, error: domainError },
     { data: lineChannelData, error: lineChannelError },
     paymentSecretStatus,
+    emailCredentialStatus,
   ] = await Promise.all([
     supabase
       .from("clinic_settings")
@@ -104,7 +106,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       .maybeSingle(),
     supabase.from("clinic_domains").select("id, hostname, verification_token, verified_at, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
     supabase.from("clinic_line_channels").select("verification_status, liff_id").eq("clinic_id", clinicId).maybeSingle(),
-    getPaymentSecretStatus(createServiceClient(), clinicId),
+    getPaymentSecretStatus(service, clinicId),
+    getEmailCredentialStatus(service, clinicId),
   ]);
   if (settingsError || clinicError || paymentError || domainError || lineChannelError) {
     throw new Error(settingsError?.message ?? clinicError?.message ?? paymentError?.message ?? domainError?.message ?? lineChannelError?.message ?? "品牌設定載入失敗");
@@ -114,8 +117,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const payment = paymentData as PaymentSettings | null;
   const domains = (domainData ?? []) as ClinicDomain[];
   const lineChannel = lineChannelData as LineChannelStatus | null;
-  const emailConfigured = Boolean(emailConfigForClinic(clinicId));
-  const canManagePaymentSecrets = accessType === "brand_admin";
+  const emailConfigured = emailCredentialStatus.configured;
+  const canManageSecrets = accessType === "brand_admin";
   const lineReady = s?.line_channel_enabled === true && lineChannel?.verification_status === "ready" && Boolean(lineChannel.liff_id);
 
   if (!s) {
@@ -406,7 +409,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <h2 className="font-semibold text-slate-900">標準金流</h2>
           <p className="help-text">支援綠界與藍新標準付款。品牌管理者可直接在這裡完成串接；付款密鑰會加密保存，儲存後不會再顯示完整內容。</p>
         </div>
-        <fieldset disabled={!canManagePaymentSecrets} className="space-y-4 disabled:opacity-65">
+        <fieldset disabled={!canManageSecrets} className="space-y-4 disabled:opacity-65">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <label className="text-sm"><span className="label">金流商</span><select name="provider" defaultValue={payment?.provider ?? "ecpay"} className="input"><option value="ecpay">綠界 ECPay</option><option value="newebpay">藍新 NewebPay</option></select></label>
             <label className="text-sm"><span className="label">環境</span><select name="environment" defaultValue={payment?.environment ?? "test"} className="input"><option value="test">測試</option><option value="production">正式</option></select></label>
@@ -427,7 +430,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </div>
           <SubmitButton className="btn btn-primary">安全儲存並更新串接</SubmitButton>
         </fieldset>
-        {!canManagePaymentSecrets && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">只有品牌管理者可以變更付款帳號與密鑰。</p>}
+        {!canManageSecrets && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">只有品牌管理者可以變更付款帳號與密鑰。</p>}
         <p className={`text-sm ${paymentSecretStatus.configured ? "text-emerald-700" : "text-amber-700"}`}>
           金流密鑰狀態：{paymentSecretStatus.source === "vault"
             ? "已由品牌後台安全設定 ✓"
@@ -468,30 +471,59 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       {/* Email 提醒(選用,需自備 Resend 金鑰)*/}
       {activeSection === "channels" && <form action={updateEmailSettingsAction} className="card space-y-4 p-5">
-        <div>
-          <h2 className="font-semibold text-slate-900">Email 預約提醒(選用)</h2>
-           <p className="mt-1 text-xs text-slate-400">
-             Resend 金鑰與寄件人由部署環境管理；請設定該品牌的 server-side 環境變數，此頁只保存啟用狀態。
-           </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-semibold text-slate-900">Email 通知（選用）</h2>
+            <p className="help-text max-w-3xl">品牌管理者可以直接設定 Resend 寄信服務，不需要請平台人員修改部署環境。API key 送出後會加密保管，畫面不會再顯示原始內容。</p>
+          </div>
+          <span className={`badge ${emailConfigured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+            {emailCredentialStatus.source === "vault"
+              ? "已由品牌後台安全保管"
+              : emailCredentialStatus.source === "environment"
+                ? "目前由舊版伺服器設定提供"
+                : "尚未設定"}
+          </span>
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            name="email_enabled"
-            defaultChecked={s.email_enabled}
-            className="h-4 w-4 accent-brand-600"
-          />
-          啟用 Email 提醒
-        </label>
-        <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-          寄件人與 Email 服務密鑰：{emailConfigured ? "已在伺服器安全設定 ✓" : "尚未設定"}
-        </div>
-        <div className="flex items-center gap-3">
-          <SubmitButton className="btn btn-primary">儲存 Email 設定</SubmitButton>
-        </div>
-        <p className="text-xs text-slate-400">
-              寄件人網域需先在 Resend 完成驗證;顧客需在「顧客查詢」建檔留有 Email 才會收到。
-        </p>
+        <fieldset disabled={!canManageSecrets} className="space-y-4 disabled:opacity-65">
+          <label className="flex items-start gap-3 rounded-xl border border-slate-200 p-4 text-sm text-slate-700">
+            <input type="checkbox" name="email_enabled" defaultChecked={s.email_enabled} className="mt-0.5 h-4 w-4 accent-brand-600" />
+            <span><span className="block font-medium text-slate-800">啟用 Email 通知</span><span className="mt-1 block text-xs leading-5 text-slate-500">預約提醒、報名通知與已啟用的自動訊息可寄到顧客信箱。</span></span>
+          </label>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="label">寄件者</span>
+              <input
+                name="email_from"
+                type="text"
+                className="input"
+                maxLength={320}
+                defaultValue={emailCredentialStatus.source === "vault" ? emailCredentialStatus.from ?? "" : ""}
+                placeholder="品牌名稱 <booking@example.com>"
+              />
+              <span className="help-text block">寄件網域必須先在 Resend 驗證。首次設定時必填。</span>
+            </label>
+            <label className="block text-sm">
+              <span className="label">Resend API key（寄信授權碼）</span>
+              <input
+                name="resend_api_key"
+                type="password"
+                className="input font-mono"
+                autoComplete="new-password"
+                spellCheck={false}
+                minLength={11}
+                maxLength={253}
+                placeholder={emailConfigured ? "已設定；不更換可留空" : "re_..."}
+              />
+              <span className="help-text block">從 Resend 的 API Keys 頁面建立；更換時才需要重新貼上。</span>
+            </label>
+          </div>
+          <SubmitButton className="btn btn-primary">安全儲存 Email 設定</SubmitButton>
+        </fieldset>
+        {!canManageSecrets && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">只有品牌管理者可以變更寄件帳號與授權碼。</p>}
+        {emailCredentialStatus.source === "environment" && emailCredentialStatus.from && (
+          <p className="text-sm text-slate-600">目前舊版寄件者：{emailCredentialStatus.from}。若要改由品牌後台管理，請同時填寫寄件者與新的 API key。</p>
+        )}
+        <p className="text-xs leading-5 text-slate-500">顧客資料需留有 Email 才會收到通知。儲存後請到「外部渠道驗收」執行寄信測試。</p>
       </form>}
       </div>
       </div>

@@ -175,7 +175,7 @@ export default async function RichMenuPage({
     const context = await getClinicLineChannelContext(supabase, clinicId);
     previewClinicSlug = context.clinicSlug;
     previewLiffId = context.liffId;
-    try { accessToken = lineAccessTokenForDestination(context.destination ?? undefined); } catch { accessToken = null; }
+    try { accessToken = await lineAccessTokenForDestination(context.destination ?? undefined); } catch { accessToken = null; }
     lineReadiness = [
       { label: "品牌 LINE 模組", ready: context.enabled },
       { label: "品牌訊息授權", ready: Boolean(context.destination && accessToken) },

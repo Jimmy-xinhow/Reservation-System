@@ -22,15 +22,42 @@ function intOr(fd: FormData, key: string, fallback: number): number {
   return Number.isFinite(value) ? value : fallback;
 }
 
-/** 只更新品牌是否啟用 Email；寄件憑證仍由伺服器環境變數管理。 */
+/** 品牌管理者可自行設定 Email；API key 只會送往 Supabase Vault，不會回傳前端。 */
 export async function updateEmailSettingsAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
-  const { error } = await supabase
-    .from("clinic_settings")
-    .update({ email_enabled: bool(fd, "email_enabled") })
-    .eq("clinic_id", clinicId);
+  const { user, clinicId } = await requireBrandAdmin();
+  const apiKey = str(fd, "resend_api_key");
+  const fromAddress = str(fd, "email_from");
+  if (apiKey && !/^re_[A-Za-z0-9_-]{8,250}$/.test(apiKey)) {
+    throw new Error("Resend API key 格式不正確，應以 re_ 開頭");
+  }
+  if (fromAddress && (
+    fromAddress.length > 320 ||
+    /[\r\n]/.test(fromAddress) ||
+    !/^[^<>]*<?[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}>?$/.test(fromAddress)
+  )) {
+    throw new Error("寄件者格式不正確，例如 品牌名稱 <booking@example.com>");
+  }
+  const service = createServiceClient();
+  const { data: existing, error: existingError } = await service
+    .from("clinic_email_secret_refs")
+    .select("clinic_id")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (existingError) throw new Error(existingError.message);
+  if (!existing && Boolean(apiKey) !== Boolean(fromAddress)) {
+    throw new Error("第一次設定時，寄件者與 Resend API key 都必須填寫");
+  }
+
+  const { error } = await service.rpc("save_clinic_email_configuration", {
+    p_clinic_id: clinicId,
+    p_actor_user_id: user.id,
+    p_enabled: bool(fd, "email_enabled"),
+    p_api_key: apiKey || null,
+    p_from_address: fromAddress || null,
+  });
   if (error) throw new Error(error.message);
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/channels");
 }
 
 /** 品牌管理者可自行更新金流設定；密鑰只會送往 Supabase Vault，不會回傳到前端。 */

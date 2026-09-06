@@ -30,10 +30,10 @@ export async function GET(req: NextRequest) {
       if (followup.purpose === "marketing" && !patient.marketing_opt_in) throw new Error("顧客未同意行銷");
       if (followup.channel === "line") {
         if (!patient.line_user_id) throw new Error("顧客沒有 LINE 身分");
-        const token = lineAccessTokenForDestination(clinic?.line_destination ?? undefined);
+        const token = await lineAccessTokenForDestination(clinic?.line_destination ?? undefined);
         await pushMessages(patient.line_user_id, [{ type: "text", text: followup.body }], token);
       } else {
-        const config = emailConfigForClinic(followup.clinic_id);
+        const config = await emailConfigForClinic(followup.clinic_id);
         if (!patient.email || !settings?.email_enabled || !config) throw new Error("顧客或品牌尚未完成 Email 設定");
         await sendEmail(config, patient.email, followup.subject || `${clinic?.name ?? "品牌"} 回訪關懷`, `<div style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(followup.body)}</div>`);
       }

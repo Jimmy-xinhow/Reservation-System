@@ -77,10 +77,10 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow) {
   const result = { candidates: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0 };
   let lineToken: string | null = null; let lineTokenError: string | null = null;
   if (rows.some((row) => Boolean(one(row.patients)?.line_user_id))) {
-    try { lineToken = lineAccessTokenForDestination(clinic.line_destination ?? undefined); }
+    try { lineToken = await lineAccessTokenForDestination(clinic.line_destination ?? undefined); }
     catch (error) { lineTokenError = error instanceof Error ? error.message : "LINE access token unavailable"; }
   }
-  const emailConfig = settings.email_enabled ? emailConfigForClinic(clinic.id) : null;
+  const emailConfig = settings.email_enabled ? await emailConfigForClinic(clinic.id) : null;
   for (const row of rows) {
     const expiresAt = row.expires_at ? new Date(row.expires_at).getTime() : null;
     const lowBalance = row.credits_remaining <= lowBalanceThreshold;

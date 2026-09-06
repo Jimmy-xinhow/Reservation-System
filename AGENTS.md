@@ -55,8 +55,8 @@
 2. **所有資料表開啟 RLS,且不給 anon 任何 policy。** anon key 視為公開資訊。後台讀寫走 Supabase Auth(authenticated)+ 對應 policy。
 3. **信任 LINE 身分前要驗證。** 前端送來的 `line_user_id` 不可信;server 端必須用 LIFF ID token 向 LINE 驗證後才採用。webhook 必須驗 `x-line-signature`(HMAC-SHA256 / `LINE_CHANNEL_SECRET`)。
 4. **顧客 PII(姓名 / 電話 / line_user_id)只在必要時回傳**,不要整包丟到前端。後台列表也只給授權成員看。
-5. 機密一律走環境變數,禁止寫死在程式碼或 commit 進 repo。
-6. 多品牌 LINE webhook 以 payload `destination` 對應品牌;各品牌 channel secret／access token 使用 server-only `LINE_CHANNEL_SECRETS_JSON`／`LINE_CHANNEL_ACCESS_TOKENS_JSON`,未提供 mapping 時僅相容單品牌 fallback。
+5. 機密一律走 server-only secret manager 或環境變數,禁止寫死在程式碼或 commit 進 repo。品牌管理者可在後台單向寫入 Supabase Vault；儲存後不得回傳或預填完整內容。
+6. 多品牌 LINE webhook 以 payload `destination` 對應品牌；各品牌 channel secret／access token 優先由 Supabase Vault 取得，`LINE_CHANNEL_SECRETS_JSON`／`LINE_CHANNEL_ACCESS_TOKENS_JSON` 僅作既有品牌相容備援。無法對應時必須 fail-closed。
 
 ---
 

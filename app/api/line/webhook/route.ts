@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
-import { verifyLineSignature, replyMessages, lineAccessTokenForDestination, lineSecretForDestination } from "@/lib/line";
+import { verifyLineSignature, replyMessages, lineCredentialsForDestination } from "@/lib/line";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { bookingPrompt, buildMessageById, menuMessage, replyMyAppointments, replyProgress, welcomeMessage, type MenuConfig } from "@/lib/line-webhook-messages";
 import { safeReply } from "@/lib/line-webhook-reply";
@@ -39,8 +39,18 @@ export async function POST(req: NextRequest) {
     return new Response("bad request", { status: 400 });
   }
   const destination = payload.destination?.trim() || undefined;
-  if (!verifyLineSignature(raw, signature, lineSecretForDestination(destination))) {
+  const svc = createServiceClient();
+  let lineCredentials: Awaited<ReturnType<typeof lineCredentialsForDestination>>;
+  try {
+    lineCredentials = await lineCredentialsForDestination(destination, svc);
+  } catch {
+    return new Response("brand LINE credentials unavailable", { status: 503 });
+  }
+  if (!verifyLineSignature(raw, signature, lineCredentials.channelSecret)) {
     return new Response("invalid signature", { status: 401 });
+  }
+  if (!lineCredentials.accessToken) {
+    return new Response("brand LINE access token unavailable", { status: 503 });
   }
   const events = payload.events ?? [];
 
@@ -48,7 +58,6 @@ export async function POST(req: NextRequest) {
   const proto = req.headers.get("x-forwarded-proto") ?? "https";
   const baseUrl = host ? `${proto}://${host}` : "";
 
-  const svc = createServiceClient();
   const { data: destinationClinic } = destination
      ? await svc.from("clinics").select("id, slug, name").eq("line_destination", destination).eq("active", true).maybeSingle()
     : CLINIC_ID
@@ -62,7 +71,7 @@ export async function POST(req: NextRequest) {
   const lineContext = await getClinicLineChannelContext(svc, clinicId);
   if (!lineContext.enabled) return new Response("brand LINE channel disabled", { status: 404 });
   const liffId = lineContext.liffId;
-  const lineAccessToken = lineAccessTokenForDestination(destination);
+  const lineAccessToken = lineCredentials.accessToken;
 
   // 讀取後台自訂的回覆規則與歡迎/預設文字
   const [{ data: rules }, { data: cs }] = await Promise.all([

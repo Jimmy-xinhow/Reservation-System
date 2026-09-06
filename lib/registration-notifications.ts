@@ -78,7 +78,7 @@ export async function notifyRegistrationStatus(
           clinicSlug: context.clinicSlug,
           liffId: context.liffId,
         });
-        const token = lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+        const token = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
         await pushMessages(row.line_user_id, [buildRegistrationStatusFlex({
           kind,
           clinicName: clinic?.name ?? "品牌",
@@ -104,7 +104,7 @@ export async function notifyRegistrationStatus(
     result.skipped += 1;
   }
 
-  const emailConfig = settings?.email_enabled ? emailConfigForClinic(row.clinic_id) : null;
+  const emailConfig = settings?.email_enabled ? await emailConfigForClinic(row.clinic_id) : null;
   if (row.email && emailConfig) {
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "email");
     if (claim) {

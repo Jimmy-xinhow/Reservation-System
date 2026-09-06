@@ -63,7 +63,7 @@
 - Supabase Postgres + Auth；不引入 ORM，不為單一功能更換框架。
 - LINE Messaging API、LIFF；LINE webhook 必須驗證簽章。
 - Vercel Cron 或現有排程執行提醒與行銷自動化；Cron 使用 UTC，程式內統一轉 `Asia/Taipei`。
-- Email 由 server-only provider 設定發送；provider、寄件網域與金鑰屬部署設定，不寫入前端。
+- Email 由 server-only provider 發送；品牌管理者可在後台單向設定寄件者與金鑰，機密只進 Supabase Vault 且不回傳前端。部署設定僅作既有品牌相容備援。
 - 所有業務時間欄位使用 `timestamptz`；顯示與日期規則以租戶時區為準，首版預設 `Asia/Taipei`。
 - 所有租戶／品牌業務資料保留 `clinic_id` 作為相容租戶鍵；不得在未完成遷移與回滾驗證前直接改名或刪除。
 
@@ -198,7 +198,7 @@
 
 - 主要入口：LINE Rich Menu → LIFF。
 - LIFF ID token 必須由 server 向 LINE 驗證後才能採用 `line_user_id`。
-- webhook 必須先驗證 `x-line-signature`，再依 LINE payload 的 `destination` 對應品牌；多品牌 channel secret／access token 只能由 server environment 的 destination map 取得，不可接受未驗證或無法對應的事件。
+- webhook 必須先驗證 `x-line-signature`，再依 LINE payload 的 `destination` 對應品牌；品牌管理者可在後台將 channel secret／access token 單向寫入 Supabase Vault，server-only 流程優先使用 Vault，部署環境的 destination map 僅作既有品牌相容備援。不可接受未驗證或無法對應的事件。
 - 預約／報名確認、取消、改期、候補、行前提醒與行銷訊息需有渠道與投遞紀錄。
 - 提供瀏覽器備援連結；非 LINE 使用者可依品牌允許的欄位完成流程。
 - 提供自訂網址、官網嵌入元件與自訂網域的路由／設定位置；網域綁定必須驗證所有權並使用 HTTPS。
@@ -247,7 +247,7 @@
 2. 後台查詢使用登入成員與 `clinic_id` 的 policy／server authorization。
 3. 顧客端只回傳完成當前流程必要的最小資料。
 4. QR、分享連結、付款回呼不得暴露姓名、電話、Email 或可逆個資。
-5. 金鑰、LINE token、LIFF secret、金流密鑰、Email key 僅能由 server-only secret manager 或部署環境變數使用；其中金流密鑰允許品牌管理者單向寫入 Supabase Vault，儲存後不得回傳完整內容到前端。
+5. 金鑰、LINE token、LIFF secret、金流密鑰、Email key 僅能由 server-only secret manager 或部署環境變數使用；LINE、Email 與金流密鑰允許品牌管理者單向寫入 Supabase Vault，儲存後不得回傳或預填完整內容到前端。部署環境變數只作平台共用渠道或既有品牌相容備援。
 6. 所有 API 做輸入驗證、速率限制、錯誤處理與租戶邊界檢查。
 
 ---

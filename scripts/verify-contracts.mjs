@@ -54,6 +54,7 @@ const migrationCustomerValue = read("supabase/migrations/202609040002_customer_v
 const migrationIndustryPacks = read("supabase/migrations/202609040003_industry_packs.sql");
 const migrationCheckoutLintCleanup = read("supabase/migrations/202609040005_checkout_lint_cleanup.sql");
 const migrationCheckoutRegistrationSync = read("supabase/migrations/202609040006_checkout_registration_sync.sql");
+const migrationChannelSecrets = read("supabase/migrations/202609060003_channel_secret_self_service.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 const projectReadme = read("README.md");
@@ -80,6 +81,21 @@ const checks = [
     "app/admin/settings/page.tsx|name=\"hash_iv\" type=\"password\"",
     "lib/payment.ts|vaultPaymentSecretsForClinic",
     "lib/payment.ts|?? environmentPaymentSecretsForClinic",
+  ]],
+  ["brand LINE and Email credentials are self-managed and encrypted at rest", [
+    "supabase/migrations/202609060003_channel_secret_self_service.sql|create table if not exists public.clinic_line_secret_refs",
+    "supabase/migrations/202609060003_channel_secret_self_service.sql|create table if not exists public.clinic_email_secret_refs",
+    "supabase/migrations/202609060003_channel_secret_self_service.sql|member.access_type = 'brand_admin'",
+    "supabase/migrations/202609060003_channel_secret_self_service.sql|vault.create_secret",
+    "supabase/migrations/202609060003_channel_secret_self_service.sql|revoke all on function public.get_clinic_line_secrets_by_destination(text) from public, anon, authenticated",
+    "supabase/migrations/202609060003_channel_secret_self_service.sql|revoke all on function public.get_clinic_email_configuration(uuid) from public, anon, authenticated",
+    "app/admin/line-actions.ts|save_clinic_line_credentials",
+    "app/admin/settings/actions.ts|save_clinic_email_configuration",
+    "app/admin/line/page.tsx|name=\"line_access_token\"",
+    "app/admin/line/page.tsx|name=\"line_channel_secret\"",
+    "app/admin/settings/page.tsx|name=\"resend_api_key\"",
+    "lib/line.ts|get_clinic_line_secrets_by_destination",
+    "lib/email.ts|get_clinic_email_configuration",
   ]],
   ["unexpected API errors are generic and traceable", ["lib/http.ts|if (status >= 500)", "lib/http.ts|error_id: errorId", "lib/http.ts|系統暫時無法完成操作", "lib/http.ts|detail: message.replace"]],
   ["LINE identity failures do not expose provider details", ["app/api/booking/reserve/route.ts|LINE 身分驗證失敗，請重新開啟預約頁。", "app/api/booking/reschedule/route.ts|LINE 身分驗證失敗，請重新開啟預約頁。", "app/api/customer/portal/route.ts|LINE 身分驗證失敗，請重新開啟頁面。"]],
@@ -802,9 +818,12 @@ invariant(
 invariant(
   "multi-brand LINE credentials fail closed",
     read("lib/line.ts").includes("function credentialMapsConfigured()") &&
-    read("lib/line.ts").includes("if (!destination) throw new Error(\"LINE destination 必須對應品牌 access token\")") &&
-    read("lib/line.ts").includes("return destination ? map[destination] ?? \"\" : \"\";") &&
+    read("lib/line.ts").includes("get_clinic_line_secrets_by_destination") &&
+    read("lib/line.ts").includes("if (!destination) throw new Error(\"LINE destination 必須對應品牌憑證\")") &&
+    read("lib/line.ts").includes("if (!credentials.accessToken) throw new Error(\"此 LINE 品牌尚未設定 access token\")") &&
     read("lib/line.ts").includes("secretOverride === undefined ? process.env.LINE_CHANNEL_SECRET : secretOverride") &&
+    read("app/api/line/webhook/route.ts").includes("lineCredentialsForDestination(destination, svc)") &&
+    read("app/api/line/webhook/route.ts").includes("verifyLineSignature(raw, signature, lineCredentials.channelSecret)") &&
     read("app/admin/line-actions.ts").includes("getRichMenuLineContext") &&
     read("app/admin/line-actions.ts").includes("clinicSlug") &&
     lineWebhook.includes("liffUrl(liffId, clinicSlug)") &&
@@ -1008,6 +1027,17 @@ invariant(
     paymentStatusApi.includes("rateLimitResponse") &&
     paymentResultPage.includes("/api/payment/status") &&
     read("app/register/page.tsx").includes("localStorage.setItem(`registration:")
+);
+invariant(
+  "channel credential functions are service-role only and browser forms never prefill secrets",
+  migrationChannelSecrets.includes("grant execute on function public.save_clinic_line_credentials(uuid, uuid, text, text) to service_role") &&
+    migrationChannelSecrets.includes("grant execute on function public.save_clinic_email_configuration(uuid, uuid, boolean, text, text) to service_role") &&
+    migrationChannelSecrets.includes("alter table public.clinic_line_secret_refs enable row level security") &&
+    migrationChannelSecrets.includes("alter table public.clinic_email_secret_refs enable row level security") &&
+    read("app/admin/line/page.tsx").includes('type="password"') &&
+    !read("app/admin/line/page.tsx").includes('defaultValue={credentialStatus') &&
+    read("app/admin/settings/page.tsx").includes('name="resend_api_key"') &&
+    !read("app/admin/settings/page.tsx").includes('defaultValue={emailCredentialStatus.api'),
 );
 invariant(
   "ECPay callbacks verify empty response fields and redirect to the public app origin",

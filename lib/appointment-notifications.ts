@@ -62,7 +62,7 @@ export async function notifyAppointmentStatus(
     if (claim) {
       try {
         const context = await getClinicLineChannelContext(svc, appointment.clinic_id);
-        const token = lineAccessTokenForDestination(appointment.line_destination ?? undefined);
+        const token = await lineAccessTokenForDestination(appointment.line_destination ?? undefined);
         const manageUrl = customerEntryUrl("appointments", {
           baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
           clinicSlug: context.clinicSlug,
@@ -92,7 +92,7 @@ export async function notifyAppointmentStatus(
     result.skipped += 1;
   }
 
-  const emailConfig = appointment.email_enabled ? emailConfigForClinic(appointment.clinic_id) : null;
+  const emailConfig = appointment.email_enabled ? await emailConfigForClinic(appointment.clinic_id) : null;
   if (appointment.patient_email && emailConfig) {
     const claim = await claimNotification(svc, appointment, kind, "email");
     if (claim) {
