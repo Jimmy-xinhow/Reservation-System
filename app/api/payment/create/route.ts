@@ -14,6 +14,7 @@ import {
   getPaymentSettings,
   type PaymentSettings,
 } from "@/lib/payment";
+import { addMerchantOrderToHistory } from "@/lib/payment-order-lookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,7 +115,7 @@ export async function POST(req: NextRequest) {
   let publicAppointment: PublicAppointment | null = null;
   let paymentExpiresAt: string | null = null;
   let returnPath = body.registration_id ? "/register" : body.membership_plan_id ? "/membership" : "/admin";
-  let existingOrder: { id: string; merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; membership_plan_id: string | null; patient_id: string | null; provider: string; status: string; expires_at: string | null; return_path: string | null } | null = null;
+  let existingOrder: { id: string; merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; membership_plan_id: string | null; patient_id: string | null; provider: string; status: string; expires_at: string | null; return_path: string | null; provider_payload: Record<string, unknown> } | null = null;
 
   try {
     if (body.registration_id) {
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
       amount = Number(registration.amount);
       const { data: found, error: foundError } = await svc
         .from("payment_orders")
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
         .eq("registration_id", registration.id)
         .eq("status", "pending")
         .maybeSingle();
@@ -188,7 +189,7 @@ export async function POST(req: NextRequest) {
       patientId = patient.id;
       const { data: found, error: foundError } = await svc
         .from("payment_orders")
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
         .eq("membership_plan_id", plan.id)
         .eq("patient_id", patient.id)
         .eq("status", "pending")
@@ -254,7 +255,7 @@ export async function POST(req: NextRequest) {
       paymentExpiresAt = appointment.deposit_expires_at ?? null;
       const { data: found, error: foundError } = await svc
         .from("payment_orders")
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
         .eq("appointment_id", appointment.id)
         .eq("status", "pending")
         .maybeSingle();
@@ -272,7 +273,7 @@ export async function POST(req: NextRequest) {
       return fail("付款訂單金額已變更，請重新建立付款訂單", 409);
     }
 
-    const order = existingOrder ?? {
+    let order = existingOrder ?? {
       id: "",
       merchant_order_no: createMerchantOrderNo(registrationId ? "REG" : membershipPlanId ? "MEM" : "APT"),
       amount,
@@ -283,6 +284,7 @@ export async function POST(req: NextRequest) {
       expires_at: paymentExpiresAt,
       return_path: returnPath,
       status: "pending",
+      provider_payload: {},
     };
     if (existingOrder?.expires_at && new Date(existingOrder.expires_at) <= new Date()) return fail("付款期限已過");
     if (!existingOrder) {
@@ -302,14 +304,14 @@ export async function POST(req: NextRequest) {
           status: "pending",
           provider_payload: {},
         })
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
         .single();
       if (error) {
         // 多個付款頁同時開啟時，partial unique index 只允許同一對象保留一筆 pending 訂單；競爭輸入改用已存在的訂單。
         if (error.code !== "23505") throw new Error(error.message);
         let concurrentQuery = svc
           .from("payment_orders")
-          .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path")
+          .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
           .eq("status", "pending");
         if (registrationId) concurrentQuery = concurrentQuery.eq("registration_id", registrationId);
         else if (membershipPlanId && patientId) concurrentQuery = concurrentQuery.eq("membership_plan_id", membershipPlanId).eq("patient_id", patientId);
@@ -322,6 +324,25 @@ export async function POST(req: NextRequest) {
       } else {
         Object.assign(order, inserted);
       }
+    } else {
+      // 綠界與藍新的商店交易編號都是一次性建立訂單憑證。使用者離開金流頁再重試時，
+      // 必須換新編號；舊編號留在同一付款單中，讓延遲抵達的合法回呼仍能被辨識。
+      const nextMerchantOrderNo = createMerchantOrderNo(registrationId ? "REG" : membershipPlanId ? "MEM" : "APT");
+      const { data: rotated, error: rotateError } = await svc
+        .from("payment_orders")
+        .update({
+          merchant_order_no: nextMerchantOrderNo,
+          return_path: returnPath,
+          provider_payload: addMerchantOrderToHistory(existingOrder.provider_payload, existingOrder.merchant_order_no),
+        })
+        .eq("id", existingOrder.id)
+        .eq("status", "pending")
+        .eq("merchant_order_no", existingOrder.merchant_order_no)
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
+        .maybeSingle();
+      if (rotateError) throw new Error(rotateError.message);
+      if (!rotated) return fail("付款頁已在其他分頁重新建立，請回到最新付款頁", 409);
+      order = rotated;
     }
 
     const { data: clinic, error: clinicError } = await svc.from("clinics").select("slug").eq("id", clinicId).maybeSingle();

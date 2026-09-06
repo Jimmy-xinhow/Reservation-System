@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, ok, rateLimitResponse } from "@/lib/http";
 import { resolvePublicClinicId } from "@/lib/public-brand";
+import { findPaymentOrderByMerchant } from "@/lib/payment-order-lookup";
+import type { PaymentProvider } from "@/lib/payment";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,14 +18,7 @@ export async function GET(req: NextRequest) {
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
     if (!clinicId) return fail("缺少品牌設定", 500);
-    const { data: order, error: orderError } = await svc
-      .from("payment_orders")
-      .select("id, status, amount, registration_id, appointment_id, membership_plan_id, patient_id, expires_at")
-      .eq("clinic_id", clinicId)
-      .eq("provider", provider)
-      .eq("merchant_order_no", orderNo)
-      .maybeSingle();
-    if (orderError) return fail(orderError.message, 500);
+    const order = await findPaymentOrderByMerchant(svc, clinicId, provider as PaymentProvider, orderNo);
     if (!order) return fail("找不到付款訂單", 404);
 
     let registrationStatus: string | null = null;

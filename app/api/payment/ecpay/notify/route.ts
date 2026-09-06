@@ -4,6 +4,7 @@ import { asPaymentFormFields, getPaymentSettingsByMerchant, verifyEcpay } from "
 import { processPaymentWebhook } from "@/lib/payment-webhook";
 import { notifyRegistrationStatus } from "@/lib/registration-notifications";
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
+import { findPaymentOrderByMerchant } from "@/lib/payment-order-lookup";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
       amount: Number(fields.TradeAmt ?? fields.TotalAmount ?? 0),
       payload: fields,
     });
-    const { data: order } = await svc.from("payment_orders").select("registration_id, appointment_id").eq("clinic_id", settings.clinic_id).eq("merchant_order_no", merchantOrderNo).eq("provider", "ecpay").maybeSingle();
+    const order = await findPaymentOrderByMerchant(svc, settings.clinic_id, "ecpay", merchantOrderNo).catch(() => null);
     if (result.changed && order?.registration_id) await notifyRegistrationStatus(svc, String(order.registration_id), fields.RtnCode === "1" ? "confirmed" : "cancelled").catch(() => undefined);
     if (result.changed && order?.appointment_id) await notifyAppointmentStatus(svc, String(order.appointment_id), fields.RtnCode === "1" ? "confirmed" : "cancelled").catch(() => undefined);
     return response("1|OK");
