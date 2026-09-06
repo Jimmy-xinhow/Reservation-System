@@ -554,16 +554,18 @@
   .beautyHeroImage figcaption { right: 12px; bottom: 12px; gap: 14px; }
   .beautyHeroCopy { padding-top: 62px; }
   .beautyHero h1 { font-size: clamp(44px, 12vw, 62px); }
+  .beautyActions .beautyPrimary, .beautyClosing .beautyPrimary { display: none; }
   .beautyTextLink { width: 100%; justify-content: space-between; }
   .beautyMethod dl div { grid-template-columns: 86px 1fr; }
   .educationHeroCopy { padding-top: 46px; }
-  .educationHero h1 { font-size: clamp(46px, 11.5vw, 60px); letter-spacing: -.08em; }
+  .educationHero h1 { width: 100%; max-width: 100%; font-size: clamp(46px, 11.5vw, 60px); letter-spacing: -.08em; text-wrap: balance; }
   .educationActions { width: 100%; gap: 18px; }
-  .educationPrimary { width: 100%; }
+  .educationActions .educationPrimary, .educationClosing .educationPrimary { display: none; }
   .educationTextLink { width: 100%; justify-content: space-between; }
-  .fitnessHero h1 { font-size: clamp(58px, 15vw, 76px); line-height: .9; }
+  .fitnessHero h1 { width: 100%; max-width: 100%; font-size: clamp(58px, 15vw, 76px); line-height: .9; text-wrap: balance; }
   .fitnessActions { width: 100%; }
-  .fitnessPrimary, .fitnessOutline { width: 100%; }
+  .fitnessActions .fitnessPrimary, .fitnessClosing .fitnessPrimary { display: none; }
+  .fitnessOutline { width: 100%; }
   .fitnessAbout dl div { grid-template-columns: 82px 1fr; }
 }
 
