@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/chiron-hei-hk";
+import "@fontsource-variable/chiron-sung-hk";
 import "./globals.css";
 
 export const metadata: Metadata = {

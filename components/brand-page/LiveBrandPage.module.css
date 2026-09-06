@@ -1,7 +1,8 @@
 .page {
   min-height: 100vh;
   overflow-x: clip;
-  font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-family: "Chiron Hei HK Variable", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-variation-settings: "wght" 470;
   text-rendering: optimizeLegibility;
 }
 
@@ -55,7 +56,7 @@
   background: color-mix(in srgb, var(--elan-paper) 94%, transparent);
   backdrop-filter: blur(14px);
 }
-.beautyMark { width: fit-content; font-family: "Noto Serif TC", "Songti TC", serif; font-size: 17px; font-weight: 650; letter-spacing: .04em; }
+.beautyMark { width: fit-content; font-family: "Chiron Sung HK Variable", "Songti TC", serif; font-size: 17px; font-weight: 650; letter-spacing: .04em; }
 .beautyMark img { display: block; width: auto; max-width: 185px; height: 38px; object-fit: contain; }
 .beautyHeader nav { display: flex; gap: clamp(22px, 3vw, 44px); }
 .beautyHeader nav a { display: flex; gap: 8px; align-items: baseline; font-size: 12px; font-weight: 600; }
@@ -95,7 +96,7 @@
 .beautyHero h1 {
   max-width: 9.5ch;
   margin-top: 30px;
-  font-family: "Noto Serif TC", "Songti TC", serif;
+  font-family: "Chiron Sung HK Variable", "Songti TC", serif;
   font-size: clamp(54px, 6.5vw, 96px);
   font-weight: 500;
   letter-spacing: -.065em;
@@ -147,7 +148,7 @@
   background: var(--elan-sheet);
 }
 .beautyEditorialNote span { color: var(--elan-rust); font-size: 9px; font-weight: 800; letter-spacing: .16em; }
-.beautyEditorialNote p { margin-top: 14px !important; font-family: "Noto Serif TC", serif; font-size: 16px; line-height: 1.65; }
+.beautyEditorialNote p { margin-top: 14px !important; font-family: "Chiron Sung HK Variable", serif; font-size: 16px; line-height: 1.65; }
 .beautyPrinciples {
   display: grid;
   grid-template-columns: minmax(170px, .44fr) minmax(0, 1.56fr);
@@ -163,7 +164,7 @@
 .beautyPrinciples > div p { min-height: 70px; padding: 0 26px; border-left: 1px solid var(--elan-line); }
 .beautyPrinciples span, .beautyPrinciples strong { display: block; }
 .beautyPrinciples span { margin-bottom: 15px; color: var(--elan-rust); font-size: 9px; }
-.beautyPrinciples strong { font-family: "Noto Serif TC", serif; font-size: 15px; font-weight: 600; }
+.beautyPrinciples strong { font-family: "Chiron Sung HK Variable", serif; font-size: 15px; font-weight: 600; }
 .beautyMenu {
   display: grid;
   grid-template-columns: minmax(280px, .62fr) minmax(0, 1.38fr);
@@ -175,7 +176,7 @@
 .beautyMenu header { align-self: start; position: sticky; top: 118px; }
 .beautyMenu h2, .beautyMethod h2, .beautyClosing h2 {
   margin-top: 20px;
-  font-family: "Noto Serif TC", "Songti TC", serif;
+  font-family: "Chiron Sung HK Variable", "Songti TC", serif;
   font-size: clamp(34px, 4.3vw, 62px);
   font-weight: 500;
   letter-spacing: -.045em;
@@ -190,7 +191,7 @@
 .beautyOfferIndex > a:hover { color: var(--elan-rust); transform: translateX(5px); }
 .beautyOfferTitle small, .beautyOfferTitle strong { display: block; }
 .beautyOfferTitle small { margin-bottom: 13px; color: var(--elan-rust); font-size: 9px; font-weight: 800; }
-.beautyOfferTitle strong { font-family: "Noto Serif TC", serif; font-size: clamp(18px, 2vw, 25px); font-weight: 600; line-height: 1.35; }
+.beautyOfferTitle strong { font-family: "Chiron Sung HK Variable", serif; font-size: clamp(18px, 2vw, 25px); font-weight: 600; line-height: 1.35; }
 .beautyOfferDescription { color: var(--elan-muted); font-size: 13px; line-height: 1.75; }
 .beautyOfferAction { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 750; }
 .beautyOfferAction b { font-size: 18px; font-weight: 500; }
@@ -243,7 +244,7 @@
   backdrop-filter: blur(12px);
 }
 .editionTag { display: flex; align-items: center; padding: 0 24px; border-right: 1px solid var(--open-line); color: var(--open-blue); font-size: 9px; font-weight: 800; letter-spacing: .14em; }
-.educationMark { display: flex; align-items: center; width: fit-content; padding: 0 28px; font-family: "Arial Narrow", "Noto Sans TC", sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+.educationMark { display: flex; align-items: center; width: fit-content; padding: 0 28px; font-family: var(--font-showcase-manrope), "Chiron Hei HK Variable", sans-serif; font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
 .educationMark img { display: block; width: auto; max-width: 185px; height: 38px; object-fit: contain; }
 .educationHeader nav { display: flex; align-items: center; gap: clamp(18px, 3vw, 42px); padding: 0 22px; }
 .educationHeader nav a { font-size: 12px; font-weight: 650; }
@@ -260,14 +261,14 @@
   border-right: 1px solid var(--open-line);
   border-left: 1px solid var(--open-line);
 }
-.educationHeroNumber { padding: 68px 20px; border-right: 1px solid var(--open-line); color: var(--open-blue); font-family: "Arial Narrow", "Noto Sans TC", sans-serif; font-size: 30px; font-weight: 900; letter-spacing: -.06em; line-height: .84; writing-mode: vertical-rl; transform: rotate(180deg); }
+.educationHeroNumber { padding: 68px 20px; border-right: 1px solid var(--open-line); color: var(--open-blue); font-family: var(--font-showcase-manrope), "Chiron Hei HK Variable", sans-serif; font-size: 30px; font-weight: 900; letter-spacing: -.06em; line-height: .84; writing-mode: vertical-rl; transform: rotate(180deg); }
 .educationHeroNumber span { display: inline-block; margin-top: 22px; color: var(--open-red); font-size: 8px; letter-spacing: .18em; }
 .educationHeroCopy { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 72px clamp(34px, 5vw, 82px); background: var(--open-sheet); }
 .educationEyebrow { color: var(--open-red); font-size: 10px; font-weight: 850; letter-spacing: .2em; }
 .educationHero h1 {
   max-width: 8.5ch;
   margin-top: 26px;
-  font-family: "Arial Narrow", "Noto Sans TC", sans-serif;
+  font-family: var(--font-showcase-manrope), "Chiron Hei HK Variable", sans-serif;
   font-size: clamp(58px, 6.7vw, 98px);
   font-stretch: condensed;
   font-weight: 800;
@@ -291,7 +292,7 @@
 .educationCourses > header { display: grid; grid-template-columns: 150px minmax(300px, .8fr) minmax(280px, 1.2fr); align-items: end; gap: 42px; margin-bottom: 64px; }
 .educationCourses > header > span, .educationAbout > div > span, .educationFaq header > span { align-self: start; color: var(--open-red); font-size: 9px; font-weight: 850; letter-spacing: .16em; }
 .educationCourses h2, .educationMethod h2, .educationAbout h2, .educationFaq h2, .educationClosing h2 {
-  font-family: "Arial Narrow", "Noto Sans TC", sans-serif;
+  font-family: var(--font-showcase-manrope), "Chiron Hei HK Variable", sans-serif;
   font-size: clamp(36px, 4.5vw, 66px);
   font-weight: 800;
   letter-spacing: -.06em;
@@ -365,7 +366,7 @@
   background: color-mix(in srgb, var(--forme-night) 94%, transparent);
   backdrop-filter: blur(12px);
 }
-.fitnessMark { width: fit-content; font-family: "Arial Black", "Noto Sans TC", sans-serif; font-size: 17px; font-weight: 900; letter-spacing: -.02em; }
+.fitnessMark { width: fit-content; font-family: var(--font-showcase-montserrat), "Chiron Hei HK Variable", sans-serif; font-size: 17px; font-weight: 900; letter-spacing: -.02em; }
 .fitnessMark img { display: block; width: auto; max-width: 185px; height: 38px; object-fit: contain; filter: brightness(0) invert(1); }
 .fitnessHeader nav { display: flex; gap: clamp(22px, 3vw, 44px); }
 .fitnessHeader nav a { color: var(--forme-mist); font-size: 11px; font-weight: 650; }
@@ -378,7 +379,7 @@
 .fitnessHero::after { position: absolute; inset: 0; z-index: -1; opacity: .16; background-image: repeating-linear-gradient(90deg, transparent 0, transparent calc(20% - 1px), rgba(255,255,255,.22) 20%); content: ""; pointer-events: none; }
 .fitnessHeroCopy { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-height: calc(100svh - 74px); max-width: 930px; padding: 86px clamp(26px, 9vw, 160px) 140px; }
 .fitnessHeroCopy > p { color: var(--forme-ochre); font-size: 9px; font-weight: 850; letter-spacing: .19em; }
-.fitnessHero h1 { max-width: 9ch; margin-top: 24px; font-family: "Arial Black", "Noto Sans TC", sans-serif; font-size: clamp(64px, 8.8vw, 142px); font-weight: 900; letter-spacing: -.075em; line-height: .82; text-transform: uppercase; }
+.fitnessHero h1 { max-width: 9ch; margin-top: 24px; font-family: var(--font-showcase-montserrat), "Chiron Hei HK Variable", sans-serif; font-size: clamp(64px, 8.8vw, 142px); font-weight: 900; letter-spacing: -.075em; line-height: .82; text-transform: uppercase; }
 .fitnessHero h1 em { display: block; color: var(--forme-ochre); font-style: normal; }
 .fitnessHeroCopy > span { max-width: 36rem; margin-top: 34px; color: rgba(232,232,220,.74); font-size: clamp(15px, 1.2vw, 18px); line-height: 1.8; }
 .fitnessActions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 38px; }
@@ -391,7 +392,7 @@
 .fitnessClasses { max-width: 1440px; margin: 0 auto; padding: clamp(100px, 11vw, 170px) clamp(24px, 5vw, 72px); }
 .fitnessClasses > header { display: grid; grid-template-columns: 180px minmax(320px, .85fr) minmax(280px, 1.15fr); align-items: end; gap: 46px; margin-bottom: 66px; }
 .fitnessClasses > header > span { align-self: start; color: var(--forme-ochre); font-size: 8px; font-weight: 850; letter-spacing: .17em; }
-.fitnessClasses h2, .fitnessAbout h2, .fitnessClosing h2 { font-family: "Arial Black", "Noto Sans TC", sans-serif; font-size: clamp(42px, 5.5vw, 78px); font-weight: 850; letter-spacing: -.065em; line-height: 1.02; text-wrap: balance; }
+.fitnessClasses h2, .fitnessAbout h2, .fitnessClosing h2 { font-family: var(--font-showcase-montserrat), "Chiron Hei HK Variable", sans-serif; font-size: clamp(42px, 5.5vw, 78px); font-weight: 850; letter-spacing: -.065em; line-height: 1.02; text-wrap: balance; }
 .fitnessClasses > header > p { color: var(--forme-mist); font-size: 14px; line-height: 1.85; }
 .fitnessSchedule { border-top: 3px solid var(--forme-ochre); }
 .fitnessScheduleHead, .fitnessSchedule > a { display: grid; grid-template-columns: 110px minmax(190px, .7fr) minmax(280px, 1.3fr) 130px; align-items: center; gap: 28px; }

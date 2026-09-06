@@ -197,13 +197,13 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
   }, [activeGroupLabel]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0b2132] text-white">
-      <div className={`border-b border-white/10 px-4 py-4 ${mode === "platform" ? "bg-[#18245b]" : "bg-[#0b2132]"}`}>
+    <div className={`flex h-full min-h-0 flex-col text-white ${mode === "platform" ? "bg-[#1b2621]" : "bg-[#18262b]"}`}>
+      <div className="border-b border-white/10 px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className={`flex h-8 w-8 items-center justify-center rounded-md text-xs font-bold tracking-wide ${mode === "platform" ? "bg-white text-[#18245b]" : "bg-[#1f79d1] text-white"}`}>{mode === "platform" ? "XP" : "XH"}</div>
+          <div className={`flex h-8 w-8 items-center justify-center rounded-sm border text-[10px] font-bold tracking-[.08em] ${mode === "platform" ? "border-[#87a99d] bg-[#263b33] text-[#d9ebe4]" : "border-[#81959e] bg-[#243840] text-[#e3edf0]"}`}>{mode === "platform" ? "XP" : "XH"}</div>
           <div>
-            <div className="text-sm font-semibold tracking-wide">{mode === "platform" ? "XINHOW PLATFORM" : "XINHOW"}</div>
-            <div className="mt-0.5 text-xs text-slate-400">{mode === "platform" ? "系統管理總控台" : "品牌營運後台"}</div>
+            <div className="text-[12px] font-semibold tracking-[.04em]">{mode === "platform" ? "XINHOW PLATFORM" : "XINHOW"}</div>
+            <div className="mt-0.5 text-[10px] text-slate-400">{mode === "platform" ? "系統管理工作區" : "品牌營運工作區"}</div>
           </div>
         </div>
       </div>
@@ -221,18 +221,18 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
                 aria-expanded={groupOpen}
                 aria-controls={groupId}
                 onClick={() => setOpenGroup(groupOpen ? null : group.label)}
-                className="flex min-h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[11px] font-semibold tracking-[0.06em] text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-brand-400"
+                className="flex min-h-9 w-full items-center gap-2 border-b border-white/5 px-2.5 text-left text-[10px] font-semibold tracking-[0.08em] text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
               >
                 <span className={`transition-transform ${groupOpen ? "rotate-90" : ""}`} aria-hidden="true">›</span>
                 <span className="flex-1">{group.label}</span>
                 <span className="sr-only">{group.items.length} 個功能</span>
               </button>
-              {groupOpen && <div id={groupId} className="mt-1 space-y-1">{group.items.map((item) => <NavItem key={item.href} item={item} pathname={pathname} unread={unread} close={close} />)}</div>}
+              {groupOpen && <div id={groupId} className="mt-1">{group.items.map((item) => <NavItem key={item.href} item={item} pathname={pathname} unread={unread} close={close} />)}</div>}
             </div>
           );
         })}
       </div>
-      <div className="border-t border-white/10 px-5 py-4 text-xs leading-5 text-slate-400">{mode === "platform" ? "系統總控台 · 跨品牌管理" : "營運後台 · 各品牌資料分開管理"}</div>
+      <div className="border-t border-white/10 px-4 py-3 text-[10px] leading-4 text-slate-400">{mode === "platform" ? "跨品牌資料與權限治理" : "目前只顯示獲授權品牌資料"}</div>
     </div>
   );
 }
@@ -245,8 +245,8 @@ function NavItem({ item, pathname, unread, close }: { item: Item; pathname: stri
       href={item.href}
       onClick={close}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-10 items-center gap-3 rounded-md border-l-2 px-3 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-brand-400 ${
-        active ? "border-[#46a4ef] bg-white/10 font-semibold text-white" : "border-transparent text-slate-300 hover:bg-white/5 hover:text-white"
+      className={`flex min-h-10 items-center gap-2.5 border-l-2 px-2.5 text-[12px] transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+        active ? "border-[#65c4a1] bg-white/9 font-semibold text-white" : "border-transparent text-slate-300 hover:bg-white/5 hover:text-white"
       }`}
     >
       <Icon name={item.icon} className="h-[18px] w-[18px] shrink-0" />
@@ -319,7 +319,7 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platfo
       >
         <Icon name="menu" />
       </button>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-950/20 lg:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 border-r border-slate-950/20 lg:block">
         <NavigationContent groups={groups} unread={unread} close={() => undefined} mode={mode} />
       </aside>
       {mobileOpen && (

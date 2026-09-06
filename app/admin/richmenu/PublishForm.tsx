@@ -170,17 +170,16 @@ export default function PublishForm({
   }
 
   return (
-    <form onSubmit={submit} className="card space-y-4 p-5">
+    <form onSubmit={submit} className="line-panel space-y-4 p-5">
       <div>
         <h3 className="font-semibold text-slate-900">④ 背景圖片、點擊區預覽與發布</h3>
         <p className="mt-1 text-sm text-slate-500">以下熱區使用目前已儲存的草稿；若剛修改版型或按鈕，請先另存草稿再測試。</p>
       </div>
-      <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-700">
-        系統會自動把圖片裁成 <strong>{width} × {height} px</strong>(等比填滿、置中裁切)並壓縮,
-        你不必自己調尺寸;建議上傳解析度足夠、比例接近的圖較不失真。
+      <p className="border-l-2 border-emerald-600 bg-emerald-50 p-3 text-sm text-emerald-800">
+        系統會把圖片裁成 <strong>{width} × {height} 像素</strong>，並自動置中、裁切與壓縮。建議上傳比例接近、解析度足夠的圖片，避免失真。
       </p>
       {templateKey !== "custom" && (
-        <div className="flex flex-col gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 border-y border-emerald-200 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-emerald-900">可直接使用的品牌圖稿</p>
             <p className="mt-0.5 text-xs leading-5 text-emerald-700">依目前模板與已啟用模組產生 LINE 規格 PNG，套用後仍可先預覽熱區。</p>
@@ -197,11 +196,11 @@ export default function PublishForm({
         type="file"
         accept="image/png,image/jpeg,image/webp"
         onChange={(e) => pick(e.target.files?.[0] ?? null)}
-        className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-4 file:py-2 file:text-white"
+        className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-sm file:border-0 file:bg-emerald-800 file:px-4 file:py-2 file:text-white"
       />
       {preview ? (
         <div
-          className="relative isolate overflow-hidden rounded-xl border border-slate-300 bg-slate-100"
+          className="relative isolate overflow-hidden rounded-sm border border-slate-300 bg-slate-100"
           style={{ aspectRatio: `${width} / ${height}` }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -223,16 +222,16 @@ export default function PublishForm({
           </div>
         </div>
       ) : (
-        <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-sm text-slate-500">
+        <div className="flex min-h-32 items-center justify-center rounded-sm border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-sm text-slate-500">
           選擇圖片後，這裡會疊合顯示實際背景與每一格點擊區。
         </div>
       )}
 
-      <section aria-labelledby="richmenu-link-test-title" className="rounded-xl border border-slate-200 p-4">
+      <section aria-labelledby="richmenu-link-test-title" className="border-y border-slate-200 py-4">
         <h4 id="richmenu-link-test-title" className="text-sm font-semibold text-slate-900">逐格連結測試</h4>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {previewSlots.map(({ slot, browserTarget, lineTarget, actionLabel }, index) => (
-            <div key={`${index}-${slot.label}`} className="rounded-lg bg-slate-50 p-3 text-sm">
+            <div key={`${index}-${slot.label}`} className="border-l-2 border-slate-300 bg-slate-50 p-3 text-sm">
               <p className="font-medium text-slate-800">{index + 1}. {slot.label}</p>
               <p className="mt-0.5 text-xs text-slate-500">{actionLabel}</p>
               <div className="mt-2 flex min-h-11 flex-wrap items-center gap-2">

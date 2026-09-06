@@ -231,17 +231,17 @@ export default async function RichMenuPage({
   }
 
   return (
-    <div className="space-y-6">
-      <header><p className="eyebrow">LINE 顧客入口</p><h1 className="mt-1 text-2xl font-bold text-slate-900">LINE 圖文選單版本與發布</h1><p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">先建立草稿，確認內容後再發布。修改草稿不會直接影響顧客目前看到的選單。</p></header>
+    <div className="line-workbench">
+      <header className="admin-page-header"><p className="eyebrow">LINE 顧客入口</p><h1 className="mt-1 text-2xl font-bold text-slate-900">LINE 圖文選單版本與發布</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">先建立草稿，確認內容後再發布。修改草稿不會直接影響顧客目前看到的選單。</p></header>
 
-      {oneParam("err") && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">操作失敗：{oneParam("err")}{oneParam("error_id") ? `（錯誤識別碼：${oneParam("error_id")}）` : ""}</p>}
-      {oneParam("ok") && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">已成功發布 LINE 圖文選單。</p>}
-      {oneParam("saved") && <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">草稿版本已儲存；線上選單沒有變更。</p>}
-      {oneParam("cloned") && <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">已複製為新草稿，可安全修改後再發布。</p>}
-      {oneParam("alias_saved") && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">頁籤捷徑已同步至 LINE。</p>}
-      {oneParam("alias_removed") && <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">頁籤捷徑已從 LINE 移除。</p>}
-      {oneParam("scheduled") && <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">顯示期間已排程。</p>}
-      {oneParam("schedule_cancelled") && <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700">尚未開始的排程已取消。</p>}
+      {oneParam("err") && <p role="alert" className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700">操作失敗：{oneParam("err")}{oneParam("error_id") ? `（錯誤識別碼：${oneParam("error_id")}）` : ""}</p>}
+      {oneParam("ok") && <p role="status" className="border-l-4 border-emerald-600 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">已成功發布 LINE 圖文選單。</p>}
+      {oneParam("saved") && <p role="status" className="border-l-4 border-sky-600 bg-sky-50 px-4 py-3 text-sm text-sky-800">草稿版本已儲存；線上選單沒有變更。</p>}
+      {oneParam("cloned") && <p role="status" className="border-l-4 border-sky-600 bg-sky-50 px-4 py-3 text-sm text-sky-800">已複製為新草稿，可安全修改後再發布。</p>}
+      {oneParam("alias_saved") && <p role="status" className="border-l-4 border-emerald-600 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">頁籤捷徑已同步至 LINE。</p>}
+      {oneParam("alias_removed") && <p role="status" className="border-l-4 border-sky-600 bg-sky-50 px-4 py-3 text-sm text-sky-800">頁籤捷徑已從 LINE 移除。</p>}
+      {oneParam("scheduled") && <p role="status" className="border-l-4 border-emerald-600 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">顯示期間已排程。</p>}
+      {oneParam("schedule_cancelled") && <p role="status" className="border-l-4 border-sky-600 bg-sky-50 px-4 py-3 text-sm text-sky-800">尚未開始的排程已取消。</p>}
 
       <section className="card p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><h2 className="font-semibold text-slate-900">發布前檢查</h2><p className="mt-1 text-sm leading-6 text-slate-600">全部通過後再發布或安排顯示時間；進階的快速切換功能會在對應區塊另外說明。</p></div><div className="flex flex-wrap gap-2">{lineReadiness.map((item) => <span key={item.label} className={`badge ${item.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{item.ready ? "✓" : "!"} {item.label}</span>)}</div></div></section>
 
@@ -262,7 +262,7 @@ export default async function RichMenuPage({
           />
         </div>
         <div className="space-y-6">
-          <section className="card p-5">
+          <section className="line-panel p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-semibold text-slate-900">目前線上版本</h2>
               <span className={`badge ${publishedId ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{publishedId ? "已發布" : "未發布"}</span>
@@ -270,12 +270,12 @@ export default async function RichMenuPage({
             {publishedId ? (
               <div className="mt-4 space-y-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/admin/richmenu-image${publishedVersionId ? `?version=${encodeURIComponent(publishedVersionId)}` : ""}`} alt="目前已發布的 LINE 圖文選單" className="w-full rounded-xl border border-slate-200" />
+                <img src={`/api/admin/richmenu-image${publishedVersionId ? `?version=${encodeURIComponent(publishedVersionId)}` : ""}`} alt="目前已發布的 LINE 圖文選單" className="w-full rounded-sm border border-slate-200" />
                 <form action={unpublishRichMenuAction}><SubmitButton className="btn btn-danger w-full">取消發布</SubmitButton></form>
               </div>
             ) : <p className="mt-3 text-sm text-slate-500">尚未設定 LINE 預設圖文選單。</p>}
           </section>
-          <section className="card p-5">
+          <section className="line-panel p-5">
             <h2 className="font-semibold text-slate-900">版本紀錄</h2>
             <div className="mt-4 space-y-3">
               {versions.length === 0 ? (
@@ -316,7 +316,7 @@ export default async function RichMenuPage({
       {compareBaseline && compareTarget && <section className="card p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-slate-900">歷史比較</h2><p className="mt-1 text-sm text-slate-500">v{compareBaseline.version_no}「{compareBaseline.name}」→ v{compareTarget.version_no}「{compareTarget.name}」</p></div><a href={`/admin/richmenu?draft=${encodeURIComponent(compareTarget.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">關閉比較</a></div>{differences.length === 0 ? <p className="mt-4 text-sm text-slate-500">兩個版本的可發布設定相同。</p> : <ul className="mt-4 space-y-2 text-sm text-slate-600">{differences.map((difference) => <li key={difference} className="rounded-lg bg-slate-50 px-3 py-2">{difference}</li>)}</ul>}</section>}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="card p-5">
+        <section className="line-panel p-5">
           <div>
             <h2 className="font-semibold text-slate-900">多頁選單捷徑</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">需要讓顧客在多個圖文選單之間切換時才使用。LINE 將這個捷徑稱為 Alias；每個捷徑只能連到同一品牌、且已上傳圖片的版本。</p>
@@ -333,7 +333,7 @@ export default async function RichMenuPage({
           </form>
           <div className="mt-5 space-y-2">
             {aliases.length === 0 ? <p className="text-sm text-slate-600">尚未建立頁籤捷徑。</p> : aliases.map((alias) => (
-              <div key={alias.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div key={alias.id} className="flex flex-col gap-2 border-b border-slate-200 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-medium text-slate-800">{alias.label} <span className="font-mono text-xs text-slate-600">{alias.alias_id}</span></p>
                   <p className="mt-1 text-xs text-slate-600">{alias.status === "ready" ? `對應 v${versions.find((version) => version.id === alias.version_id)?.version_no ?? "?"}` : alias.status === "removed" ? "已移除" : "尚未就緒"}</p>
@@ -345,7 +345,7 @@ export default async function RichMenuPage({
           </div>
         </section>
 
-        <section className="card p-5">
+        <section className="line-panel p-5">
           <div><h2 className="font-semibold text-slate-900">顯示期間與排程</h2><p className="mt-1 text-sm text-slate-500">時間以台北時間輸入；開始時切換到指定版本，結束後回復排程開始前的版本。</p></div>
           <form action={createRichMenuScheduleAction} className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="text-sm sm:col-span-2"><span className="label">顯示版本</span><select name="version_id" required className="input"><option value="">請選擇</option>{lineBackedVersions.map((version) => <option key={version.id} value={version.id}>v{version.version_no} · {version.name}</option>)}</select></label>
@@ -355,7 +355,7 @@ export default async function RichMenuPage({
           </form>
           <div className="mt-5 space-y-2">
             {schedules.length === 0 ? <p className="text-sm text-slate-400">尚無顯示排程。</p> : schedules.map((schedule) => (
-              <div key={schedule.id} className="rounded-xl border border-slate-200 p-3">
+              <div key={schedule.id} className="border-b border-slate-200 py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-slate-800">v{versions.find((version) => version.id === schedule.version_id)?.version_no ?? "?"} · {SCHEDULE_STATUS[schedule.status]}</p>

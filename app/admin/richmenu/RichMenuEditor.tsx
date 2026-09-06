@@ -50,7 +50,7 @@ export default function RichMenuEditor({
   }
 
   return (
-    <form action={saveAction} className="card space-y-6 p-5">
+    <form action={saveAction} className="line-panel space-y-6 p-5">
       <input type="hidden" name="layout" value={layout} />
       <input type="hidden" name="template_key" value={template} />
 
@@ -63,7 +63,7 @@ export default function RichMenuEditor({
           <input name="name" defaultValue={initialName} className="input" maxLength={120} required />
         </label>
         <label className="block text-sm">
-          <span className="mb-1 block font-medium text-slate-600">選單列文字(聊天室下方那條)</span>
+          <span className="mb-1 block font-medium text-slate-600">聊天室下方的選單名稱</span>
           <input name="chat_bar_text" defaultValue={initialChatBar} className="input" maxLength={14} required />
         </label>
         <label className="block text-sm"><span className="mb-1 block font-medium text-slate-600">快速模板</span><select value={template} onChange={(event) => applyTemplate(event.target.value as RichMenuTemplateKey)} className="input"><option value="custom">自訂</option>{Object.entries(RICH_MENU_TEMPLATES).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
@@ -83,12 +83,12 @@ export default function RichMenuEditor({
             ))}
           </select>
         </label>
-        <div className="rounded-xl bg-brand-50 p-3 text-sm text-brand-700">
-          背景圖片尺寸需為 <strong>{spec.width} × {spec.height} px</strong>(共 {spec.slots} 格)。上傳時系統會自動裁成此尺寸。
+        <div className="border-l-2 border-emerald-600 bg-emerald-50 p-3 text-sm text-emerald-800">
+          背景圖片尺寸需為 <strong>{spec.width} × {spec.height} 像素</strong>，共 {spec.slots} 格。上傳時系統會自動裁成此尺寸。
         </div>
         {/* 實際圖稿與版面示意 */}
         <div
-          className="relative isolate grid gap-1 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 p-1"
+          className="relative isolate grid gap-1 overflow-hidden rounded-sm border border-slate-300 bg-slate-100 p-1"
           style={{
             gridTemplateColumns: `repeat(${spec.cols}, 1fr)`,
             aspectRatio: `${spec.width} / ${spec.height}`,
@@ -100,7 +100,7 @@ export default function RichMenuEditor({
           )}
           {slots.map((s, i) => (
             <div key={i} className={`relative z-10 flex items-end justify-center rounded border border-white/80 px-1 pb-2 text-center text-[11px] font-semibold sm:text-xs ${template === "custom" ? "bg-white text-slate-500" : "bg-slate-950/5 text-slate-700"}`}>
-              <span className="rounded-full bg-white/90 px-2 py-1 shadow-sm">{i + 1}. {ACTION_OPTIONS.find((o) => o.value === s.action)?.label ?? "(未設定)"}</span>
+              <span className="rounded-sm border border-slate-200 bg-white/90 px-2 py-1">{i + 1}. {ACTION_OPTIONS.find((o) => o.value === s.action)?.label ?? "尚未設定"}</span>
             </div>
           ))}
         </div>
@@ -109,9 +109,9 @@ export default function RichMenuEditor({
       {/* ③ 每格動作 */}
       <section className="space-y-3">
         <h3 className="font-semibold text-slate-900">③ 每格動作</h3>
-        <p className="text-sm text-slate-400">設定顧客點每一格時要做什麼(格號對應上方示意圖)。</p>
+        <p className="text-sm text-slate-500">設定顧客點選每一格後要前往哪裡；格號與上方示意圖一致。</p>
         {slots.map((s, i) => (
-          <div key={i} className="rounded-xl border border-slate-200 p-3">
+          <div key={i} className="border-t border-slate-200 py-3 first:border-t-0">
             <div className="mb-2 text-sm font-medium text-slate-700">
               第 {i + 1} 格
             </div>

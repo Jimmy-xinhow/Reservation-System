@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase-browser";
-import { Brand } from "@/components/Brand";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -67,17 +66,30 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
-      <Brand align="center" size="lg" subtitle="系統管理與品牌營運共用入口" />
-      <form onSubmit={onSubmit} className="card w-full max-w-sm p-6">
-        <h1 className="text-lg font-bold text-slate-900">後台登入</h1>
-        <p className="mt-1 text-sm leading-6 text-slate-500">選擇要前往的工作區；實際權限仍由帳號角色在伺服器端判定。</p>
-        <div className="my-5 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1" role="group" aria-label="後台入口">
+    <main className="admin-login-shell">
+      <aside className="admin-login-aside">
+        <div className="flex items-center gap-3 text-xs font-semibold tracking-[.08em]">
+          <span className="grid h-8 w-8 place-items-center border border-white/40 font-mono text-[10px]">XH</span>
+          XINHOW OPERATIONS
+        </div>
+        <div>
+          <h1>把今天要處理的事，放在同一個工作區。</h1>
+          <p>品牌營運人員處理預約、報名與顧客；系統管理人員負責跨品牌開通、權限與服務健康。登入後只會看到帳號獲授權的範圍。</p>
+        </div>
+        <span className="text-[10px] tracking-[.08em] text-[#91a29a]">BOOKING · EVENTS · CUSTOMER OPERATIONS</span>
+      </aside>
+      <section className="admin-login-main">
+        <form onSubmit={onSubmit} className="admin-login-form">
+          <header className="admin-login-form-header">
+            <p className="mb-2 text-[11px] font-semibold tracking-[.08em] text-emerald-800">安全登入</p>
+            <h2>選擇工作區並登入</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">同一組帳號可依授權進入品牌營運或系統管理。</p>
+          </header>
+          <div className="admin-login-switch" role="group" aria-label="後台入口">
           <button
             type="button"
             aria-pressed={entry === "brand"}
             onClick={() => setEntry("brand")}
-            className={`min-h-11 rounded-lg px-3 text-sm font-medium transition ${entry === "brand" ? "bg-white text-brand-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
           >
             品牌營運後台
           </button>
@@ -85,43 +97,21 @@ export default function AdminLoginPage() {
             type="button"
             aria-pressed={entry === "platform"}
             onClick={() => setEntry("platform")}
-            className={`min-h-11 rounded-lg px-3 text-sm font-medium transition ${entry === "platform" ? "bg-white text-indigo-700 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
           >
             系統管理後台
           </button>
-        </div>
-        <label htmlFor="admin-email" className="label">Email</label>
-        <input
-          id="admin-email"
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-          className="input mb-4"
-          placeholder="you@example.com"
-        />
-        <label htmlFor="admin-password" className="label">密碼</label>
-        <input
-          id="admin-password"
-          type="password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-          className="input mb-5"
-          placeholder="••••••••"
-        />
-        {error && (
-          <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>
-        )}
-        <button type="submit" disabled={loading} className="btn btn-primary w-full">
-          {loading ? "登入中…" : `登入${entry === "platform" ? "系統管理後台" : "品牌營運後台"}`}
-        </button>
-        <p className="mt-4 text-center text-xs leading-5 text-slate-400">
-          系統管理者負責跨品牌系統層；品牌管理者與員工只會看到獲授權的品牌資料。
-        </p>
-      </form>
+          </div>
+          <div className="admin-login-fields">
+            <label htmlFor="admin-email"><span className="label">Email</span><input id="admin-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="input" placeholder="name@company.com" /></label>
+            <label htmlFor="admin-password"><span className="label">密碼</span><input id="admin-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="input" placeholder="輸入登入密碼" /></label>
+          </div>
+          {error && <p role="alert" className="admin-login-error">{error}</p>}
+          <button type="submit" disabled={loading} className="btn btn-primary mt-5 w-full">
+            {loading ? "正在確認帳號…" : `進入${entry === "platform" ? "系統管理" : "品牌營運"}`}
+          </button>
+          <p className="mt-4 text-xs leading-5 text-slate-500">實際權限仍由帳號角色在伺服器端判定；選錯工作區不會讓帳號取得額外資料。</p>
+        </form>
+      </section>
     </main>
   );
 }

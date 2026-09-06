@@ -20,20 +20,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   if (platformAdmin && (isPlatformShell || !member)) {
     return (
-      <div className="admin-shell min-h-screen bg-[#f1f4ff]">
+      <div className="admin-shell admin-shell-platform min-h-screen">
         <AdminNav role="owner" isPlatformAdmin platformAccessType={platformAdmin.accessType} platformPermissions={platformAdmin.permissions} hasBrandContext={Boolean(member)} />
-        <div className="min-h-screen lg:pl-64">
-          <header className="sticky top-0 z-20 border-b border-indigo-100 bg-white/95 backdrop-blur">
-            <div className="mx-auto flex min-h-14 max-w-[1480px] flex-wrap items-center gap-2 px-4 py-2 pl-16 sm:flex-nowrap sm:gap-3 sm:px-6 sm:pl-16 lg:px-6 lg:pl-6">
-              <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#18245b] text-sm font-bold tracking-wide text-white shadow-sm sm:h-10 sm:w-10">XP</div>
+        <div className="min-h-screen lg:pl-56">
+          <header className="admin-topbar">
+            <div className="admin-topbar-inner">
+              <div className="admin-wordmark">
+                <div className="admin-wordmark-mark" aria-hidden="true">XP</div>
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-bold tracking-tight text-slate-950 sm:text-base">XINHOW PLATFORM</div>
-                  <div className="hidden truncate text-xs text-indigo-700 md:block">系統管理控制台 · 跨品牌管理</div>
+                  <div className="admin-wordmark-title">XINHOW PLATFORM</div>
+                  <div className="admin-wordmark-subtitle">跨品牌營運控制台</div>
                 </div>
               </div>
               <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-                <span className="badge hidden bg-indigo-50 text-indigo-700 md:inline-flex">{platformAccessLabel(platformAdmin.accessType)}</span>
+                <span className="badge hidden bg-emerald-50 text-emerald-800 md:inline-flex">{platformAccessLabel(platformAdmin.accessType)}</span>
                 {hasDualAdminContext && (
                   <a href="/admin/dashboard" className="btn btn-secondary min-h-10 shrink-0 whitespace-nowrap px-3 py-1.5 text-xs">
                     <span className="sm:hidden">品牌後台</span><span className="hidden sm:inline">返回品牌後台</span>
@@ -43,7 +43,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </div>
             </div>
           </header>
-          <main className="mx-auto w-full max-w-[1480px] p-4 sm:p-5 lg:p-6">{children}</main>
+          <main className="admin-content">{children}</main>
         </div>
       </div>
     );
@@ -66,12 +66,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   };
 
   return (
-    <div className="admin-shell min-h-screen bg-[#f5f8fb]">
+    <div className="admin-shell admin-shell-brand min-h-screen">
       <AdminProductTelemetry />
       <AdminNav role={member.role} isPlatformAdmin={Boolean(platformAdmin)} platformAccessType={platformAdmin?.accessType} platformPermissions={platformAdmin?.permissions} hasBrandContext modules={modules} />
-      <div className="min-h-screen lg:pl-64">
-        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto flex min-h-14 max-w-[1480px] flex-wrap items-center gap-2 px-4 py-2 pl-16 sm:gap-3 sm:px-6 sm:pl-16 lg:flex-nowrap lg:px-6 lg:pl-6">
+      <div className="min-h-screen lg:pl-56">
+        <header className="admin-topbar">
+          <div className="admin-topbar-inner flex-wrap sm:flex-nowrap">
             <div className="min-w-0 flex-1 overflow-hidden"><Brand name={member.clinicName} subtitle="管理後台" /></div>
             {member.clinics.length > 1 && (
               <form action={setActiveClinicAction} className="order-3 flex w-full items-center gap-2 sm:order-none sm:w-auto">
@@ -91,7 +91,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1480px] p-4 sm:p-5 lg:p-6">{children}</main>
+        <main className="admin-content">{children}</main>
       </div>
     </div>
   );

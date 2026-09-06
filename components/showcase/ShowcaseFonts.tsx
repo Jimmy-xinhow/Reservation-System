@@ -74,10 +74,10 @@ const fontVariables = [
 ].join(" ");
 
 const systemFontVariables = {
-  "--font-showcase-huninn": '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei"',
-  "--font-showcase-lxgw-wenkai-tc": '"Noto Serif TC", "Songti TC", "PMingLiU"',
-  "--font-showcase-noto-sans-tc": '"Noto Sans TC", "PingFang TC", "Microsoft JhengHei"',
-  "--font-showcase-noto-serif-tc": '"Noto Serif TC", "Songti TC", "PMingLiU"',
+  "--font-showcase-huninn": '"Chiron Hei HK Variable", "PingFang TC", "Microsoft JhengHei"',
+  "--font-showcase-lxgw-wenkai-tc": '"Chiron Sung HK Variable", "Songti TC", "PMingLiU"',
+  "--font-showcase-noto-sans-tc": '"Chiron Hei HK Variable", "PingFang TC", "Microsoft JhengHei"',
+  "--font-showcase-noto-serif-tc": '"Chiron Sung HK Variable", "Songti TC", "PMingLiU"',
 } as React.CSSProperties;
 
 export function ShowcaseFonts({ children }: { children: React.ReactNode }) {
