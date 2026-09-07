@@ -303,9 +303,10 @@ function FitnessHeader({ brand }: { brand: PublicBrandPageData }) {
 function FitnessSchedule({ brand }: { brand: PublicBrandPageData }) {
   return (
     <div className={styles.fitnessSchedule}>
-      <div className={styles.fitnessScheduleHead}><span>類型</span><span>課程</span><span>內容</span><span>預約</span></div>
+      <div className={styles.fitnessScheduleHead}><span>序</span><span>類型</span><span>課程</span><span>內容</span><span>預約</span></div>
       {offersFor(brand, "fitness").map((offer, index) => (
         <a href={offer.href} key={`${offer.id}-${index}`}>
+          <span className={styles.fitnessClassIndex}>{String(index + 1).padStart(2, "0")}</span>
           <span className={styles.fitnessType}>{offer.kind === "event" ? "團體課" : "私人課"}</span>
           <strong>{offer.title}</strong>
           <small>{offer.description}</small>
@@ -341,30 +342,55 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
 
         <section className={styles.fitnessClasses} id="offers">
           <header>
-            <span>本期課表 · 即時名額</span>
-            <h2>{brand.content.section_title}</h2>
-            <p>{brand.content.section_description}</p>
+            <div>
+              <span>CLASS SELECTION · 本期開放</span>
+              <h2>{brand.content.section_title}</h2>
+            </div>
+            <p>{brand.content.section_description}<br />選擇適合的課型後，再查看真正可預約的時間與名額。</p>
           </header>
           <FitnessSchedule brand={brand} />
         </section>
 
-        <section className={styles.fitnessPrinciples} id="method">
-          <p>訓練與預約方式</p>
-          <div>{principles.map((point, index) => <article key={point}><span>0{index + 1}</span><h3>{point}</h3><p>{index === 0 ? "依你的經驗與目標選擇合適入口。" : index === 1 ? "私人課與團體課各自顯示真實可用時段。" : "完成後可隨時查看預約、報名與付款狀態。"}</p></article>)}</div>
+        <section className={styles.fitnessMethod} id="method">
+          <figure>
+            <BrandImage src={brand.content.detail_image_url} alt={`${brand.name} 教練帶領與器械細節`} sizes="(max-width: 820px) 100vw, 48vw" />
+            <figcaption>專注動作品質，也保留每個人的節奏。</figcaption>
+          </figure>
+          <div className={styles.fitnessMethodCopy}>
+            <span>THE STUDIO METHOD · 訓練方式</span>
+            <h2>先理解身體，<br />再安排適合的練習。</h2>
+            <p>{brand.content.about_description}</p>
+            <ol>{principles.map((point, index) => <li key={point}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{point}</h3><p>{index === 0 ? "依你的經驗、身體狀況與目標選擇合適入口。" : index === 1 ? "私人課與團體課分開呈現可用時段與剩餘名額。" : "預約、報名、付款與上課紀錄都能在同一處查看。"}</p></div></li>)}</ol>
+          </div>
         </section>
 
-        <section className={styles.fitnessAbout} id="about">
-          <div className={styles.fitnessAboutCopy}>
-            <span>私人課與團體課</span>
+        <section className={styles.fitnessStart} id="about">
+          <header>
+            <span>CHOOSE YOUR START · 選擇開始方式</span>
             <h2>{brand.content.about_title}</h2>
-            <p>{brand.content.about_description}</p>
+          </header>
+          <div className={styles.fitnessStartRoutes}>
+            {brand.links.booking && <a href={brand.links.booking}>
+              <span>01 / PRIVATE</span>
+              <h3>私人課與體態評估</h3>
+              <p>依需求選擇服務與教練，再查看個別可約時段。</p>
+              <b>查看私人課時段 <i aria-hidden="true">→</i></b>
+            </a>}
+            {brand.links.registration && <a href={brand.links.registration}>
+              <span>02 / GROUP</span>
+              <h3>團體課與主題場次</h3>
+              <p>一次看懂日期、時間、剩餘名額與可使用票種。</p>
+              <b>查看團體課場次 <i aria-hidden="true">→</i></b>
+            </a>}
+          </div>
+          <aside>
+            <figure><BrandImage src={brand.content.gallery_image_url} alt={`${brand.name} 教室空間`} sizes="(max-width: 820px) 100vw, 38vw" /></figure>
             <dl>
-              <div><dt>私人課</dt><dd>選擇服務與個別時段</dd></div>
-              <div><dt>團體課</dt><dd>依場次、名額與票種報名</dd></div>
+              <div><dt>適合對象</dt><dd>初學者到持續練習者</dd></div>
+              <div><dt>課程形式</dt><dd>私人課／團體課</dd></div>
               <div><dt>上課地點</dt><dd>{brand.address ?? "預約時確認"}</dd></div>
             </dl>
-          </div>
-          <figure><BrandImage src={brand.content.gallery_image_url} alt={`${brand.name} 教室與器械細節`} sizes="(max-width: 760px) 100vw, 52vw" /></figure>
+          </aside>
         </section>
 
         <section className={styles.fitnessClosing}>

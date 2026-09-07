@@ -36,8 +36,8 @@
 }
 ```
 
-- 標題：`Noto Serif TC` / `Songti TC`，500。
-- 內文：`Noto Sans TC` / `Microsoft JhengHei`，400–600。
+- 標題：`Chiron Sung HK Variable` / `Songti TC`，500–560；使用已隨專案打包的繁中字型。
+- 內文：`Chiron Hei HK Variable` / `PingFang TC`，400–560；不使用瀏覽器預設字型。
 - 主要按鈕：直角、赭紅底、右側長箭頭；動詞使用「查看療程與時段」。
 - 次要按鈕：無底色、只有底線與箭頭。
 - 圓角：圖片與容器 0–2px；不使用陰影。
@@ -59,8 +59,8 @@
 }
 ```
 
-- 標題：`Arial Narrow` / `Noto Sans TC`，700，緊縮字距。
-- 內文：`Noto Sans TC`，400–600。
+- 標題：`Chiron Sung HK Variable`，500–560，中文維持自然字距與較寬鬆行高。
+- 內文：`Chiron Hei HK Variable`，400–560；英文編號才使用小尺寸緊縮排版。
 - 主要按鈕：藍色方形按鈕，包含「探索課程」與方向箭頭。
 - 次要按鈕：文字連結配紅色編號，不使用外框卡片。
 - 圓角：0；圖片可用 1px 細框與錯位色塊。
@@ -68,26 +68,27 @@
 
 ## FORME 皮拉提斯
 
-**視覺語氣：** 建築感、克制、具身體動態與教室節奏。  
-**記憶點：** 全版深綠攝影、黃褐色課表線、橫向時段板。
+**視覺語氣：** 溫暖、克制、具身體動態與紙本運動刊物的編輯節奏。
+**記憶點：** 自然攝影、宋體中文標題、編號式課程索引，以及照片與訓練方法並置的內容頁。
 
 ```css
 :root {
-  --forme-night: #0d1917;
-  --forme-green: #18312d;
-  --forme-cream: #e8e8dc;
-  --forme-ochre: #d0a43a;
-  --forme-mist: #9ea9a4;
-  --forme-line: #3f514d;
+  --forme-paper: #eee9df;
+  --forme-sheet: #f8f4eb;
+  --forme-green: #153d34;
+  --forme-ink: #17332d;
+  --forme-brass: #b38736;
+  --forme-line: #bcc2b9;
 }
 ```
 
-- 標題：`Arial Black` / `Noto Sans TC`，700–800；英文字重、中文留白。
-- 內文：`Noto Sans TC`，400–600。
-- 主要按鈕：黃褐色實心、深色文字；文字使用「預約第一堂課」。
-- 課表列：深綠底、細線分隔、右側明確「查看時段／查看場次」。
+- 標題：`Chiron Sung HK Variable`，460–560；中文使用自然字距與 1.3 左右行高，不以放大字級取代排版。
+- 內文：`Chiron Hei HK Variable`，400–560；以 14–17px 與較舒展行距組出層次。
+- 主要按鈕：米白或森林綠實心、清楚的方向箭頭；文字使用「預約第一堂課」。
+- 課表列：暖米色底、編號與細線索引、右側明確「查看時段／查看場次」。
 - 圓角：0；不使用陰影。
-- 內容順序：教室氣氛與行動 → 課表 → 三項訓練原則 → 空間與適合對象 → 預約。
+- 深綠只作導覽、首屏影像遮罩與頁尾錨點，不再鋪成無內容的大色塊。
+- 內容順序：教室氣氛與行動 → 緊湊課程索引 → 教練照片與訓練方法 → 私人／團體課雙入口 → 預約。
 
 ## 手機版驗收規則
 
@@ -105,23 +106,23 @@
     "primary_color": "#914b3d",
     "background": "#f1eee6",
     "text_color": "#242522",
-    "font_heading": "Noto Serif TC",
-    "font_body": "Noto Sans TC"
+    "font_heading": "Chiron Sung HK Variable",
+    "font_body": "Chiron Hei HK Variable"
   },
   "openroom": {
     "primary_color": "#155e9b",
     "secondary_color": "#d34c3f",
     "background": "#eef2f4",
     "text_color": "#132238",
-    "font_heading": "Arial Narrow, Noto Sans TC",
-    "font_body": "Noto Sans TC"
+    "font_heading": "Chiron Sung HK Variable",
+    "font_body": "Chiron Hei HK Variable"
   },
   "forme": {
-    "primary_color": "#d0a43a",
-    "background": "#0d1917",
-    "text_color": "#e8e8dc",
-    "font_heading": "Arial Black, Noto Sans TC",
-    "font_body": "Noto Sans TC"
+    "primary_color": "#b38736",
+    "background": "#eee9df",
+    "text_color": "#17332d",
+    "font_heading": "Chiron Sung HK Variable",
+    "font_body": "Chiron Hei HK Variable"
   }
 }
 ```

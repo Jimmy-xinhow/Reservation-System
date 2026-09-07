@@ -1815,13 +1815,17 @@ invariant(
 invariant(
   "public brand pages keep readable Chinese typography and explicit actions",
   read("components/brand-page/LiveBrandPage.module.css").includes("font-size: 16px") &&
+    read("components/brand-page/LiveBrandPage.module.css").includes('font-family: var(--font-editorial)') &&
     read("components/brand-page/LiveBrandPage.module.css").includes("max-width: 11.5em") &&
     read("components/brand-page/LiveBrandPage.module.css").includes("min-height: 44px") &&
     !read("components/brand-page/LiveBrandPage.module.css").includes("max-width: 9ch") &&
     !read("components/brand-page/LiveBrandPage.module.css").includes("font-size: clamp(64px, 8.8vw, 142px)") &&
     !read("components/brand-page/LiveBrandPage.module.css").includes(":ilho") &&
+    !read("docs/design/three-demo-visual-identity.md").includes("Arial Black") &&
     read("components/brand-page/LiveBrandPage.module.css").includes(".beautyActions .beautyPrimary") &&
     read("components/brand-page/LiveBrandPage.tsx").includes("fitnessHeroMedia") &&
+    read("components/brand-page/LiveBrandPage.tsx").includes("fitnessMethod") &&
+    read("components/brand-page/LiveBrandPage.tsx").includes("fitnessStartRoutes") &&
     read("components/brand-page/LiveBrandPage.tsx").includes("私人課與團體課") &&
     !read("app/page.tsx").includes("ShowcaseFonts") &&
     read("lib/brand-page.ts").includes("教練帶領 · 依你的節奏前進"),
