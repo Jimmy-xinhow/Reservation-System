@@ -1833,6 +1833,10 @@ invariant(
     read("components/brand-page/LiveBrandPage.tsx").includes("fitnessStartRoutes") &&
     read("components/brand-page/LiveBrandPage.tsx").includes("私人課與團體課") &&
     read("components/brand-page/LiveBrandPage.tsx").includes('new Intl.Segmenter("zh-Hant"') &&
+    !read("components/brand-page/LiveBrandPage.tsx").includes('<span>01</span>服務方式') &&
+    !read("components/brand-page/LiveBrandPage.tsx").includes("fitnessScheduleHead") &&
+    !read("components/brand-page/LiveBrandPage.tsx").includes("01 / PRIVATE") &&
+    !read("components/brand-page/LiveBrandPage.tsx").includes("02 / GROUP") &&
     !read("components/brand-page/LiveBrandPage.tsx").includes("不是把內容塞滿，<br />") &&
     !read("app/page.tsx").includes("ShowcaseFonts") &&
     read("lib/brand-page.ts").includes("教練帶領 · 依你的節奏前進"),

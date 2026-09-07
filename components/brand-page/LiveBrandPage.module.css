@@ -38,8 +38,8 @@
 .beautyMark { font-family: var(--font-editorial); font-size: 21px; font-weight: 620; }
 .beautyMark img { display: block; width: auto; max-width: 190px; height: 40px; object-fit: contain; }
 .beautyHeader nav { display: flex; gap: clamp(22px, 3vw, 44px); margin-right: clamp(28px, 4vw, 60px); }
-.beautyHeader nav a { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; font-size: 14px; }
-.beautyHeader nav span { color: var(--accent); font-size: 11px; }
+.beautyHeader nav a { display: inline-flex; align-items: center; min-height: 44px; border-bottom: 1px solid transparent; font-size: 14px; transition: border-color 160ms ease; }
+.beautyHeader nav a:hover { border-color: var(--accent); }
 .beautyHeaderAction, .beautyPrimary { display: inline-flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 50px; padding: 0 19px; background: var(--accent); color: #fffaf5 !important; font-size: 14px; font-weight: 680; }
 .beautyHeaderAction { min-width: 176px; }
 .beautyHero { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(430px, .88fr); min-height: clamp(660px, 80svh, 810px); border-bottom: 1px solid var(--line); }
@@ -58,20 +58,17 @@
 .beautyPrinciples { display: flex; align-items: flex-start; gap: clamp(32px, 6vw, 92px); max-width: 1280px; margin: 0 auto; padding: 44px clamp(24px, 5vw, 64px); }
 .beautyPrinciples > p { flex: 0 0 150px; color: var(--accent); font-size: 13px; }
 .beautyPrinciples > div { display: flex; flex: 1; flex-wrap: wrap; gap: 20px 0; }
-.beautyPrinciples > div p { flex: 1 1 190px; padding: 0 26px; border-left: 1px solid var(--line); }
-.beautyPrinciples span, .beautyPrinciples strong { display: block; }
-.beautyPrinciples span { margin-bottom: 8px; color: var(--accent); font-size: 11px; }
+.beautyPrinciples > div p { flex: 1 1 190px; min-height: 58px; padding: 4px 30px; border-left: 1px solid var(--line); }
 .beautyPrinciples strong { font-family: var(--font-editorial); font-size: 18px; font-weight: 620; line-height: 1.5; }
 .beautyMenu { display: grid; grid-template-columns: minmax(410px, .88fr) minmax(0, 1.12fr); gap: clamp(46px, 6vw, 78px); max-width: 1280px; margin: 0 auto; padding: clamp(82px, 9vw, 124px) clamp(24px, 5vw, 60px); }
 .beautyMenu header { align-self: start; position: sticky; top: 116px; }
 .beautyMenu h2, .beautyMethod h2 { max-width: 18em; margin-top: 18px; font-family: var(--font-editorial); font-size: clamp(34px, 3vw, 43px); font-weight: 520; letter-spacing: -.014em; line-height: 1.42; }
 .beautyMenu header > p:last-child { max-width: 30rem; margin-top: 22px !important; color: var(--muted); font-size: 16px; line-height: 1.85; }
-.beautyTableHead { display: none; }
 .beautyOfferIndex { border-top: 1px solid var(--ink); }
 .beautyOfferIndex > a { display: grid; grid-template-columns: minmax(180px, .8fr) minmax(220px, 1.2fr); gap: 12px 36px; align-items: start; padding: 28px 0; border-bottom: 1px solid var(--line); transition: padding-inline 160ms ease, background 160ms ease; }
 .beautyOfferIndex > a:hover { padding-inline: 10px; background: rgba(255,255,255,.32); }
 .beautyOfferTitle small, .beautyOfferTitle strong { display: block; }
-.beautyOfferTitle small { margin-bottom: 8px; color: var(--accent); font-size: 11px; }
+.beautyOfferTitle small { margin-bottom: 8px; color: var(--accent); font-size: 11px; font-weight: 650; letter-spacing: .08em; }
 .beautyOfferTitle strong { font-family: var(--font-editorial); font-size: clamp(21px, 2vw, 28px); font-weight: 620; line-height: 1.42; }
 .beautyOfferDescription { color: var(--muted); font-size: 15px; line-height: 1.75; }
 .beautyOfferAction { grid-column: 2; display: inline-flex; align-items: center; justify-content: space-between; width: min(100%, 190px); min-height: 44px; margin-top: 2px; border-bottom: 1px solid var(--ink); font-size: 14px; }
@@ -113,29 +110,27 @@
 .educationActions { display: flex; align-items: center; flex-wrap: wrap; gap: 28px; margin-top: 38px; }
 .educationPrimary { min-width: 210px; }
 .educationTextLink { display: inline-flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 44px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.8); font-size: 14px; }
-.educationHeroNumber, .educationFacts { display: none; }
 .educationCourses { position: relative; display: grid; grid-template-columns: minmax(420px, .92fr) minmax(0, 1.08fr); gap: clamp(46px, 6vw, 78px); max-width: 1280px; margin: 0 auto; padding: clamp(82px, 9vw, 124px) clamp(24px, 5vw, 60px); background: var(--paper); color: #182235; }
 .educationCourses::before { position: absolute; inset: 0; z-index: -1; content: ""; background: var(--paper); }
 .educationCourses > header > span { color: var(--red); font-size: 13px; }
 .educationCourses h2, .educationAbout h2, .educationFaq h2 { max-width: 18em; margin-top: 18px; font-family: var(--font-text); font-size: clamp(31px, 2.8vw, 41px); font-weight: 610; letter-spacing: -.018em; line-height: 1.45; }
 .educationCourses header > p { margin-top: 22px !important; color: #60646b; font-size: 16px; line-height: 1.85; }
 .educationCatalog { border-top: 1px solid #182235; }
-.educationCatalog > a { display: grid; grid-template-columns: 52px 112px minmax(0, 1fr); gap: 14px 24px; align-items: start; padding: 27px 0; border-bottom: 1px solid var(--line); transition: padding-inline 160ms ease, background 160ms ease; }
+.educationCatalog > a { display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 14px 26px; align-items: start; padding: 30px 0; border-bottom: 1px solid var(--line); transition: padding-inline 160ms ease, background 160ms ease; }
 .educationCatalog > a:hover { padding-inline: 10px; background: rgba(255,255,255,.38); }
-.educationIndex { color: var(--red); font-size: 13px; }
-.educationType { font-size: 13px; font-weight: 650; }
+.educationType { color: var(--red); font-size: 13px; font-weight: 650; }
 .educationOfferCopy strong, .educationOfferCopy small { display: block; }
 .educationOfferCopy strong { font-family: var(--font-editorial); font-size: clamp(21px, 2vw, 27px); font-weight: 560; line-height: 1.46; }
 .educationOfferCopy small { margin-top: 8px; color: #686b70; font-size: 15px; line-height: 1.7; }
-.educationOfferAction { grid-column: 3; display: inline-flex; justify-content: space-between; width: min(100%, 210px); min-height: 44px; margin-top: 2px; border-bottom: 1px solid #182235; font-size: 14px; }
+.educationOfferAction { grid-column: 2; display: inline-flex; justify-content: space-between; width: min(100%, 210px); min-height: 44px; margin-top: 2px; border-bottom: 1px solid #182235; font-size: 14px; }
 .educationMethod { display: grid; grid-template-columns: minmax(460px, .9fr) minmax(0, 1.1fr); max-width: 1360px; margin: 0 auto; border-top: 1px solid rgba(255,255,255,.25); border-bottom: 1px solid rgba(255,255,255,.25); }
 .educationMethodIntro { padding: clamp(54px, 6vw, 76px); border-right: 1px solid rgba(255,255,255,.25); }
 .educationMethodIntro > p { color: #f08b80; font-size: 13px; }
 .educationMethodIntro h2 { max-width: 18em; margin-top: 22px; font-family: var(--font-text); font-size: clamp(31px, 2.8vw, 41px); font-weight: 610; letter-spacing: -.018em; line-height: 1.45; }
 .educationMethod ol { margin: 0; padding: 0; list-style: none; }
-.educationMethod li { display: grid; grid-template-columns: 48px minmax(0, .9fr) minmax(200px, 1.1fr); align-items: center; gap: 24px; min-height: 146px; padding: 28px clamp(30px, 5vw, 62px); border-bottom: 1px solid rgba(255,255,255,.22); }
+.educationMethod li { display: grid; grid-template-columns: 104px minmax(0, .86fr) minmax(200px, 1.14fr); align-items: center; gap: 24px; min-height: 146px; padding: 28px clamp(30px, 5vw, 62px); border-bottom: 1px solid rgba(255,255,255,.22); }
 .educationMethod li:last-child { border-bottom: 0; }
-.educationMethod li > span { color: #f08b80; font-size: 18px; }
+.educationMethod li > span { color: #f08b80; font-size: 12px; font-weight: 650; letter-spacing: .08em; }
 .educationMethod li > strong { font-size: 18px; }
 .educationMethod li > p { color: var(--muted); font-size: 15px; }
 .educationAbout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(500px, 1.1fr); max-width: 1280px; margin: clamp(82px, 9vw, 118px) auto; padding: 0 clamp(24px, 5vw, 60px); }
@@ -191,11 +186,8 @@
 .fitnessClasses h2 { max-width: 15em; font-size: clamp(30px, 2.8vw, 42px); line-height: 1.4; }
 .fitnessClasses > header > p { max-width: 36rem; color: var(--muted); font-size: 15px; line-height: 1.9; }
 .fitnessSchedule { border-top: 1px solid var(--ink); }
-.fitnessScheduleHead, .fitnessSchedule > a { display: grid; grid-template-columns: 48px 84px minmax(190px, .82fr) minmax(250px, 1.18fr) 148px; gap: 18px; align-items: center; }
-.fitnessScheduleHead { min-height: 46px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; letter-spacing: .08em; }
-.fitnessSchedule > a { min-height: 116px; padding: 22px 0; border-bottom: 1px solid var(--line); transition: background 160ms ease, padding-inline 160ms ease; }
+.fitnessSchedule > a { display: grid; grid-template-columns: 90px minmax(190px, .78fr) minmax(250px, 1.22fr) 148px; gap: 20px; align-items: center; min-height: 124px; padding: 25px 0; border-bottom: 1px solid var(--line); transition: background 160ms ease, padding-inline 160ms ease; }
 .fitnessSchedule > a:hover { padding-inline: 12px; background: rgba(255,255,255,.36); }
-.fitnessClassIndex { color: #9b8c75; font-family: var(--font-editorial); font-size: 14px; }
 .fitnessType { width: fit-content; color: #8a641c; font-size: 12px; font-weight: 620; }
 .fitnessSchedule strong { font-family: var(--font-editorial); font-size: clamp(20px, 1.75vw, 25px); font-weight: 560; line-height: 1.46; }
 .fitnessSchedule small { color: var(--muted); font-size: 14px; line-height: 1.76; }
@@ -209,8 +201,8 @@
 .fitnessMethodCopy > span, .fitnessStart > header > span { color: #8a641c; font-size: 11px; font-weight: 620; letter-spacing: .13em; }
 .fitnessMethodCopy > p { max-width: 34rem; margin-top: 22px !important; color: var(--muted); font-size: 15px; line-height: 1.9; }
 .fitnessMethodCopy ol { margin: 34px 0 0; padding: 0; border-top: 1px solid var(--line); list-style: none; }
-.fitnessMethodCopy li { display: grid; grid-template-columns: 46px 1fr; gap: 18px; padding: 19px 0; border-bottom: 1px solid var(--line); }
-.fitnessMethodCopy li > span { padding-top: 3px; color: #9d762c; font-family: var(--font-editorial); font-size: 13px; }
+.fitnessMethodCopy li { display: grid; grid-template-columns: 78px 1fr; gap: 18px; padding: 21px 0; border-bottom: 1px solid var(--line); }
+.fitnessMethodCopy li > span { padding-top: 5px; color: #9d762c; font-size: 11px; font-weight: 650; letter-spacing: .08em; }
 .fitnessMethodCopy h3 { font-family: var(--font-editorial); font-size: 19px; font-weight: 560; line-height: 1.5; }
 .fitnessMethodCopy li p { margin-top: 5px !important; color: var(--muted); font-size: 13px; line-height: 1.72; }
 .fitnessStart { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(390px, 1.1fr) minmax(270px, .8fr); gap: 0 clamp(28px, 4vw, 52px); max-width: 1320px; margin: 0 auto; padding: clamp(72px, 8vw, 104px) clamp(24px, 5vw, 60px); }
@@ -251,8 +243,8 @@
   .beautyMethod, .educationAbout { grid-template-columns: minmax(0, .86fr) minmax(460px, 1.14fr); }
   .beautyOfferIndex > a { grid-template-columns: 1fr; }
   .beautyOfferAction { grid-column: 1; }
-  .educationCatalog > a { grid-template-columns: 48px 100px minmax(0, 1fr); }
-  .fitnessScheduleHead, .fitnessSchedule > a { grid-template-columns: 42px 72px minmax(150px, .78fr) minmax(210px, 1.22fr) 132px; gap: 14px; }
+  .educationCatalog > a { grid-template-columns: 104px minmax(0, 1fr); }
+  .fitnessSchedule > a { grid-template-columns: 76px minmax(150px, .78fr) minmax(210px, 1.22fr) 132px; gap: 14px; }
   .fitnessStart { grid-template-columns: minmax(230px, .7fr) minmax(390px, 1.3fr); }
   .fitnessStart aside { grid-column: 2; display: grid; grid-template-columns: minmax(210px, .8fr) minmax(180px, 1fr); margin-top: 34px; }
 }
@@ -273,8 +265,7 @@
   .beautyPrinciples { display: block; padding: 32px 22px; }
   .beautyPrinciples > p { margin-bottom: 20px !important; }
   .beautyPrinciples > div { display: block; }
-  .beautyPrinciples > div p { display: grid; grid-template-columns: 34px 1fr; align-items: center; min-height: 58px; padding: 0; border-top: 1px solid var(--line); border-left: 0; }
-  .beautyPrinciples span { margin: 0; }
+  .beautyPrinciples > div p { display: flex; align-items: center; min-height: 64px; padding: 0; border-top: 1px solid var(--line); border-left: 0; }
 
   .beautyMenu, .educationCourses { grid-template-columns: 1fr; gap: 42px; padding: 82px 22px; }
   .fitnessClasses { padding: 72px 22px; }
@@ -283,7 +274,6 @@
   .beautyOfferIndex > a, .educationCatalog > a { grid-template-columns: 1fr; gap: 11px; padding: 24px 0; }
   .beautyOfferAction, .educationOfferAction { grid-column: 1; }
   .educationType { grid-column: 1; }
-  .educationIndex { display: none; }
   .beautyMethod, .educationAbout, .fitnessMethod { grid-template-columns: 1fr; }
   .beautyMethod figure, .educationAbout figure, .fitnessMethod > figure { min-height: 76vw; }
   .beautyMethodCopy, .educationAbout > div, .fitnessMethodCopy { padding: 56px 22px 66px; }
@@ -296,16 +286,15 @@
   .educationHeroImage figcaption, .fitnessHeroRail { right: 12px; bottom: 12px; left: auto; }
   .educationMethod { grid-template-columns: 1fr; border-inline: 0; }
   .educationMethodIntro { padding: 58px 22px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.25); }
-  .educationMethod li { grid-template-columns: 42px 1fr; min-height: 126px; padding: 24px 22px; }
-  .educationMethod li > p { grid-column: 2; }
+  .educationMethod li { grid-template-columns: 1fr; gap: 8px; min-height: 0; padding: 26px 22px; }
   .educationAbout { margin: 82px auto; padding: 0 22px; }
   .educationFaq { grid-template-columns: 1fr; gap: 36px; padding: 0 22px 82px; }
-  .fitnessScheduleHead { display: none; }
-  .fitnessSchedule > a { grid-template-columns: 42px 1fr; gap: 8px 14px; min-height: 0; padding: 22px 0; }
-  .fitnessClassIndex { grid-row: 1 / span 4; }
-  .fitnessType, .fitnessSchedule strong, .fitnessSchedule small, .fitnessBook { grid-column: 2; }
+  .fitnessSchedule > a { grid-template-columns: 1fr; gap: 8px; min-height: 0; padding: 24px 0; }
+  .fitnessType, .fitnessSchedule strong, .fitnessSchedule small, .fitnessBook { grid-column: 1; }
   .fitnessSchedule small { max-width: 32rem; }
   .fitnessBook { width: min(100%, 180px); margin-top: 7px; }
+  .fitnessMethodCopy li { grid-template-columns: 1fr; gap: 6px; }
+  .fitnessMethodCopy li > span { padding-top: 0; }
   .fitnessStart { grid-template-columns: 1fr; gap: 38px; padding: 72px 22px; }
   .fitnessStart aside { grid-column: 1; grid-template-columns: 1fr 1fr; margin-top: 0; }
   .fitnessClosing > div { align-items: stretch; flex-direction: column; }
