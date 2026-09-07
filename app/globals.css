@@ -1002,6 +1002,7 @@ body {
   .admin-table-mobile-cards .tbl td[data-mobile-empty="true"] { display: block; padding: 28px 16px; }
   .admin-table-mobile-cards .tbl td[data-mobile-empty="true"]::before { content: none; }
   .admin-table-mobile-cards .tbl td :where(.flex, form) { min-width: 0; }
+  .admin-table-mobile-cards .tbl td > .badge { justify-self: start; }
   .admin-table-mobile-cards .tbl td .admin-inline-action { min-height: 2.5rem; }
 
   .admin-setup-row {
