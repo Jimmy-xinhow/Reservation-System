@@ -20,5 +20,35 @@ export default async function ResourcesPage() {
     const resourceName = Array.isArray(row.service_resources) ? row.service_resources[0]?.name : row.service_resources?.name;
     return { id: row.id as string, service_id: row.service_id as string, resource_id: row.resource_id as string, quantity: row.quantity as number, service_name: serviceName ?? "未知服務", resource_name: resourceName ?? "未知資源" };
   }) as ResourceAssignment[];
-  return <div className="space-y-6"><div><p className="eyebrow">預約資源</p><h1 className="text-xl font-bold text-slate-900">場地與設備資源</h1><p className="mt-1 text-sm text-slate-500">集中管理可被服務預約占用的場地、設備與人員資源。</p></div><ResourceManager resources={(resources ?? []) as ResourceItem[]} services={(services ?? []) as Array<{ id: string; name: string }>} assignments={assignmentRows} createAction={createResourceAction} toggleAction={toggleResourceAction} assignAction={assignResourceAction} removeAction={removeAssignmentAction} /></div>;
+  const resourceRows = (resources ?? []) as ResourceItem[];
+  const activeResources = resourceRows.filter((resource) => resource.active);
+  const totalCapacity = activeResources.reduce((total, resource) => total + resource.capacity, 0);
+
+  return (
+    <div className="admin-page">
+      <header className="admin-page-header">
+        <div>
+          <p className="eyebrow">預約資源</p>
+          <h1 className="admin-page-title">場地與設備資源</h1>
+          <p className="admin-page-description">管理教室、房間與器材的可用數量，避免不同服務預約到同一個資源。</p>
+        </div>
+      </header>
+
+      <section className="admin-metric-strip grid-cols-3" aria-label="資源摘要">
+        <div className="admin-metric"><span className="admin-metric-label">啟用資源</span><strong className="admin-metric-value">{activeResources.length}</strong></div>
+        <div className="admin-metric"><span className="admin-metric-label">可用總量</span><strong className="admin-metric-value">{totalCapacity}</strong></div>
+        <div className="admin-metric"><span className="admin-metric-label">服務綁定</span><strong className="admin-metric-value">{assignmentRows.length}</strong></div>
+      </section>
+
+      <ResourceManager
+        resources={resourceRows}
+        services={(services ?? []) as Array<{ id: string; name: string }>}
+        assignments={assignmentRows}
+        createAction={createResourceAction}
+        toggleAction={toggleResourceAction}
+        assignAction={assignResourceAction}
+        removeAction={removeAssignmentAction}
+      />
+    </div>
+  );
 }

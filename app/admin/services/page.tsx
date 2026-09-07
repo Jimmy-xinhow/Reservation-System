@@ -17,5 +17,26 @@ export default async function ServicesPage() {
   if (error || addonError) throw new Error(error?.message ?? addonError?.message ?? "讀取服務設定失敗");
   const services = (data ?? []) as ServiceItem[];
   const addons = (addonData ?? []) as ServiceAddon[];
-  return <div className="space-y-8"><div><h1 className="text-xl font-bold text-slate-900">服務與資源</h1><p className="text-sm text-slate-400">管理品牌提供的服務、預約表單、同意欄位與可選加購。</p></div><ServiceManager items={services} createAction={createServiceAction} updateAction={updateServiceAction} toggleAction={toggleServiceAction} deleteAction={deleteServiceAction} /><ServiceAddonManager services={services} addons={addons} createAction={createServiceAddonAction} updateAction={updateServiceAddonAction} toggleAction={toggleServiceAddonAction} /></div>;
+  const activeServices = services.filter((service) => service.active);
+  const resourceOnlyServices = activeServices.filter((service) => service.booking_target === "resource_only");
+  const activeAddons = addons.filter((addon) => addon.active);
+
+  return (
+    <div className="admin-page">
+      <div className="admin-page-header">
+        <div>
+          <p className="eyebrow">預約基礎設定</p>
+          <h1 className="admin-page-title">服務項目與加購</h1>
+          <p className="admin-page-description">設定顧客可預約的服務、售價、所需時間與表單欄位；場地及設備請到資源管理綁定。</p>
+        </div>
+      </div>
+      <div className="admin-metric-strip grid-cols-3">
+        <div className="admin-metric"><span className="admin-metric-label">啟用服務</span><strong className="admin-metric-value">{activeServices.length}</strong></div>
+        <div className="admin-metric"><span className="admin-metric-label">免指定人員</span><strong className="admin-metric-value">{resourceOnlyServices.length}</strong></div>
+        <div className="admin-metric"><span className="admin-metric-label">啟用加購</span><strong className="admin-metric-value">{activeAddons.length}</strong></div>
+      </div>
+      <ServiceManager items={services} createAction={createServiceAction} updateAction={updateServiceAction} toggleAction={toggleServiceAction} deleteAction={deleteServiceAction} />
+      <ServiceAddonManager services={services} addons={addons} createAction={createServiceAddonAction} updateAction={updateServiceAddonAction} toggleAction={toggleServiceAddonAction} />
+    </div>
+  );
 }
