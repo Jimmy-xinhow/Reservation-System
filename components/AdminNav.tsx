@@ -65,6 +65,7 @@ const GROUPS: Group[] = [
       { href: "/admin/calendar", label: "預約日曆", icon: "calendar" },
       { href: "/admin", label: "預約列表", icon: "list", exact: true },
       { href: "/admin/checkout", label: "結帳中心", icon: "membership" },
+      { href: "/admin/attendance", label: "出勤打卡", icon: "checkin" },
       { href: "/admin/handoff", label: "交班待辦", icon: "checkin" },
       { href: "/admin/queue", label: "舊版服務進度", icon: "queue", module: "legacy" },
     ],
@@ -94,6 +95,7 @@ const GROUPS: Group[] = [
   {
     label: "營運中心",
     items: [
+      { href: "/admin/products", label: "商品管理", icon: "membership", adminOnly: true },
       { href: "/admin/beauty", label: "服務營運總覽", icon: "service", module: "beauty", exact: true },
       { href: "/admin/operations/service-records", label: "服務過程紀錄", icon: "list", module: "beauty" },
       { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list", module: "beauty" },
@@ -266,7 +268,7 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platfo
   const [unread, setUnread] = useState(chatUnread);
   const isAdmin = role === "owner" || role === "admin";
   const mode: "brand" | "platform" = isPlatformAdmin && (!hasBrandContext || pathname.startsWith("/admin/platform")) ? "platform" : "brand";
-  const providerAllowed = new Set(["/admin/dashboard", "/admin/calendar", "/admin"]);
+  const providerAllowed = new Set(["/admin/dashboard", "/admin/calendar", "/admin", "/admin/attendance"]);
   const groups = GROUPS.filter((group) => (isAdmin || !group.adminOnly) && (mode === "platform" ? group.platformOnly === true : !group.platformOnly))
     .map((group) => ({
       ...group,

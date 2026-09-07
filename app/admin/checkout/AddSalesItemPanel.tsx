@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { addCatalogSalesItemAction, addCustomSalesItemAction } from "./actions";
 
@@ -22,7 +23,7 @@ type Kind = (typeof KINDS)[number]["key"];
 
 function money(value: number): string { return `NT$${Number(value).toLocaleString("zh-TW")}`; }
 
-export function AddSalesItemPanel({ orderId, services, products, packages }: { orderId: string; services: CatalogSalesItem[]; products: CatalogSalesItem[]; packages: CatalogSalesItem[] }) {
+export function AddSalesItemPanel({ orderId, services, products, packages, canManageProducts }: { orderId: string; services: CatalogSalesItem[]; products: CatalogSalesItem[]; packages: CatalogSalesItem[]; canManageProducts: boolean }) {
   const [kind, setKind] = useState<Kind>(products.length > 0 ? "product" : services.length > 0 ? "service" : packages.length > 0 ? "package" : "custom");
   const catalogs: Record<Exclude<Kind, "custom">, CatalogSalesItem[]> = { service: services, product: products, package: packages };
   const current = kind === "custom" ? [] : catalogs[kind];
@@ -35,6 +36,7 @@ export function AddSalesItemPanel({ orderId, services, products, packages }: { o
       <div className="checkout-item-tabs" role="tablist" aria-label="品項類型">
         {KINDS.map((item) => <button type="button" role="tab" aria-selected={kind === item.key} className={kind === item.key ? "is-active" : ""} key={item.key} onClick={() => setKind(item.key)}>{item.label}{item.key !== "custom" && <span>{catalogs[item.key].length}</span>}</button>)}
       </div>
+      {kind === "product" && canManageProducts && <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"><span>{products.length > 0 ? "商品來自營運中心的商品清單。" : "目前尚未建立可結帳的商品。"}</span><Link href="/admin/products" className="font-semibold text-brand-700 hover:underline">前往商品管理新增 →</Link></div>}
       {kind !== "custom" ? (
         <form action={addCatalogSalesItemAction} className="checkout-add-item-form">
           <input type="hidden" name="order_id" value={orderId} />

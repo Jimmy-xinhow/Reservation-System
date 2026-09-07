@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getAssignedDoctorIds, requireMember } from "@/lib/admin";
+import { getAssignedDoctorIds, hasBrandPermission, requireMember } from "@/lib/admin";
 import { taipeiDateString } from "@/lib/slots";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { PermissionHelpButton } from "@/components/AdminProductTelemetry";
@@ -66,6 +66,7 @@ function taipeiMinute(value: string): number {
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const params = await searchParams;
   const member = await requireMember();
+  const canManageProducts = hasBrandPermission(member, "brand.manage");
   const { clinicId, role } = member;
   const supabase = await createSupabaseServer();
   const { data: productSettings, error: productSettingsError } = await supabase
@@ -211,7 +212,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <section className="admin-section p-4">
           <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">出勤與交班</p><h2 className="font-semibold text-slate-900">我的打卡</h2><p className="mt-1 text-xs leading-5 text-slate-500">{latestAttendance ? `最近：${latestAttendance.event_type === "clock_in" ? "上班" : "下班"} ${new Date(latestAttendance.occurred_at).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })}` : "今天尚無打卡紀錄"}</p></div><Link href="/admin/handoff" className="text-xs font-semibold text-brand-700">交班 {openHandoffTasks.length} 項 →</Link></div>
           {attendanceSettings.click_enabled && <div className="mt-4 grid grid-cols-2 gap-2"><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_in" /><SubmitButton className="btn btn-primary w-full">上班打卡</SubmitButton></form><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_out" /><SubmitButton className="btn btn-secondary w-full">下班打卡</SubmitButton></form></div>}
-          <div className="mt-3 grid grid-cols-2 gap-2"><Link href="/admin/handoff#attendance-scanner" className="btn btn-secondary text-center">掃描 QR</Link><Link href="/admin/handoff#attendance-manager" className="btn btn-secondary text-center">顯示 QR</Link></div>
+          <div className="mt-3 grid grid-cols-2 gap-2"><Link href="/admin/attendance#attendance-scanner" className="btn btn-secondary text-center">掃描 QR</Link><Link href="/admin/attendance#attendance-manager" className="btn btn-secondary text-center">顯示 QR</Link></div>
           <p className={`mt-3 text-xs ${highPriorityHandoffs ? "text-amber-700" : "text-slate-500"}`}>{highPriorityHandoffs ? `${highPriorityHandoffs} 項高優先交班尚未完成` : "目前沒有高優先交班"}</p>
         </section>
       </div>
@@ -220,7 +221,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <section className="admin-section">
           <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">本月營運與庫存</h2><p className="mt-0.5 text-xs text-slate-500">收款、待收、採購與庫存數字使用同一品牌資料。</p></div><Link href="/admin/operations/finance" className="text-xs font-semibold text-brand-700">查看財務摘要 →</Link></div>
           <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-4 sm:divide-y-0"><MoneyMetric label="本月已收" value={monthlyRevenue} /><MoneyMetric label="銷售待收" value={outstandingRevenue} /><MoneyMetric label="本月採購" value={monthlyPurchaseCost} /><MoneyMetric label="庫存售價值" value={stockRetailValue} /></div>
-          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm"><span className={lowStockCount ? "font-medium text-amber-700" : "text-slate-500"}>{lowStockCount ? `${lowStockCount} 項低於補貨提醒量` : "目前沒有低庫存品項"}</span><Link href="/admin/beauty/supply" className="btn btn-secondary px-3 py-1.5">採購與盤點</Link></div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 px-4 py-3 text-sm"><span className={lowStockCount ? "font-medium text-amber-700" : "text-slate-500"}>{lowStockCount ? `${lowStockCount} 項低於補貨提醒量` : "目前沒有低庫存品項"}</span><div className="flex gap-2">{canManageProducts && <Link href="/admin/products" className="btn btn-secondary px-3 py-1.5">商品管理</Link>}<Link href="/admin/beauty/supply" className="btn btn-secondary px-3 py-1.5">採購與盤點</Link></div></div>
         </section>
         <section className="admin-section">
           <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">客服對話</h2><p className="mt-0.5 text-xs text-slate-500">直接看見最近對話與未讀狀態。</p></div><Link href="/admin/chat" className="text-xs font-semibold text-brand-700">開啟客服視窗 →</Link></div>

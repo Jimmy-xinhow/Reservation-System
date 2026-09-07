@@ -1012,7 +1012,6 @@ body {
 .calendar-detail-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .appointment-list-toolbar { width: 100%; align-items: end; flex-wrap: nowrap; }
-.appointment-day-navigation { display: flex; flex: 1 1 auto; align-items: end; gap: 8px; min-width: 0; }
 .appointment-toolbar-date { min-width: 154px; }
 .appointment-toolbar-field { min-width: 150px; }
 .appointment-toolbar-field .input { width: 100%; }
@@ -1071,6 +1070,7 @@ body {
 .attendance-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--admin-border); }
 .attendance-panel-heading h2 { color: #16272d; font-size: 17px; font-weight: 760; }.attendance-panel-heading p:not(.eyebrow) { margin-top: 4px; color: #647078; font-size: 12px; line-height: 1.55; }
 .attendance-live-mark { display: inline-flex; align-items: center; gap: 6px; color: #647078; font-size: 11px; white-space: nowrap; }.attendance-live-mark i { width: 7px; height: 7px; border-radius: 999px; background: #16a34a; box-shadow: 0 0 0 3px #dcfce7; }
+.attendance-live-clock { display: grid; gap: 3px; border-bottom: 1px solid var(--admin-border); background: #f5f8f7; padding: 18px 20px; }.attendance-live-clock span { color: #607077; font-size: 12px; letter-spacing: .03em; }.attendance-live-clock time { color: #14282f; font-family: var(--font-mono); font-size: clamp(2rem,4.5vw,3.25rem); font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: .035em; line-height: 1; }
 .attendance-clock-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 18px 20px; }.attendance-clock-actions .btn { width: 100%; min-height: 48px; }
 .attendance-scan-area { margin: 0 20px 18px; border: 1px solid #dce3e6; background: #f8faf9; padding: 13px; }
 .attendance-scan-toolbar { display: flex; align-items: center; gap: 8px; }.attendance-scan-toolbar strong { margin-right: auto; color: #263840; font-size: 13px; }.attendance-scan-toolbar .input { width: 130px; }
@@ -1108,9 +1108,7 @@ body {
   .calendar-detail { width: 100%; }
 
   .appointment-list-toolbar { align-items: stretch; flex-wrap: wrap; }
-  .appointment-day-navigation { width: 100%; flex-wrap: wrap; }
-  .appointment-day-navigation > .btn { flex: 1 1 calc(33.333% - 6px); }
-  .appointment-toolbar-date { flex: 1 1 100%; }
+  .appointment-toolbar-date { flex: 1 1 160px; }
   .appointment-toolbar-field { min-width: 0; flex: 1 1 100%; }
   .appointment-toolbar-count { width: 100%; margin-left: 0; text-align: right; }
   .checkout-form-section { padding: 16px; }

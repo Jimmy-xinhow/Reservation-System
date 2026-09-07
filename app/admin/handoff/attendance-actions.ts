@@ -15,7 +15,7 @@ function eventType(fd: FormData): AttendanceEventType {
 async function record(clinicId: string, userId: string, type: AttendanceEventType, method: "button" | "qr") {
   const { error } = await createServiceClient().from("attendance_events").insert({ clinic_id: clinicId, user_id: userId, event_type: type, method });
   if (error) throw new Error(`打卡失敗：${error.message}`);
-  revalidatePath("/admin/handoff");
+  revalidatePath("/admin/attendance");
   revalidatePath("/admin/dashboard");
 }
 
@@ -53,7 +53,7 @@ export async function saveAttendanceSettingsAction(fd: FormData): Promise<void> 
     updated_by: member.user.id,
   }, { onConflict: "clinic_id" });
   if (error) throw new Error(`儲存打卡設定失敗：${error.message}`);
-  revalidatePath("/admin/handoff");
+  revalidatePath("/admin/attendance");
   revalidatePath("/admin/dashboard");
 }
 
@@ -71,6 +71,6 @@ export async function saveAttendanceStaffAction(fd: FormData): Promise<void> {
   const { error } = await service.from("attendance_staff").upsert({ clinic_id: member.clinicId, user_id: userId, display_name: displayName || null, line_user_id: lineUserId || null, active: fd.get("active") === "on" }, { onConflict: "clinic_id,user_id" });
   if (error?.code === "23505") throw new Error("這個 LINE 帳號已綁定其他員工");
   if (error) throw new Error(`儲存員工綁定失敗：${error.message}`);
-  revalidatePath("/admin/handoff");
+  revalidatePath("/admin/attendance");
   revalidatePath("/admin/dashboard");
 }

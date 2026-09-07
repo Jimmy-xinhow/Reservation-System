@@ -162,7 +162,7 @@ export default async function TodayPage({
         </div>
       </div>
 
-      <AppointmentDateToolbar initialDate={viewDate} today={today} initialDoctor={fDoctor} initialStatus={fStatus} doctors={doctors ?? []} count={rows.length} />
+      <AppointmentDateToolbar initialDate={viewDate} initialDoctor={fDoctor} initialStatus={fStatus} doctors={doctors ?? []} count={rows.length} />
 
       {settingsUnavailable && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">

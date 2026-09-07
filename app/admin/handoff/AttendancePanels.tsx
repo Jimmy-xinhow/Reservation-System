@@ -13,8 +13,15 @@ export function AttendanceClockPanel({ clickEnabled, qrEnabled, lastEvent }: { c
   const [token, setToken] = useState("");
   const [eventType, setEventType] = useState<"clock_in" | "clock_out">("clock_in");
   const [scanError, setScanError] = useState("");
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => () => stopScanner(), []);
+  useEffect(() => {
+    const update = () => setNow(new Date());
+    update();
+    const timer = window.setInterval(update, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   function stopScanner() {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = null;
@@ -48,6 +55,10 @@ export function AttendanceClockPanel({ clickEnabled, qrEnabled, lastEvent }: { c
 
   return <section className="attendance-clock-panel">
     <div className="attendance-panel-heading"><div><p className="eyebrow">我的出勤</p><h2>上下班打卡</h2><p>{lastEvent ? `最近紀錄：${lastEvent.eventType === "clock_in" ? "上班" : "下班"} · ${new Date(lastEvent.occurredAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false })}` : "今天還沒有打卡紀錄"}</p></div><span className="attendance-live-mark"><i />台北時間</span></div>
+    <div className="attendance-live-clock" aria-live="off">
+      <span>{now ? new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "long", day: "numeric", weekday: "long" }).format(now) : "台北日期載入中"}</span>
+      <time dateTime={now?.toISOString()}>{now ? new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(now) : "--:--:--"}</time>
+    </div>
     {clickEnabled && <div className="attendance-clock-actions"><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_in" /><SubmitButton className="btn btn-primary">上班打卡</SubmitButton></form><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_out" /><SubmitButton className="btn btn-secondary">下班打卡</SubmitButton></form></div>}
     {qrEnabled && <div className="attendance-scan-area">
       <div className="attendance-scan-toolbar"><strong>掃描管理者 QR Code</strong><select className="input" value={eventType} onChange={(event) => setEventType(event.target.value as "clock_in" | "clock_out")}><option value="clock_in">上班打卡</option><option value="clock_out">下班打卡</option></select><button type="button" className="btn btn-secondary" onClick={scanning ? stopScanner : startScanner}>{scanning ? "停止掃描" : "開啟相機掃碼"}</button></div>
@@ -84,5 +95,5 @@ export function AttendanceQrBoard({ enabled, refreshSeconds }: { enabled: boolea
   const remaining = Math.max(0, Math.ceil((new Date(expiresAt || 0).getTime() - now) / 1000));
   const svg = useMemo(() => token ? createQrSvg(token) : "", [token]);
   if (!enabled) return <div className="attendance-qr-disabled">啟用 QR 打卡後，這裡會顯示自動更新的員工打卡碼。</div>;
-  return <div className="attendance-qr-board">{error ? <p className="notice notice-error">{error}</p> : <><div className="attendance-qr-image" dangerouslySetInnerHTML={{ __html: svg }} /><strong>{remaining} 秒後更新</strong><code>{token}</code><p>員工登入後台「交班待辦」，以相機掃描此碼。</p></>}</div>;
+  return <div className="attendance-qr-board">{error ? <p className="notice notice-error">{error}</p> : <><div className="attendance-qr-image" dangerouslySetInnerHTML={{ __html: svg }} /><strong>{remaining} 秒後更新</strong><code>{token}</code><p>員工登入後台「出勤打卡」，以相機掃描此碼。</p></>}</div>;
 }
