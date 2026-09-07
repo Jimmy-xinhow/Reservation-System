@@ -290,7 +290,7 @@ export default async function TodayPage({
         </section>
       )}
 
-      <div className="admin-table-shell">
+      <div className="admin-table-shell admin-table-mobile-cards">
         <table className="tbl">
           <thead>
             <tr>
@@ -307,43 +307,43 @@ export default async function TodayPage({
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-10 text-center text-slate-400">
+                <td colSpan={8} className="py-10 text-center text-slate-400" data-mobile-empty="true">
                   本日尚無預約
                 </td>
               </tr>
             )}
             {rows.map((r) => (
               <tr key={r.id}>
-                <td className="font-semibold text-slate-900">
+                <td className="font-semibold text-slate-900" data-label={mode === "time" ? "時間" : "號次"}>
                   {mode === "time" ? formatTime(r.start_at) : `第 ${r.queue_number} 號`}
                 </td>
-                <td>{r.doctors?.name}</td>
-                <td>
+                <td data-label="服務提供者">{r.doctors?.name}</td>
+                <td data-label="顧客">
                   <div className="font-medium text-slate-800">{r.patients?.name}</div>
                   <div className="text-xs text-slate-400">
                     {canViewSensitiveCustomerData(role) ? r.patients?.phone : maskPhone(r.patients?.phone)}
                   </div>
                 </td>
-                <td>
+                <td data-label="服務">
                   {r.services?.name ? (
                     <span className="badge bg-slate-100 text-slate-600">{r.services.name}</span>
                   ) : (
                     <span className="text-slate-300">—</span>
                   )}
                 </td>
-                <td>
+                <td data-label="服務類型">
                   {r.visit_type === "first" ? (
                     <span className="badge bg-accent-500/10 text-accent-600">首次服務</span>
                   ) : (
                     <span className="badge bg-slate-100 text-slate-600">再次服務</span>
                   )}
                 </td>
-                <td>
+                <td data-label="狀態">
                   <span className={`badge ${STATUS_STYLE[r.status] ?? "bg-slate-100 text-slate-600"}`}>
                     {STATUS_LABEL[r.status] ?? "其他狀態"}
                   </span>
                 </td>
-                <td>
+                <td data-label="訂金">
                   {r.deposit_status === "none" ? (
                     <span className="text-slate-300">—</span>
                   ) : (
@@ -364,7 +364,7 @@ export default async function TodayPage({
                     </form>
                   )}
                 </td>
-                <td>
+                <td data-label="操作">
                   <div className="flex flex-wrap gap-1.5">
                     {!providerOnly && ["booked", "confirmed", "done"].includes(r.status) && <a href={`/admin/checkout?appointment_id=${r.id}`} className="admin-inline-action text-brand-700">結帳</a>}
                   {r.status !== "cancelled" && r.status !== "done" && (

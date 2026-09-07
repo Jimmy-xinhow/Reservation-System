@@ -159,7 +159,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <div className="admin-page-header"><div><p className="eyebrow">今日營運</p><h1 className="admin-page-title">{role === "provider" ? "我的今日工作台" : "今日工作台"}</h1><p className="admin-page-description">{role === "provider" ? "只顯示已指派給你的預約與今日工作。" : "先處理需要行動的事項，再查看營運趨勢。"}</p></div><div className="flex flex-wrap gap-2">{publicBrandUrl && <Link href={publicBrandUrl} target="_blank" className="btn btn-secondary">品牌形象頁 ↗</Link>}<Link href="/admin/calendar" className="btn btn-secondary">日曆</Link>{role !== "provider" && <Link href="/admin/reports" className="btn btn-primary">報表</Link>}</div></div>
 
       {params.notice === "permission" && (
-        <div role="status" className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
+        <div role="status" className="flex flex-col gap-2 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 sm:flex-row sm:items-center sm:justify-between">
           <span>你的員工權限未包含剛才的功能，因此已安全返回今日工作台。若工作需要使用該功能，請聯絡品牌管理者到「團隊與權限」調整授權。</span>
           <PermissionHelpButton />
         </div>
@@ -197,7 +197,7 @@ function BrandSetupGuide({ items }: { items: SetupItem[] }) {
       </summary>
       <div className="border-t border-brand-100 px-5 pb-5 pt-4">
         <p className="mb-4 text-sm leading-6 text-slate-600">依序處理尚未完成的項目；「需確認」代表可先使用部分功能，但正式上線前仍要測試。</p>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">{items.map((item, index) => <Link key={item.label} href={item.href} className={`rounded-xl border p-4 transition hover:-translate-y-0.5 ${item.status === "done" ? "border-emerald-200 bg-emerald-50" : item.status === "warning" ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`}><div className="flex items-center justify-between gap-2"><span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white ${item.status === "done" ? "bg-emerald-600" : item.status === "warning" ? "bg-amber-500" : "bg-red-600"}`}>{item.status === "done" ? "✓" : index + 1}</span><span className={`text-xs font-medium ${item.status === "done" ? "text-emerald-700" : item.status === "warning" ? "text-amber-700" : "text-red-700"}`}>{item.status === "done" ? "已完成" : item.status === "warning" ? "需確認" : "尚未完成"}</span></div><p className="mt-3 text-sm font-medium text-slate-800">{item.label}</p><p className="mt-1 text-xs leading-5 text-slate-600">{item.reason}</p></Link>)}</div>
+        <div className="admin-setup-list border-y border-slate-200">{items.map((item, index) => <Link key={item.label} href={item.href} className="admin-setup-row" data-status={item.status}><span className="admin-setup-row-number">{item.status === "done" ? "✓" : index + 1}</span><strong>{item.label.replace(/^\d+\.\s*/, "")}</strong><p>{item.reason}</p><span className="admin-setup-row-state">{item.status === "done" ? "已完成" : item.status === "warning" ? "需確認" : "尚未完成"} →</span></Link>)}</div>
       </div>
     </details>
   );

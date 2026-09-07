@@ -142,7 +142,7 @@ export default async function PatientsPage({
         )}
       </form>
 
-      <div className="admin-table-shell">
+      <div className="admin-table-shell admin-table-mobile-cards">
         <table className="tbl">
           <thead>
             <tr>
@@ -158,7 +158,7 @@ export default async function PatientsPage({
           <tbody>
             {patients.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400">
+                <td colSpan={7} className="py-8 text-center text-slate-400" data-mobile-empty="true">
                   {segmentId && !segmentName ? "找不到指定分眾" : keyword ? "查無符合的顧客" : segmentId ? "此分眾目前沒有顧客" : "尚無顧客"}
                 </td>
               </tr>
@@ -172,9 +172,9 @@ export default async function PatientsPage({
                 .filter(Boolean);
               return (
                 <tr key={p.id}>
-                  <td className="font-medium text-slate-800">{p.name}</td>
-                  <td className="text-slate-500">{p.phone}</td>
-                  <td>
+                  <td className="font-medium text-slate-800" data-label="姓名">{p.name}</td>
+                  <td className="text-slate-500" data-label="電話">{p.phone}</td>
+                  <td data-label="標籤">
                     <div className="flex flex-wrap gap-1">
                       {tags.slice(0, 3).map((t) => (
                         <span key={t} className="badge bg-brand-50 text-brand-700">
@@ -183,18 +183,18 @@ export default async function PatientsPage({
                       ))}
                     </div>
                   </td>
-                  <td className="text-slate-500">{c.all}</td>
-                  <td className={c.noShow >= 3 ? "font-semibold text-red-600" : "text-slate-500"}>
+                  <td className="text-slate-500" data-label="預約">{c.all}</td>
+                  <td className={c.noShow >= 3 ? "font-semibold text-red-600" : "text-slate-500"} data-label="未到">
                     {c.noShow}
                   </td>
-                  <td>
+                  <td data-label="狀態">
                     {blocked ? (
                       <span className="badge bg-red-50 text-red-600">停權中</span>
                     ) : (
                       <span className="badge bg-accent-500/10 text-accent-600">正常</span>
                     )}
                   </td>
-                  <td>
+                  <td data-label="操作">
                     <div className="flex items-center gap-3">
                       <Link
                         href={`/admin/patients/${p.id}`}
