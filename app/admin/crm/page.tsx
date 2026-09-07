@@ -178,8 +178,8 @@ export default async function CrmPage() {
             <p className="px-5 py-8 text-sm text-slate-400">尚未建立分眾。</p>
           ) : (
             segments.map((segment) => (
-              <div key={segment.id} className="flex flex-col gap-3 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
+              <div key={segment.id} className={`grid gap-3 px-5 py-4 lg:items-center ${canEdit ? "lg:grid-cols-[minmax(0,1fr)_112px_minmax(280px,auto)]" : "lg:grid-cols-[minmax(0,1fr)_112px]"}`}>
+                <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="font-medium text-slate-800">{segment.name}</h3>
                     <span className={`badge ${segment.active ? "bg-accent-500/10 text-accent-700" : "bg-slate-100 text-slate-500"}`}>
@@ -192,11 +192,11 @@ export default async function CrmPage() {
                     {segment.description ? `｜${segment.description}` : ""}
                   </p>
                 </div>
-                <Link href={`/admin/patients?segment_id=${encodeURIComponent(segment.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">
+                <Link href={`/admin/patients?segment_id=${encodeURIComponent(segment.id)}`} className="btn btn-secondary w-full justify-center px-3 py-1.5 text-xs">
                   查看顧客
                 </Link>
                 {canEdit && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
                     <form action={refreshSegmentAction}>
                       <input type="hidden" name="id" value={segment.id} />
                       <SubmitButton className="btn btn-secondary px-3 py-1.5 text-xs">重新計算</SubmitButton>
@@ -340,9 +340,9 @@ export default async function CrmPage() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-slate-900">投遞狀態</h2>
-            <p className="mt-1 text-sm text-slate-500">這裡只顯示摘要；要追查單筆錯誤、跳過原因與時間範圍，請到營運報表。</p>
+            <p className="mt-1 text-sm text-slate-500">這裡顯示摘要；單筆錯誤、跳過原因與嘗試次數請到投遞紀錄。</p>
           </div>
-          <Link href="/admin/reports" className="btn btn-secondary w-fit px-3 py-1.5 text-xs">查看完整投遞報表</Link>
+          <Link href="/admin/crm/deliveries" className="btn btn-secondary w-fit px-3 py-1.5 text-xs">查看完整投遞紀錄</Link>
         </div>
         <div className="admin-metric-strip grid-cols-2 sm:max-w-md">
           <Stat label="已送達" value={deliverySent ?? 0} />

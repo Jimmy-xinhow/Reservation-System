@@ -25,6 +25,7 @@ interface Clinic {
 
 interface Settings {
   booking_mode: "time" | "number";
+  dashboard_focus: "booking" | "registration" | "mixed";
   first_visit_extends: boolean;
   first_visit_minutes: number | null;
   allow_multi_patient_per_phone: boolean;
@@ -90,7 +91,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   ] = await Promise.all([
     supabase
       .from("clinic_settings")
-      .select("booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url")
+      .select("booking_mode, dashboard_focus, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     supabase
@@ -257,6 +258,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       {activeSection === "booking" && <form action={updateSettingsAction} className="admin-section overflow-hidden">
         <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">預約與營運規則</h2><p className="mt-0.5 text-xs text-slate-500">由上到下完成主要開關、預約限制與公開入口。</p></div></div>
         <div className="grid md:grid-cols-2">
+        <Section title="工作台營運主軸">
+          <label className="w-full text-sm">
+            品牌主要工作流程
+            <select name="dashboard_focus" defaultValue={s.dashboard_focus ?? "mixed"} className="input mt-1">
+              <option value="mixed">綜合營運（預約＋課程報名）</option>
+              <option value="booking">預約／服務為主</option>
+              <option value="registration">課程／活動報名為主</option>
+            </select>
+          </label>
+          <p className="w-full text-xs leading-5 text-slate-500">工作台指標、待辦、常用操作與服務過程紀錄會依這個主軸調整用詞及排序；資料功能不會被關閉。</p>
+        </Section>
         <Section title="標準模組">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="events_enabled" defaultChecked={s.events_enabled} />
@@ -476,13 +488,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-semibold text-slate-900">Email 通知（選用）</h2>
-            <p className="help-text max-w-3xl">品牌管理者可以直接設定 Resend 寄信服務，不需要請平台人員修改部署環境。API key 送出後會加密保管，畫面不會再顯示原始內容。</p>
+            <p className="help-text max-w-3xl">每個品牌使用自己的 Resend 寄信服務，不共用或取得平台 API key。品牌管理者可直接設定，送出後會加密保管且畫面不再顯示原始內容。</p>
           </div>
           <span className={`badge ${emailConfigured ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
             {emailCredentialStatus.source === "vault"
               ? "已由品牌後台安全保管"
               : emailCredentialStatus.source === "environment"
-                ? "目前由舊版伺服器設定提供"
+                ? "既有品牌相容設定（請改用自有 Resend）"
                 : "尚未設定"}
           </span>
         </div>
@@ -523,7 +535,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </fieldset>
         {!canManageSecrets && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">只有品牌管理者可以變更寄件帳號與授權碼。</p>}
         {emailCredentialStatus.source === "environment" && emailCredentialStatus.from && (
-          <p className="text-sm text-slate-600">目前舊版寄件者：{emailCredentialStatus.from}。若要改由品牌後台管理，請同時填寫寄件者與新的 API key。</p>
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">目前是明確列入名單的舊品牌備援寄件者：{emailCredentialStatus.from}。此設定不提供新品牌使用；請同時填寫品牌自己的寄件者與 API key 完成移轉。</p>
         )}
         <p className="text-xs leading-5 text-slate-500">顧客資料需留有 Email 才會收到通知。儲存後請到「外部渠道驗收」執行寄信測試。</p>
       </form>}

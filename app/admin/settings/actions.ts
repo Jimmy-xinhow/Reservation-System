@@ -243,6 +243,9 @@ export async function updateBrandPageAction(fd: FormData): Promise<void> {
 export async function updateSettingsAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const bookingMode = str(fd, "booking_mode") === "number" ? "number" : "time";
+  const dashboardFocus = (["booking", "registration", "mixed"] as const).includes(str(fd, "dashboard_focus") as "booking" | "registration" | "mixed")
+    ? str(fd, "dashboard_focus")
+    : "mixed";
   const depositScope = (["all", "self_pay", "none"] as const).includes(
     str(fd, "deposit_scope") as "all" | "self_pay" | "none",
   )
@@ -254,6 +257,7 @@ export async function updateSettingsAction(fd: FormData) {
     .from("clinic_settings")
     .update({
       booking_mode: bookingMode,
+      dashboard_focus: dashboardFocus,
       first_visit_extends: bool(fd, "first_visit_extends"),
       first_visit_minutes: str(fd, "first_visit_minutes") ? intOr(fd, "first_visit_minutes", 0) : null,
       allow_multi_patient_per_phone: bool(fd, "allow_multi_patient_per_phone"),
@@ -277,4 +281,6 @@ export async function updateSettingsAction(fd: FormData) {
     .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/settings");
+  revalidatePath("/admin/dashboard");
+  revalidatePath("/admin/operations/service-records");
 }

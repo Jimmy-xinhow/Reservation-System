@@ -28,7 +28,7 @@ export function AddSalesItemPanel({ orderId, services, products, packages, canMa
   const current = catalogs[kind];
   const manager = {
     service: { href: "/admin/services", label: "前往服務方案新增", source: "服務來自營運中心的服務方案。" },
-    product: { href: "/admin/products", label: "前往商品管理新增", source: "商品來自設定中心的商品清單。" },
+    product: { href: "/admin/products", label: "前往商品管理新增", source: "商品來自營運中心的商品清單。" },
     package: { href: "/admin/memberships", label: "前往套票管理新增", source: "套票來自會員管理的套票方案。" },
   }[kind];
 

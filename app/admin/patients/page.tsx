@@ -15,6 +15,8 @@ interface Patient {
   id: string;
   name: string;
   phone: string;
+  birthday: string | null;
+  gender: string | null;
   tags: string | null;
   blocked_until: string | null;
   membership_level_id: string | null;
@@ -23,8 +25,6 @@ interface Patient {
 
 interface MembershipLevel { id: string; name: string; active: boolean; }
 interface PatientDetail extends Patient {
-  birthday: string | null;
-  gender: string | null;
   email: string | null;
   marketing_opt_in: boolean;
 }
@@ -35,9 +35,16 @@ interface RecentAppointment {
   doctors: { name: string } | { name: string }[] | null;
   services: { name: string } | { name: string }[] | null;
 }
+interface RecentRegistration {
+  id: string;
+  created_at: string;
+  status: string;
+  events: { title: string } | { title: string }[] | null;
+  event_sessions: { name: string; start_at: string } | { name: string; start_at: string }[] | null;
+}
 
 const PAGE_SIZE = 30;
-const SELECT = "id, name, phone, tags, blocked_until, membership_level_id, created_at";
+const SELECT = "id, name, phone, birthday, gender, tags, blocked_until, membership_level_id, created_at";
 
 function isBlocked(p: Patient): boolean {
   return !!p.blocked_until && new Date(p.blocked_until) > new Date();
@@ -58,6 +65,7 @@ function listHref(filters: { keyword: string; page: number; segmentId: string; p
 }
 
 const APPOINTMENT_STATUS: Record<string, string> = { booked: "已預約", confirmed: "已確認", cancelled: "已取消", done: "已完成", no_show: "未到" };
+const REGISTRATION_STATUS: Record<string, string> = { pending: "待確認", confirmed: "已確認", cancelled: "已取消", waitlisted: "候補", attended: "已出席", no_show: "未到" };
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat("zh-TW", {
@@ -181,8 +189,9 @@ export default async function PatientsPage({
 
   let selectedPatient: PatientDetail | null = null;
   let recentAppointments: RecentAppointment[] = [];
+  let recentRegistrations: RecentRegistration[] = [];
   if (selectedPatientId) {
-    const [{ data: selectedData, error: selectedError }, { data: recentData, error: recentError }] = await Promise.all([
+    const [{ data: selectedData, error: selectedError }, { data: recentData, error: recentError }, { data: registrationData, error: registrationError }] = await Promise.all([
       supabase
         .from("patients")
         .select("id, name, phone, tags, blocked_until, membership_level_id, created_at, birthday, gender, email, marketing_opt_in")
@@ -197,10 +206,18 @@ export default async function PatientsPage({
         .eq("patient_id", selectedPatientId)
         .order("start_at", { ascending: false })
         .limit(8),
+      supabase
+        .from("registrations")
+        .select("id, created_at, status, events(title), event_sessions(name,start_at)")
+        .eq("clinic_id", clinicId)
+        .eq("patient_id", selectedPatientId)
+        .order("created_at", { ascending: false })
+        .limit(8),
     ]);
-    if (selectedError || recentError) throw new Error(selectedError?.message ?? recentError?.message ?? "讀取顧客詳情失敗");
+    if (selectedError || recentError || registrationError) throw new Error(selectedError?.message ?? recentError?.message ?? registrationError?.message ?? "讀取顧客詳情失敗");
     selectedPatient = selectedData as PatientDetail | null;
     recentAppointments = (recentData ?? []) as unknown as RecentAppointment[];
+    recentRegistrations = (registrationData ?? []) as unknown as RecentRegistration[];
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -241,6 +258,8 @@ export default async function PatientsPage({
             <tr>
               <th>姓名</th>
               <th>電話</th>
+              <th>性別</th>
+              <th>生日</th>
               <th>標籤</th>
               <th>預約</th>
               <th>未到</th>
@@ -252,7 +271,7 @@ export default async function PatientsPage({
           <tbody>
             {patients.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-400" data-mobile-empty="true">
+                <td colSpan={10} className="py-8 text-center text-slate-400" data-mobile-empty="true">
                   {segmentId && !segmentName ? "找不到指定分眾" : keyword ? "查無符合的顧客" : segmentId ? "此分眾目前沒有顧客" : "尚無顧客"}
                 </td>
               </tr>
@@ -268,6 +287,8 @@ export default async function PatientsPage({
                 <tr key={p.id}>
                   <td className="font-medium text-slate-800" data-label="姓名">{p.name}</td>
                   <td className="text-slate-500" data-label="電話">{p.phone}</td>
+                  <td className="text-slate-500" data-label="性別">{p.gender || "未填"}</td>
+                  <td className="whitespace-nowrap text-slate-500" data-label="生日">{p.birthday ? p.birthday.replaceAll("-", "/") : "未填"}</td>
                   <td data-label="標籤">
                     <div className="flex flex-wrap gap-1">
                       {tags.slice(0, 3).map((t) => (
@@ -334,12 +355,12 @@ export default async function PatientsPage({
       {selectedPatient && (
         <AdminModal
           title="顧客詳情"
-          description="不離開顧客名單即可修改基本資料、會員等級並查看近期預約。"
+          description="不離開顧客名單即可修改基本資料、會員等級並查看近期預約與課程報名。"
           closeHref={closeDetailHref}
           size="wide"
         >
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
-            <form action={updatePatientDetailsAction} className="space-y-4">
+          <div className="grid lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,.8fr)]">
+            <form action={updatePatientDetailsAction} className="space-y-4 p-5">
               <input type="hidden" name="id" value={selectedPatient.id} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm"><span className="label">姓名</span><input name="name" defaultValue={selectedPatient.name} required maxLength={120} className="input" /></label>
@@ -359,15 +380,17 @@ export default async function PatientsPage({
               </div>
             </form>
 
-            <aside className="space-y-4 border-t border-slate-200 pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+            <aside className="space-y-5 border-t border-slate-200 bg-slate-50/70 p-5 lg:border-l lg:border-t-0">
               <div>
-                <p className="eyebrow">近期預約</p>
+                <p className="eyebrow">顧客摘要</p>
                 <p className="mt-1 text-sm text-slate-500">建檔日期 {formatDateTime(selectedPatient.created_at)}</p>
               </div>
+              <dl className="grid grid-cols-2 gap-px overflow-hidden border border-slate-200 bg-slate-200 text-sm"><div className="bg-white p-3"><dt className="text-xs text-slate-500">性別</dt><dd className="mt-1 font-medium text-slate-800">{selectedPatient.gender || "未填"}</dd></div><div className="bg-white p-3"><dt className="text-xs text-slate-500">生日</dt><dd className="mt-1 font-medium text-slate-800">{selectedPatient.birthday?.replaceAll("-", "/") || "未填"}</dd></div><div className="bg-white p-3"><dt className="text-xs text-slate-500">會員等級</dt><dd className="mt-1 font-medium text-slate-800">{selectedPatient.membership_level_id ? levelName.get(selectedPatient.membership_level_id) ?? "會員" : "一般顧客"}</dd></div><div className="bg-white p-3"><dt className="text-xs text-slate-500">行銷通知</dt><dd className="mt-1 font-medium text-slate-800">{selectedPatient.marketing_opt_in ? "已同意" : "未同意"}</dd></div></dl>
+              <div><h3 className="text-sm font-semibold text-slate-800">近期預約</h3>
               {recentAppointments.length === 0 ? (
-                <p className="rounded-lg bg-slate-50 px-4 py-5 text-sm text-slate-500">目前沒有預約紀錄。</p>
+                <p className="mt-2 border border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">目前沒有預約紀錄。</p>
               ) : (
-                <div className="divide-y divide-slate-200 border-y border-slate-200">
+                <div className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
                   {recentAppointments.map((appointment) => (
                     <div key={appointment.id} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 py-3 text-sm">
                       <span className="font-medium text-slate-800">{formatDateTime(appointment.start_at)}</span>
@@ -377,6 +400,8 @@ export default async function PatientsPage({
                   ))}
                 </div>
               )}
+              </div>
+              <div><h3 className="text-sm font-semibold text-slate-800">近期課程／活動報名</h3>{recentRegistrations.length === 0 ? <p className="mt-2 border border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">目前沒有報名紀錄。</p> : <div className="mt-2 divide-y divide-slate-200 border-y border-slate-200">{recentRegistrations.map((registration) => { const session = one(registration.event_sessions); return <div key={registration.id} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 py-3 text-sm"><span className="font-medium text-slate-800">{one(registration.events)?.title ?? session?.name ?? "課程／活動"}</span><span className="text-xs text-slate-500">{REGISTRATION_STATUS[registration.status] ?? registration.status}</span><span className="col-span-2 text-slate-600">{formatDateTime(session?.start_at ?? registration.created_at)}</span></div>; })}</div>}</div>
             </aside>
           </div>
         </AdminModal>

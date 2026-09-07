@@ -1090,7 +1090,7 @@ body {
 .attendance-panel-heading h2 { color: #16272d; font-size: 17px; font-weight: 760; }.attendance-panel-heading p:not(.eyebrow) { margin-top: 4px; color: #647078; font-size: 12px; line-height: 1.55; }
 .attendance-live-mark { display: inline-flex; align-items: center; gap: 6px; color: #647078; font-size: 11px; white-space: nowrap; }.attendance-live-mark i { width: 7px; height: 7px; border-radius: 999px; background: #16a34a; box-shadow: 0 0 0 3px #dcfce7; }
 .attendance-clock-heading { display: grid; grid-template-columns: minmax(0,1fr) minmax(280px,.9fr); align-items: center; }
-.attendance-heading-clock { display: grid; justify-items: center; gap: 8px; border-left: 1px solid var(--admin-border); padding-left: 18px; text-align: center; }
+.attendance-heading-clock { display: grid; justify-items: start; gap: 8px; border-left: 1px solid var(--admin-border); padding-left: 18px; text-align: left; }
 .live-taipei-clock { color: #14282f; font-family: var(--font-mono); font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: .025em; line-height: 1.4; white-space: nowrap; }
 .live-taipei-clock.is-compact { display: inline-flex; min-height: 36px; align-items: center; border: 1px solid #d7dee1; background: #f8faf9; padding: 0 11px; color: #425159; font-size: 12px; }
 .attendance-clock-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 18px 20px; }.attendance-clock-actions .btn { width: 100%; min-height: 48px; }

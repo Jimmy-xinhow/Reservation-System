@@ -39,12 +39,16 @@ create table if not exists clinic_settings (
   deposit_scope text not null default 'self_pay' check (deposit_scope in ('all','self_pay','none')),
   min_lead_minutes smallint not null default 30,
   max_advance_days smallint not null default 30,
-  -- Email 提醒(寄件人與 provider 僅由 server environment 管理)
+  -- Email 提醒(品牌憑證存 Vault；部署變數僅供明確列入名單的舊品牌備援)
   email_enabled boolean not null default false,
+  dashboard_focus text not null default 'mixed' check (dashboard_focus in ('booking','registration','mixed')),
   updated_at timestamptz default now()
 );
 alter table clinic_settings add column if not exists email_enabled boolean not null default false;
 alter table clinic_settings add column if not exists beauty_operations_enabled boolean not null default false;
+alter table clinic_settings add column if not exists dashboard_focus text not null default 'mixed';
+alter table clinic_settings drop constraint if exists clinic_settings_dashboard_focus_check;
+alter table clinic_settings add constraint clinic_settings_dashboard_focus_check check (dashboard_focus in ('booking','registration','mixed'));
 do $$
 begin
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'clinic_settings' and column_name = 'resend_api_key') then
@@ -4833,6 +4837,7 @@ begin;
 alter table public.clinic_settings add column if not exists beauty_operations_enabled boolean not null default false;
 alter table public.patient_records add column if not exists record_type text not null default 'general';
 alter table public.patient_records add column if not exists appointment_id uuid references public.appointments(id) on delete restrict;
+alter table public.patient_records add column if not exists registration_id uuid references public.registrations(id) on delete restrict;
 alter table public.patient_records add column if not exists treatment_name text;
 alter table public.patient_records add column if not exists assessment text;
 alter table public.patient_records add column if not exists aftercare text;
@@ -4841,8 +4846,11 @@ alter table public.patient_records add column if not exists photo_consent boolea
 alter table public.patient_records add column if not exists recorded_by uuid references auth.users(id) on delete set null;
 alter table public.patient_records add column if not exists updated_at timestamptz not null default now();
 alter table public.patient_records drop constraint if exists patient_records_record_type_check;
-alter table public.patient_records add constraint patient_records_record_type_check check (record_type in ('general','beauty_treatment'));
+alter table public.patient_records add constraint patient_records_record_type_check check (record_type in ('general','beauty_treatment','service_record'));
+alter table public.patient_records drop constraint if exists patient_records_service_source_check;
+alter table public.patient_records add constraint patient_records_service_source_check check (record_type not in ('beauty_treatment','service_record') or ((appointment_id is not null)::integer + (registration_id is not null)::integer = 1));
 create index if not exists patient_records_appointment_idx on public.patient_records (clinic_id, appointment_id, created_at desc);
+create index if not exists patient_records_registration_idx on public.patient_records (clinic_id, registration_id, created_at desc);
 drop trigger if exists trg_patient_records_touch on public.patient_records;
 create trigger trg_patient_records_touch before update on public.patient_records for each row execute function public.touch_updated_at();
 
