@@ -11,6 +11,8 @@ import {
   cancelAppointmentWaitlistAction,
 } from "./appointment-actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { AppointmentDateToolbar } from "./_components/AppointmentDateToolbar";
+import AppointmentEditor from "./appointments/AppointmentEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -62,12 +64,6 @@ function taipeiToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 }
 
-function shiftDate(base: string, days: number): string {
-  const d = new Date(`${base}T00:00:00+08:00`);
-  d.setDate(d.getDate() + days);
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(d);
-}
-
 function maskPhone(phone: string | undefined): string {
   if (!phone) return "";
   return phone.length <= 4 ? "••••" : `${"•".repeat(Math.max(0, phone.length - 4))}${phone.slice(-4)}`;
@@ -76,7 +72,7 @@ function maskPhone(phone: string | undefined): string {
 export default async function TodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ doctor?: string; status?: string; date?: string }>;
+  searchParams: Promise<{ doctor?: string; status?: string; date?: string; modal?: string; appointment_id?: string }>;
 }) {
   const sp = await searchParams;
   const fDoctor = sp.doctor ?? "";
@@ -162,44 +158,11 @@ export default async function TodayPage({
           <span className="badge bg-brand-50 text-brand-700">
             {settingsUnavailable ? "讀不到設定" : mode === "time" ? "時間制" : "號次制"}
           </span>
-          {canOperate(role) && <a href={`/admin/appointments/new?date=${viewDate}&return_to=${encodeURIComponent(dayLink(viewDate))}`} className="btn btn-primary"><span aria-hidden="true">＋</span>新增預約</a>}
+          {canOperate(role) && <a href={`${dayLink(viewDate)}&modal=new`} className="btn btn-primary"><span aria-hidden="true">＋</span>新增預約</a>}
         </div>
       </div>
 
-      <form className="admin-toolbar appointment-list-toolbar text-sm">
-        <a href={dayLink(shiftDate(viewDate, -1))} className="btn btn-secondary px-3 py-1.5">
-          ← 前一天
-        </a>
-        <a href={dayLink(today)} className="btn btn-ghost px-3 py-1.5">
-          今天
-        </a>
-        <a href={dayLink(shiftDate(viewDate, 1))} className="btn btn-secondary px-3 py-1.5">
-          後一天 →
-        </a>
-        <div className="appointment-toolbar-field">
-          <label className="label">日期</label>
-          <input type="date" name="date" defaultValue={viewDate} className="input" />
-        </div>
-        {(doctors ?? []).length > 1 && (
-          <div className="appointment-toolbar-field">
-            <label className="label">服務人員</label>
-            <select name="doctor" defaultValue={fDoctor} className="input">
-              <option value="">全部人員</option>
-              {(doctors ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-          </div>
-        )}
-        <div className="appointment-toolbar-field">
-          <label className="label">狀態</label>
-          <select name="status" defaultValue={fStatus} className="input">
-            <option value="">全部狀態</option>
-            {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </div>
-        <SubmitButton className="btn btn-secondary">套用</SubmitButton>
-        {(fDoctor || fStatus) && <a href={`/admin?date=${viewDate}`} className="btn btn-ghost">清除篩選</a>}
-        <span className="appointment-toolbar-count">{rows.length} 筆</span>
-      </form>
+      <AppointmentDateToolbar initialDate={viewDate} today={today} initialDoctor={fDoctor} initialStatus={fStatus} doctors={doctors ?? []} count={rows.length} />
 
       {settingsUnavailable && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
@@ -296,8 +259,8 @@ export default async function TodayPage({
                 </td>
                 <td data-label="操作">
                   <div className="flex flex-wrap gap-1.5">
-                    {!providerOnly && ["booked", "confirmed", "done"].includes(r.status) && <a href={`/admin/checkout/new?appointment_id=${r.id}`} className="admin-inline-action admin-inline-action-primary">{r.status === "done" ? "結帳" : "完成／結帳"}</a>}
-                    {!providerOnly && ["booked", "confirmed"].includes(r.status) && <a href={`/admin/appointments/${r.id}/reschedule?return_to=${encodeURIComponent(dayLink(viewDate))}`} className="admin-inline-action">改期</a>}
+                    {!providerOnly && ["booked", "confirmed", "done"].includes(r.status) && <a href={`/admin/checkout?modal=new-sale&appointment_id=${r.id}`} className="admin-inline-action admin-inline-action-primary">完成／結帳</a>}
+                    {!providerOnly && ["booked", "confirmed"].includes(r.status) && <a href={`${dayLink(viewDate)}&modal=reschedule&appointment_id=${r.id}`} className="admin-inline-action">改期</a>}
                   {r.status !== "cancelled" && r.status !== "done" && (
                     <>
                       {r.status === "booked" && <StatusBtn id={r.id} status="confirmed" label="確認" />}
@@ -318,6 +281,7 @@ export default async function TodayPage({
           </tbody>
         </table>
       </div>
+      {(sp.modal === "new" || (sp.modal === "reschedule" && sp.appointment_id)) && <AppointmentEditor appointmentId={sp.modal === "reschedule" ? sp.appointment_id : undefined} date={viewDate} returnTo={dayLink(viewDate)} variant="modal" />}
     </div>
   );
 }

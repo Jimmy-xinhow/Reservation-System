@@ -37,6 +37,14 @@ const STATUS_LEGEND = [
   { key: "cancelled", label: "已取消", color: "#dc2626" },
 ];
 
+const PROVIDER_COLORS = ["#0f766e", "#7c3aed", "#c2410c", "#0369a1", "#be123c", "#4d7c0f", "#6d28d9", "#a16207"];
+
+function providerColor(name: string): string {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return PROVIDER_COLORS[hash % PROVIDER_COLORS.length];
+}
+
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date(value));
 }
@@ -116,7 +124,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
     <div className="admin-page">
       <div className="admin-page-header">
         <div><p className="eyebrow">預約營運</p><h1 className="admin-page-title">預約日曆</h1><p className="admin-page-description">以月曆掌握全局，切換週／日檢視後查看人員工作量；點擊預約可直接處理狀態。</p></div>
-        {canOperate && <Link href={`/admin/appointments/new?date=${calendarDate}&return_to=${encodeURIComponent("/admin/calendar")}`} className="btn btn-primary"><span aria-hidden="true">＋</span>新增預約</Link>}
+        {canOperate && <Link href={`/admin/calendar?modal=new&date=${calendarDate}`} className="btn btn-primary"><span aria-hidden="true">＋</span>新增預約</Link>}
       </div>
 
       <section className="admin-toolbar calendar-toolbar">
@@ -169,7 +177,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
                 <div className="calendar-event-meta"><span>{info.event.startStr ? formatTime(info.event.startStr) : "未定"}</span><span>{props.statusLabel}</span></div>
                 <strong>{props.customerName}</strong>
                 <span>{props.serviceName}</span>
-                <small>{props.providerName}</small>
+                <small className="calendar-provider" style={{ color: providerColor(props.providerName) }}><i style={{ backgroundColor: providerColor(props.providerName) }} />{props.providerName}</small>
               </div>
             );
           }}
@@ -191,8 +199,8 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
               <Detail label="聯絡電話" value={selected.customerPhone} />
             </dl>
             <div className="calendar-detail-actions">
-              {canOperate && <Link href={`/admin/appointments/${selected.id}/reschedule?return_to=${encodeURIComponent("/admin/calendar")}`} className="btn btn-secondary"><span aria-hidden="true">✎</span>改期預約</Link>}
-              {canOperate && ["booked", "confirmed", "done"].includes(selected.status) && <Link href={`/admin/checkout/new?appointment_id=${selected.id}`} className="btn btn-primary"><span aria-hidden="true">✓</span>{selected.status === "done" ? "前往結帳" : "完成／結帳"}</Link>}
+              {canOperate && <Link href={`/admin/calendar?modal=reschedule&appointment_id=${selected.id}`} className="btn btn-secondary"><span aria-hidden="true">✎</span>改期預約</Link>}
+              {canOperate && ["booked", "confirmed", "done"].includes(selected.status) && <Link href={`/admin/checkout?modal=new-sale&appointment_id=${selected.id}`} className="btn btn-primary"><span aria-hidden="true">✓</span>{selected.status === "done" ? "前往結帳" : "完成／結帳"}</Link>}
               {canOperate && (selected.status === "booked" || selected.status === "confirmed") && <>
                 {selected.status === "booked" && <form action={updateStatus}><input type="hidden" name="id" value={selected.id} /><input type="hidden" name="status" value="confirmed" /><SubmitButton className="btn btn-primary"><span aria-hidden="true">✓</span>確認預約</SubmitButton></form>}
                 <div className="calendar-detail-secondary-actions">

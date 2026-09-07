@@ -17,9 +17,10 @@ const GROUPS: Array<{ kind: CheckoutSourceOption["kind"]; label: string }> = [
   { kind: "patient", label: "顧客／會員" },
 ];
 
-export default function CreateSalesOrderForm({ options, defaultSource }: { options: CheckoutSourceOption[]; defaultSource: string }) {
+export default function CreateSalesOrderForm({ options, defaultSource, closeHref = "/admin/checkout", embedded = false }: { options: CheckoutSourceOption[]; defaultSource: string; closeHref?: string; embedded?: boolean }) {
   const [source, setSource] = useState(defaultSource);
   const selected = useMemo(() => options.find((option) => option.value === source) ?? null, [options, source]);
+  const [kind, setKind] = useState<CheckoutSourceOption["kind"]>(() => selected?.kind ?? GROUPS.find((group) => options.some((option) => option.kind === group.kind))?.kind ?? "patient");
   const [sourceAmount, setSourceAmount] = useState(() => {
     const option = options.find((item) => item.value === defaultSource);
     return option?.amount === null || option?.amount === undefined ? "" : String(option.amount);
@@ -31,21 +32,32 @@ export default function CreateSalesOrderForm({ options, defaultSource }: { optio
     setSourceAmount(option?.amount === null || option?.amount === undefined ? "" : String(option.amount));
   }
 
+  function changeKind(value: CheckoutSourceOption["kind"]) {
+    setKind(value);
+    setSource("");
+    setSourceAmount("");
+  }
+
+  const visibleOptions = options.filter((option) => option.kind === kind);
+
   return (
-    <form action={createSalesOrderAction} className="admin-section checkout-create-form">
+    <form action={createSalesOrderAction} className={`${embedded ? "checkout-create-form checkout-create-form-modal" : "admin-section checkout-create-form"}`}>
       <div className="checkout-form-section">
         <div className="checkout-form-heading">
           <span>1</span>
           <div><h2>選擇結帳對象</h2><p>可從預約、活動報名或既有顧客開始，不會預設成現場顧客。</p></div>
         </div>
+        <div className="checkout-source-tabs" role="tablist" aria-label="結帳來源類型">
+          {GROUPS.map((group) => {
+            const count = options.filter((option) => option.kind === group.kind).length;
+            return <button key={group.kind} type="button" role="tab" aria-selected={kind === group.kind} className={kind === group.kind ? "is-active" : ""} disabled={count === 0} onClick={() => changeKind(group.kind)}><strong>{group.label}</strong><span>{count} 筆可選</span></button>;
+          })}
+        </div>
         <label className="block text-sm">
-          <span className="label">結帳來源</span>
+          <span className="label">選擇{GROUPS.find((group) => group.kind === kind)?.label}</span>
           <select name="source" className="input" value={source} onChange={(event) => changeSource(event.target.value)} required>
             <option value="" disabled>請選擇結帳對象</option>
-            {GROUPS.map((group) => {
-              const rows = options.filter((option) => option.kind === group.kind);
-              return rows.length > 0 ? <optgroup key={group.kind} label={group.label}>{rows.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup> : null;
-            })}
+            {visibleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
         {selected?.kind === "patient" && <p className="checkout-form-hint">商品、套票或沒有預約的服務：先選擇顧客建立銷售單，再於下一步加入品項與數量。</p>}
@@ -72,7 +84,7 @@ export default function CreateSalesOrderForm({ options, defaultSource }: { optio
       </div>
 
       <div className="checkout-create-actions">
-        <a href="/admin/checkout" className="btn btn-secondary">取消</a>
+        <a href={closeHref} className="btn btn-secondary">取消</a>
         <SubmitButton className="btn btn-primary" disabled={!selected}>建立並開啟銷售單</SubmitButton>
       </div>
     </form>

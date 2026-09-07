@@ -69,6 +69,7 @@ export default function BookingForm({
   returnTo,
   createAction,
   rescheduleAction,
+  embedded = false,
 }: {
   mode: "time" | "number";
   doctors: Doctor[];
@@ -80,6 +81,7 @@ export default function BookingForm({
   returnTo?: string;
   createAction: ServerAction;
   rescheduleAction: ServerAction;
+  embedded?: boolean;
 }) {
   const singleDoctor = doctors.length === 1 ? doctors[0] : null;
   const targetId = initialTargetId ?? "";
@@ -196,13 +198,13 @@ export default function BookingForm({
   const action = isReschedule ? rescheduleAction : createAction;
 
   return (
-    <form action={action} className="admin-section appointment-editor-form overflow-hidden">
-      <div className="border-b border-slate-200 px-5 py-4">
+    <form action={action} className={`${embedded ? "appointment-editor-form appointment-editor-form-modal" : "admin-section appointment-editor-form"} overflow-hidden`}>
+      {!embedded && <div className="border-b border-slate-200 px-5 py-4">
         <h2 className="font-semibold text-slate-950">{isReschedule ? "改期預約" : "建立預約"}</h2>
         <p className="mt-1 text-sm text-slate-500">
           {isReschedule ? "保留原預約紀錄，選擇新的日期與可用時段。" : "依序選擇顧客、服務與時段，確認後儲存。"}
         </p>
-      </div>
+      </div>}
 
       <input type="hidden" name="mode" value={mode} />
       <input type="hidden" name="return_to" value={returnTo ?? "/admin"} />

@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { formatTime } from "@/lib/slots";
 import BookingForm from "../_components/BookingForm";
 import { createAppointmentAction, rescheduleAppointmentAction } from "../appointment-actions";
+import { AdminModal } from "@/components/AdminModal";
 
 interface BookingField {
   key: string;
@@ -39,10 +40,12 @@ export default async function AppointmentEditor({
   appointmentId,
   date,
   returnTo,
+  variant = "page",
 }: {
   appointmentId?: string;
   date?: string;
   returnTo?: string;
+  variant?: "page" | "modal";
 }) {
   const member = await requireOperator();
   const supabase = member.supabase;
@@ -75,6 +78,37 @@ export default async function AppointmentEditor({
     ? [{ id: current.id, doctor_id: current.doctor_id, service_id: current.service_id, label: `${customer} ${formatTime(current.start_at)}` }]
     : [];
 
+  const form = (doctorsResult.data ?? []).length === 0 && (servicesResult.data ?? []).length === 0 ? (
+    <section className="admin-section p-5 text-sm text-slate-600">尚未建立服務、人員或排程，請先完成服務排程設定。</section>
+  ) : (
+    <BookingForm
+      mode={mode}
+      doctors={doctorsResult.data ?? []}
+      services={(servicesResult.data ?? []) as unknown as Array<{ id: string; name: string; booking_target?: "provider_required" | "provider_optional" | "resource_only"; booking_fields?: BookingField[] }>}
+      appointments={appointments}
+      clinicSlug={clinicResult.data?.slug}
+      defaultDate={defaultDate}
+      initialTargetId={current?.id}
+      returnTo={safeReturn(returnTo)}
+      createAction={createAppointmentAction}
+      rescheduleAction={rescheduleAppointmentAction}
+      embedded={variant === "modal"}
+    />
+  );
+
+  if (variant === "modal") {
+    return (
+      <AdminModal
+        title={current ? `改期 · ${customer}` : "新增預約"}
+        description={current ? "選擇新的日期與時段，原預約會保留為取消紀錄。" : "輸入顧客、服務與時段後直接儲存。"}
+        closeHref={safeReturn(returnTo)}
+        size="wide"
+      >
+        {form}
+      </AdminModal>
+    );
+  }
+
   return (
     <div className="admin-page appointment-editor-page">
       <div className="admin-page-header">
@@ -86,22 +120,7 @@ export default async function AppointmentEditor({
         <Link href={safeReturn(returnTo)} className="btn btn-secondary">← 返回</Link>
       </div>
 
-      {(doctorsResult.data ?? []).length === 0 && (servicesResult.data ?? []).length === 0 ? (
-        <section className="admin-section p-5 text-sm text-slate-600">尚未建立服務、人員或排程，請先完成服務排程設定。</section>
-      ) : (
-        <BookingForm
-          mode={mode}
-          doctors={doctorsResult.data ?? []}
-          services={(servicesResult.data ?? []) as unknown as Array<{ id: string; name: string; booking_target?: "provider_required" | "provider_optional" | "resource_only"; booking_fields?: BookingField[] }>}
-          appointments={appointments}
-          clinicSlug={clinicResult.data?.slug}
-          defaultDate={defaultDate}
-          initialTargetId={current?.id}
-          returnTo={safeReturn(returnTo)}
-          createAction={createAppointmentAction}
-          rescheduleAction={rescheduleAppointmentAction}
-        />
-      )}
+      {form}
     </div>
   );
 }

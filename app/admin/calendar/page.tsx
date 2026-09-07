@@ -1,6 +1,7 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { canOperate, getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { CalendarWorkspace } from "./CalendarWorkspace";
+import AppointmentEditor from "../appointments/AppointmentEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,8 @@ function todayTaipei(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 }
 
-export default async function CalendarPage() {
+export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ modal?: string; appointment_id?: string; date?: string }> }) {
+  const params = await searchParams;
   const member = await requireMember();
   const supabase = await createSupabaseServer();
   const assigned = await getAssignedDoctorIds(member);
@@ -19,5 +21,9 @@ export default async function CalendarPage() {
   const { data, error } = await query;
   if (error) throw new Error(error.message);
 
-  return <CalendarWorkspace doctors={(data ?? []) as Doctor[]} initialDate={todayTaipei()} canOperate={canOperate(member.role)} />;
+  const modal = params.modal === "new" || params.modal === "reschedule" ? params.modal : null;
+  return <>
+    <CalendarWorkspace doctors={(data ?? []) as Doctor[]} initialDate={todayTaipei()} canOperate={canOperate(member.role)} />
+    {modal && <AppointmentEditor appointmentId={modal === "reschedule" ? params.appointment_id : undefined} date={params.date} returnTo="/admin/calendar" variant="modal" />}
+  </>;
 }

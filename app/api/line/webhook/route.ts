@@ -5,12 +5,14 @@ import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { bookingPrompt, buildMessageById, menuMessage, replyMyAppointments, replyProgress, welcomeMessage, type MenuConfig } from "@/lib/line-webhook-messages";
 import { safeReply } from "@/lib/line-webhook-reply";
 import { handleStatusPostback } from "@/lib/line-webhook-status";
+import { recordLineAttendance } from "@/lib/attendance";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface LineEvent {
   type: string;
+  webhookEventId?: string;
   replyToken?: string;
   source?: { userId?: string };
   message?: { type?: string; text?: string };
@@ -114,6 +116,16 @@ export async function POST(req: NextRequest) {
          await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName)], lineAccessToken);
       } else if (ev.type === "message" && ev.message?.type === "text") {
         const text = (ev.message.text ?? "").trim();
+        if (text === "上班打卡" || text === "下班打卡") {
+          const result = await recordLineAttendance(svc, {
+            clinicId,
+            lineUserId: ev.source?.userId,
+            eventType: text === "上班打卡" ? "clock_in" : "clock_out",
+            lineEventId: ev.webhookEventId,
+          });
+          await safeReply(ev.replyToken, result.message, lineAccessToken);
+          continue;
+        }
         // 依後台規則(排序)找第一個命中的關鍵字
         const rule = replyRules.find((r) =>
           r.keywords
