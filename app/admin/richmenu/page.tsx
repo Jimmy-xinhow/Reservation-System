@@ -15,6 +15,7 @@ import RichMenuEditor from "./RichMenuEditor";
 import PublishForm from "./PublishForm";
 import { requireAdmin } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { getRichMenuInsightSummary, lineAccessTokenForDestination, type RichMenuInsightSummary } from "@/lib/line";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
@@ -243,7 +244,12 @@ export default async function RichMenuPage({
       {oneParam("scheduled") && <p role="status" className="border-l-4 border-emerald-600 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">顯示期間已排程。</p>}
       {oneParam("schedule_cancelled") && <p role="status" className="border-l-4 border-sky-600 bg-sky-50 px-4 py-3 text-sm text-sky-800">尚未開始的排程已取消。</p>}
 
-      <section className="card p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between"><div><h2 className="font-semibold text-slate-900">發布前檢查</h2><p className="mt-1 text-sm leading-6 text-slate-600">全部通過後再發布或安排顯示時間；進階的快速切換功能會在對應區塊另外說明。</p></div><div className="flex flex-wrap gap-2">{lineReadiness.map((item) => <span key={item.label} className={`badge ${item.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{item.ready ? "✓" : "!"} {item.label}</span>)}</div></div></section>
+      <section className="admin-section">
+        <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">發布前檢查</h2><p className="mt-0.5 text-xs leading-5 text-slate-500">全部通過後再發布或安排顯示時間。</p></div><div className="flex flex-wrap gap-2">{lineReadiness.map((item) => <span key={item.label} className={`badge ${item.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{item.ready ? "✓" : "!"} {item.label}</span>)}</div></div>
+        <ol className="grid divide-y divide-slate-200 text-sm sm:grid-cols-4 sm:divide-x sm:divide-y-0" aria-label="圖文選單發布流程">
+          {["建立草稿", "選擇版型", "設定每格動作", "預覽並發布"].map((step, index) => <li key={step} className="flex items-center gap-2 px-4 py-3"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">{index + 1}</span><span className="font-medium text-slate-700">{step}</span></li>)}
+        </ol>
+      </section>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(20rem,.8fr)]">
         <div className="space-y-6">
@@ -262,7 +268,7 @@ export default async function RichMenuPage({
           />
         </div>
         <div className="space-y-6">
-          <section className="line-panel p-5">
+          <section className="admin-section p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-semibold text-slate-900">目前線上版本</h2>
               <span className={`badge ${publishedId ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{publishedId ? "已發布" : "未發布"}</span>
@@ -271,17 +277,17 @@ export default async function RichMenuPage({
               <div className="mt-4 space-y-3">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/api/admin/richmenu-image${publishedVersionId ? `?version=${encodeURIComponent(publishedVersionId)}` : ""}`} alt="目前已發布的 LINE 圖文選單" className="w-full rounded-sm border border-slate-200" />
-                <form action={unpublishRichMenuAction}><SubmitButton className="btn btn-danger w-full">取消發布</SubmitButton></form>
+                <form action={unpublishRichMenuAction}><ConfirmSubmitButton confirmMessage="確定要取消目前線上的圖文選單嗎？顧客會立即看不到這份選單。" className="btn btn-danger w-full">取消目前線上發布</ConfirmSubmitButton></form>
               </div>
             ) : <p className="mt-3 text-sm text-slate-500">尚未設定 LINE 預設圖文選單。</p>}
           </section>
-          <section className="line-panel p-5">
+          <section className="admin-section p-5">
             <h2 className="font-semibold text-slate-900">版本紀錄</h2>
             <div className="mt-4 space-y-3">
               {versions.length === 0 ? (
                 <p className="text-sm text-slate-400">尚無版本。請先另存第一份草稿。</p>
               ) : versions.map((version) => (
-                <article key={version.id} className={`rounded-xl border p-4 ${version.id === draft?.id ? "border-brand-300 bg-brand-50/50" : "border-slate-200"}`}>
+                <article key={version.id} className={`border-l-2 px-3 py-3 ${version.id === draft?.id ? "border-brand-600 bg-brand-50/50" : "border-slate-200 bg-slate-50/60"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium text-slate-900">v{version.version_no} · {version.name}</p>
@@ -313,10 +319,10 @@ export default async function RichMenuPage({
         </div>
       </div>
 
-      {compareBaseline && compareTarget && <section className="card p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-slate-900">歷史比較</h2><p className="mt-1 text-sm text-slate-500">v{compareBaseline.version_no}「{compareBaseline.name}」→ v{compareTarget.version_no}「{compareTarget.name}」</p></div><a href={`/admin/richmenu?draft=${encodeURIComponent(compareTarget.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">關閉比較</a></div>{differences.length === 0 ? <p className="mt-4 text-sm text-slate-500">兩個版本的可發布設定相同。</p> : <ul className="mt-4 space-y-2 text-sm text-slate-600">{differences.map((difference) => <li key={difference} className="rounded-lg bg-slate-50 px-3 py-2">{difference}</li>)}</ul>}</section>}
+      {compareBaseline && compareTarget && <section className="admin-section p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold text-slate-900">歷史比較</h2><p className="mt-1 text-sm text-slate-500">v{compareBaseline.version_no}「{compareBaseline.name}」→ v{compareTarget.version_no}「{compareTarget.name}」</p></div><a href={`/admin/richmenu?draft=${encodeURIComponent(compareTarget.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">關閉版本比較</a></div>{differences.length === 0 ? <p className="mt-4 text-sm text-slate-500">兩個版本的可發布設定相同。</p> : <ul className="mt-4 divide-y divide-slate-200 border-y border-slate-200 text-sm text-slate-600">{differences.map((difference) => <li key={difference} className="px-3 py-2">{difference}</li>)}</ul>}</section>}
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="line-panel p-5">
+        <section className="admin-section p-5">
           <div>
             <h2 className="font-semibold text-slate-900">多頁選單捷徑</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">需要讓顧客在多個圖文選單之間切換時才使用。LINE 將這個捷徑稱為 Alias；每個捷徑只能連到同一品牌、且已上傳圖片的版本。</p>
@@ -339,13 +345,13 @@ export default async function RichMenuPage({
                   <p className="mt-1 text-xs text-slate-600">{alias.status === "ready" ? `對應 v${versions.find((version) => version.id === alias.version_id)?.version_no ?? "?"}` : alias.status === "removed" ? "已移除" : "尚未就緒"}</p>
                   {alias.last_error && <TechnicalDetails summary="查看同步失敗原因" items={[{ label: "失敗原因", value: alias.last_error }]} />}
                 </div>
-                {alias.status !== "removed" && <form action={removeRichMenuAliasAction}><input type="hidden" name="alias_id" value={alias.alias_id} /><SubmitButton className="btn btn-secondary px-3 py-1.5 text-xs">移除</SubmitButton></form>}
+                {alias.status !== "removed" && <form action={removeRichMenuAliasAction}><input type="hidden" name="alias_id" value={alias.alias_id} /><ConfirmSubmitButton confirmMessage={`確定要移除「${alias.label}」頁籤捷徑嗎？`} className="btn btn-secondary px-3 py-1.5 text-xs">移除頁籤捷徑</ConfirmSubmitButton></form>}
               </div>
             ))}
           </div>
         </section>
 
-        <section className="line-panel p-5">
+        <section className="admin-section p-5">
           <div><h2 className="font-semibold text-slate-900">顯示期間與排程</h2><p className="mt-1 text-sm text-slate-500">時間以台北時間輸入；開始時切換到指定版本，結束後回復排程開始前的版本。</p></div>
           <form action={createRichMenuScheduleAction} className="mt-4 grid gap-3 sm:grid-cols-2">
             <label className="text-sm sm:col-span-2"><span className="label">顯示版本</span><select name="version_id" required className="input"><option value="">請選擇</option>{lineBackedVersions.map((version) => <option key={version.id} value={version.id}>v{version.version_no} · {version.name}</option>)}</select></label>
@@ -362,7 +368,7 @@ export default async function RichMenuPage({
                     <p className="mt-1 text-xs text-slate-500">{formatTaipei(schedule.starts_at)} ～ {formatTaipei(schedule.ends_at)} · 已嘗試 {schedule.attempt_count} 次</p>
                     {schedule.last_error && <TechnicalDetails summary="查看排程失敗原因" items={[{ label: "失敗原因", value: schedule.last_error }]} />}
                   </div>
-                  {schedule.status === "scheduled" && <form action={cancelRichMenuScheduleAction}><input type="hidden" name="schedule_id" value={schedule.id} /><SubmitButton className="btn btn-secondary px-3 py-1.5 text-xs">取消排程</SubmitButton></form>}
+                  {schedule.status === "scheduled" && <form action={cancelRichMenuScheduleAction}><input type="hidden" name="schedule_id" value={schedule.id} /><ConfirmSubmitButton confirmMessage="確定要取消這段尚未開始的顯示排程嗎？" className="btn btn-secondary px-3 py-1.5 text-xs">取消此顯示排程</ConfirmSubmitButton></form>}
                 </div>
               </div>
             ))}
@@ -370,7 +376,7 @@ export default async function RichMenuPage({
         </section>
       </div>
 
-      <section className="card p-5"><div><h2 className="font-semibold text-slate-900">曝光、點擊與轉換</h2><p className="mt-1 text-sm text-slate-500">LINE 提供整份選單曝光與各點擊區域統計；每個區域會同步看見整份選單曝光。預約／報名轉換來自平台匿名漏斗事件，不含姓名、電話或 LINE 使用者識別碼。</p></div><form method="get" className="mt-4 grid gap-3 sm:grid-cols-4"><label className="text-sm sm:col-span-2"><span className="label">版本</span><select name="insight_version" required defaultValue={insightVersion?.id ?? ""} className="input"><option value="">請選擇</option>{lineBackedVersions.map((version) => <option key={version.id} value={version.id}>v{version.version_no} · {version.name}</option>)}</select></label><label className="text-sm"><span className="label">開始日期</span><input name="insight_from" type="date" defaultValue={insightFrom} required className="input" /></label><label className="text-sm"><span className="label">結束日期</span><input name="insight_to" type="date" defaultValue={insightTo} required className="input" /></label><div className="sm:col-span-4"><button type="submit" disabled={!lineReady || lineBackedVersions.length === 0} className="btn btn-primary">讀取官方洞察</button></div></form>{insightError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{insightError}</p>}{insightVersion && insight && !insight.impression && !insight.clicks && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">LINE 因隱私門檻未回傳統計明細；指定期間的點擊不重複使用者少於 20 人時，只會回傳選單識別碼（Rich Menu ID）。</p>}{insightVersion && insight && (insight.impression || insight.clicks) && <div className="mt-5 overflow-x-auto"><table className="tbl"><thead><tr><th>區域</th><th>選單曝光</th><th>區域點擊</th><th>預約完成</th><th>報名完成</th></tr></thead><tbody>{insightVersion.slots.map((slot, index) => { const bounds = insightBounds[index]; const click = insight.clicks?.find((item) => item.bounds.x === bounds.x && item.bounds.y === bounds.y && item.bounds.width === bounds.width && item.bounds.height === bounds.height); const conversion = conversions.get(index + 1) ?? { booking: 0, registration: 0 }; return <tr key={`${insightVersion.id}-${index}`}><td><p className="font-medium text-slate-800">第 {index + 1} 格 · {slot.label}</p><p className="text-xs text-slate-400">{richMenuActionLabel(slot.action)}</p></td><td>{insight.impression?.metrics.count ?? "—"}<div className="text-xs text-slate-400">{insight.impression ? `${insight.impression.metrics.uniqueUsers} 人` : ""}</div></td><td>{click?.metrics.count ?? 0}<div className="text-xs text-slate-400">{click ? `${click.metrics.uniqueUsers} 人` : ""}</div></td><td>{conversion.booking}</td><td>{conversion.registration}</td></tr>; })}</tbody></table></div>}</section>
+      <section className="admin-section p-5"><div><h2 className="font-semibold text-slate-900">曝光、點擊與轉換</h2><p className="mt-1 text-sm text-slate-500">LINE 提供整份選單曝光與各點擊區域統計；每個區域會同步看見整份選單曝光。預約／報名轉換來自平台匿名漏斗事件，不含姓名、電話或 LINE 使用者識別碼。</p></div><form method="get" className="mt-4 grid gap-3 sm:grid-cols-4"><label className="text-sm sm:col-span-2"><span className="label">版本</span><select name="insight_version" required defaultValue={insightVersion?.id ?? ""} className="input"><option value="">請選擇</option>{lineBackedVersions.map((version) => <option key={version.id} value={version.id}>v{version.version_no} · {version.name}</option>)}</select></label><label className="text-sm"><span className="label">開始日期</span><input name="insight_from" type="date" defaultValue={insightFrom} required className="input" /></label><label className="text-sm"><span className="label">結束日期</span><input name="insight_to" type="date" defaultValue={insightTo} required className="input" /></label><div className="sm:col-span-4"><button type="submit" disabled={!lineReady || lineBackedVersions.length === 0} className="btn btn-primary">讀取 LINE 官方洞察</button></div></form>{insightError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{insightError}</p>}{insightVersion && insight && !insight.impression && !insight.clicks && <p className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">LINE 因隱私門檻未回傳統計明細；指定期間的點擊不重複使用者少於 20 人時，只會回傳選單識別碼（Rich Menu ID）。</p>}{insightVersion && insight && (insight.impression || insight.clicks) && <div className="admin-table-shell admin-table-mobile-cards mt-5"><table className="tbl"><thead><tr><th>區域</th><th>選單曝光</th><th>區域點擊</th><th>預約完成</th><th>報名完成</th></tr></thead><tbody>{insightVersion.slots.map((slot, index) => { const bounds = insightBounds[index]; const click = insight.clicks?.find((item) => item.bounds.x === bounds.x && item.bounds.y === bounds.y && item.bounds.width === bounds.width && item.bounds.height === bounds.height); const conversion = conversions.get(index + 1) ?? { booking: 0, registration: 0 }; return <tr key={`${insightVersion.id}-${index}`}><td data-label="區域"><p className="font-medium text-slate-800">第 {index + 1} 格 · {slot.label}</p><p className="text-xs text-slate-400">{richMenuActionLabel(slot.action)}</p></td><td data-label="選單曝光">{insight.impression?.metrics.count ?? "—"}<div className="text-xs text-slate-400">{insight.impression ? `${insight.impression.metrics.uniqueUsers} 人` : ""}</div></td><td data-label="區域點擊">{click?.metrics.count ?? 0}<div className="text-xs text-slate-400">{click ? `${click.metrics.uniqueUsers} 人` : ""}</div></td><td data-label="預約完成">{conversion.booking}</td><td data-label="報名完成">{conversion.registration}</td></tr>; })}</tbody></table></div>}</section>
     </div>
   );
 }

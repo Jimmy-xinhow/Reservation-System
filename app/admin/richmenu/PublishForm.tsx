@@ -170,11 +170,12 @@ export default function PublishForm({
   }
 
   return (
-    <form onSubmit={submit} className="line-panel space-y-4 p-5">
-      <div>
-        <h3 className="font-semibold text-slate-900">④ 背景圖片、點擊區預覽與發布</h3>
-        <p className="mt-1 text-sm text-slate-500">以下熱區使用目前已儲存的草稿；若剛修改版型或按鈕，請先另存草稿再測試。</p>
+    <form onSubmit={submit} className="admin-section">
+      <div className="admin-section-header">
+        <div><h2 className="font-semibold text-slate-900">步驟 4　上傳圖稿、預覽並發布</h2><p className="mt-0.5 text-xs text-slate-500">預覽使用目前已儲存的草稿；剛修改內容時，請先儲存新的草稿版本。</p></div>
+        <span className={`badge ${disabled ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{disabled ? "尚未可發布" : "可進行發布"}</span>
       </div>
+      <div className="space-y-4 p-4 sm:p-5">
       <p className="border-l-2 border-emerald-600 bg-emerald-50 p-3 text-sm text-emerald-800">
         系統會把圖片裁成 <strong>{width} × {height} 像素</strong>，並自動置中、裁切與壓縮。建議上傳比例接近、解析度足夠的圖片，避免失真。
       </p>
@@ -247,6 +248,7 @@ export default function PublishForm({
       <button className="btn btn-primary" disabled={disabled || busy}>
         {busy ? "處理中…" : "驗證並發布此草稿"}
       </button>
+      </div>
     </form>
   );
 }

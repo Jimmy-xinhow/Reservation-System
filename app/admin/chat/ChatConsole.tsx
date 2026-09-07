@@ -151,10 +151,21 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
 
   const activeThread = threads.find((t) => t.lineUserId === active) ?? null;
 
+  if (threads.length === 0) {
+    return (
+      <section className="admin-section">
+        <div className="px-5 py-12 text-center">
+          <h2 className="text-base font-semibold text-slate-800">目前沒有客服對話</h2>
+          <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-500">顧客從公開預約頁的「線上客服」送出第一則訊息後，對話會出現在這裡並自動更新。</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-[280px_1fr]">
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
       {/* 對話串列表 */}
-      <div className="card max-h-[70vh] overflow-y-auto p-0">
+      <section className="admin-section max-h-[70vh] overflow-y-auto">
         {threads.length === 0 ? (
           <p className="p-6 text-center text-sm text-slate-400">尚無對話</p>
         ) : (
@@ -197,13 +208,13 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
             ))}
           </ul>
         )}
-      </div>
+      </section>
 
       {/* 訊息串 + 回覆 */}
-      <div className="card flex flex-col p-0">
+      <section className="admin-section flex min-h-[420px] flex-col">
         {!activeThread ? (
           <div className="flex h-[70vh] items-center justify-center text-sm text-slate-400">
-            請選擇左側對話
+            請先選擇一則顧客對話
           </div>
         ) : (
           <>
@@ -223,7 +234,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
                   activeThread.blocked ? "text-brand-600" : "text-red-600"
                 }`}
               >
-                {activeThread.blocked ? "解除封鎖" : "封鎖"}
+                {activeThread.blocked ? "解除顧客封鎖" : "封鎖此顧客"}
               </button>
             </div>
 
@@ -277,7 +288,7 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
             </div>
           </>
         )}
-      </div>
+      </section>
     </div>
   );
 }

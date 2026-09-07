@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export interface Reply {
   id: string;
@@ -43,6 +44,7 @@ export default function RepliesEditor({
   const [replyText, setReplyText] = useState("");
   const [messageId, setMessageId] = useState("");
   const [sort, setSort] = useState("0");
+  const formRef = useRef<HTMLFormElement>(null);
 
   function edit(r: Reply) {
     setEditingId(r.id);
@@ -51,7 +53,7 @@ export default function RepliesEditor({
     setReplyText(r.reply_text ?? "");
     setMessageId(r.message_id ?? "");
     setSort(String(r.sort));
-    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+    requestAnimationFrame(() => formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
   function cancel() {
     setEditingId(null);
@@ -63,16 +65,18 @@ export default function RepliesEditor({
   }
 
   return (
-    <section className="space-y-3">
+    <section className="admin-section">
+      <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">關鍵字回覆規則</h2><p className="mt-0.5 text-xs text-slate-500">排序數字較小的規則會先比對，第一個符合的規則立即生效。</p></div><span className="text-xs tabular-nums text-slate-500">{replies.length} 筆</span></div>
       <form
+        ref={formRef}
         action={editingId ? updateAction : createAction}
-        className={`card space-y-4 p-5 ${editingId ? "ring-2 ring-brand-200" : ""}`}
+        className={`grid scroll-mt-24 gap-4 border-b border-slate-200 p-4 lg:grid-cols-2 ${editingId ? "bg-brand-50/40" : "bg-white"}`}
       >
-        <h2 className="font-semibold text-slate-900">{editingId ? "編輯回覆規則" : "新增回覆規則"}</h2>
+        <h3 className="font-semibold text-slate-900 lg:col-span-2">{editingId ? "編輯回覆規則" : "新增回覆規則"}</h3>
         {editingId && <input type="hidden" name="id" value={editingId} />}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-2">
           <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-600">觸發關鍵字（以逗號分隔，符合任一個即可）</span>
+            <span className="label">觸發關鍵字（逗號分隔）</span>
             <input
               name="keywords"
               required
@@ -83,7 +87,7 @@ export default function RepliesEditor({
             />
           </label>
           <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-600">動作</span>
+            <span className="label">符合後要執行的動作</span>
             <select name="action" value={action} onChange={(e) => setAction(e.target.value)} className="input">
               {Object.entries(ACTION_LABEL).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -94,8 +98,8 @@ export default function RepliesEditor({
           </label>
         </div>
         {action === "text" && (
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-600">回覆文字</span>
+          <label className="block text-sm lg:col-span-2">
+            <span className="label">回覆文字</span>
             <textarea
               name="reply_text"
               rows={2}
@@ -107,8 +111,8 @@ export default function RepliesEditor({
           </label>
         )}
         {action === "message" && (
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-600">選擇訊息素材</span>
+          <label className="block text-sm lg:col-span-2">
+            <span className="label">選擇訊息素材</span>
             <select name="message_id" value={messageId} onChange={(e) => setMessageId(e.target.value)} className="input">
               <option value="">請選擇</option>
               {messages.map((m) => (
@@ -122,9 +126,9 @@ export default function RepliesEditor({
             )}
           </label>
         )}
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3 lg:col-span-2">
           <label className="text-sm">
-            <span className="mb-1 block font-medium text-slate-600">排序</span>
+            <span className="label">比對順序</span>
             <input
               name="sort"
               type="number"
@@ -133,19 +137,16 @@ export default function RepliesEditor({
               className="input w-20"
             />
           </label>
-          <SubmitButton className="btn btn-primary">{editingId ? "儲存修改" : "新增"}</SubmitButton>
+          <SubmitButton className="btn btn-primary">{editingId ? "儲存規則修改" : "新增回覆規則"}</SubmitButton>
           {editingId && (
             <button type="button" onClick={cancel} className="btn btn-secondary">
-              取消
+              取消編輯
             </button>
           )}
         </div>
-        <p className="text-xs text-slate-400">
-          由上到下(排序小的優先)比對;第一個命中的規則生效。動作「回覆自訂文字」才需填回覆文字。
-        </p>
       </form>
 
-      <div className="card overflow-x-auto">
+      <div className="admin-table-shell admin-table-mobile-cards border-0">
         <table className="tbl">
           <thead>
             <tr>
@@ -160,41 +161,41 @@ export default function RepliesEditor({
           <tbody>
             {replies.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-8 text-center text-slate-400">
-                  尚無規則
+                <td colSpan={6} data-mobile-empty="true" className="py-8 text-center text-slate-400">
+                  尚未建立關鍵字回覆規則
                 </td>
               </tr>
             )}
             {replies.map((r) => (
               <tr key={r.id} className={editingId === r.id ? "bg-brand-50/60" : ""}>
-                <td className="font-medium text-slate-800">{r.keywords}</td>
-                <td>{ACTION_LABEL[r.action] ?? r.action}</td>
-                <td className="max-w-[16rem] truncate text-slate-500">{r.reply_text || "—"}</td>
-                <td className="text-slate-500">{r.sort}</td>
-                <td>
+                <td data-label="關鍵字" className="font-medium text-slate-800">{r.keywords}</td>
+                <td data-label="執行動作">{ACTION_LABEL[r.action] ?? r.action}</td>
+                <td data-label="回覆內容" className="max-w-[16rem] text-slate-500">{r.reply_text || "使用訊息素材或系統入口"}</td>
+                <td data-label="比對順序" className="text-slate-500">{r.sort}</td>
+                <td data-label="狀態">
                   <span className={`badge ${r.active ? "bg-accent-500/10 text-accent-600" : "bg-slate-100 text-slate-500"}`}>
                     {r.active ? "啟用" : "停用"}
                   </span>
                 </td>
-                <td>
-                  <div className="flex gap-3">
+                <td data-label="操作">
+                  <div className="flex flex-wrap gap-1">
                     <button
                       type="button"
                       onClick={() => edit(r)}
                       className="admin-inline-action text-brand-700"
                     >
-                      編輯
+                      編輯規則
                     </button>
                     <form action={toggleAction}>
                       <input type="hidden" name="id" value={r.id} />
                       <input type="hidden" name="active" value={String(r.active)} />
                       <SubmitButton className="admin-inline-action">
-                        {r.active ? "停用" : "啟用"}
+                        {r.active ? "停用規則" : "啟用規則"}
                       </SubmitButton>
                     </form>
                     <form action={deleteAction}>
                       <input type="hidden" name="id" value={r.id} />
-                      <SubmitButton className="admin-inline-action text-red-700">刪除</SubmitButton>
+                      <ConfirmSubmitButton confirmMessage="刪除後，顧客輸入這些關鍵字時將不再套用此規則。確定刪除嗎？" className="admin-inline-action text-red-700">刪除規則</ConfirmSubmitButton>
                     </form>
                   </div>
                 </td>

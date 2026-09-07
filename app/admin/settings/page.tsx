@@ -121,7 +121,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
   if (!s) {
     return (
-      <div className="card space-y-4 border-red-200 p-5 text-red-800">
+      <div className="admin-section space-y-4 border-red-200 p-5 text-red-800">
         <div><h1 className="text-lg font-semibold">目前無法載入品牌設定</h1><p className="mt-2 text-sm leading-6">請先重新整理頁面。若仍無法開啟，請將此畫面交給系統管理者檢查品牌是否已完成建立，以及你的帳號是否已加入這個品牌。</p></div>
         <details className="technical-details border-red-200 bg-red-50/60"><summary>提供給系統管理者的檢查項目</summary><ol className="mx-5 mb-4 list-decimal space-y-2 text-sm"><li>確認此品牌已有預設設定資料</li><li>確認登入帳號已加入品牌成員名單</li><li>確認資料庫讀取權限規則已套用</li></ol></details>
       </div>
@@ -166,7 +166,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </aside>
       <div className="min-w-0 space-y-5">
 
-      {activeSection === "advanced" && <form action={createBrandAction} className="card space-y-4 border-brand-100 bg-brand-50/40 p-5">
+      {activeSection === "advanced" && <form action={createBrandAction} className="admin-section space-y-4 border-brand-100 bg-brand-50/40 p-5">
         <div>
           <p className="eyebrow">同一帳號的進階操作</p>
           <h2 className="mt-1 font-semibold text-slate-900">為目前帳號新增可管理品牌</h2>
@@ -194,9 +194,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </form>}
 
       {/* 公開品牌資訊(顯示於公開資訊頁) */}
-      {activeSection === "brand" && <form action={updateClinicProfileAction} className="card space-y-4 p-5">
-        <h2 className="font-semibold text-slate-900">公開品牌資訊</h2>
-        <p className="-mt-2 text-xs text-slate-400">顯示於公開資訊頁，顧客看得到。</p>
+      {activeSection === "brand" && <form action={updateClinicProfileAction} className="admin-section">
+        <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">公開品牌資訊</h2><p className="mt-0.5 text-xs text-slate-500">這些內容會顯示在顧客看得到的公開頁面。</p></div></div>
+        <div className="space-y-4 p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className="label">品牌名稱</label>
@@ -236,7 +236,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             />
           </div>
         </div>
-        <SubmitButton className="btn btn-primary">儲存公開資訊</SubmitButton>
+        <SubmitButton className="btn btn-primary">儲存公開品牌資訊</SubmitButton>
+        </div>
       </form>}
 
       {activeSection === "page" && (
@@ -253,7 +254,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         </>
       )}
 
-      {activeSection === "booking" && <form action={updateSettingsAction} className="space-y-6">
+      {activeSection === "booking" && <form action={updateSettingsAction} className="admin-section overflow-hidden">
+        <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">預約與營運規則</h2><p className="mt-0.5 text-xs text-slate-500">由上到下完成主要開關、預約限制與公開入口。</p></div></div>
+        <div className="grid md:grid-cols-2">
         <Section title="標準模組">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" name="events_enabled" defaultChecked={s.events_enabled} />
@@ -397,12 +400,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           {!s.events_enabled && <p className="w-full text-xs text-amber-700">若未同時啟用「活動與報名」模組，公開報名會自動保持關閉。</p>}
         </Section>
 
-        <SubmitButton className="btn btn-primary">儲存設定</SubmitButton>
+        </div>
+        <div className="border-t border-slate-200 p-4"><SubmitButton className="btn btn-primary">儲存預約與營運設定</SubmitButton></div>
       </form>}
 
-      {activeSection === "channels" && <section className="card flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-slate-900">LINE 官方帳號與圖文選單</h2><p className="mt-1 text-sm leading-6 text-slate-600">LINE 連線、顧客入口與圖文選單集中在獨立工作區，並提供白話步驟與進階技術設定。</p></div><Link href="/admin/line" className="btn btn-secondary shrink-0">前往 LINE 設定</Link></section>}
+      {activeSection === "channels" && <section className="admin-section flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold text-slate-900">LINE 官方帳號與圖文選單</h2><p className="mt-1 text-sm leading-6 text-slate-600">LINE 連線、顧客入口與圖文選單集中在獨立工作區，並提供白話步驟與進階技術設定。</p></div><Link href="/admin/line" className="btn btn-secondary shrink-0">管理 LINE 官方帳號</Link></section>}
 
-      {activeSection === "channels" && <form action={updatePaymentSettingsAction} className="card space-y-4 p-5">
+      {activeSection === "channels" && <form action={updatePaymentSettingsAction} className="admin-section space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">標準金流</h2>
           <p className="help-text">支援綠界與藍新標準付款。品牌管理者可直接在這裡完成串接；付款密鑰會加密保存，儲存後不會再顯示完整內容。</p>
@@ -439,7 +443,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </form>}
 
       {activeSection === "domain" && (
-        <section className="card space-y-4 p-5">
+        <section className="admin-section space-y-4 p-5">
           <div>
             <h2 className="font-semibold text-slate-900">自訂網址／網域</h2>
             <p className="mt-1 text-sm leading-6 text-slate-500">新增網域後，需要到網址服務商完成所有權驗證。DNS 是網址服務商的網域設定；TXT 是用來證明這個網址屬於品牌的驗證文字。</p>
@@ -468,7 +472,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       )}
 
       {/* Email 提醒(選用,需自備 Resend 金鑰)*/}
-      {activeSection === "channels" && <form action={updateEmailSettingsAction} className="card space-y-4 p-5">
+      {activeSection === "channels" && <form action={updateEmailSettingsAction} className="admin-section space-y-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-semibold text-slate-900">Email 通知（選用）</h2>
@@ -531,7 +535,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset className="border-b border-slate-200 bg-white px-4 py-5 last:border-b-0">
+    <fieldset className="border-b border-slate-200 bg-white px-4 py-5 md:border-r md:odd:border-r md:even:border-r-0 md:[&:nth-last-child(-n+2)]:border-b-0">
       <legend className="px-0 text-sm font-semibold text-slate-900">{title}</legend>
       <div className="mt-3 flex flex-wrap items-end gap-4">{children}</div>
     </fieldset>

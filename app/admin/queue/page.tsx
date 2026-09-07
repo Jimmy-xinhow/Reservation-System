@@ -4,6 +4,7 @@ import { getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { getQueueForDate, taipeiToday, type QueueAppt } from "@/lib/queue";
 import { advanceServingAction, setQueueAutoAction, setStatusAction } from "../appointment-actions";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -45,15 +46,27 @@ export default async function QueuePage({
   const sessions = role === "provider"
     ? (await Promise.all((doctorId ? [doctorId] : assignedDoctorIds).map((id) => getQueueForDate(supabase, clinicId, date, mode, id)))).flat()
     : await getQueueForDate(supabase, clinicId, date, mode, doctorId);
+  const waitingCount = sessions.reduce((total, session) => total + [...session.online, ...session.offline].filter((appointment) => appointment.status !== "done" && appointment.status !== "no_show").length, 0);
+  const readySessions = sessions.filter((session) => Boolean(session.doctorId)).length;
 
   return (
-    <div className="space-y-5">
-      <h1 className="text-xl font-bold text-slate-900">
-        叫號 · {date}
-        {date === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
-      </h1>
+    <div className="admin-page">
+      <header className="admin-page-header">
+        <div>
+          <p className="eyebrow">舊版服務進度</p>
+          <h1 className="admin-page-title">現場叫號</h1>
+          <p className="admin-page-description">僅供已啟用叫號流程的品牌使用；一般預約與課程報名不需要操作這一頁。</p>
+        </div>
+        <span className="badge bg-brand-50 text-brand-700">{date}{date === today ? " · 今天" : ""}</span>
+      </header>
 
-      <form className="flex flex-wrap items-end gap-3">
+      <section className="admin-metric-strip grid-cols-3" aria-label="叫號摘要">
+        <div className="admin-metric"><span className="admin-metric-label">服務場次</span><strong className="admin-metric-value">{sessions.length}</strong></div>
+        <div className="admin-metric"><span className="admin-metric-label">可叫號場次</span><strong className="admin-metric-value">{readySessions}</strong></div>
+        <div className="admin-metric"><span className="admin-metric-label">目前候診</span><strong className="admin-metric-value">{waitingCount}</strong></div>
+      </section>
+
+      <form className="admin-toolbar">
         <div>
           <label className="label">日期</label>
           <input type="date" name="date" defaultValue={date} className="input" />
@@ -71,16 +84,15 @@ export default async function QueuePage({
             </select>
           </div>
         )}
-        <SubmitButton className="btn btn-secondary">套用</SubmitButton>
+        <SubmitButton className="btn btn-secondary">套用日期與人員</SubmitButton>
       </form>
 
-      <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-xs leading-relaxed text-slate-500">
-        線上與現場各自一組號碼,互不影響。可分別「叫下一位」;或開啟自動穿插(每 N 位線上插 1 位現場),
-        按「自動下一位」即依規則輪流安排,現場顧客不會被排到最後。
+      <p className="border-y border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-5 text-slate-600">
+        線上與現場各自使用一組號碼。可分別叫下一位，或設定每幾位線上顧客穿插一位現場顧客。
       </p>
 
       {sessions.length === 0 && (
-        <p className="rounded-xl bg-slate-50 px-4 py-6 text-center text-slate-400">本日無預約。</p>
+        <section className="admin-section px-4 py-10 text-center"><h2 className="font-semibold text-slate-800">本日沒有可叫號的預約</h2><p className="mt-2 text-sm text-slate-500">可更換日期或服務提供者後重新查看。</p></section>
       )}
 
       <div className="space-y-4">
@@ -104,24 +116,24 @@ export default async function QueuePage({
           );
 
           return (
-            <section key={`${s.doctorId}-${s.key}`} className="card overflow-hidden">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3">
+            <section key={`${s.doctorId}-${s.key}`} className="admin-section overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
                 <div>
                   <span className="font-semibold text-slate-900">{s.doctorName || "未指定服務人員"}</span>
-                  <span className="ml-2 text-sm text-slate-400">{s.label}</span>
+                  <span className="ml-2 text-sm text-slate-500">{s.label}</span>
                 </div>
                 {/* 自動穿插設定 */}
                 {canManageQueue && queueAvailable && <form action={setQueueAutoAction} className="flex flex-wrap items-center gap-2 text-sm">
                   {hidden}<span className="text-slate-500">每</span><input name="auto_every" type="number" min={0} defaultValue={s.autoEvery} className="input w-16 px-2 py-1" />
-                  <span className="text-slate-500">位線上插 1 位現場</span><SubmitButton className="btn btn-ghost px-2 py-1 text-xs">儲存</SubmitButton>
+                  <span className="text-slate-500">位線上插 1 位現場</span><SubmitButton className="btn btn-secondary px-2 py-1 text-xs">儲存穿插規則</SubmitButton>
                 </form>}
               </div>
 
               {/* 自動下一位(依規則) */}
-              {canManageQueue && queueAvailable && <div className="border-b border-slate-100 px-5 py-3">
+              {canManageQueue && queueAvailable && <div className="border-b border-slate-200 px-4 py-3">
                 <form action={advanceServingAction} className="flex flex-wrap items-center gap-3">
-                  {hidden}<input type="hidden" name="op" value="auto" /><SubmitButton className="btn btn-primary">自動下一位 →</SubmitButton>
-                  <span className="text-xs text-slate-400">{s.autoEvery > 0 ? `自動:每 ${s.autoEvery} 位線上插 1 位現場` : "自動未開啟(等同叫線上)"}</span>
+                  {hidden}<input type="hidden" name="op" value="auto" /><SubmitButton className="btn btn-primary">依規則叫下一位</SubmitButton>
+                  <span className="text-xs text-slate-500">{s.autoEvery > 0 ? `每 ${s.autoEvery} 位線上顧客後安排 1 位現場顧客` : "尚未設定穿插，會先叫線上顧客"}</span>
                 </form>
               </div>}
               {!queueAvailable && <p className="border-b border-amber-100 bg-amber-50 px-5 py-3 text-sm text-amber-800">此預約未指定服務提供者，先完成指派後才能使用叫號；目前仍可在下方更新預約狀態。</p>}
@@ -155,11 +167,11 @@ export default async function QueuePage({
                 />
               </div>
 
-              {canManageQueue && queueAvailable && <div className="border-t border-slate-100 px-5 py-2">
+              {canManageQueue && queueAvailable && <div className="border-t border-slate-200 px-4 py-3">
                 <form action={advanceServingAction}>
                   {hidden}
                   <input type="hidden" name="op" value="reset" />
-                  <SubmitButton className="admin-inline-action text-red-700">重設此診叫號</SubmitButton>
+                  <ConfirmSubmitButton confirmMessage="重設後，目前叫號進度會回到尚未開始，但不會刪除預約。確定重設嗎？" className="admin-inline-action text-red-700">重設這個場次的叫號</ConfirmSubmitButton>
                 </form>
               </div>}
             </section>
@@ -201,7 +213,7 @@ function StreamPanel({
   return (
     <div className={`p-5 ${bordered ? "border-t border-slate-100 sm:border-l sm:border-t-0" : ""}`}>
       <div className="mb-3 text-sm font-semibold text-slate-700">{title}</div>
-      <div className={`mb-3 rounded-xl ${bg} p-4 text-center`}>
+      <div className={`mb-3 border-y border-slate-200 ${bg} p-4 text-center`}>
         <div className="text-xs text-slate-500">目前服務</div>
         <div className={`text-4xl font-bold ${color}`}>{current || "—"}</div>
         <div className="mt-0.5 truncate text-sm text-slate-600">
@@ -213,7 +225,7 @@ function StreamPanel({
       </div>
       {!readOnly && <div className="mb-3 flex gap-2">
         <form action={advanceServingAction} className="flex-1">
-          {hidden}<input type="hidden" name="op" value={opNext} /><SubmitButton className="btn btn-secondary w-full text-sm">叫下一位 →</SubmitButton>
+          {hidden}<input type="hidden" name="op" value={opNext} /><SubmitButton className="btn btn-secondary w-full text-sm">叫下一位</SubmitButton>
         </form>
         <form action={advanceServingAction}>
           {hidden}<input type="hidden" name="op" value={opPrev} /><SubmitButton className="btn btn-ghost px-3 text-sm">上一號</SubmitButton>

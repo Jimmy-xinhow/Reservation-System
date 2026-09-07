@@ -50,13 +50,18 @@ export default function RichMenuEditor({
   }
 
   return (
-    <form action={saveAction} className="line-panel space-y-6 p-5">
+    <form action={saveAction} className="admin-section">
       <input type="hidden" name="layout" value={layout} />
       <input type="hidden" name="template_key" value={template} />
+      <div className="admin-section-header">
+        <div><h2 className="font-semibold text-slate-900">編輯草稿內容</h2><p className="mt-0.5 text-xs text-slate-500">依序完成基本資料、版型與每一格動作，儲存後才會進入發布步驟。</p></div>
+        <span className="badge bg-slate-100 text-slate-600">尚未影響線上版本</span>
+      </div>
+      <div className="space-y-6 p-4 sm:p-5">
 
       {/* ① 基本設定 */}
       <section className="space-y-2">
-        <h3 className="font-semibold text-slate-900">① 基本設定</h3>
+        <h3 className="font-semibold text-slate-900">步驟 1　基本設定</h3>
         <div className="grid gap-3 sm:grid-cols-3">
         <label className="block text-sm">
           <span className="mb-1 block font-medium text-slate-600">草稿名稱</span>
@@ -71,8 +76,8 @@ export default function RichMenuEditor({
       </section>
 
       {/* ② 版型 */}
-      <section className="space-y-2">
-        <h3 className="font-semibold text-slate-900">② 版型</h3>
+      <section className="space-y-3 border-t border-slate-200 pt-5">
+        <h3 className="font-semibold text-slate-900">步驟 2　選擇版型</h3>
         <label className="block text-sm sm:max-w-xs">
           <span className="mb-1 block font-medium text-slate-600">選擇格數</span>
           <select value={layout} onChange={(e) => changeLayout(e.target.value as Layout)} className="input">
@@ -107,8 +112,8 @@ export default function RichMenuEditor({
       </section>
 
       {/* ③ 每格動作 */}
-      <section className="space-y-3">
-        <h3 className="font-semibold text-slate-900">③ 每格動作</h3>
+      <section className="space-y-3 border-t border-slate-200 pt-5">
+        <h3 className="font-semibold text-slate-900">步驟 3　設定每格動作</h3>
         <p className="text-sm text-slate-500">設定顧客點選每一格後要前往哪裡；格號與上方示意圖一致。</p>
         {slots.map((s, i) => (
           <div key={i} className="border-t border-slate-200 py-3 first:border-t-0">
@@ -187,7 +192,8 @@ export default function RichMenuEditor({
         ))}
       </section>
 
-      <SubmitButton className="btn btn-primary">另存草稿版本</SubmitButton>
+      <SubmitButton className="btn btn-primary">儲存為新的草稿版本</SubmitButton>
+      </div>
     </form>
   );
 }
