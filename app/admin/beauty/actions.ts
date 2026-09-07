@@ -12,7 +12,7 @@ function photoPaths(fd: FormData, clinicId: string, appointmentId: string): stri
   if (!raw) return [];
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Error("照片資料格式錯誤"); }
-  if (!Array.isArray(parsed) || parsed.length > 6) throw new Error("每筆療程最多 6 張照片");
+  if (!Array.isArray(parsed) || parsed.length > 6) throw new Error("每筆服務紀錄最多 6 張照片");
   const prefix = `${clinicId}/${appointmentId}/`;
   const paths = parsed.filter((value): value is string => typeof value === "string");
   if (paths.length !== parsed.length || paths.some((path) => !path.startsWith(prefix))) throw new Error("照片不屬於目前品牌或預約");

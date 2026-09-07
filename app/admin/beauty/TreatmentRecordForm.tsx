@@ -13,7 +13,7 @@ export function TreatmentRecordForm({ appointments, action }: { appointments: Be
 
   async function upload(file: File) {
     if (!appointmentId) { setError("請先選擇預約"); return; }
-    if (photos.length >= 6) { setError("每筆療程最多 6 張照片"); return; }
+    if (photos.length >= 6) { setError("每筆服務紀錄最多 6 張照片"); return; }
     setUploading(true); setError(null);
     try {
       const form = new FormData(); form.set("appointment_id", appointmentId); form.set("file", file);
