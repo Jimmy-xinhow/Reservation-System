@@ -821,11 +821,15 @@ body {
 .line-message-demo { min-width: 0; padding: 16px; border-left: 1px solid var(--admin-border); background: #eef2ef; }
 .line-message-demo-label { margin-bottom: 8px; color: #707c76; font-size: 10px; font-variation-settings: "wght" 650; letter-spacing: .04em; }
 .line-message-card { overflow: hidden; border: 1px solid #d8dedb; border-radius: 8px; background: #fff; box-shadow: 0 3px 8px rgba(25, 45, 36, .06); }
-.line-message-card-head { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 11px; border-bottom: 1px solid #e7ebe9; color: #48554f; font-size: 10px; }
-.line-message-card-head b { padding: 4px 6px; border-radius: 3px; font-size: 9px; font-variation-settings: "wght" 720; }
-.line-message-card-body { padding: 12px; border-top: 3px solid #06c755; }
-.line-message-card-body h3 { color: #17231e; font-size: 14px; font-variation-settings: "wght" 720; line-height: 1.35; }
-.line-message-card-body > p { margin-top: 5px; color: #66726c; font-size: 10px; line-height: 1.55; }
+.line-message-card-status { padding: 14px 13px 16px; color: #fff; }
+.line-message-card-head { display: flex; min-height: 20px; align-items: center; justify-content: space-between; gap: 10px; color: rgba(255,255,255,.94); font-size: 9px; }
+.line-message-card-head b { font-size: 9px; font-variation-settings: "wght" 720; text-align: right; }
+.line-message-card-status h3 { margin-top: 12px; color: #fff; font-size: 15px; font-variation-settings: "wght" 730; line-height: 1.35; }
+.line-message-card-status > p { margin-top: 5px; color: rgba(255,255,255,.9); font-size: 10px; line-height: 1.55; }
+.line-message-card-body { padding: 12px; }
+.line-message-card-highlight { display: grid; gap: 3px; border-radius: 5px; padding: 9px 10px; }
+.line-message-card-highlight span { color: #68736e; font-size: 8px; font-variation-settings: "wght" 650; }
+.line-message-card-highlight strong { color: #17231e; font-size: 12px; font-variation-settings: "wght" 720; line-height: 1.35; }
 .line-message-card-body dl { margin-top: 10px; border-top: 1px solid #e8ecea; }
 .line-message-card-body dl > div { display: grid; grid-template-columns: 52px minmax(0,1fr); gap: 8px; padding: 6px 0; border-bottom: 1px solid #eef1ef; font-size: 9px; }
 .line-message-card-body dt { color: #808984; }

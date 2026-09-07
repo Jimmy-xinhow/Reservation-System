@@ -5,6 +5,9 @@ import { lineAccessTokenForDestination, pushMessages, type LineMessage } from "@
 import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { customerEntryUrl } from "@/lib/customer-entry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +17,7 @@ interface ApptRow {
   start_at: string;
   queue_number: number | null;
   doctors: { name: string } | null;
+  services: { name: string } | null;
   patients: { name: string; line_user_id: string | null; email: string | null } | null;
 }
 
@@ -70,7 +74,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
   const hours = Number(process.env.REMINDER_HOURS_BEFORE ?? 24) || 24;
   const now = new Date();
   const until = new Date(now.getTime() + hours * 3600 * 1000);
-  const { data: appts, error } = await svc.from("appointments").select("id, start_at, queue_number, doctors(name), patients(name, line_user_id, email)").eq("clinic_id", clinicId).in("status", ["booked", "confirmed"]).gt("start_at", now.toISOString()).lte("start_at", until.toISOString());
+  const { data: appts, error } = await svc.from("appointments").select("id, start_at, queue_number, doctors(name), services(name), patients(name, line_user_id, email)").eq("clinic_id", clinicId).in("status", ["booked", "confirmed"]).gt("start_at", now.toISOString()).lte("start_at", until.toISOString());
   if (error) throw new Error(error.message);
   const rows = (appts ?? []) as unknown as ApptRow[];
   let lineAccessToken: string | null = null;
@@ -82,6 +86,12 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
       lineAccessError = error instanceof Error ? error.message : "LINE access token unavailable";
     }
   }
+  const lineContext = await getClinicLineChannelContext(svc, clinicId);
+  const manageUrl = customerEntryUrl("appointments", {
+    baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
+    clinicSlug: lineContext.clinicSlug,
+    liffId: lineContext.liffId,
+  });
   let line = 0;
   let lineFailed = 0;
   for (const appointment of rows) {
@@ -94,7 +104,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
       continue;
     }
     try {
-      await pushMessages(appointment.patients.line_user_id, [buildReminderFlex(appointment, settings.booking_mode)], lineAccessToken);
+      await pushMessages(appointment.patients.line_user_id, [buildReminderFlex(appointment, settings.booking_mode, clinic?.name as string | null, manageUrl)], lineAccessToken);
       await finishReminder(svc, claim, "sent");
       line += 1;
     } catch (error) {
@@ -164,45 +174,22 @@ function escapeHtml(value: string): string {
   });
 }
 
-function buildReminderFlex(a: ApptRow, mode: "time" | "number"): LineMessage {
-  const doctor = a.doctors?.name ?? "服務提供者";
-  const patient = a.patients?.name ?? "";
+function buildReminderFlex(a: ApptRow, mode: "time" | "number", clinicName: string | null, manageUrl: string): LineMessage {
+  const doctor = a.doctors?.name ?? "由品牌安排";
   const when =
     mode === "time"
       ? formatDateTime(a.start_at)
       : `${formatDateSession(a.start_at)} 第 ${a.queue_number ?? "?"} 號`;
-  const altText = `預約提醒:${when} ${doctor}`;
-
-  return {
-    type: "flex",
-    altText,
-    contents: {
-      type: "bubble",
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "md",
-        contents: [
-          { type: "text", text: "預約提醒", weight: "bold", size: "lg", color: "#1d4ed8" },
-          { type: "text", text: when, wrap: true, size: "md", weight: "bold" },
-          { type: "text", text: `服務提供者:${doctor}`, size: "sm", color: "#555555" },
-          ...(patient ? [{ type: "text", text: `顧客:${patient}`, size: "sm", color: "#555555" }] : []),
-          { type: "text", text: "無法前來請點下方取消。", size: "sm", color: "#888888", margin: "md" },
-        ],
-      },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        contents: [
-          {
-            type: "button",
-            style: "secondary",
-            action: { type: "postback", label: "無法前來 · 取消預約", data: `action=cancel&id=${a.id}`, displayText: "取消預約" },
-          },
-        ],
-      },
-    },
-  };
+  return buildAppointmentStatusFlex({
+    kind: "reminder",
+    clinicName: clinicName?.trim() || "預約與報名平台",
+    dateTime: when,
+    serviceName: a.services?.name ?? "預約服務",
+    providerName: doctor,
+    manageUrl,
+    queueNumber: a.queue_number,
+    cancelPostbackData: `action=cancel&id=${a.id}`,
+  });
 }
 
 function buildReminderHtml(a: ApptRow, mode: "time" | "number", clinicName: string | null): string {

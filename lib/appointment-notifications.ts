@@ -63,7 +63,7 @@ export async function notifyAppointmentStatus(
       try {
         const context = await getClinicLineChannelContext(svc, appointment.clinic_id);
         const token = await lineAccessTokenForDestination(appointment.line_destination ?? undefined);
-        const manageUrl = customerEntryUrl("appointments", {
+        const manageUrl = customerEntryUrl(kind === "cancelled" ? "booking" : "appointments", {
           baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
           clinicSlug: context.clinicSlug,
           liffId: context.liffId,
@@ -247,7 +247,7 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
   const patient = first(row.patients);
   const doctor = first(row.doctors);
   const service = first(row.services);
-  if (!patient || !doctor || !clinic) return null;
+  if (!patient || !clinic) return null;
   return {
     id: row.id,
     clinic_id: row.clinic_id,
@@ -263,7 +263,7 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
     patient_name: patient.name,
     patient_email: patient.email,
     patient_line_user_id: patient.line_user_id,
-    doctor_name: doctor.name,
+    doctor_name: doctor?.name ?? "由品牌安排",
     service_name: service?.name ?? null,
     email_enabled: settings?.email_enabled === true,
   };

@@ -78,6 +78,11 @@ export async function notifyRegistrationStatus(
           clinicSlug: context.clinicSlug,
           liffId: context.liffId,
         });
+        const eventsUrl = customerEntryUrl("events", {
+          baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
+          clinicSlug: context.clinicSlug,
+          liffId: context.liffId,
+        });
         const token = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
         await pushMessages(row.line_user_id, [buildRegistrationStatusFlex({
           kind,
@@ -88,7 +93,7 @@ export async function notifyRegistrationStatus(
           dateTime: session?.start_at ? formatEventDate(session.start_at) : "待確認",
           venue: session?.venue ?? "",
           amount: formatAmount(Number(row.amount)),
-          actionUrl: kind === "pending" ? paymentUrl ?? ticketsUrl : ticketsUrl,
+          actionUrl: kind === "pending" ? paymentUrl ?? ticketsUrl : kind === "cancelled" ? eventsUrl : ticketsUrl,
         })], token);
         await finishNotification(svc, claim, "sent");
         result.sent += 1;

@@ -61,11 +61,14 @@ export async function processAppointmentWaitlistNotificationQueue(
           continue;
         }
         const token = await lineAccessTokenForDestination(row.line_destination ?? undefined);
-        const entryUrl = customerEntryUrl("appointments", {
-          baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
-          clinicSlug: context.clinicSlug,
-          liffId: context.liffId,
-        });
+        const entryUrl = customerEntryUrl(
+          row.kind === "cancelled" || row.kind === "expired" ? "booking" : "appointments",
+          {
+            baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",
+            clinicSlug: context.clinicSlug,
+            liffId: context.liffId,
+          },
+        );
         const when = row.target_start_at ? formatDateTime(row.target_start_at) : row.requested_date;
         const target = [when, row.service_name, row.doctor_name].filter(Boolean).join("・");
         await pushMessages(row.line_user_id, [buildWaitlistStatusFlex({

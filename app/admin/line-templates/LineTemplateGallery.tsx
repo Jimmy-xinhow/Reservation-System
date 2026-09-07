@@ -35,14 +35,14 @@ export default function LineTemplateGallery() {
               <div className="line-message-demo" aria-label={`${template.title} 訊息預覽`}>
                 <p className="line-message-demo-label">顧客實際閱讀順序</p>
                 <div className="line-message-card">
-                  <div className="line-message-card-head">
-                    <span>品牌官方帳號</span>
-                    <b style={{ color: template.accent, backgroundColor: `${template.accent}14` }}>{template.badge}</b>
-                  </div>
-                  <div className="line-message-card-body" style={{ borderTopColor: template.accent }}>
+                  <div className="line-message-card-status" style={{ backgroundColor: template.accent }}>
+                    <div className="line-message-card-head"><span>品牌官方帳號</span><b>{template.badge}</b></div>
                     <h3>{template.headline}</h3>
                     <p>{template.body}</p>
-                    <dl>{template.details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+                  </div>
+                  <div className="line-message-card-body">
+                    {template.details[0] && <div className="line-message-card-highlight" style={{ backgroundColor: `${template.accent}12` }}><span>{template.details[0][0]}</span><strong>{template.details[0][1]}</strong></div>}
+                    <dl>{template.details.slice(1).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
                   </div>
                   <div className="line-message-card-actions">
                     <span>{template.primaryAction}</span>

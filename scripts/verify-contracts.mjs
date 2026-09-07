@@ -1783,6 +1783,21 @@ invariant(
     read("lib/line-ui-templates.ts").includes('type: "flex"') &&
     read("lib/line-ui-templates.ts").includes('view: "appointments"') === false,
 );
+invariant(
+  "LINE booking and registration cards expose status, primary information, accessible text, and explicit actions",
+  read("lib/line-ui-templates.ts").includes("function statusCard") &&
+    read("lib/line-ui-templates.ts").includes('highlight: ["預約時間", input.dateTime]') &&
+    read("lib/line-ui-templates.ts").includes('highlight: ["活動／課程", input.eventTitle]') &&
+    read("lib/line-ui-templates.ts").includes("下一步：${selected.action}") &&
+    read("lib/line-ui-templates.ts").includes('scaling: true') &&
+    read("lib/line-ui-templates.ts").includes('adjustMode: "shrink-to-fit"') &&
+    read("lib/line-ui-templates.ts").includes('label: "取消這筆預約"') &&
+    read("app/api/cron/reminders/route.ts").includes("buildAppointmentStatusFlex") &&
+    read("lib/appointment-notifications.ts").includes('doctor?.name ?? "由品牌安排"') &&
+    read("lib/appointment-notifications.ts").includes('kind === "cancelled" ? "booking" : "appointments"') &&
+    read("lib/registration-notifications.ts").includes('kind === "cancelled" ? eventsUrl : ticketsUrl') &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-message-card-highlight"),
+);
 
 if (failures.length > 0) {
   console.error(`\nContract verification failed: ${failures.join("; ")}`);
