@@ -98,12 +98,12 @@ export default async function CrmPage() {
   const segmentName = new Map(segments.map((segment) => [segment.id, segment.name]));
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="admin-page">
+      <div className="admin-page-header">
         <div>
           <p className="eyebrow">顧客經營</p>
-          <h1 className="text-2xl font-bold text-slate-900">顧客回訪與自動提醒</h1>
-          <p className="mt-2 max-w-2xl text-base leading-7 text-slate-600">
+          <h1 className="admin-page-title">顧客回訪與自動提醒</h1>
+          <p className="admin-page-description">
             依清楚規則整理顧客名單，並在指定情況自動發送訊息。只有已同意接收行銷訊息的顧客會收到，完整發送紀錄會保留在系統內。
           </p>
         </div>
@@ -112,7 +112,7 @@ export default async function CrmPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="admin-metric-strip grid-cols-2 sm:grid-cols-5">
         <Stat label="可管理顧客" value={customerCount ?? 0} />
         <Stat label="分眾" value={segments.length} />
         <Stat label="自動化" value={automations.length} />
@@ -120,18 +120,18 @@ export default async function CrmPage() {
         <Stat label="投遞失敗" value={deliveryFailed ?? 0} tone={deliveryFailed ? "danger" : undefined} />
       </div>
 
-      <section className="rounded-2xl border border-brand-100 bg-brand-50/60 p-5">
+      <section className="admin-section border-l-[3px] border-l-brand-600 p-4">
         <h2 className="font-semibold text-slate-900">建議使用順序</h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">先建立可解釋的分眾，再建立單一目的的自動化，啟用後觀察投遞結果；不要同時對同一顧客啟用多個相同觸發條件，避免訊息重複。</p>
       </section>
 
-      <nav aria-label="顧客回訪功能導覽" className="sticky top-[68px] z-10 -mx-1 flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur">
-        <a href="#segments" className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">分眾</a>
-        <a href="#automations" className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">自動化</a>
-        <a href="#delivery" className="shrink-0 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">投遞狀態</a>
+      <nav aria-label="顧客回訪功能導覽" className="crm-anchor-nav">
+        <a href="#segments">分眾名單</a>
+        <a href="#automations">自動提醒</a>
+        <a href="#delivery">投遞狀態</a>
       </nav>
 
-      <section id="segments" className="scroll-mt-28 card space-y-4 p-5">
+      <section id="segments" className="admin-section scroll-mt-28 space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">建立顧客分眾</h2>
           <p className="mt-1 text-sm text-slate-500">先提供可查核的規則式分眾，不以黑盒 AI 推測顧客。</p>
@@ -169,7 +169,7 @@ export default async function CrmPage() {
         )}
       </section>
 
-      <section className="scroll-mt-28 card overflow-hidden">
+      <section className="admin-section scroll-mt-28 overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="font-semibold text-slate-900">分眾名單</h2>
         </div>
@@ -218,7 +218,7 @@ export default async function CrmPage() {
         </div>
       </section>
 
-      <section id="automations" className="scroll-mt-28 card space-y-4 p-5">
+      <section id="automations" className="admin-section scroll-mt-28 space-y-4 p-5">
         <div>
           <h2 className="font-semibold text-slate-900">建立規則式行銷自動化</h2>
           <p className="mt-1 text-sm text-slate-500">
@@ -288,7 +288,7 @@ export default async function CrmPage() {
         )}
       </section>
 
-      <section className="scroll-mt-28 card overflow-hidden">
+      <section className="admin-section scroll-mt-28 overflow-hidden">
         <div className="border-b border-slate-100 px-5 py-4">
           <h2 className="font-semibold text-slate-900">行銷自動化</h2>
         </div>
@@ -312,10 +312,10 @@ export default async function CrmPage() {
                     {automation.trigger_type === "appointment_done" ? `｜延遲 ${automation.delay_minutes} 分鐘` : ""}
                   </p>
                 <p className="mt-1 truncate text-sm text-slate-400">{automation.body}</p>
-                <details className="mt-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                <details className="mt-3 border-y border-slate-200 bg-slate-50 px-3 py-2">
                   <summary className="cursor-pointer text-sm font-medium text-brand-700">預覽與編輯</summary>
                   <div className="mt-3 space-y-3">
-                    <div className="rounded-lg border border-brand-100 bg-white p-3 text-sm text-slate-700">
+                    <div className="border-l-[3px] border-l-brand-500 bg-white p-3 text-sm text-slate-700">
                       <div className="text-xs font-medium text-slate-400">示例預覽（不會實際發送）</div>
                       {automation.channel === "email" && <div className="mt-2 font-medium">主旨：{previewAutomationTemplate(automation.subject ?? automation.name)}</div>}
                       <p className="mt-2 whitespace-pre-wrap leading-6">{previewAutomationTemplate(automation.body)}</p>
@@ -357,7 +357,7 @@ export default async function CrmPage() {
         </div>
       </section>
 
-      <section id="delivery" className="scroll-mt-28 card space-y-3 p-5">
+      <section id="delivery" className="admin-section scroll-mt-28 space-y-3 p-5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold text-slate-900">投遞狀態</h2>
@@ -365,9 +365,9 @@ export default async function CrmPage() {
           </div>
           <Link href="/admin/reports" className="btn btn-secondary w-fit px-3 py-1.5 text-xs">查看完整投遞報表</Link>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-          <div className="rounded-xl bg-emerald-50 p-3"><div className="text-xs text-emerald-700">已送達</div><div className="mt-1 text-xl font-bold text-emerald-800">{deliverySent ?? 0}</div></div>
-          <div className={`rounded-xl p-3 ${deliveryFailed ? "bg-red-50" : "bg-slate-50"}`}><div className={`text-xs ${deliveryFailed ? "text-red-700" : "text-slate-500"}`}>投遞失敗</div><div className={`mt-1 text-xl font-bold ${deliveryFailed ? "text-red-800" : "text-slate-800"}`}>{deliveryFailed ?? 0}</div></div>
+        <div className="admin-metric-strip grid-cols-2 sm:max-w-md">
+          <Stat label="已送達" value={deliverySent ?? 0} />
+          <Stat label="投遞失敗" value={deliveryFailed ?? 0} tone={deliveryFailed ? "danger" : undefined} />
         </div>
       </section>
 
@@ -380,9 +380,9 @@ export default async function CrmPage() {
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "danger" }) {
   return (
-    <div className="card p-4">
-      <div className="text-sm text-slate-500">{label}</div>
-      <div className={`mt-1 text-2xl font-bold ${tone === "danger" ? "text-red-600" : "text-slate-900"}`}>{value}</div>
+    <div className={`admin-metric ${tone === "danger" ? "bg-red-50" : ""}`}>
+      <div className="admin-metric-label">{label}</div>
+      <div className={`admin-metric-value ${tone === "danger" ? "text-red-700" : ""}`}>{value}</div>
     </div>
   );
 }
