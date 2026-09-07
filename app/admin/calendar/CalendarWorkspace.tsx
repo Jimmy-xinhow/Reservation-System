@@ -155,7 +155,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
           headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
           buttonText={{ today: "今天", month: "月", week: "週", day: "日", list: "列表" }}
           events={loadEvents}
-          datesSet={(info) => setCalendarDate(taipeiDate(info.view.currentStart))}
+          datesSet={(info) => setCalendarDate(taipeiDate(info.view.calendar.getDate()))}
           eventClick={handleEventClick}
           dateClick={handleDateClick}
           eventDisplay="block"

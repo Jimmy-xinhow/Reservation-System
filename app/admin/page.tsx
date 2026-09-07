@@ -152,7 +152,7 @@ export default async function TodayPage({
             預約列表 · {viewDate}
             {viewDate === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
           </h1>
-          <p className="admin-page-description">集中查看當日預約；新增、改期與結帳使用各自的操作頁，避免表單混在列表中。</p>
+          <p className="admin-page-description">集中查看當日預約；新增、改期與結帳會開啟獨立視窗，完成後仍留在原本列表。</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="badge bg-brand-50 text-brand-700">
