@@ -185,6 +185,7 @@
 .fitnessClasses > header { display: grid; grid-template-columns: minmax(280px, .82fr) minmax(300px, 1.18fr); align-items: end; gap: clamp(42px, 8vw, 112px); margin-bottom: 44px; }
 .fitnessClasses > header > div > span { color: #8a641c; font-size: 11px; font-weight: 620; letter-spacing: .13em; }
 .fitnessClasses h2, .fitnessMethod h2, .fitnessStart h2, .fitnessClosing h2 { max-width: 13em; margin-top: 14px; font-family: var(--font-editorial); font-size: clamp(32px, 3.2vw, 46px); font-weight: 520; letter-spacing: -.008em; line-height: 1.34; }
+.fitnessClasses h2 { max-width: 15em; font-size: clamp(30px, 2.8vw, 42px); line-height: 1.4; }
 .fitnessClasses > header > p { max-width: 36rem; color: var(--muted); font-size: 15px; line-height: 1.9; }
 .fitnessSchedule { border-top: 1px solid var(--ink); }
 .fitnessScheduleHead, .fitnessSchedule > a { display: grid; grid-template-columns: 48px 84px minmax(190px, .82fr) minmax(250px, 1.18fr) 148px; gap: 18px; align-items: center; }
@@ -209,8 +210,9 @@
 .fitnessMethodCopy li > span { padding-top: 3px; color: #9d762c; font-family: var(--font-editorial); font-size: 13px; }
 .fitnessMethodCopy h3 { font-family: var(--font-editorial); font-size: 19px; font-weight: 560; line-height: 1.5; }
 .fitnessMethodCopy li p { margin-top: 5px !important; color: var(--muted); font-size: 13px; line-height: 1.72; }
-.fitnessStart { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(430px, 1.3fr) minmax(270px, .8fr); gap: 0 clamp(30px, 5vw, 72px); max-width: 1320px; margin: 0 auto; padding: clamp(82px, 9vw, 126px) clamp(24px, 5vw, 60px); }
+.fitnessStart { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(390px, 1.1fr) minmax(270px, .8fr); gap: 0 clamp(28px, 4vw, 52px); max-width: 1320px; margin: 0 auto; padding: clamp(72px, 8vw, 104px) clamp(24px, 5vw, 60px); }
 .fitnessStart > header { align-self: start; }
+.fitnessStart h2 { max-width: 15em; font-size: clamp(30px, 2.45vw, 38px); line-height: 1.46; }
 .fitnessStartRoutes { border-top: 1px solid var(--ink); }
 .fitnessStartRoutes > a { display: block; padding: 24px 2px 26px; border-bottom: 1px solid var(--line); transition: padding-inline 160ms ease; }
 .fitnessStartRoutes > a:hover { padding-inline: 10px; }
