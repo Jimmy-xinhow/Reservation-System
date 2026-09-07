@@ -145,7 +145,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const [attendanceSettingsResult, attendanceResult, handoffResult, salesPaymentsResult, salesOrdersResult, purchaseOrdersResult, inventoryResult, chatThreads] = await Promise.all([
     supabase.from("attendance_settings").select("click_enabled, qr_enabled").eq("clinic_id", clinicId).maybeSingle(),
     supabase.from("attendance_events").select("event_type, occurred_at").eq("clinic_id", clinicId).eq("user_id", member.user.id).gte("occurred_at", todayStartIso).lte("occurred_at", todayEndIso).order("occurred_at", { ascending: false }).limit(20),
-    supabase.from("handoff_tasks").select("id, priority, status", { count: "exact" }).eq("clinic_id", clinicId).neq("status", "done").limit(50),
+    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("handoff_tasks").select("id, priority, status", { count: "exact" }).eq("clinic_id", clinicId).neq("status", "done").limit(50),
     role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("sales_payments").select("amount, received_at").eq("clinic_id", clinicId).gte("received_at", monthStartIso).lte("received_at", todayEndIso),
     role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("sales_orders").select("total_amount, paid_amount, status").eq("clinic_id", clinicId).neq("status", "void").gte("created_at", monthStartIso).lte("created_at", todayEndIso),
     role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("purchase_orders").select("status, purchase_order_items(quantity, unit_cost)").eq("clinic_id", clinicId).in("status", ["ordered", "received"]).gte("created_at", monthStartIso).lte("created_at", todayEndIso),
