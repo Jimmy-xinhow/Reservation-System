@@ -41,8 +41,18 @@ export async function middleware(req: NextRequest) {
     url.pathname = "/admin/login";
     return NextResponse.redirect(url);
   }
-  // 登入頁不能只憑 session 判定工作區；有效帳號可能已被移除所有後台權限。
-  // 實際品牌／系統權限由登入後的 server route 與各頁 guard 驗證。
+  if (isLogin && user) {
+    const hasAccessReason = req.nextUrl.searchParams.has("reason");
+    const inviteAccepted = req.nextUrl.searchParams.get("invite") === "accepted";
+    if (!hasAccessReason && !inviteAccepted) {
+      // 先交給 /admin 的 server guard 判定品牌或系統工作區，避免只憑 session 猜測權限。
+      const url = req.nextUrl.clone();
+      url.pathname = "/admin";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+  // 帶有權限原因或邀請完成狀態時仍顯示獨立登入頁，由頁面安全登出舊 session。
   return res;
 }
 

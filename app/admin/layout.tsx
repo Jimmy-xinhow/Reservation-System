@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [member, platformAdmin] = await Promise.all([getOptionalMember(), getOptionalPlatformAdmin()]);
   const currentPath = (await headers()).get("x-admin-path") ?? "";
+  if (currentPath.startsWith("/admin/login")) return <>{children}</>;
   const isPlatformShell = Boolean(platformAdmin && currentPath.startsWith("/admin/platform"));
   const hasDualAdminContext = Boolean(member && platformAdmin);
   if (!member && !platformAdmin) return <>{children}</>;

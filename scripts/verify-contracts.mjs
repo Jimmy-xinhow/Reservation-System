@@ -247,6 +247,15 @@ invariant(
 );
 
 invariant(
+  "authenticated users cannot see a login form inside an active admin shell",
+  read("middleware.ts").includes('if (isLogin && user)') &&
+    read("middleware.ts").includes('url.pathname = "/admin"') &&
+    read("middleware.ts").includes('req.nextUrl.searchParams.has("reason")') &&
+    read("app/admin/layout.tsx").includes('currentPath.startsWith("/admin/login")') &&
+    read("app/admin/layout.tsx").includes('return <>{children}</>'),
+);
+
+invariant(
   "sign out works for both brand and system-only accounts",
   between(read("app/admin/actions.ts"), "export async function signOutAction()", "// ── 今日約診").includes("createSupabaseServer()") &&
     !between(read("app/admin/actions.ts"), "export async function signOutAction()", "// ── 今日約診").includes("requireMember()"),
@@ -1030,6 +1039,7 @@ invariant(
     paymentResultPage.includes("/api/payment/status") &&
     read("app/register/page.tsx").includes("localStorage.setItem(`registration:")
 );
+
 invariant(
   "brand settings LINE summary uses the same shared-or-brand resolver as runtime checks",
   read("app/admin/settings/page.tsx").includes("getClinicLineChannelContext(service, clinicId)") &&
