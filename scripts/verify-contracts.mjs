@@ -1817,6 +1817,8 @@ invariant(
     read("components/brand-page/LiveBrandPage.module.css").includes("min-height: 44px") &&
     !read("components/brand-page/LiveBrandPage.module.css").includes("max-width: 9ch") &&
     !read("components/brand-page/LiveBrandPage.module.css").includes("font-size: clamp(64px, 8.8vw, 142px)") &&
+    !read("components/brand-page/LiveBrandPage.module.css").includes(":ilho") &&
+    read("components/brand-page/LiveBrandPage.module.css").includes(".beautyActions .beautyPrimary") &&
     read("components/brand-page/LiveBrandPage.tsx").includes("fitnessHeroMedia") &&
     read("components/brand-page/LiveBrandPage.tsx").includes("私人課與團體課") &&
     !read("app/page.tsx").includes("ShowcaseFonts") &&
