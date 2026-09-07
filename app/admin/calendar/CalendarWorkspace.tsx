@@ -24,6 +24,7 @@ interface CalendarAppointment {
   customerName: string;
   customerPhone: string;
   serviceName: string;
+  providerId: string | null;
   providerName: string;
   visitType: string;
   depositStatus: string;
@@ -39,10 +40,11 @@ const STATUS_LEGEND = [
 
 const PROVIDER_COLORS = ["#0f766e", "#7c3aed", "#c2410c", "#0369a1", "#be123c", "#4d7c0f", "#6d28d9", "#a16207"];
 
-function providerColor(name: string): string {
-  let hash = 0;
-  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  return PROVIDER_COLORS[hash % PROVIDER_COLORS.length];
+function providerColor(providerId: string | null, doctors: Doctor[]): string {
+  if (!providerId) return "#64748b";
+  const index = doctors.findIndex((doctor) => doctor.id === providerId);
+  if (index < 0) return "#64748b";
+  return PROVIDER_COLORS[index] ?? `hsl(${Math.round((index * 137.508 + 168) % 360)} 68% 34%)`;
 }
 
 function formatDate(value: string): string {
@@ -172,12 +174,13 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
           eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
           eventContent={(info) => {
             const props = info.event.extendedProps as Omit<CalendarAppointment, "id" | "start" | "end">;
+            const staffColor = providerColor(props.providerId, doctors);
             return (
               <div className="calendar-event-content">
                 <div className="calendar-event-meta"><span>{info.event.startStr ? formatTime(info.event.startStr) : "未定"}</span><span>{props.statusLabel}</span></div>
                 <strong>{props.customerName}</strong>
                 <span>{props.serviceName}</span>
-                <small className="calendar-provider" style={{ color: providerColor(props.providerName) }}><i style={{ backgroundColor: providerColor(props.providerName) }} />{props.providerName}</small>
+                <small className="calendar-provider" style={{ color: staffColor }}><i style={{ backgroundColor: staffColor }} />{props.providerName}</small>
               </div>
             );
           }}

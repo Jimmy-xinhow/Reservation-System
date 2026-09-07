@@ -65,6 +65,7 @@ export async function GET(request: NextRequest) {
           customerName,
           customerPhone: showPii ? (patient?.phone ?? "未提供") : maskPhone(patient?.phone),
           serviceName,
+          providerId: row.doctor_id,
           providerName: doctor?.name ?? "未指定",
           visitType: row.visit_type,
           depositStatus: row.deposit_status,
