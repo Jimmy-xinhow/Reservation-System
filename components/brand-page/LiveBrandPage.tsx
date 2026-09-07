@@ -77,7 +77,7 @@ function BrandMark({ brand }: { brand: PublicBrandPageData }) {
 }
 
 function BrandFooter({ brand, mode }: { brand: PublicBrandPageData; mode: PageMode }) {
-  const modeLabel = mode === "beauty" ? "CARE, WITH INTENTION." : mode === "education" ? "KEEP CURIOSITY OPEN." : "MOVE WITH CONTROL.";
+  const modeLabel = mode === "beauty" ? "從理解開始的細節照護" : mode === "education" ? "讓學習真正變成成果" : "從穩定開始建立力量";
   return (
     <footer className={`${styles.brandFooter} ${styles[`${mode}Footer`]}`}>
       <div className={styles.footerIdentity}>
@@ -90,7 +90,7 @@ function BrandFooter({ brand, mode }: { brand: PublicBrandPageData; mode: PageMo
         {brand.links.line && <a href={brand.links.line}>官方 LINE ↗</a>}
         <a href={brand.links.records}>我的紀錄 ↗</a>
       </div>
-      <a className={styles.backToTop} href="#top">TOP ↑</a>
+      <a className={styles.backToTop} href="#top">回到頁首 ↑</a>
     </footer>
   );
 }
@@ -100,11 +100,11 @@ function BeautyHeader({ brand }: { brand: PublicBrandPageData }) {
     <header className={styles.beautyHeader}>
       <a className={styles.beautyMark} href="#top"><BrandMark brand={brand} /></a>
       <nav aria-label="美學所頁面導覽">
-        <a href="#principles"><span>01</span>照護原則</a>
-        <a href="#offers"><span>02</span>療程索引</a>
-        <a href="#about"><span>03</span>認識空間</a>
+        <a href="#principles"><span>01</span>服務方式</a>
+        <a href="#offers"><span>02</span>服務項目</a>
+        <a href="#about"><span>03</span>關於品牌</a>
       </nav>
-      <a className={styles.beautyHeaderAction} href={brand.links.primary}>預約諮詢 <span aria-hidden="true">→</span></a>
+      <a className={styles.beautyHeaderAction} href={brand.links.primary}>{brand.content.primary_cta_label} <span aria-hidden="true">→</span></a>
     </header>
   );
 }
@@ -112,7 +112,7 @@ function BeautyHeader({ brand }: { brand: PublicBrandPageData }) {
 function BeautyOfferIndex({ brand }: { brand: PublicBrandPageData }) {
   return (
     <div className={styles.beautyOfferIndex}>
-      <div className={styles.beautyTableHead}><span>療程</span><span>內容</span><span>下一步</span></div>
+      <div className={styles.beautyTableHead}><span>服務項目</span><span>服務說明</span><span>預約</span></div>
       {offersFor(brand, "beauty").map((offer, index) => (
         <a href={offer.href} key={`${offer.id}-${index}`}>
           <span className={styles.beautyOfferTitle}><small>{String(index + 1).padStart(2, "0")}</small><strong>{offer.title}</strong></span>
@@ -142,19 +142,19 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
           </div>
           <figure className={styles.beautyHeroImage}>
             <BrandImage src={brand.content.hero_image_url} alt={`${brand.name} 肌膚照護情境`} priority sizes="(max-width: 760px) 100vw, 58vw" />
-            <figcaption><span>PRIVATE CARE</span><span>{brand.address ?? "BY APPOINTMENT"}</span></figcaption>
+            <figcaption><span>一對一照護</span><span>{brand.address ?? "採預約制"}</span></figcaption>
           </figure>
-          <aside className={styles.beautyEditorialNote}><span>NOTE / 01</span><p>先理解你的需求，再一起決定適合的照護方式。</p></aside>
+          <aside className={styles.beautyEditorialNote}><span>初次到訪</span><p>先理解你的需求，再一起決定適合的照護方式。</p></aside>
         </section>
 
         <section className={styles.beautyPrinciples} id="principles" aria-label="服務原則">
-          <p>CARE STANDARD</p>
+          <p>我們重視的事</p>
           <div>{principles.map((point, index) => <p key={point}><span>{String(index + 1).padStart(2, "0")}</span><strong>{point}</strong></p>)}</div>
         </section>
 
         <section className={styles.beautyMenu} id="offers">
           <header>
-            <p className={styles.beautyEyebrow}>TREATMENT INDEX</p>
+            <p className={styles.beautyEyebrow}>服務與可約時段</p>
             <h2>{brand.content.section_title}</h2>
             <p>{brand.content.section_description}</p>
           </header>
@@ -164,7 +164,7 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.beautyMethod} id="about">
           <figure><BrandImage src={brand.content.gallery_image_url} alt={`${brand.name} 照護細節`} sizes="(max-width: 760px) 100vw, 46vw" /></figure>
           <div className={styles.beautyMethodCopy}>
-            <span className={styles.beautySectionNumber}>03 / OUR APPROACH</span>
+            <span className={styles.beautySectionNumber}>關於服務方式</span>
             <h2>{brand.content.about_title}</h2>
             <p>{brand.content.about_description}</p>
             <dl>
@@ -176,7 +176,7 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
         </section>
 
         <section className={styles.beautyClosing}>
-          <span>BOOKING NOTE</span>
+          <span>準備開始預約</span>
           <h2>{brand.content.secondary_cta_label}</h2>
           <p>選好服務之後，系統會帶你查看目前仍可預約的時間，不需要來回等待確認。</p>
           <a className={styles.beautyPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<span aria-hidden="true">→</span></a>
@@ -191,10 +191,10 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
 function EducationHeader({ brand }: { brand: PublicBrandPageData }) {
   return (
     <header className={styles.educationHeader}>
-      <div className={styles.editionTag}>PUBLIC PROGRAM / 2026</div>
+      <div className={styles.editionTag}>本期線上課程</div>
       <a className={styles.educationMark} href="#top"><BrandMark brand={brand} /></a>
       <nav aria-label="學習所頁面導覽"><a href="#offers">課程索引</a><a href="#method">學習方式</a><a href={brand.links.records}>報名紀錄</a></nav>
-      <a className={styles.educationHeaderAction} href={brand.links.primary}>探索課程 <span aria-hidden="true">↗</span></a>
+      <a className={styles.educationHeaderAction} href={brand.links.primary}>{brand.content.primary_cta_label} <span aria-hidden="true">→</span></a>
     </header>
   );
 }
@@ -205,7 +205,7 @@ function EducationCatalog({ brand }: { brand: PublicBrandPageData }) {
       {offersFor(brand, "education").map((offer, index) => (
         <a href={offer.href} key={`${offer.id}-${index}`}>
           <span className={styles.educationIndex}>{String(index + 1).padStart(2, "0")}</span>
-          <span className={styles.educationType}>{offer.kind === "event" ? "COHORT / EVENT" : "COURSE / SESSION"}</span>
+          <span className={styles.educationType}>{offer.kind === "event" ? "課程報名" : "一對一課程"}</span>
           <span className={styles.educationOfferCopy}><strong>{offer.title}</strong><small>{offer.description}</small></span>
           <span className={styles.educationOfferAction}>查看內容與場次 <b aria-hidden="true">→</b></span>
         </a>
@@ -222,7 +222,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
       <EducationHeader brand={brand} />
       <main>
         <section className={styles.educationHero}>
-          <div className={styles.educationHeroNumber}>OPEN<br />ROOM<span>ISSUE 01</span></div>
+          <div className={styles.educationHeroNumber}>本期精選<span>線上學習</span></div>
           <div className={styles.educationHeroCopy}>
             <p className={styles.educationEyebrow}>{brand.content.hero_eyebrow}</p>
             <h1>{brand.content.hero_title}<em>{brand.content.hero_highlight}</em></h1>
@@ -234,7 +234,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
           </div>
           <figure className={styles.educationHeroImage}>
             <BrandImage src={brand.content.hero_image_url} alt={`${brand.name} 成人線上學習情境`} priority sizes="(max-width: 760px) 100vw, 48vw" />
-            <figcaption>LEARN / PRACTICE / GROW</figcaption>
+            <figcaption>學習 · 練習 · 完成</figcaption>
           </figure>
           <div className={styles.educationFacts}>
             <p><span>{contentCount || "—"}</span>目前開放內容</p>
@@ -245,7 +245,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
 
         <section className={styles.educationCourses} id="offers">
           <header>
-            <span>INDEX / 01—{String(Math.max(contentCount, 1)).padStart(2, "0")}</span>
+            <span>目前開放 {String(Math.max(contentCount, 1)).padStart(2, "0")} 項</span>
             <h2>{brand.content.section_title}</h2>
             <p>{brand.content.section_description}</p>
           </header>
@@ -254,7 +254,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
 
         <section className={styles.educationMethod} id="method">
           <div className={styles.educationMethodIntro}>
-            <p>HOW IT WORKS</p>
+            <p>報名與學習流程</p>
             <h2>不是把內容塞滿，<br />而是讓每一步都有方向。</h2>
           </div>
           <ol>{principles.map((point, index) => <li key={point}><span>0{index + 1}</span><strong>{point}</strong><p>{index === 0 ? "選擇適合的課程與場次。" : index === 1 ? "完成必要的報名與付款。" : "依資格進入教材與紀錄。"}</p></li>)}</ol>
@@ -263,7 +263,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.educationAbout} id="about">
           <figure><BrandImage src={brand.content.gallery_image_url} alt={`${brand.name} 課程實作情境`} sizes="(max-width: 760px) 100vw, 44vw" /></figure>
           <div>
-            <span>FIELD NOTES / 02</span>
+            <span>課程學習方式</span>
             <h2>{brand.content.about_title}</h2>
             <p>{brand.content.about_description}</p>
             <a href={brand.links.records}>已報名？查看我的學習紀錄 <b aria-hidden="true">↗</b></a>
@@ -271,7 +271,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
         </section>
 
         <section className={styles.educationFaq}>
-          <header><span>FAQ / 03</span><h2>報名前，先把重要的事情說清楚。</h2></header>
+          <header><span>常見問題</span><h2>報名前，先把重要的事情說清楚。</h2></header>
           <div>
             <details><summary>{brand.content.faq_1_question}<span>＋</span></summary><p>{brand.content.faq_1_answer}</p></details>
             <details><summary>{brand.content.faq_2_question}<span>＋</span></summary><p>{brand.content.faq_2_answer}</p></details>
@@ -279,7 +279,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
         </section>
 
         <section className={styles.educationClosing}>
-          <span>NEXT COHORT</span>
+          <span>下一期課程</span>
           <h2>{brand.content.secondary_cta_label}</h2>
           <a className={styles.educationPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<span aria-hidden="true">↗</span></a>
         </section>
@@ -295,7 +295,7 @@ function FitnessHeader({ brand }: { brand: PublicBrandPageData }) {
     <header className={styles.fitnessHeader}>
       <a className={styles.fitnessMark} href="#top"><BrandMark brand={brand} /></a>
       <nav aria-label="運動教室頁面導覽"><a href="#offers">本期課表</a><a href="#method">訓練方式</a><a href={brand.links.records}>我的紀錄</a></nav>
-      <a className={styles.fitnessHeaderAction} href={brand.links.primary}>BOOK A CLASS <span aria-hidden="true">↗</span></a>
+      <a className={styles.fitnessHeaderAction} href={brand.links.primary}>{brand.content.primary_cta_label} <span aria-hidden="true">→</span></a>
     </header>
   );
 }
@@ -303,10 +303,10 @@ function FitnessHeader({ brand }: { brand: PublicBrandPageData }) {
 function FitnessSchedule({ brand }: { brand: PublicBrandPageData }) {
   return (
     <div className={styles.fitnessSchedule}>
-      <div className={styles.fitnessScheduleHead}><span>TYPE</span><span>CLASS</span><span>DETAIL</span><span>BOOK</span></div>
+      <div className={styles.fitnessScheduleHead}><span>類型</span><span>課程</span><span>內容</span><span>預約</span></div>
       {offersFor(brand, "fitness").map((offer, index) => (
         <a href={offer.href} key={`${offer.id}-${index}`}>
-          <span className={styles.fitnessType}>{offer.kind === "event" ? "GROUP" : "PRIVATE"}</span>
+          <span className={styles.fitnessType}>{offer.kind === "event" ? "團體課" : "私人課"}</span>
           <strong>{offer.title}</strong>
           <small>{offer.description}</small>
           <span className={styles.fitnessBook}>{offer.kind === "event" ? "查看場次" : "查看時段"}<b aria-hidden="true">↗</b></span>
@@ -323,8 +323,6 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
       <FitnessHeader brand={brand} />
       <main>
         <section className={styles.fitnessHero}>
-          <BrandImage src={brand.content.hero_image_url} alt={`${brand.name} Reformer 訓練情境`} priority sizes="100vw" />
-          <div className={styles.fitnessHeroShade} />
           <div className={styles.fitnessHeroCopy}>
             <p>{brand.content.hero_eyebrow}</p>
             <h1>{brand.content.hero_title}<em>{brand.content.hero_highlight}</em></h1>
@@ -334,13 +332,16 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
               <a className={styles.fitnessOutline} href="#offers">查看本期課表</a>
             </div>
           </div>
-          <div className={styles.fitnessHeroRail}><span>REFORMER</span><span>PRIVATE / GROUP</span><span>ALL LEVELS</span></div>
-          <a className={styles.fitnessScroll} href="#offers">SCROLL TO SCHEDULE ↓</a>
+          <figure className={styles.fitnessHeroMedia}>
+            <BrandImage src={brand.content.hero_image_url} alt={`${brand.name} Reformer 訓練情境`} priority sizes="(max-width: 820px) 100vw, 56vw" />
+            <figcaption className={styles.fitnessHeroRail}><span>器械皮拉提斯</span><span>私人課與團體課</span><span>各程度皆可開始</span></figcaption>
+          </figure>
+          <a className={styles.fitnessScroll} href="#offers">查看課表 ↓</a>
         </section>
 
         <section className={styles.fitnessClasses} id="offers">
           <header>
-            <span>CLASS BOARD / TAIPEI</span>
+            <span>本期課表 · 即時名額</span>
             <h2>{brand.content.section_title}</h2>
             <p>{brand.content.section_description}</p>
           </header>
@@ -348,26 +349,26 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
         </section>
 
         <section className={styles.fitnessPrinciples} id="method">
-          <p>THE FORME METHOD</p>
+          <p>訓練與預約方式</p>
           <div>{principles.map((point, index) => <article key={point}><span>0{index + 1}</span><h3>{point}</h3><p>{index === 0 ? "依你的經驗與目標選擇合適入口。" : index === 1 ? "私人課與團體課各自顯示真實可用時段。" : "完成後可隨時查看預約、報名與付款狀態。"}</p></article>)}</div>
         </section>
 
         <section className={styles.fitnessAbout} id="about">
           <div className={styles.fitnessAboutCopy}>
-            <span>STUDIO / 02</span>
+            <span>私人課與團體課</span>
             <h2>{brand.content.about_title}</h2>
             <p>{brand.content.about_description}</p>
             <dl>
-              <div><dt>PRIVATE</dt><dd>選擇服務與個別時段</dd></div>
-              <div><dt>GROUP</dt><dd>依場次、名額與票種報名</dd></div>
-              <div><dt>LOCATION</dt><dd>{brand.address ?? "預約時確認"}</dd></div>
+              <div><dt>私人課</dt><dd>選擇服務與個別時段</dd></div>
+              <div><dt>團體課</dt><dd>依場次、名額與票種報名</dd></div>
+              <div><dt>上課地點</dt><dd>{brand.address ?? "預約時確認"}</dd></div>
             </dl>
           </div>
           <figure><BrandImage src={brand.content.gallery_image_url} alt={`${brand.name} 教室與器械細節`} sizes="(max-width: 760px) 100vw, 52vw" /></figure>
         </section>
 
         <section className={styles.fitnessClosing}>
-          <p>START WHERE YOU ARE.</p>
+          <p>從適合自己的方式開始</p>
           <h2>{brand.content.secondary_cta_label}</h2>
           <div><a className={styles.fitnessPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<b aria-hidden="true">→</b></a><a href={brand.links.records}>查看我的紀錄 ↗</a></div>
         </section>

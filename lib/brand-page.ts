@@ -84,7 +84,7 @@ export interface PublicBrandPageData {
 export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageContent> = {
   beauty: {
     primary_entry: "booking",
-    hero_eyebrow: "BY APPOINTMENT · TAIPEI",
+    hero_eyebrow: "專業照護 · 採預約制",
     hero_title: "為你的日常，",
     hero_highlight: "留下剛好的風格。",
     hero_description: "從剪裁、色彩到日常整理，讓每一次服務都從真正理解你開始。",
@@ -130,7 +130,7 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
   },
   fitness: {
     primary_entry: "auto",
-    hero_eyebrow: "COACH LED · YOUR PACE",
+    hero_eyebrow: "教練帶領 · 依你的節奏前進",
     hero_title: "MOVE PAST",
     hero_highlight: "AVERAGE.",
     hero_description: "教練掌握節奏，你掌握強度。選擇課程後，直接查看可預約時段。",
@@ -153,7 +153,7 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
   },
   education: {
     primary_entry: "registration",
-    hero_eyebrow: "LEARNING, WIDE OPEN.",
+    hero_eyebrow: "線上學習 · 將知識轉化為成果",
     hero_title: "好奇心沒有",
     hero_highlight: "標準答案。",
     hero_description: "讓課程不只是填滿時間，而是讓興趣有地方繼續長大。",

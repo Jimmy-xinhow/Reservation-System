@@ -1810,6 +1810,18 @@ invariant(
     read("app/admin/followups/FollowupComposer.tsx").includes("LINE 回訪即時預覽") &&
     read("app/admin/line/page.tsx").includes("測試推播實際內容"),
 );
+invariant(
+  "public brand pages keep readable Chinese typography and explicit actions",
+  read("components/brand-page/LiveBrandPage.module.css").includes("font-size: 16px") &&
+    read("components/brand-page/LiveBrandPage.module.css").includes("max-width: 11.5em") &&
+    read("components/brand-page/LiveBrandPage.module.css").includes("min-height: 44px") &&
+    !read("components/brand-page/LiveBrandPage.module.css").includes("max-width: 9ch") &&
+    !read("components/brand-page/LiveBrandPage.module.css").includes("font-size: clamp(64px, 8.8vw, 142px)") &&
+    read("components/brand-page/LiveBrandPage.tsx").includes("fitnessHeroMedia") &&
+    read("components/brand-page/LiveBrandPage.tsx").includes("私人課與團體課") &&
+    !read("app/page.tsx").includes("ShowcaseFonts") &&
+    read("lib/brand-page.ts").includes("教練帶領 · 依你的節奏前進"),
+);
 
 if (failures.length > 0) {
   console.error(`\nContract verification failed: ${failures.join("; ")}`);

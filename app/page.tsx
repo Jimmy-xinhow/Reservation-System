@@ -6,7 +6,6 @@ import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { FunnelTracker } from "@/components/FunnelTracker";
 import { MarketingHome } from "@/components/MarketingHome";
 import { IndustryShowcase } from "@/components/showcase/IndustryShowcase";
-import { ShowcaseFonts } from "@/components/showcase/ShowcaseFonts";
 import { loadPublicBrandPage } from "@/lib/public-brand-page";
 
 export const dynamic = "force-dynamic";
@@ -67,10 +66,10 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
   }
   if (brandPage) {
     return (
-      <ShowcaseFonts>
+      <>
         <FunnelTracker eventName="portal_view" />
         <IndustryShowcase slug={brandPage.template} brand={brandPage} />
-      </ShowcaseFonts>
+      </>
     );
   }
   const clinic = await getClinic(clinicId);
