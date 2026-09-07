@@ -149,7 +149,7 @@ export async function updatePatientDetailsAction(fd: FormData): Promise<void> {
   if (hasBrandPermission(member, "brand.manage")) {
     const levelId = str(fd, "membership_level_id") || null;
     if (levelId) {
-      const { data: level, error: levelError } = await member.supabase.from("membership_levels").select("id").eq("id", levelId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle();
+      const { data: level, error: levelError } = await createServiceClient().from("membership_levels").select("id").eq("id", levelId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle();
       if (levelError) throw new Error(levelError.message);
       if (!level) throw new Error("會員等級不屬於目前品牌或已停用");
     }

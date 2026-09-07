@@ -7,6 +7,7 @@ import { DeletePatientButton } from "./DeletePatientButton";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { assignPatientMembershipLevelAction } from "../memberships/actions";
 import { updatePatientDetailsAction } from "../patient-actions";
+import { createServiceClient } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -86,9 +87,10 @@ export default async function PatientsPage({
     return <p className="card p-6 text-sm text-slate-500">目前角色只能查看被分配的工作，不開放完整顧客名單。</p>;
   }
   const supabase = await createSupabaseServer();
+  const service = createServiceClient();
   const canManageMembershipLevels = hasBrandPermission(member, "brand.manage");
   const { data: membershipLevels, error: membershipLevelsError } = canManageMembershipLevels
-    ? await supabase.from("membership_levels").select("id, name, active").eq("clinic_id", clinicId).order("sort_order").order("name")
+    ? await service.from("membership_levels").select("id, name, active").eq("clinic_id", clinicId).order("sort_order").order("name")
     : { data: [] as MembershipLevel[], error: null };
   if (membershipLevelsError) throw new Error(`讀取會員等級失敗：${membershipLevelsError.message}`);
   const levelRows = (membershipLevels ?? []) as MembershipLevel[];
