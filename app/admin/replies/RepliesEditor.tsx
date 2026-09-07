@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import ChannelMessagePreview from "@/app/admin/_components/ChannelMessagePreview";
+import type { MsgData, MsgKind } from "@/lib/lineMessage";
 
 export interface Reply {
   id: string;
@@ -32,7 +34,7 @@ export default function RepliesEditor({
   deleteAction,
 }: {
   replies: Reply[];
-  messages: { id: string; name: string }[];
+  messages: { id: string; name: string; kind: MsgKind; data: MsgData }[];
   createAction: ServerAction;
   updateAction: ServerAction;
   toggleAction: ServerAction;
@@ -43,8 +45,22 @@ export default function RepliesEditor({
   const [action, setAction] = useState("text");
   const [replyText, setReplyText] = useState("");
   const [messageId, setMessageId] = useState("");
+  const [messagePreviewIndex, setMessagePreviewIndex] = useState(0);
   const [sort, setSort] = useState("0");
   const formRef = useRef<HTMLFormElement>(null);
+  const selectedMessage = messages.find((message) => message.id === messageId);
+  const selectedCards = selectedMessage?.kind === "carousel" ? selectedMessage.data.cards ?? [] : [];
+  const activeMessagePreviewIndex = Math.min(messagePreviewIndex, Math.max(selectedCards.length - 1, 0));
+  const selectedCard = selectedMessage?.kind === "card" ? selectedMessage.data.card : selectedMessage?.kind === "carousel" ? selectedCards[activeMessagePreviewIndex] : undefined;
+  const preview = action === "text"
+    ? { body: replyText, title: undefined, buttons: [] as string[], imageUrl: undefined }
+    : action === "message"
+      ? { body: selectedMessage?.kind === "text" ? selectedMessage.data.text ?? "" : selectedCard?.text ?? "", title: selectedCard?.title || selectedMessage?.name || "請選擇訊息素材", buttons: selectedCard?.buttons.map((button) => button.label) ?? [], imageUrl: selectedCard?.imageUrl }
+      : action === "booking"
+        ? { body: "選擇服務與方便的日期時間，送出後即可完成預約。", title: "線上預約", buttons: ["開始預約"], imageUrl: undefined }
+        : action === "query"
+          ? { body: "查看目前有效預約，或進一步取消與改期。", title: "我的預約", buttons: ["查看預約"], imageUrl: undefined }
+          : { body: "查看今天的服務安排與目前進度。", title: "服務進度", buttons: ["查看進度"], imageUrl: undefined };
 
   function edit(r: Reply) {
     setEditingId(r.id);
@@ -70,11 +86,13 @@ export default function RepliesEditor({
       <form
         ref={formRef}
         action={editingId ? updateAction : createAction}
-        className={`grid scroll-mt-24 gap-4 border-b border-slate-200 p-4 lg:grid-cols-2 ${editingId ? "bg-brand-50/40" : "bg-white"}`}
+        className={`scroll-mt-24 border-b border-slate-200 ${editingId ? "bg-brand-50/40" : "bg-white"}`}
       >
-        <h3 className="font-semibold text-slate-900 lg:col-span-2">{editingId ? "編輯回覆規則" : "新增回覆規則"}</h3>
         {editingId && <input type="hidden" name="id" value={editingId} />}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:col-span-2">
+        <div className="line-live-editor-layout">
+        <div className="line-live-editor-fields">
+        <h3 className="font-semibold text-slate-900">{editingId ? "編輯回覆規則" : "新增回覆規則"}</h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <label className="text-sm">
             <span className="label">觸發關鍵字（逗號分隔）</span>
             <input
@@ -98,7 +116,7 @@ export default function RepliesEditor({
           </label>
         </div>
         {action === "text" && (
-          <label className="block text-sm lg:col-span-2">
+          <label className="block text-sm">
             <span className="label">回覆文字</span>
             <textarea
               name="reply_text"
@@ -111,9 +129,9 @@ export default function RepliesEditor({
           </label>
         )}
         {action === "message" && (
-          <label className="block text-sm lg:col-span-2">
+          <label className="block text-sm">
             <span className="label">選擇訊息素材</span>
-            <select name="message_id" value={messageId} onChange={(e) => setMessageId(e.target.value)} className="input">
+            <select name="message_id" value={messageId} onChange={(e) => { setMessageId(e.target.value); setMessagePreviewIndex(0); }} className="input">
               <option value="">請選擇</option>
               {messages.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -126,7 +144,7 @@ export default function RepliesEditor({
             )}
           </label>
         )}
-        <div className="flex flex-wrap items-end gap-3 lg:col-span-2">
+        <div className="flex flex-wrap items-end gap-3">
           <label className="text-sm">
             <span className="label">比對順序</span>
             <input
@@ -143,6 +161,20 @@ export default function RepliesEditor({
               取消編輯
             </button>
           )}
+        </div>
+        </div>
+        <div className="line-live-preview-column">
+          {action === "message" && selectedCards.length > 1 && <div className="line-preview-pages" role="tablist" aria-label="選擇訊息素材預覽頁">{selectedCards.map((_, index) => <button key={index} type="button" role="tab" aria-selected={activeMessagePreviewIndex === index} onClick={() => setMessagePreviewIndex(index)}>第 {index + 1} 頁</button>)}</div>}
+          <ChannelMessagePreview
+            customerText={keywords.split(/[，,]/)[0]?.trim() || "輸入關鍵字"}
+            title={preview.title}
+            body={preview.body}
+            buttons={preview.buttons}
+            imageUrl={preview.imageUrl}
+            label="自動回覆即時預覽"
+            note="左側的第一個關鍵字會模擬為顧客訊息；回覆內容與所選素材會同步更新。"
+          />
+        </div>
         </div>
       </form>
 

@@ -7,7 +7,6 @@ import {
   SEGMENT_RULE_LABELS,
   SEGMENT_RULE_TYPES,
   describeSegmentRule,
-  previewAutomationTemplate,
   type AutomationTriggerType,
   type SegmentRuleType,
 } from "@/lib/crm";
@@ -23,6 +22,7 @@ import {
 } from "./actions";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
+import AutomationMessageFields from "./AutomationMessageFields";
 
 export const dynamic = "force-dynamic";
 
@@ -253,13 +253,6 @@ export default async function CrmPage() {
               </select>
             </label>
             <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600">發送渠道</span>
-              <select name="channel" defaultValue="line" className="input">
-                <option value="line">LINE</option>
-                <option value="email">Email</option>
-              </select>
-            </label>
-            <label className="text-sm">
               <span className="mb-1 block font-medium text-slate-600">完成後延遲分鐘</span>
               <input type="number" min="0" name="delay_minutes" defaultValue="0" className="input" />
             </label>
@@ -271,14 +264,7 @@ export default async function CrmPage() {
               <span className="mb-1 block font-medium text-slate-600">未回訪重複間隔天數</span>
               <input type="number" min="1" name="cooldown_days" defaultValue="30" className="input" />
             </label>
-            <label className="text-sm">
-              <span className="mb-1 block font-medium text-slate-600">Email 主旨（Email 必填）</span>
-              <input name="subject" className="input" placeholder="回訪提醒" />
-            </label>
-            <label className="text-sm md:col-span-2">
-              <span className="mb-1 block font-medium text-slate-600">訊息內容</span>
-              <textarea name="body" required rows={5} className="input" placeholder="您好 {{customer_name}}，謝謝您這次的使用。" />
-            </label>
+            <AutomationMessageFields />
             <div className="md:col-span-2">
               <SubmitButton className="btn btn-primary">建立自動化</SubmitButton>
             </div>
@@ -315,23 +301,16 @@ export default async function CrmPage() {
                 <details className="mt-3 border-y border-slate-200 bg-slate-50 px-3 py-2">
                   <summary className="cursor-pointer text-sm font-medium text-brand-700">預覽與編輯</summary>
                   <div className="mt-3 space-y-3">
-                    <div className="border-l-[3px] border-l-brand-500 bg-white p-3 text-sm text-slate-700">
-                      <div className="text-xs font-medium text-slate-400">示例預覽（不會實際發送）</div>
-                      {automation.channel === "email" && <div className="mt-2 font-medium">主旨：{previewAutomationTemplate(automation.subject ?? automation.name)}</div>}
-                      <p className="mt-2 whitespace-pre-wrap leading-6">{previewAutomationTemplate(automation.body)}</p>
-                    </div>
                     {canEdit && (
                       <form action={updateAutomationAction} className="grid grid-cols-1 gap-3 border-t border-slate-200 pt-3 md:grid-cols-2">
                         <input type="hidden" name="id" value={automation.id} />
                         <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">自動化名稱</span><input name="name" defaultValue={automation.name} required className="input" /></label>
                         <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">觸發條件</span><select name="trigger_type" defaultValue={automation.trigger_type} className="input">{AUTOMATION_TRIGGER_TYPES.map((type) => <option key={type} value={type}>{AUTOMATION_TRIGGER_LABELS[type]}</option>)}</select></label>
                         <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">套用分眾</span><select name="segment_id" defaultValue={automation.segment_id ?? ""} className="input"><option value="">所有符合資格的顧客</option>{segments.map((segment) => <option key={segment.id} value={segment.id}>{segment.name}</option>)}</select></label>
-                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">發送渠道</span><select name="channel" defaultValue={automation.channel} className="input"><option value="line">LINE</option><option value="email">Email</option></select></label>
                         <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">完成後延遲分鐘</span><input type="number" min="0" name="delay_minutes" defaultValue={automation.delay_minutes} className="input" /></label>
                         <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">未回訪條件天數</span><input type="number" min="1" name="trigger_days" defaultValue={automation.trigger_days} className="input" /></label>
                         <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">冷卻間隔天數</span><input type="number" min="1" name="cooldown_days" defaultValue={automation.cooldown_days} className="input" /></label>
-                        <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">Email 主旨（Email 必填）</span><input name="subject" defaultValue={automation.subject ?? ""} className="input" /></label>
-                        <label className="text-sm md:col-span-2"><span className="mb-1 block font-medium text-slate-600">訊息內容</span><textarea name="body" defaultValue={automation.body} required rows={4} className="input" /></label>
+                        <AutomationMessageFields initialChannel={automation.channel} initialSubject={automation.subject ?? ""} initialBody={automation.body} />
                         <div className="md:col-span-2"><SubmitButton className="btn btn-secondary">儲存修改</SubmitButton></div>
                       </form>
                     )}

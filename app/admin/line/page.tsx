@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/admin";
 import { saveLineCredentialsAction, sendTestPushAction, updateLineChannelSettingsAction, verifyLineChannelSettingsAction } from "../line-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createServiceClient } from "@/lib/supabase";
+import ChannelMessagePreview from "@/app/admin/_components/ChannelMessagePreview";
 
 export const dynamic = "force-dynamic";
 
@@ -289,7 +290,8 @@ export default async function LinePage({
       {/* 測試推播 */}
       <section className="line-panel">
         <div className="line-panel-header"><div><h2>實際發送測試</h2><p>選一位已加入官方帳號的顧客確認能否送達。</p></div></div>
-        <form action={sendTestPushAction} className="line-form-body sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <div className="line-live-editor-layout">
+        <form action={sendTestPushAction} className="line-form-body self-start">
           <div className="grow">
             <label className="label">測試收件人 LINE 使用者識別碼</label>
             <input
@@ -306,6 +308,8 @@ export default async function LinePage({
             發送測試訊息
           </SubmitButton>
         </form>
+        <div className="line-live-preview-column"><ChannelMessagePreview botName={bot?.displayName ?? "品牌官方帳號"} body="【品牌】測試推播 ✅ 連線正常。" label="測試推播實際內容" note="按下發送後，選定收件人會收到完全相同的文字。" /></div>
+        </div>
         {!clinicToken && (
           <p className="mt-3 text-sm text-red-700">目前品牌尚未設定 LINE 訊息授權資料，因此無法發送測試。</p>
         )}

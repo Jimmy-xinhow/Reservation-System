@@ -29,6 +29,8 @@ export default function RichMenuEditor({
 }) {
   const [layout, setLayout] = useState<Layout>(initialLayout);
   const [template, setTemplate] = useState<RichMenuTemplateKey>(initialTemplate);
+  const [name, setName] = useState(initialName);
+  const [chatBar, setChatBar] = useState(initialChatBar);
   const spec = LAYOUTS[layout];
   const [slots, setSlots] = useState<Slot[]>(() => normalize(initialSlots, spec.slots));
 
@@ -57,6 +59,7 @@ export default function RichMenuEditor({
         <div><h2 className="font-semibold text-slate-900">編輯草稿內容</h2><p className="mt-0.5 text-xs text-slate-500">依序完成基本資料、版型與每一格動作，儲存後才會進入發布步驟。</p></div>
         <span className="badge bg-slate-100 text-slate-600">尚未影響線上版本</span>
       </div>
+      <div className="richmenu-live-editor-grid">
       <div className="space-y-6 p-4 sm:p-5">
 
       {/* ① 基本設定 */}
@@ -65,11 +68,11 @@ export default function RichMenuEditor({
         <div className="grid gap-3 sm:grid-cols-3">
         <label className="block text-sm">
           <span className="mb-1 block font-medium text-slate-600">草稿名稱</span>
-          <input name="name" defaultValue={initialName} className="input" maxLength={120} required />
+          <input name="name" value={name} onChange={(event) => setName(event.target.value)} className="input" maxLength={120} required />
         </label>
         <label className="block text-sm">
           <span className="mb-1 block font-medium text-slate-600">聊天室下方的選單名稱</span>
-          <input name="chat_bar_text" defaultValue={initialChatBar} className="input" maxLength={14} required />
+          <input name="chat_bar_text" value={chatBar} onChange={(event) => setChatBar(event.target.value)} className="input" maxLength={14} required />
         </label>
         <label className="block text-sm"><span className="mb-1 block font-medium text-slate-600">快速模板</span><select value={template} onChange={(event) => applyTemplate(event.target.value as RichMenuTemplateKey)} className="input"><option value="custom">自訂</option>{Object.entries(RICH_MENU_TEMPLATES).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
         </div>
@@ -193,6 +196,38 @@ export default function RichMenuEditor({
       </section>
 
       <SubmitButton className="btn btn-primary">儲存為新的草稿版本</SubmitButton>
+      </div>
+      <aside className="richmenu-live-preview" aria-label="LINE 圖文選單即時預覽">
+        <div className="message-composer-preview-head"><strong>LINE 圖文選單即時預覽</strong><span className="line-live-status" role="status">輸入即時更新</span></div>
+        <div className="line-preview-canvas">
+          <div className="line-phone line-richmenu-phone">
+            <div className="line-phone-header"><span className="status-dot bg-[#06c755]" /><strong>品牌官方帳號</strong></div>
+            <div className="line-richmenu-chat"><span>圖文選單會固定顯示在聊天室下方</span></div>
+            <div
+              className="line-richmenu-grid"
+              style={{
+                gridTemplateColumns: `repeat(${spec.cols}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${spec.rows}, minmax(0, 1fr))`,
+                aspectRatio: `${spec.width} / ${spec.height}`,
+              }}
+            >
+              {template !== "custom" && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={`/api/admin/richmenu-template?template=${encodeURIComponent(template)}`} alt="目前模板預覽" className="absolute inset-0 h-full w-full object-cover" />
+              )}
+              {slots.map((slot, index) => (
+                <div key={`${index}-${slot.label}`} className="line-richmenu-slot">
+                  <strong>{slot.label.trim() || `第 ${index + 1} 格`}</strong>
+                  <span>{ACTION_OPTIONS.find((option) => option.value === slot.action)?.label ?? "尚未設定"}</span>
+                </div>
+              ))}
+            </div>
+            <div className="line-richmenu-chatbar">{chatBar.trim() || "選單"}</div>
+          </div>
+        </div>
+        <dl className="richmenu-live-summary"><div><dt>草稿</dt><dd>{name.trim() || "未命名草稿"}</dd></div><div><dt>版型</dt><dd>{spec.label}</dd></div><div><dt>格數</dt><dd>{spec.slots} 格</dd></div></dl>
+        <p className="message-composer-preview-note">模板、格數、顯示名稱、點擊動作與聊天室選單名稱會同步更新；自訂背景圖會在發布步驟疊合預覽。</p>
+      </aside>
       </div>
     </form>
   );

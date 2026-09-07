@@ -28,6 +28,7 @@ export default function MessageComposer({
   const [cards, setCards] = useState<MsgCard[]>(
     initial?.data.cards && initial.data.cards.length ? initial.data.cards : [emptyCard()],
   );
+  const [previewIndex, setPreviewIndex] = useState(0);
 
   const data: MsgData =
     kind === "text" ? { text } : kind === "card" ? { card } : { cards };
@@ -94,7 +95,11 @@ export default function MessageComposer({
                 {cards.length > 1 && (
                   <button
                     type="button"
-                    onClick={() => setCards(cards.filter((_, idx) => idx !== i))}
+                    onClick={() => {
+                      const next = cards.filter((_, idx) => idx !== i);
+                      setCards(next);
+                      setPreviewIndex((current) => Math.min(current, next.length - 1));
+                    }}
                     className="admin-inline-action text-red-700"
                   >
                     刪除此頁
@@ -107,7 +112,10 @@ export default function MessageComposer({
           {cards.length < 10 && (
             <button
               type="button"
-              onClick={() => setCards([...cards, emptyCard()])}
+              onClick={() => {
+                setCards([...cards, emptyCard()]);
+                setPreviewIndex(cards.length);
+              }}
               className="btn btn-secondary"
             >
               ＋ 新增一頁
@@ -118,17 +126,19 @@ export default function MessageComposer({
 
       <SubmitButton className="btn btn-primary">儲存訊息素材</SubmitButton>
       </div>
-      <MessagePreview kind={kind} text={text} card={card} cards={cards} />
+      <MessagePreview kind={kind} text={text} card={card} cards={cards} previewIndex={previewIndex} onPreviewIndexChange={setPreviewIndex} />
       </div>
     </form>
   );
 }
 
-function MessagePreview({ kind, text, card, cards }: { kind: MsgKind; text: string; card: MsgCard; cards: MsgCard[] }) {
-  const activeCard = kind === "carousel" ? cards[0] ?? emptyCard() : card;
+function MessagePreview({ kind, text, card, cards, previewIndex, onPreviewIndexChange }: { kind: MsgKind; text: string; card: MsgCard; cards: MsgCard[]; previewIndex: number; onPreviewIndexChange: (index: number) => void }) {
+  const activeIndex = Math.min(previewIndex, Math.max(cards.length - 1, 0));
+  const activeCard = kind === "carousel" ? cards[activeIndex] ?? emptyCard() : card;
   return (
     <aside className="message-composer-preview" aria-label="LINE 訊息即時預覽">
-      <div className="message-composer-preview-head"><strong>顧客畫面預覽</strong><span>{kind === "text" ? "文字訊息" : kind === "card" ? "圖文卡" : `第 1／${cards.length} 頁`}</span></div>
+      <div className="message-composer-preview-head"><strong>顧客畫面即時預覽</strong><span className="line-live-status">{kind === "text" ? "文字訊息" : kind === "card" ? "圖文卡" : `第 ${activeIndex + 1}／${cards.length} 頁`}</span></div>
+      {kind === "carousel" && cards.length > 1 && <div className="line-preview-pages" role="tablist" aria-label="選擇輪播預覽頁">{cards.map((_, index) => <button key={index} type="button" role="tab" aria-selected={activeIndex === index} onClick={() => onPreviewIndexChange(index)}>第 {index + 1} 頁</button>)}</div>}
       <div className="line-preview-canvas">
         <div className="line-phone">
           <div className="line-phone-header"><span className="status-dot bg-[#06c755]" /><strong>品牌官方帳號</strong></div>

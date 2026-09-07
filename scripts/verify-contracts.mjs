@@ -1798,6 +1798,18 @@ invariant(
     read("lib/registration-notifications.ts").includes('kind === "cancelled" ? eventsUrl : ticketsUrl') &&
     read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-message-card-highlight"),
 );
+invariant(
+  "all editable LINE content surfaces provide a live customer preview",
+  exists("app/admin/_components/ChannelMessagePreview.tsx") &&
+    read("app/admin/_components/ChannelMessagePreview.tsx").includes("輸入即時更新") &&
+    read("app/admin/richmenu/RichMenuEditor.tsx").includes("LINE 圖文選單即時預覽") &&
+    read("app/admin/messages/MessageComposer.tsx").includes("onPreviewIndexChange") &&
+    read("app/admin/replies/LineReplySettingsEditor.tsx").includes("ChannelMessagePreview") &&
+    read("app/admin/replies/RepliesEditor.tsx").includes("自動回覆即時預覽") &&
+    read("app/admin/crm/AutomationMessageFields.tsx").includes("LINE 自動訊息即時預覽") &&
+    read("app/admin/followups/FollowupComposer.tsx").includes("LINE 回訪即時預覽") &&
+    read("app/admin/line/page.tsx").includes("測試推播實際內容"),
+);
 
 if (failures.length > 0) {
   console.error(`\nContract verification failed: ${failures.join("; ")}`);
