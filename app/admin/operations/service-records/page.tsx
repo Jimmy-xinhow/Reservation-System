@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { requireOperator } from "@/lib/admin";
-import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { formatDateTime } from "@/lib/slots";
 import { createServiceClient } from "@/lib/supabase";
 import { createTreatmentRecordAction } from "../../beauty/actions";
@@ -33,9 +31,6 @@ interface RecordRow {
 
 export default async function ServiceRecordsPage() {
   const member = await requireOperator();
-  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) {
-    return <ModuleDisabled title="服務營運與庫存尚未啟用" />;
-  }
   const service = createServiceClient();
   const [{ data: appointments, error: appointmentsError }, { data: records, error: recordsError }] = await Promise.all([
     service.from("appointments").select("id, start_at, status, patients(name), services(name)").eq("clinic_id", member.clinicId).order("start_at", { ascending: false }).limit(150),

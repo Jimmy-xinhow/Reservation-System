@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { requireMember, canViewSensitiveCustomerData } from "@/lib/admin";
+import { requireMember, canViewSensitiveCustomerData, hasBrandPermission } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
+import { AdminModal } from "@/components/AdminModal";
 import { DeletePatientButton } from "./DeletePatientButton";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { assignPatientMembershipLevelAction } from "../memberships/actions";
+import { updatePatientDetailsAction } from "../patient-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,19 @@ interface Patient {
 }
 
 interface MembershipLevel { id: string; name: string; active: boolean; }
+interface PatientDetail extends Patient {
+  birthday: string | null;
+  gender: string | null;
+  email: string | null;
+  marketing_opt_in: boolean;
+}
+interface RecentAppointment {
+  id: string;
+  start_at: string;
+  status: string;
+  doctors: { name: string } | { name: string }[] | null;
+  services: { name: string } | { name: string }[] | null;
+}
 
 const PAGE_SIZE = 30;
 const SELECT = "id, name, phone, tags, blocked_until, membership_level_id, created_at";
@@ -27,22 +42,51 @@ function isBlocked(p: Patient): boolean {
   return !!p.blocked_until && new Date(p.blocked_until) > new Date();
 }
 
+function one<T>(value: T | T[] | null): T | null {
+  return Array.isArray(value) ? value[0] ?? null : value;
+}
+
+function listHref(filters: { keyword: string; page: number; segmentId: string; patientId?: string }): string {
+  const query = new URLSearchParams();
+  if (filters.keyword) query.set("q", filters.keyword);
+  if (filters.page > 1) query.set("page", String(filters.page));
+  if (filters.segmentId) query.set("segment_id", filters.segmentId);
+  if (filters.patientId) query.set("patient_id", filters.patientId);
+  const suffix = query.toString();
+  return `/admin/patients${suffix ? `?${suffix}` : ""}`;
+}
+
+const APPOINTMENT_STATUS: Record<string, string> = { booked: "已預約", confirmed: "已確認", cancelled: "已取消", done: "已完成", no_show: "未到" };
+
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat("zh-TW", {
+    timeZone: "Asia/Taipei",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(value));
+}
+
 export default async function PatientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string; segment_id?: string }>;
+  searchParams: Promise<{ q?: string; page?: string; segment_id?: string; patient_id?: string }>;
 }) {
-  const { q, page: pageStr, segment_id: segmentIdParam } = await searchParams;
+  const { q, page: pageStr, segment_id: segmentIdParam, patient_id: patientIdParam } = await searchParams;
   const keyword = (q ?? "").trim().replace(/[,%()*]/g, "");
   const page = Math.max(1, Number(pageStr) || 1);
   const segmentId = (segmentIdParam ?? "").trim();
+  const selectedPatientId = (patientIdParam ?? "").trim();
 
-  const { clinicId, role } = await requireMember();
+  const member = await requireMember();
+  const { clinicId, role } = member;
   if (!canViewSensitiveCustomerData(role)) {
     return <p className="card p-6 text-sm text-slate-500">目前角色只能查看被分配的工作，不開放完整顧客名單。</p>;
   }
   const supabase = await createSupabaseServer();
-  const canManageMembershipLevels = role === "owner" || role === "admin";
+  const canManageMembershipLevels = hasBrandPermission(member, "brand.manage");
   const { data: membershipLevels, error: membershipLevelsError } = canManageMembershipLevels
     ? await supabase.from("membership_levels").select("id, name, active").eq("clinic_id", clinicId).order("sort_order").order("name")
     : { data: [] as MembershipLevel[], error: null };
@@ -133,13 +177,42 @@ export default async function PatientsPage({
     }
   }
 
+  let selectedPatient: PatientDetail | null = null;
+  let recentAppointments: RecentAppointment[] = [];
+  if (selectedPatientId) {
+    const [{ data: selectedData, error: selectedError }, { data: recentData, error: recentError }] = await Promise.all([
+      supabase
+        .from("patients")
+        .select("id, name, phone, tags, blocked_until, membership_level_id, created_at, birthday, gender, email, marketing_opt_in")
+        .eq("id", selectedPatientId)
+        .eq("clinic_id", clinicId)
+        .eq("active", true)
+        .maybeSingle(),
+      supabase
+        .from("appointments")
+        .select("id, start_at, status, doctors(name), services(name)")
+        .eq("clinic_id", clinicId)
+        .eq("patient_id", selectedPatientId)
+        .order("start_at", { ascending: false })
+        .limit(8),
+    ]);
+    if (selectedError || recentError) throw new Error(selectedError?.message ?? recentError?.message ?? "讀取顧客詳情失敗");
+    selectedPatient = selectedData as PatientDetail | null;
+    recentAppointments = (recentData ?? []) as unknown as RecentAppointment[];
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const closeDetailHref = listHref({ keyword, page, segmentId });
+  const activeLevelRows = levelRows.filter((level) => level.active);
 
   return (
     <div className="admin-page">
       <div className="admin-page-header">
         <div><p className="eyebrow">顧客與會員</p><h1 className="admin-page-title">{segmentName ? `分眾顧客：${segmentName}` : "顧客名單"}</h1><p className="admin-page-description">集中搜尋顧客、查看預約紀錄、標籤與可服務狀態。</p></div>
-        {segmentId && <Link href="/admin/patients" className="btn btn-ghost text-sm">清除分眾篩選</Link>}
+        <div className="flex flex-wrap gap-2">
+          {canManageMembershipLevels && <Link href="/admin/membership-levels" className="btn btn-secondary text-sm">會員等級設定</Link>}
+          {segmentId && <Link href="/admin/patients" className="btn btn-ghost text-sm">清除分眾篩選</Link>}
+        </div>
       </div>
 
       <form className="admin-toolbar">
@@ -152,6 +225,13 @@ export default async function PatientsPage({
           </Link>
         )}
       </form>
+
+      {canManageMembershipLevels && activeLevelRows.length === 0 && (
+        <div className="notice notice-info flex flex-wrap items-center justify-between gap-3">
+          <span>目前品牌尚未建立會員等級，因此名單只會顯示「一般顧客」。</span>
+          <Link href="/admin/membership-levels" className="btn btn-secondary text-sm">建立會員等級</Link>
+        </div>
+      )}
 
       <div className="admin-table-shell admin-table-mobile-cards">
         <table className="tbl">
@@ -207,13 +287,13 @@ export default async function PatientsPage({
                     )}
                   </td>
                   <td data-label="會員等級">
-                    {canManageMembershipLevels ? <form action={assignPatientMembershipLevelAction} className="flex min-w-52 items-center gap-2"><input type="hidden" name="patient_id" value={p.id} /><select className="input py-1.5 text-xs" name="level_id" defaultValue={p.membership_level_id ?? ""}><option value="">一般顧客</option>{levelRows.filter((level) => level.active).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select><SubmitButton className="btn btn-secondary px-2 py-1.5 text-xs">儲存</SubmitButton></form> : <span className="text-slate-500">{p.membership_level_id ? levelName.get(p.membership_level_id) ?? "會員" : "一般顧客"}</span>}
+                    {canManageMembershipLevels ? <form action={assignPatientMembershipLevelAction} className="flex min-w-52 items-center gap-2"><input type="hidden" name="patient_id" value={p.id} /><select className="input py-1.5 text-xs" name="level_id" defaultValue={p.membership_level_id ?? ""}><option value="">一般顧客</option>{activeLevelRows.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select><SubmitButton className="btn btn-secondary px-2 py-1.5 text-xs">儲存</SubmitButton></form> : <span className="text-slate-500">{p.membership_level_id ? levelName.get(p.membership_level_id) ?? "會員" : "一般顧客"}</span>}
                   </td>
                   <td data-label="操作">
                     <div className="flex items-center gap-3">
                       <Link
-                        href={`/admin/patients/${p.id}`}
-                        className="admin-inline-action text-brand-700"
+                        href={listHref({ keyword, page, segmentId, patientId: p.id })}
+                        className="btn btn-secondary px-3 py-1.5 text-xs"
                       >
                         詳情
                       </Link>
@@ -247,6 +327,57 @@ export default async function PatientsPage({
             <span className="text-slate-300">下一頁</span>
           )}
         </div>
+      )}
+
+      {selectedPatient && (
+        <AdminModal
+          title="顧客詳情"
+          description="不離開顧客名單即可修改基本資料、會員等級並查看近期預約。"
+          closeHref={closeDetailHref}
+          size="wide"
+        >
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
+            <form action={updatePatientDetailsAction} className="space-y-4">
+              <input type="hidden" name="id" value={selectedPatient.id} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-sm"><span className="label">姓名</span><input name="name" defaultValue={selectedPatient.name} required maxLength={120} className="input" /></label>
+                <label className="text-sm"><span className="label">電話</span><input name="phone" defaultValue={selectedPatient.phone} required maxLength={30} className="input" /></label>
+                <label className="text-sm"><span className="label">Email</span><input type="email" name="email" defaultValue={selectedPatient.email ?? ""} maxLength={200} className="input" /></label>
+                <label className="text-sm"><span className="label">生日</span><input type="date" name="birthday" defaultValue={selectedPatient.birthday ?? ""} className="input" /></label>
+                <label className="text-sm"><span className="label">性別</span><select name="gender" defaultValue={selectedPatient.gender ?? ""} className="input"><option value="">未填</option><option value="女">女</option><option value="男">男</option><option value="其他">其他</option></select></label>
+                {canManageMembershipLevels && (
+                  <label className="text-sm"><span className="label">會員等級</span><select name="membership_level_id" defaultValue={selectedPatient.membership_level_id ?? ""} className="input"><option value="">一般顧客</option>{activeLevelRows.map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select></label>
+                )}
+                <label className="text-sm sm:col-span-2"><span className="label">標籤</span><input name="tags" defaultValue={selectedPatient.tags ?? ""} maxLength={1000} placeholder="例如：長期會員，偏好晚間" className="input" /><span className="help-text block">多個標籤請用逗號分隔。</span></label>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="marketing_opt_in" defaultChecked={selectedPatient.marketing_opt_in} className="h-4 w-4 accent-brand-600" />同意接收行銷訊息</label>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                {canManageMembershipLevels && <Link href="/admin/membership-levels" className="admin-inline-action text-brand-700">管理會員等級</Link>}
+                <div className="ml-auto flex gap-2"><Link href={closeDetailHref} className="btn btn-secondary">取消</Link><SubmitButton className="btn btn-primary">儲存顧客資料</SubmitButton></div>
+              </div>
+            </form>
+
+            <aside className="space-y-4 border-t border-slate-200 pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+              <div>
+                <p className="eyebrow">近期預約</p>
+                <p className="mt-1 text-sm text-slate-500">建檔日期 {formatDateTime(selectedPatient.created_at)}</p>
+              </div>
+              {recentAppointments.length === 0 ? (
+                <p className="rounded-lg bg-slate-50 px-4 py-5 text-sm text-slate-500">目前沒有預約紀錄。</p>
+              ) : (
+                <div className="divide-y divide-slate-200 border-y border-slate-200">
+                  {recentAppointments.map((appointment) => (
+                    <div key={appointment.id} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 py-3 text-sm">
+                      <span className="font-medium text-slate-800">{formatDateTime(appointment.start_at)}</span>
+                      <span className="justify-self-end text-xs text-slate-500">{APPOINTMENT_STATUS[appointment.status] ?? appointment.status}</span>
+                      <span className="col-span-2 text-slate-600">{one(appointment.services)?.name ?? "未指定服務"}{one(appointment.doctors)?.name ? ` · ${one(appointment.doctors)?.name}` : ""}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </aside>
+          </div>
+        </AdminModal>
       )}
     </div>
   );

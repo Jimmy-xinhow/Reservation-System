@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin, requireOperator } from "@/lib/admin";
+import { hasBrandPermission, requireAdmin, requireOperator } from "@/lib/admin";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { createServiceClient } from "@/lib/supabase";
 
@@ -106,6 +106,60 @@ export async function updatePatientAction(fd: FormData) {
     .eq("id", id)
     .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
+  revalidatePath(`/admin/patients/${id}`);
+  revalidatePath("/admin/patients");
+}
+
+export async function updatePatientDetailsAction(fd: FormData): Promise<void> {
+  const member = await requireOperator();
+  const id = str(fd, "id");
+  const name = str(fd, "name");
+  const phone = str(fd, "phone");
+  const email = str(fd, "email");
+  const birthday = str(fd, "birthday");
+  const gender = str(fd, "gender");
+  const tags = str(fd, "tags");
+  if (!id) throw new Error("缺少顧客");
+  if (!name) throw new Error("請填寫顧客姓名");
+  if (!phone) throw new Error("請填寫顧客電話");
+  if (name.length > 120 || phone.length > 30 || email.length > 200 || tags.length > 1000) throw new Error("顧客資料超過可輸入長度");
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Email 格式不正確");
+  if (birthday && !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) throw new Error("生日格式不正確");
+  if (gender && !["男", "女", "其他"].includes(gender)) throw new Error("性別選項不正確");
+
+  const changes: {
+    name: string;
+    phone: string;
+    email: string | null;
+    birthday: string | null;
+    gender: string | null;
+    tags: string | null;
+    marketing_opt_in: boolean;
+    membership_level_id?: string | null;
+  } = {
+    name,
+    phone,
+    email: email || null,
+    birthday: birthday || null,
+    gender: gender || null,
+    tags: tags || null,
+    marketing_opt_in: bool(fd, "marketing_opt_in"),
+  };
+
+  if (hasBrandPermission(member, "brand.manage")) {
+    const levelId = str(fd, "membership_level_id") || null;
+    if (levelId) {
+      const { data: level, error: levelError } = await member.supabase.from("membership_levels").select("id").eq("id", levelId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle();
+      if (levelError) throw new Error(levelError.message);
+      if (!level) throw new Error("會員等級不屬於目前品牌或已停用");
+    }
+    changes.membership_level_id = levelId;
+  }
+
+  const { data, error } = await member.supabase.from("patients").update(changes).eq("id", id).eq("clinic_id", member.clinicId).select("id").maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("找不到目前品牌的顧客");
+  revalidatePath("/admin/patients");
   revalidatePath(`/admin/patients/${id}`);
 }
 

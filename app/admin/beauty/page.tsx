@@ -1,7 +1,5 @@
 import { requireOperator } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
-import { isAdminModuleEnabled } from "@/lib/admin-modules";
-import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { SubmitButton } from "@/components/SubmitButton";
 import { formatDateTime } from "@/lib/slots";
 import Link from "next/link";
@@ -23,7 +21,6 @@ const twd = new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD",
 export default async function BeautyOperationsPage() {
   const member = await requireOperator();
   const { clinicId } = member;
-  if (!(await isAdminModuleEnabled(member.supabase, clinicId, "beauty"))) return <ModuleDisabled title="服務營運與庫存尚未啟用" />;
   const service = createServiceClient();
   const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
   const [inventoryResult, movementsResult, doctorsResult, servicesResult, rulesResult, completedResult] = await Promise.all([

@@ -96,8 +96,8 @@ const GROUPS: Group[] = [
     label: "營運中心",
     items: [
       { href: "/admin/products", label: "商品管理", icon: "membership", adminOnly: true },
-      { href: "/admin/beauty", label: "服務營運總覽", icon: "service", module: "beauty", exact: true },
-      { href: "/admin/operations/service-records", label: "服務過程紀錄", icon: "list", module: "beauty" },
+      { href: "/admin/beauty", label: "服務營運總覽", icon: "service", exact: true },
+      { href: "/admin/operations/service-records", label: "服務過程紀錄", icon: "list" },
       { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list", module: "beauty" },
       { href: "/admin/operations/finance", label: "財務摘要", icon: "membership" },
       { href: "/admin/reports", label: "營運報表", icon: "report" },
