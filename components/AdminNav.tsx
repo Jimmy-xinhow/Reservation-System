@@ -101,9 +101,9 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/services", label: "服務方案與排程設定", icon: "service", adminOnly: true, activePrefixes: ["/admin/resources", "/admin/schedules", "/admin/exceptions"] },
       { href: "/admin/operations/service-records", label: "服務過程紀錄", icon: "list" },
-      { href: "/admin/operations/inventory", label: "耗材與商品庫存", icon: "membership", module: "beauty" },
-      { href: "/admin/operations/commissions", label: "服務獎金試算", icon: "report", module: "beauty" },
-      { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list", module: "beauty" },
+      { href: "/admin/operations/inventory", label: "耗材與商品庫存", icon: "membership" },
+      { href: "/admin/operations/commissions", label: "服務獎金試算", icon: "report" },
+      { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list" },
       { href: "/admin/products", label: "商品管理", icon: "membership", adminOnly: true },
       { href: "/admin/documents", label: "同意書與簽署", icon: "list", adminOnly: true },
       { href: "/admin/operations/finance", label: "財務摘要", icon: "membership" },
