@@ -14,9 +14,10 @@
 .page *, .page *::before, .page *::after { box-sizing: border-box; }
 .page a { color: inherit; text-decoration: none; }
 .page h1, .page h2, .page h3, .page p, .page figure, .page dl, .page dd { margin: 0; }
-.page h1, .page h2, .page h3 { overflow-wrap: normal; word-break: normal; line-break: strict; text-wrap: balance; }
-.page h1, .page h2 { font-family: var(--font-editorial); font-weight: 520; letter-spacing: -.012em; }
+.page h1, .page h2, .page h3 { overflow-wrap: normal; word-break: auto-phrase; line-break: strict; }
+.page h1, .page h2 { text-wrap: balance; }
 .page h3 { font-weight: 560; }
+.headingPhrase { display: inline-block; }
 .page a:focus-visible, .page summary:focus-visible { outline: 3px solid currentColor; outline-offset: 4px; }
 .runtimeImage { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
@@ -61,9 +62,9 @@
 .beautyPrinciples span, .beautyPrinciples strong { display: block; }
 .beautyPrinciples span { margin-bottom: 8px; color: var(--accent); font-size: 11px; }
 .beautyPrinciples strong { font-family: var(--font-editorial); font-size: 18px; font-weight: 620; line-height: 1.5; }
-.beautyMenu { display: grid; grid-template-columns: minmax(260px, .54fr) minmax(0, 1.46fr); gap: clamp(46px, 7vw, 96px); max-width: 1240px; margin: 0 auto; padding: clamp(82px, 9vw, 124px) clamp(24px, 5vw, 60px); }
+.beautyMenu { display: grid; grid-template-columns: minmax(410px, .88fr) minmax(0, 1.12fr); gap: clamp(46px, 6vw, 78px); max-width: 1280px; margin: 0 auto; padding: clamp(82px, 9vw, 124px) clamp(24px, 5vw, 60px); }
 .beautyMenu header { align-self: start; position: sticky; top: 116px; }
-.beautyMenu h2, .beautyMethod h2, .beautyClosing h2 { max-width: 13em; margin-top: 18px; font-family: var(--font-editorial); font-size: clamp(34px, 3.5vw, 50px); font-weight: 520; letter-spacing: -.02em; line-height: 1.34; }
+.beautyMenu h2, .beautyMethod h2 { max-width: 18em; margin-top: 18px; font-family: var(--font-editorial); font-size: clamp(34px, 3vw, 43px); font-weight: 520; letter-spacing: -.014em; line-height: 1.42; }
 .beautyMenu header > p:last-child { max-width: 30rem; margin-top: 22px !important; color: var(--muted); font-size: 16px; line-height: 1.85; }
 .beautyTableHead { display: none; }
 .beautyOfferIndex { border-top: 1px solid var(--ink); }
@@ -74,16 +75,17 @@
 .beautyOfferTitle strong { font-family: var(--font-editorial); font-size: clamp(21px, 2vw, 28px); font-weight: 620; line-height: 1.42; }
 .beautyOfferDescription { color: var(--muted); font-size: 15px; line-height: 1.75; }
 .beautyOfferAction { grid-column: 2; display: inline-flex; align-items: center; justify-content: space-between; width: min(100%, 190px); min-height: 44px; margin-top: 2px; border-bottom: 1px solid var(--ink); font-size: 14px; }
-.beautyMethod { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(390px, .92fr); max-width: 1380px; margin: 0 auto clamp(82px, 9vw, 124px); background: var(--sheet); }
+.beautyMethod { display: grid; grid-template-columns: minmax(0, .9fr) minmax(500px, 1.1fr); max-width: 1380px; margin: 0 auto clamp(82px, 9vw, 124px); background: var(--sheet); }
 .beautyMethod figure { position: relative; min-height: 650px; overflow: hidden; }
 .beautyMethod figure img { width: 100%; height: 100%; object-fit: cover; }
-.beautyMethodCopy { align-self: center; padding: clamp(56px, 7vw, 98px); }
+.beautyMethodCopy { align-self: center; padding: clamp(52px, 5vw, 76px); }
 .beautyMethodCopy > p { margin-top: 25px !important; color: var(--muted); font-size: 16px; line-height: 1.88; }
 .beautyMethod dl { margin-top: 38px; border-top: 1px solid var(--line); }
 .beautyMethod dl div { display: grid; grid-template-columns: 105px 1fr; gap: 22px; padding: 16px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .beautyMethod dt { color: var(--muted); }
 .beautyClosing { display: grid; grid-template-columns: 170px 1fr auto; align-items: center; gap: 40px; padding: clamp(62px, 7vw, 86px) clamp(24px, 7vw, 104px); background: var(--accent); color: #fff8f1; }
 .beautyClosing > span { font-size: 13px; opacity: .76; }
+.beautyClosing h2 { max-width: 18em; font-family: var(--font-editorial); font-size: clamp(32px, 3vw, 44px); font-weight: 520; letter-spacing: -.014em; line-height: 1.4; }
 .beautyClosing p { display: none; }
 .beautyClosing .beautyPrimary { border: 1px solid rgba(255,255,255,.7); background: transparent; }
 .beautyFooter { border-color: var(--line); background: #e7e0d5; }
@@ -105,17 +107,17 @@
 .educationHeroImage figcaption { position: absolute; right: 28px; bottom: 24px; z-index: 2; padding: 9px 12px; background: var(--red); font-size: 12px; font-weight: 650; }
 .educationHeroCopy { position: relative; z-index: 2; display: flex; min-height: inherit; flex-direction: column; align-items: flex-start; justify-content: center; width: min(58%, 760px); padding: clamp(78px, 9vw, 130px) clamp(28px, 7vw, 104px); }
 .educationEyebrow { color: #f08b80; font-size: 13px; font-weight: 650; }
-.educationHero h1 { max-width: 11.5em; margin-top: 28px; font-size: clamp(44px, 4.6vw, 64px); font-weight: 520; letter-spacing: -.012em; line-height: 1.28; }
+.educationHero h1 { max-width: 11.5em; margin-top: 28px; font-family: var(--font-editorial); font-size: clamp(44px, 4.6vw, 64px); font-weight: 520; letter-spacing: -.012em; line-height: 1.28; }
 .educationHero h1 em { display: block; margin-top: 7px; color: #fff; font-style: normal; }
 .educationHeroCopy > p:last-of-type { max-width: 35rem; margin-top: 28px !important; color: rgba(255,255,255,.76); font-size: clamp(16px, 1.2vw, 18px); line-height: 1.85; }
 .educationActions { display: flex; align-items: center; flex-wrap: wrap; gap: 28px; margin-top: 38px; }
 .educationPrimary { min-width: 210px; }
 .educationTextLink { display: inline-flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 44px; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.8); font-size: 14px; }
 .educationHeroNumber, .educationFacts { display: none; }
-.educationCourses { position: relative; display: grid; grid-template-columns: minmax(260px, .54fr) minmax(0, 1.46fr); gap: clamp(46px, 7vw, 96px); max-width: 1260px; margin: 0 auto; padding: clamp(82px, 9vw, 124px) clamp(24px, 5vw, 60px); background: var(--paper); color: #182235; }
+.educationCourses { position: relative; display: grid; grid-template-columns: minmax(420px, .92fr) minmax(0, 1.08fr); gap: clamp(46px, 6vw, 78px); max-width: 1280px; margin: 0 auto; padding: clamp(82px, 9vw, 124px) clamp(24px, 5vw, 60px); background: var(--paper); color: #182235; }
 .educationCourses::before { position: absolute; inset: 0; z-index: -1; content: ""; background: var(--paper); }
 .educationCourses > header > span { color: var(--red); font-size: 13px; }
-.educationCourses h2, .educationAbout h2, .educationFaq h2, .educationClosing h2 { margin-top: 18px; font-size: clamp(34px, 3.7vw, 52px); letter-spacing: -.025em; line-height: 1.25; }
+.educationCourses h2, .educationAbout h2, .educationFaq h2 { max-width: 18em; margin-top: 18px; font-family: var(--font-text); font-size: clamp(31px, 2.8vw, 41px); font-weight: 610; letter-spacing: -.018em; line-height: 1.45; }
 .educationCourses header > p { margin-top: 22px !important; color: #60646b; font-size: 16px; line-height: 1.85; }
 .educationCatalog { border-top: 1px solid #182235; }
 .educationCatalog > a { display: grid; grid-template-columns: 52px 112px minmax(0, 1fr); gap: 14px 24px; align-items: start; padding: 27px 0; border-bottom: 1px solid var(--line); transition: padding-inline 160ms ease, background 160ms ease; }
@@ -126,24 +128,24 @@
 .educationOfferCopy strong { font-family: var(--font-editorial); font-size: clamp(21px, 2vw, 27px); font-weight: 560; line-height: 1.46; }
 .educationOfferCopy small { margin-top: 8px; color: #686b70; font-size: 15px; line-height: 1.7; }
 .educationOfferAction { grid-column: 3; display: inline-flex; justify-content: space-between; width: min(100%, 210px); min-height: 44px; margin-top: 2px; border-bottom: 1px solid #182235; font-size: 14px; }
-.educationMethod { display: grid; grid-template-columns: minmax(320px, .7fr) minmax(0, 1.3fr); max-width: 1360px; margin: 0 auto; border-top: 1px solid rgba(255,255,255,.25); border-bottom: 1px solid rgba(255,255,255,.25); }
-.educationMethodIntro { padding: clamp(54px, 7vw, 84px); border-right: 1px solid rgba(255,255,255,.25); }
+.educationMethod { display: grid; grid-template-columns: minmax(460px, .9fr) minmax(0, 1.1fr); max-width: 1360px; margin: 0 auto; border-top: 1px solid rgba(255,255,255,.25); border-bottom: 1px solid rgba(255,255,255,.25); }
+.educationMethodIntro { padding: clamp(54px, 6vw, 76px); border-right: 1px solid rgba(255,255,255,.25); }
 .educationMethodIntro > p { color: #f08b80; font-size: 13px; }
-.educationMethodIntro h2 { margin-top: 22px; font-size: clamp(34px, 3.8vw, 52px); line-height: 1.28; }
+.educationMethodIntro h2 { max-width: 18em; margin-top: 22px; font-family: var(--font-text); font-size: clamp(31px, 2.8vw, 41px); font-weight: 610; letter-spacing: -.018em; line-height: 1.45; }
 .educationMethod ol { margin: 0; padding: 0; list-style: none; }
 .educationMethod li { display: grid; grid-template-columns: 48px minmax(0, .9fr) minmax(200px, 1.1fr); align-items: center; gap: 24px; min-height: 146px; padding: 28px clamp(30px, 5vw, 62px); border-bottom: 1px solid rgba(255,255,255,.22); }
 .educationMethod li:last-child { border-bottom: 0; }
 .educationMethod li > span { color: #f08b80; font-size: 18px; }
 .educationMethod li > strong { font-size: 18px; }
 .educationMethod li > p { color: var(--muted); font-size: 15px; }
-.educationAbout { display: grid; grid-template-columns: minmax(0, 1.06fr) minmax(390px, .94fr); max-width: 1260px; margin: clamp(82px, 9vw, 118px) auto; padding: 0 clamp(24px, 5vw, 60px); }
+.educationAbout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(500px, 1.1fr); max-width: 1280px; margin: clamp(82px, 9vw, 118px) auto; padding: 0 clamp(24px, 5vw, 60px); }
 .educationAbout figure { position: relative; min-height: 620px; overflow: hidden; }
 .educationAbout figure img { width: 100%; height: 100%; object-fit: cover; }
-.educationAbout > div { align-self: center; padding: clamp(54px, 7vw, 92px); background: var(--paper); color: #182235; }
+.educationAbout > div { align-self: center; padding: clamp(52px, 5vw, 74px); background: var(--paper); color: #182235; }
 .educationAbout > div > span { color: var(--red); font-size: 13px; }
 .educationAbout > div > p { margin-top: 25px !important; color: #62666e; font-size: 16px; line-height: 1.88; }
 .educationAbout > div > a { display: flex; justify-content: space-between; min-height: 52px; margin-top: 36px; padding: 14px 0; border-top: 1px solid #182235; border-bottom: 1px solid #182235; font-size: 14px; }
-.educationFaq { display: grid; grid-template-columns: minmax(280px, .75fr) minmax(0, 1.25fr); gap: clamp(48px, 8vw, 108px); max-width: 1160px; margin: 0 auto; padding: 0 clamp(24px, 5vw, 58px) clamp(82px, 9vw, 118px); }
+.educationFaq { display: grid; grid-template-columns: minmax(400px, .9fr) minmax(0, 1.1fr); gap: clamp(48px, 7vw, 88px); max-width: 1220px; margin: 0 auto; padding: 0 clamp(24px, 5vw, 58px) clamp(82px, 9vw, 118px); }
 .educationFaq header > span { color: #f08b80; font-size: 13px; }
 .educationFaq details { border-top: 1px solid rgba(255,255,255,.5); }
 .educationFaq details:last-child { border-bottom: 1px solid rgba(255,255,255,.5); }
@@ -152,6 +154,7 @@
 .educationFaq details p { padding: 0 0 26px; color: var(--muted); font-size: 15px; }
 .educationClosing { display: grid; grid-template-columns: 160px 1fr auto; align-items: center; gap: 38px; padding: clamp(64px, 7vw, 90px) clamp(24px, 7vw, 104px); background: var(--red); color: #fff; }
 .educationClosing > span { font-size: 13px; opacity: .76; }
+.educationClosing h2 { max-width: 18em; font-family: var(--font-text); font-size: clamp(30px, 2.8vw, 42px); font-weight: 610; letter-spacing: -.018em; line-height: 1.42; }
 .educationClosing .educationPrimary { border: 1px solid rgba(255,255,255,.75); background: transparent; }
 .educationFooter { border-color: rgba(255,255,255,.26); background: #08090a; }
 
@@ -169,10 +172,10 @@
 .fitnessHeroMedia { position: absolute; inset: 0; background: #172a23; }
 .fitnessHeroMedia::after { position: absolute; inset: 0; content: ""; background: linear-gradient(90deg, rgba(9,28,23,.92) 0%, rgba(9,28,23,.7) 38%, rgba(9,28,23,.16) 70%, rgba(9,28,23,.04) 100%); }
 .fitnessHeroMedia img { width: 100%; height: 100%; object-fit: cover; object-position: 68% center; filter: saturate(.82) contrast(.96); }
-.fitnessHeroCopy { position: relative; z-index: 2; display: flex; min-height: inherit; flex-direction: column; align-items: flex-start; justify-content: center; width: min(56%, 720px); padding: clamp(72px, 8vw, 116px) clamp(28px, 7vw, 104px); }
+.fitnessHeroCopy { position: relative; z-index: 2; display: flex; min-height: inherit; flex-direction: column; align-items: flex-start; justify-content: center; width: min(60%, 820px); padding: clamp(72px, 8vw, 116px) clamp(28px, 7vw, 104px); }
 .fitnessHeroCopy > p { color: #e2bc67; font-size: 11px; font-weight: 620; letter-spacing: .16em; }
-.fitnessHero h1 { max-width: 10.5em; margin-top: 24px; font-family: var(--font-editorial); font-size: clamp(42px, 4.6vw, 64px); font-weight: 520; letter-spacing: -.008em; line-height: 1.3; }
-.fitnessHero h1 em { display: block; margin-top: 1px; color: #f0d496; font-style: normal; font-weight: 460; }
+.fitnessHero h1 { max-width: 13.5em; margin-top: 24px; font-family: var(--font-editorial); font-size: clamp(40px, 4.2vw, 58px); font-weight: 520; letter-spacing: -.008em; line-height: 1.34; }
+.fitnessHero h1 em { display: block; margin-top: 1px; color: #f0d496; font-style: normal; font-weight: 460; white-space: nowrap; }
 .fitnessHeroCopy > span { max-width: 31rem; margin-top: 24px; color: rgba(255,255,255,.76); font-size: clamp(15px, 1.08vw, 17px); line-height: 1.92; }
 .fitnessActions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .fitnessPrimary, .fitnessOutline { display: inline-flex; align-items: center; justify-content: space-between; gap: 28px; min-height: 52px; padding: 0 19px; font-size: 14px; font-weight: 590; transition: transform 160ms ease, background 160ms ease; }
@@ -243,7 +246,9 @@
   .beautyHero { grid-template-columns: minmax(0, 1.02fr) minmax(390px, .98fr); }
   .beautyHeroCopy { padding-inline: 44px; }
   .educationHeroCopy, .fitnessHeroCopy { width: 68%; padding-inline: 56px; }
-  .beautyMenu, .educationCourses { gap: 58px; }
+  .beautyMenu, .educationCourses { grid-template-columns: minmax(370px, .9fr) minmax(0, 1.1fr); gap: 48px; }
+  .educationMethod { grid-template-columns: minmax(390px, .86fr) minmax(0, 1.14fr); }
+  .beautyMethod, .educationAbout { grid-template-columns: minmax(0, .86fr) minmax(460px, 1.14fr); }
   .beautyOfferIndex > a { grid-template-columns: 1fr; }
   .beautyOfferAction { grid-column: 1; }
   .educationCatalog > a { grid-template-columns: 48px 100px minmax(0, 1fr); }
@@ -264,6 +269,7 @@
   .beautyHeroImage { order: 1; min-height: min(76vw, 540px); }
   .beautyHeroCopy { order: 2; padding: 54px 22px 68px; }
   .beautyHero h1, .educationHero h1, .fitnessHero h1 { max-width: 11.5em; font-size: clamp(38px, 8vw, 50px); }
+  .fitnessHero h1 em { white-space: normal; }
   .beautyPrinciples { display: block; padding: 32px 22px; }
   .beautyPrinciples > p { margin-bottom: 20px !important; }
   .beautyPrinciples > div { display: block; }
@@ -315,6 +321,9 @@
   .beautyMark img, .educationMark img, .fitnessMark img { max-width: 145px; height: 34px; }
   .beautyHeroImage, .educationHeroImage, .fitnessHeroMedia { min-height: 84vw; }
   .beautyHero h1, .educationHero h1, .fitnessHero h1 { font-size: clamp(36px, 9.5vw, 44px); line-height: 1.22; }
+  .beautyMenu h2, .beautyMethod h2,
+  .educationCourses h2, .educationMethodIntro h2, .educationAbout h2, .educationFaq h2,
+  .fitnessClasses h2, .fitnessMethod h2, .fitnessStart h2 { font-size: clamp(28px, 8vw, 36px); line-height: 1.45; }
   .beautyActions, .educationActions, .fitnessActions { align-items: stretch; flex-direction: column; gap: 10px; }
   .beautyActions .beautyPrimary, .educationActions .educationPrimary, .fitnessActions .fitnessPrimary,
   .beautyClosing .beautyPrimary, .educationClosing .educationPrimary, .fitnessClosing .fitnessPrimary { display: none; }

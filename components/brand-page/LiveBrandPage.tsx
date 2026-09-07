@@ -4,6 +4,43 @@ import styles from "./LiveBrandPage.module.css";
 
 type PageMode = "beauty" | "education" | "fitness";
 
+const headingSegmenter = new Intl.Segmenter("zh-Hant", { granularity: "word" });
+const headingSuffixes = new Set(["的", "了", "著", "過", "時", "前", "後", "中", "內", "外"]);
+const headingPunctuation = /^[，。！？；：、,.!?;:）】》」』]$/u;
+
+function headingPhrases(text: string): string[] {
+  if (!/\p{Script=Han}/u.test(text)) return [text];
+  const tokens = Array.from(headingSegmenter.segment(text), ({ segment }) => segment).filter((segment) => segment.trim());
+  const phrases: string[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (headingPunctuation.test(token) && phrases.length > 0) {
+      phrases[phrases.length - 1] += token;
+      continue;
+    }
+
+    if ([...token].length === 1 && headingSuffixes.has(token) && phrases.length > 0) {
+      phrases[phrases.length - 1] += token;
+      continue;
+    }
+
+    const next = tokens[index + 1];
+    if ([...token].length === 1 && next && !headingPunctuation.test(next)) {
+      tokens[index + 1] = token + next;
+      continue;
+    }
+
+    phrases.push(token);
+  }
+
+  return phrases;
+}
+
+function HeadingText({ text }: { text: string }) {
+  return <>{headingPhrases(text).map((phrase, index) => <span className={styles.headingPhrase} key={`${phrase}-${index}`}>{phrase}</span>)}</>;
+}
+
 interface PublicOffer {
   id: string;
   title: string;
@@ -133,7 +170,7 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.beautyHero}>
           <div className={styles.beautyHeroCopy}>
             <p className={styles.beautyEyebrow}>{brand.content.hero_eyebrow}</p>
-            <h1>{brand.content.hero_title}<em>{brand.content.hero_highlight}</em></h1>
+            <h1><HeadingText text={brand.content.hero_title} /><em><HeadingText text={brand.content.hero_highlight} /></em></h1>
             <p className={styles.beautyLead}>{brand.content.hero_description}</p>
             <div className={styles.beautyActions}>
               <a className={styles.beautyPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<span aria-hidden="true">→</span></a>
@@ -155,7 +192,7 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.beautyMenu} id="offers">
           <header>
             <p className={styles.beautyEyebrow}>服務與可約時段</p>
-            <h2>{brand.content.section_title}</h2>
+            <h2><HeadingText text={brand.content.section_title} /></h2>
             <p>{brand.content.section_description}</p>
           </header>
           <BeautyOfferIndex brand={brand} />
@@ -165,7 +202,7 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
           <figure><BrandImage src={brand.content.gallery_image_url} alt={`${brand.name} 照護細節`} sizes="(max-width: 760px) 100vw, 46vw" /></figure>
           <div className={styles.beautyMethodCopy}>
             <span className={styles.beautySectionNumber}>關於服務方式</span>
-            <h2>{brand.content.about_title}</h2>
+            <h2><HeadingText text={brand.content.about_title} /></h2>
             <p>{brand.content.about_description}</p>
             <dl>
               <div><dt>預約方式</dt><dd>線上查看真實可約時段</dd></div>
@@ -177,7 +214,7 @@ function BeautyBrandPage({ brand }: { brand: PublicBrandPageData }) {
 
         <section className={styles.beautyClosing}>
           <span>準備開始預約</span>
-          <h2>{brand.content.secondary_cta_label}</h2>
+          <h2><HeadingText text={brand.content.secondary_cta_label} /></h2>
           <p>選好服務之後，系統會帶你查看目前仍可預約的時間，不需要來回等待確認。</p>
           <a className={styles.beautyPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<span aria-hidden="true">→</span></a>
         </section>
@@ -225,7 +262,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
           <div className={styles.educationHeroNumber}>本期精選<span>線上學習</span></div>
           <div className={styles.educationHeroCopy}>
             <p className={styles.educationEyebrow}>{brand.content.hero_eyebrow}</p>
-            <h1>{brand.content.hero_title}<em>{brand.content.hero_highlight}</em></h1>
+            <h1><HeadingText text={brand.content.hero_title} /><em><HeadingText text={brand.content.hero_highlight} /></em></h1>
             <p>{brand.content.hero_description}</p>
             <div className={styles.educationActions}>
               <a className={styles.educationPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<span aria-hidden="true">↗</span></a>
@@ -246,7 +283,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.educationCourses} id="offers">
           <header>
             <span>目前開放 {String(Math.max(contentCount, 1)).padStart(2, "0")} 項</span>
-            <h2>{brand.content.section_title}</h2>
+            <h2><HeadingText text={brand.content.section_title} /></h2>
             <p>{brand.content.section_description}</p>
           </header>
           <EducationCatalog brand={brand} />
@@ -255,7 +292,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.educationMethod} id="method">
           <div className={styles.educationMethodIntro}>
             <p>報名與學習流程</p>
-            <h2>不是把內容塞滿，<br />而是讓每一步都有方向。</h2>
+            <h2><HeadingText text="不是把內容塞滿，而是讓每一步都有方向。" /></h2>
           </div>
           <ol>{principles.map((point, index) => <li key={point}><span>0{index + 1}</span><strong>{point}</strong><p>{index === 0 ? "選擇適合的課程與場次。" : index === 1 ? "完成必要的報名與付款。" : "依資格進入教材與紀錄。"}</p></li>)}</ol>
         </section>
@@ -264,14 +301,14 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
           <figure><BrandImage src={brand.content.gallery_image_url} alt={`${brand.name} 課程實作情境`} sizes="(max-width: 760px) 100vw, 44vw" /></figure>
           <div>
             <span>課程學習方式</span>
-            <h2>{brand.content.about_title}</h2>
+            <h2><HeadingText text={brand.content.about_title} /></h2>
             <p>{brand.content.about_description}</p>
             <a href={brand.links.records}>已報名？查看我的學習紀錄 <b aria-hidden="true">↗</b></a>
           </div>
         </section>
 
         <section className={styles.educationFaq}>
-          <header><span>常見問題</span><h2>報名前，先把重要的事情說清楚。</h2></header>
+          <header><span>常見問題</span><h2><HeadingText text="報名前，先把重要的事情說清楚。" /></h2></header>
           <div>
             <details><summary>{brand.content.faq_1_question}<span>＋</span></summary><p>{brand.content.faq_1_answer}</p></details>
             <details><summary>{brand.content.faq_2_question}<span>＋</span></summary><p>{brand.content.faq_2_answer}</p></details>
@@ -280,7 +317,7 @@ function EducationBrandPage({ brand }: { brand: PublicBrandPageData }) {
 
         <section className={styles.educationClosing}>
           <span>下一期課程</span>
-          <h2>{brand.content.secondary_cta_label}</h2>
+          <h2><HeadingText text={brand.content.secondary_cta_label} /></h2>
           <a className={styles.educationPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<span aria-hidden="true">↗</span></a>
         </section>
       </main>
@@ -326,7 +363,7 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.fitnessHero}>
           <div className={styles.fitnessHeroCopy}>
             <p>{brand.content.hero_eyebrow}</p>
-            <h1>{brand.content.hero_title}<em>{brand.content.hero_highlight}</em></h1>
+            <h1><HeadingText text={brand.content.hero_title} /><em><HeadingText text={brand.content.hero_highlight} /></em></h1>
             <span>{brand.content.hero_description}</span>
             <div className={styles.fitnessActions}>
               <a className={styles.fitnessPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<b aria-hidden="true">→</b></a>
@@ -344,7 +381,7 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
           <header>
             <div>
               <span>CLASS SELECTION · 本期開放</span>
-              <h2>{brand.content.section_title}</h2>
+              <h2><HeadingText text={brand.content.section_title} /></h2>
             </div>
             <p>{brand.content.section_description}<br />選擇適合的課型後，再查看真正可預約的時間與名額。</p>
           </header>
@@ -358,7 +395,7 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
           </figure>
           <div className={styles.fitnessMethodCopy}>
             <span>THE STUDIO METHOD · 訓練方式</span>
-            <h2>先理解身體，<br />再安排適合的練習。</h2>
+            <h2><HeadingText text="先理解身體，再安排適合的練習。" /></h2>
             <p>{brand.content.about_description}</p>
             <ol>{principles.map((point, index) => <li key={point}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{point}</h3><p>{index === 0 ? "依你的經驗、身體狀況與目標選擇合適入口。" : index === 1 ? "私人課與團體課分開呈現可用時段與剩餘名額。" : "預約、報名、付款與上課紀錄都能在同一處查看。"}</p></div></li>)}</ol>
           </div>
@@ -367,7 +404,7 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
         <section className={styles.fitnessStart} id="about">
           <header>
             <span>CHOOSE YOUR START · 選擇開始方式</span>
-            <h2>{brand.content.about_title}</h2>
+            <h2><HeadingText text={brand.content.about_title} /></h2>
           </header>
           <div className={styles.fitnessStartRoutes}>
             {brand.links.booking && <a href={brand.links.booking}>
@@ -395,7 +432,7 @@ function FitnessBrandPage({ brand }: { brand: PublicBrandPageData }) {
 
         <section className={styles.fitnessClosing}>
           <p>從適合自己的方式開始</p>
-          <h2>{brand.content.secondary_cta_label}</h2>
+          <h2><HeadingText text={brand.content.secondary_cta_label} /></h2>
           <div><a className={styles.fitnessPrimary} href={brand.links.primary}>{brand.content.primary_cta_label}<b aria-hidden="true">→</b></a><a href={brand.links.records}>查看我的紀錄 ↗</a></div>
         </section>
       </main>

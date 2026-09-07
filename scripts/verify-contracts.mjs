@@ -1815,8 +1815,13 @@ invariant(
 invariant(
   "public brand pages keep readable Chinese typography and explicit actions",
   read("components/brand-page/LiveBrandPage.module.css").includes("font-size: 16px") &&
+    read("components/brand-page/LiveBrandPage.module.css").includes("word-break: auto-phrase") &&
+    read("components/brand-page/LiveBrandPage.module.css").includes(".headingPhrase { display: inline-block; }") &&
     read("components/brand-page/LiveBrandPage.module.css").includes('font-family: var(--font-editorial)') &&
+    read("components/brand-page/LiveBrandPage.module.css").includes('.educationCourses h2, .educationAbout h2, .educationFaq h2') &&
+    read("components/brand-page/LiveBrandPage.module.css").includes('font-family: var(--font-text)') &&
     read("components/brand-page/LiveBrandPage.module.css").includes("max-width: 11.5em") &&
+    !read("components/brand-page/LiveBrandPage.module.css").includes(".page h1, .page h2 { font-family") &&
     read("components/brand-page/LiveBrandPage.module.css").includes("min-height: 44px") &&
     !read("components/brand-page/LiveBrandPage.module.css").includes("max-width: 9ch") &&
     !read("components/brand-page/LiveBrandPage.module.css").includes("font-size: clamp(64px, 8.8vw, 142px)") &&
@@ -1827,6 +1832,8 @@ invariant(
     read("components/brand-page/LiveBrandPage.tsx").includes("fitnessMethod") &&
     read("components/brand-page/LiveBrandPage.tsx").includes("fitnessStartRoutes") &&
     read("components/brand-page/LiveBrandPage.tsx").includes("私人課與團體課") &&
+    read("components/brand-page/LiveBrandPage.tsx").includes('new Intl.Segmenter("zh-Hant"') &&
+    !read("components/brand-page/LiveBrandPage.tsx").includes("不是把內容塞滿，<br />") &&
     !read("app/page.tsx").includes("ShowcaseFonts") &&
     read("lib/brand-page.ts").includes("教練帶領 · 依你的節奏前進"),
 );
