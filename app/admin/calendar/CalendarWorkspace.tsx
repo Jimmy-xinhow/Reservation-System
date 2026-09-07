@@ -150,6 +150,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
           datesSet={(info) => setCalendarDate(taipeiDate(info.view.currentStart))}
           eventClick={handleEventClick}
           dateClick={handleDateClick}
+          eventDisplay="block"
           dayMaxEvents={3}
           moreLinkText={(count) => `另 ${count} 筆`}
           nowIndicator
