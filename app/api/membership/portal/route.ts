@@ -34,8 +34,8 @@ export async function POST(request: NextRequest) {
     }
     if (!patientId) return fail("找不到會員資料", 404);
     const [{ data, error }, { data: plans, error: plansError }] = await Promise.all([
-      service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, membership_plans(name, description, price)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }),
-      service.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id").eq("clinic_id", clinicId).eq("active", true).order("created_at", { ascending: false }),
+      service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, membership_plans(name, description, price, card_image_url, card_theme, card_accent, redeem_channels, redemption_note)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }),
+      service.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id, card_image_url, card_theme, card_accent, redeem_channels, redemption_note").eq("clinic_id", clinicId).eq("active", true).order("created_at", { ascending: false }),
     ]);
     if (error) return fail(error.message, 500);
     if (plansError) return fail(plansError.message, 500);

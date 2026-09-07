@@ -83,14 +83,22 @@ const GROUPS: Group[] = [
     label: "顧客與會員",
     items: [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
-      { href: "/admin/beauty", label: "美業營運", icon: "service", module: "beauty" },
-      { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list", module: "beauty" },
       { href: "/admin/documents", label: "同意書與簽署", icon: "list" },
       { href: "/admin/memberships", label: "會員與套票", icon: "membership", module: "memberships" },
       { href: "/admin/customer-value", label: "儲值、點數與訂閱", icon: "membership", module: "memberships" },
       { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership", module: "memberships", adminOnly: true },
       { href: "/admin/crm", label: "顧客回訪與自動提醒", icon: "crm", module: "crm", adminOnly: true },
       { href: "/admin/followups", label: "指定日期回訪", icon: "message", module: "crm" },
+    ],
+  },
+  {
+    label: "營運中心",
+    items: [
+      { href: "/admin/beauty", label: "服務營運總覽", icon: "service", module: "beauty", exact: true },
+      { href: "/admin/operations/service-records", label: "服務過程紀錄", icon: "list", module: "beauty" },
+      { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list", module: "beauty" },
+      { href: "/admin/operations/finance", label: "財務摘要", icon: "membership" },
+      { href: "/admin/reports", label: "營運報表", icon: "report" },
     ],
   },
   {
@@ -101,10 +109,6 @@ const GROUPS: Group[] = [
       { href: "/admin/messages", label: "訊息模板", icon: "message", module: "line", adminOnly: true },
       { href: "/admin/line-templates", label: "LINE 訊息範本", icon: "line", module: "line", adminOnly: true },
     ],
-  },
-  {
-    label: "報表",
-    items: [{ href: "/admin/reports", label: "營運報表", icon: "report" }],
   },
   {
     label: "設定中心",

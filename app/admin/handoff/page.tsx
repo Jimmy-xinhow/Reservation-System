@@ -113,9 +113,9 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
         <Metric label="高優先" value={highPriorityCount} />
       </section>
 
-      <section className="attendance-workspace">
+      <section id="attendance-scanner" className="attendance-workspace scroll-mt-6">
         <AttendanceClockPanel clickEnabled={settings.click_enabled === true} qrEnabled={settings.qr_enabled === true} lastEvent={myLastEvent ? { eventType: myLastEvent.event_type, occurredAt: myLastEvent.occurred_at } : undefined} />
-        {isBrandAdmin && <section className="attendance-admin-panel">
+        {isBrandAdmin && <section id="attendance-manager" className="attendance-admin-panel scroll-mt-6">
           <div className="attendance-panel-heading"><div><p className="eyebrow">管理者工具</p><h2>打卡方式與動態 QR</h2><p>可同時開放多種方式；QR 會依設定時間自動換碼。</p></div></div>
           <form action={saveAttendanceSettingsAction} className="attendance-settings-form">
             <label><input type="checkbox" name="click_enabled" defaultChecked={settings.click_enabled === true} />員工點擊按鈕</label>

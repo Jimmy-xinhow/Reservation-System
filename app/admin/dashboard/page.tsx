@@ -5,6 +5,9 @@ import { taipeiDateString } from "@/lib/slots";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { PermissionHelpButton } from "@/components/AdminProductTelemetry";
 import { ScheduleTimeline, TrendLineChart } from "@/components/admin/OperationsCharts";
+import { SubmitButton } from "@/components/SubmitButton";
+import { buildThreads } from "@/lib/chatQueries";
+import { recordButtonAttendanceAction } from "../handoff/attendance-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +41,10 @@ interface RegistrationRow {
 }
 interface PaymentRow { status: string; amount: number; }
 interface DeliveryRow { status: string; }
+interface AttendanceEventRow { event_type: "clock_in" | "clock_out"; occurred_at: string; }
+interface SalesOrderRow { total_amount: number; paid_amount: number; status: string; }
+interface PurchaseOrderRow { status: string; purchase_order_items: Array<{ quantity: number; unit_cost: number }> | null; }
+interface InventoryItemRow { stock_on_hand: number; reorder_level: number; retail_price: number; }
 type SetupStatus = "done" | "warning" | "blocked";
 interface SetupItem { label: string; href: string; status: SetupStatus; reason: string; }
 
@@ -103,6 +110,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const winEnd = shiftDate(today, 7);
   const winStartIso = new Date(`${winStart}T00:00:00+08:00`).toISOString();
   const winEndIso = new Date(`${winEnd}T23:59:59.999+08:00`).toISOString();
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const monthStartIso = new Date(`${monthStart}T00:00:00+08:00`).toISOString();
+  const todayStartIso = new Date(`${today}T00:00:00+08:00`).toISOString();
+  const todayEndIso = new Date(`${today}T23:59:59.999+08:00`).toISOString();
 
   let appointmentsQuery = supabase
     .from("appointments")
@@ -130,6 +141,34 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const registrations = (registrationData ?? []) as unknown as RegistrationRow[];
   const payments = (paymentData ?? []) as unknown as PaymentRow[];
   const deliveries = (deliveryData ?? []) as unknown as DeliveryRow[];
+
+  const [attendanceSettingsResult, attendanceResult, handoffResult, salesPaymentsResult, salesOrdersResult, purchaseOrdersResult, inventoryResult, chatThreads] = await Promise.all([
+    supabase.from("attendance_settings").select("click_enabled, qr_enabled").eq("clinic_id", clinicId).maybeSingle(),
+    supabase.from("attendance_events").select("event_type, occurred_at").eq("clinic_id", clinicId).eq("user_id", member.user.id).gte("occurred_at", todayStartIso).lte("occurred_at", todayEndIso).order("occurred_at", { ascending: false }).limit(20),
+    supabase.from("handoff_tasks").select("id, priority, status", { count: "exact" }).eq("clinic_id", clinicId).neq("status", "done").limit(50),
+    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("sales_payments").select("amount, received_at").eq("clinic_id", clinicId).gte("received_at", monthStartIso).lte("received_at", todayEndIso),
+    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("sales_orders").select("total_amount, paid_amount, status").eq("clinic_id", clinicId).neq("status", "void").gte("created_at", monthStartIso).lte("created_at", todayEndIso),
+    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("purchase_orders").select("status, purchase_order_items(quantity, unit_cost)").eq("clinic_id", clinicId).in("status", ["ordered", "received"]).gte("created_at", monthStartIso).lte("created_at", todayEndIso),
+    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("inventory_items").select("stock_on_hand, reorder_level, retail_price").eq("clinic_id", clinicId).eq("active", true),
+    role === "provider" || productSettings.line_channel_enabled !== true ? Promise.resolve([]) : buildThreads(supabase, clinicId),
+  ]);
+  const supplementalError = [attendanceSettingsResult.error, attendanceResult.error, handoffResult.error, salesPaymentsResult.error, salesOrdersResult.error, purchaseOrdersResult.error, inventoryResult.error].find(Boolean);
+  if (supplementalError && supplementalError.code !== "42P01") throw new Error(`工作台摘要載入失敗：${supplementalError.message}`);
+
+  const attendanceEvents = (attendanceResult.data ?? []) as AttendanceEventRow[];
+  const latestAttendance = attendanceEvents[0];
+  const attendanceSettings = attendanceSettingsResult.data ?? { click_enabled: true, qr_enabled: false };
+  const openHandoffTasks = handoffResult.data ?? [];
+  const highPriorityHandoffs = openHandoffTasks.filter((task) => task.priority === "high").length;
+  const monthlyRevenue = (salesPaymentsResult.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0);
+  const salesOrders = (salesOrdersResult.data ?? []) as SalesOrderRow[];
+  const outstandingRevenue = salesOrders.reduce((sum, row) => sum + Math.max(0, Number(row.total_amount) - Number(row.paid_amount)), 0);
+  const purchaseOrders = (purchaseOrdersResult.data ?? []) as unknown as PurchaseOrderRow[];
+  const monthlyPurchaseCost = purchaseOrders.reduce((sum, order) => sum + (order.purchase_order_items ?? []).reduce((lineSum, line) => lineSum + Number(line.quantity) * Number(line.unit_cost), 0), 0);
+  const inventoryItems = (inventoryResult.data ?? []) as InventoryItemRow[];
+  const stockRetailValue = inventoryItems.reduce((sum, item) => sum + Number(item.stock_on_hand) * Number(item.retail_price), 0);
+  const lowStockCount = inventoryItems.filter((item) => Number(item.stock_on_hand) <= Number(item.reorder_level)).length;
+  const unreadChatCount = chatThreads.reduce((sum, thread) => sum + thread.unread, 0);
   const activeAppointments = appointments.filter((item) => item.status !== "cancelled");
   const activeRegistrations = registrations.filter((item) => item.status !== "cancelled");
   const todayAppointments = activeAppointments.filter((item) => taipeiDateString(item.start_at) === today);
@@ -167,7 +206,30 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <div className="admin-metric-strip grid-cols-2 sm:grid-cols-5"><Stat label="今日預約" value={todayAppointments.length} accent />{eventsEnabled && role !== "provider" && <Stat label="今日活動報名" value={todayRegistrations.length} />}<Stat label="待確認" value={waitingConfirmation} tone={waitingConfirmation ? "warning" : undefined} />{role !== "provider" && <Stat label="待付款" value={pendingPayments} tone={pendingPayments ? "warning" : undefined} />}<Stat label="未來 7 日預約" value={upcomingAppointments.length} /></div>
 
-      <section className="admin-section"><div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">今日待處理</h2><p className="mt-0.5 text-xs text-slate-500">需要人工確認或補救的工作。</p></div><span className="text-xs text-slate-400">每 30 秒更新</span></div><div className="grid divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0 lg:grid-cols-4">{<ActionCard href="/admin" label="待確認預約" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認預約"} tone={waitingConfirmation ? "warning" : "neutral"} />}{eventsEnabled && role !== "provider" && <ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款"} tone={pendingPayments ? "warning" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="通知失敗" value={failedDeliveries} description={failedDeliveries ? "查看投遞紀錄" : "近期沒有失敗"} tone={failedDeliveries ? "danger" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="近期未到" value={noShows} description={noShows ? "可檢查回訪與分眾" : "近期沒有未到"} tone={noShows ? "warning" : "neutral"} />}</div></section>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]">
+        <section className="admin-section"><div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">今日待處理</h2><p className="mt-0.5 text-xs text-slate-500">需要人工確認或補救的工作。</p></div><span className="text-xs text-slate-400">每 30 秒更新</span></div><div className="grid divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0">{<ActionCard href="/admin" label="待確認預約" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認預約"} tone={waitingConfirmation ? "warning" : "neutral"} />}{eventsEnabled && role !== "provider" && <ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款"} tone={pendingPayments ? "warning" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="通知失敗" value={failedDeliveries} description={failedDeliveries ? "查看投遞紀錄" : "近期沒有失敗"} tone={failedDeliveries ? "danger" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/reports" label="近期未到" value={noShows} description={noShows ? "可檢查回訪與分眾" : "近期沒有未到"} tone={noShows ? "warning" : "neutral"} />}</div></section>
+        <section className="admin-section p-4">
+          <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">出勤與交班</p><h2 className="font-semibold text-slate-900">我的打卡</h2><p className="mt-1 text-xs leading-5 text-slate-500">{latestAttendance ? `最近：${latestAttendance.event_type === "clock_in" ? "上班" : "下班"} ${new Date(latestAttendance.occurred_at).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })}` : "今天尚無打卡紀錄"}</p></div><Link href="/admin/handoff" className="text-xs font-semibold text-brand-700">交班 {openHandoffTasks.length} 項 →</Link></div>
+          {attendanceSettings.click_enabled && <div className="mt-4 grid grid-cols-2 gap-2"><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_in" /><SubmitButton className="btn btn-primary w-full">上班打卡</SubmitButton></form><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_out" /><SubmitButton className="btn btn-secondary w-full">下班打卡</SubmitButton></form></div>}
+          <div className="mt-3 grid grid-cols-2 gap-2"><Link href="/admin/handoff#attendance-scanner" className="btn btn-secondary text-center">掃描 QR</Link><Link href="/admin/handoff#attendance-manager" className="btn btn-secondary text-center">顯示 QR</Link></div>
+          <p className={`mt-3 text-xs ${highPriorityHandoffs ? "text-amber-700" : "text-slate-500"}`}>{highPriorityHandoffs ? `${highPriorityHandoffs} 項高優先交班尚未完成` : "目前沒有高優先交班"}</p>
+        </section>
+      </div>
+
+      {role !== "provider" && <div className="grid gap-5 lg:grid-cols-2">
+        <section className="admin-section">
+          <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">本月營運與庫存</h2><p className="mt-0.5 text-xs text-slate-500">收款、待收、採購與庫存數字使用同一品牌資料。</p></div><Link href="/admin/operations/finance" className="text-xs font-semibold text-brand-700">查看財務摘要 →</Link></div>
+          <div className="grid grid-cols-2 divide-x divide-y divide-slate-200 sm:grid-cols-4 sm:divide-y-0"><MoneyMetric label="本月已收" value={monthlyRevenue} /><MoneyMetric label="銷售待收" value={outstandingRevenue} /><MoneyMetric label="本月採購" value={monthlyPurchaseCost} /><MoneyMetric label="庫存售價值" value={stockRetailValue} /></div>
+          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm"><span className={lowStockCount ? "font-medium text-amber-700" : "text-slate-500"}>{lowStockCount ? `${lowStockCount} 項低於補貨提醒量` : "目前沒有低庫存品項"}</span><Link href="/admin/beauty/supply" className="btn btn-secondary px-3 py-1.5">採購與盤點</Link></div>
+        </section>
+        <section className="admin-section">
+          <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">客服對話</h2><p className="mt-0.5 text-xs text-slate-500">直接看見最近對話與未讀狀態。</p></div><Link href="/admin/chat" className="text-xs font-semibold text-brand-700">開啟客服視窗 →</Link></div>
+          {chatThreads.length === 0 ? <p className="p-6 text-sm text-slate-400">目前沒有客服對話。</p> : <div className="divide-y divide-slate-200">{chatThreads.slice(0, 3).map((thread) => <Link key={thread.lineUserId} href="/admin/chat" className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50"><span className={`h-2 w-2 rounded-full ${thread.unread ? "bg-red-500" : "bg-slate-300"}`} /><span className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-800">{thread.name ?? "LINE 顧客"}</strong><span className="block truncate text-xs text-slate-500">{thread.lastBody}</span></span>{thread.unread > 0 && <span className="badge bg-red-50 text-red-700">{thread.unread} 未讀</span>}</Link>)}</div>}
+          <div className="border-t border-slate-200 px-4 py-3 text-xs text-slate-500">全部未讀訊息：<strong className={unreadChatCount ? "text-red-700" : "text-slate-700"}>{unreadChatCount}</strong></div>
+        </section>
+      </div>}
+
+      <section className="admin-section p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-2 text-sm font-semibold text-slate-800">常用操作</span><Link href={`/admin/calendar?modal=new&date=${today}`} className="btn btn-primary">＋ 新增預約</Link>{eventsEnabled && role !== "provider" && <Link href="/admin/events" className="btn btn-secondary">建立活動／課程</Link>}<Link href="/admin/patients" className="btn btn-secondary">顧客管理</Link>{role !== "provider" && <Link href="/admin/checkout?modal=new" className="btn btn-secondary">建立銷售單</Link>}<Link href="/admin/handoff" className="btn btn-secondary">新增交班待辦</Link></div></section>
 
       {setupItems.length > 0 && setupItems.some((item) => item.status !== "done") && <BrandSetupGuide items={setupItems} />}
 
@@ -181,6 +243,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 }
 
 function Stat({ label, value, accent, tone }: { label: string; value: number | string; accent?: boolean; tone?: "warning" }) { return <div className={`admin-metric ${tone === "warning" ? "bg-amber-50" : accent ? "border-t-2 border-t-brand-600" : ""}`}><div className="admin-metric-label">{label}</div><div className={`admin-metric-value ${tone === "warning" ? "text-amber-700" : ""}`}>{value}</div></div>; }
+function MoneyMetric({ label, value }: { label: string; value: number }) { return <div className="min-w-0 px-4 py-4"><span className="block text-xs text-slate-500">{label}</span><strong className="mt-1 block truncate text-lg tabular-nums text-slate-900">NT${value.toLocaleString("zh-TW", { maximumFractionDigits: 0 })}</strong></div>; }
 function ActionCard({ href, label, value, description, tone }: { href: string; label: string; value: number; description: string; tone: "warning" | "danger" | "neutral" }) { return <Link href={href} className={`flex min-h-20 items-center gap-3 px-4 py-3 transition hover:bg-slate-50 ${tone === "danger" ? "text-red-700" : tone === "warning" ? "text-amber-800" : "text-slate-800"}`}><span className={`h-2 w-2 shrink-0 rounded-full ${tone === "danger" ? "bg-red-500" : tone === "warning" ? "bg-amber-500" : "bg-slate-300"}`} /><span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{label}</span><span className="mt-0.5 block text-xs leading-5 text-slate-500">{description}</span></span><strong className="text-xl tabular-nums">{value}</strong></Link>; }
 function SummaryLine({ label, value }: { label: string; value: string }) { return <div className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0"><span className="text-slate-500">{label}</span><span className="font-medium text-slate-800">{value}</span></div>; }
 function BrandSetupGuide({ items }: { items: SetupItem[] }) {

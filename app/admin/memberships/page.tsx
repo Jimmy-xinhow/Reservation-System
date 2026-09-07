@@ -5,11 +5,13 @@ import { auditStatusLabel } from "@/lib/admin-display";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import {
   createDiscountCodeAction,
-  createMembershipPlanAction,
   grantPatientMembershipAction,
+  redeemPatientMembershipAction,
+  saveMembershipPlanAction,
   toggleDiscountCodeAction,
   toggleMembershipPlanAction,
 } from "./actions";
+import { MembershipPlanDesigner } from "./MembershipPlanDesigner";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +24,11 @@ interface PlanRow {
   valid_days: number | null;
   usage_scope: string;
   service_id: string | null;
+  card_image_url: string | null;
+  card_theme: string;
+  card_accent: string;
+  redeem_channels: string[];
+  redemption_note: string | null;
   active: boolean;
 }
 interface ServiceRow { id: string; name: string; }
@@ -49,7 +56,7 @@ interface MembershipRow {
   credits_remaining: number;
   expires_at: string | null;
   patients: { name: string; phone: string } | null;
-  membership_plans: { name: string } | null;
+  membership_plans: { name: string; redeem_channels: string[] } | null;
 }
 
 function usageScopeLabel(value: string): string {
@@ -70,11 +77,11 @@ export default async function MembershipsPage() {
     { data: codes, error: codesError },
     { data: memberships, error: membershipsError },
   ] = await Promise.all([
-    supabase.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
+    supabase.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id, card_image_url, card_theme, card_accent, redeem_channels, redemption_note, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
     supabase.from("services").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
     supabase.from("patients").select("id, name, phone").eq("clinic_id", clinicId).eq("active", true).order("name").limit(500),
     supabase.from("discount_codes").select("id, code, benefit_type, kind, value, min_amount, used_count, max_uses, recipient_name, recipient_phone, starts_at, ends_at, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
-    supabase.from("patient_memberships").select("id, membership_code, status, credits_total, credits_remaining, expires_at, patients(name, phone), membership_plans(name)").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(200),
+    supabase.from("patient_memberships").select("id, membership_code, status, credits_total, credits_remaining, expires_at, patients(name, phone), membership_plans(name, redeem_channels)").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(200),
   ]);
   const error = plansError ?? servicesError ?? patientsError ?? codesError ?? membershipsError;
   if (error) throw new Error(error.message);
@@ -89,6 +96,7 @@ export default async function MembershipsPage() {
   const activeCodeCount = codeRows.filter((code) => code.active).length;
   const activeMemberships = membershipRows.filter((membership) => membership.status === "active");
   const remainingCredits = activeMemberships.reduce((sum, membership) => sum + membership.credits_remaining, 0);
+  const manuallyRedeemable = activeMemberships.filter((membership) => membership.credits_remaining > 0 && membership.membership_plans?.redeem_channels?.some((channel) => ["product", "course", "offline"].includes(channel)));
 
   return (
     <div className="admin-page">
@@ -107,22 +115,10 @@ export default async function MembershipsPage() {
         <div className="admin-metric"><span className="admin-metric-label">未使用堂數</span><strong className="admin-metric-value">{remainingCredits.toLocaleString("zh-TW")}</strong></div>
       </div>
 
-      {canEdit && (
-        <div className="admin-workbench-grid-wide">
-          <section className="admin-section">
-            <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">建立套票方案</h2><p className="mt-0.5 text-xs text-slate-500">設定售價、堂數與可扣抵的服務範圍。</p></div></div>
-            <form action={createMembershipPlanAction} className="grid grid-cols-1 gap-3 p-4 sm:grid-cols-2">
-              <label className="text-sm sm:col-span-2"><span className="label">方案名稱</span><input name="name" required className="input" placeholder="例如：私人課 8 堂套票" /></label>
-              <label className="text-sm"><span className="label">價格</span><input name="price" type="number" min="0" defaultValue="0" required className="input" /></label>
-              <label className="text-sm"><span className="label">堂數</span><input name="credits_total" type="number" min="1" defaultValue="1" required className="input" /></label>
-              <label className="text-sm"><span className="label">有效天數（選填）</span><input name="valid_days" type="number" min="1" className="input" /></label>
-              <label className="text-sm"><span className="label">使用範圍</span><select name="usage_scope" className="input"><option value="both">預約與報名</option><option value="appointment">僅預約</option><option value="registration">僅報名</option></select></label>
-              <label className="text-sm sm:col-span-2"><span className="label">適用服務（選填）</span><select name="service_id" className="input"><option value="">所有服務</option>{serviceRows.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>
-              <label className="text-sm sm:col-span-2"><span className="label">方案說明（選填）</span><textarea name="description" rows={2} className="input" /></label>
-              <div className="sm:col-span-2"><SubmitButton className="btn btn-primary">建立套票方案</SubmitButton></div>
-            </form>
-          </section>
+      {canEdit && <MembershipPlanDesigner plans={planRows} services={serviceRows} action={saveMembershipPlanAction} />}
 
+      {canEdit && (
+        <div className="admin-workbench-grid">
           <section className="admin-section self-start">
             <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">發放套票</h2><p className="mt-0.5 text-xs text-slate-500">選擇顧客與方案後，系統會產生專屬套票序號。</p></div></div>
             <form action={grantPatientMembershipAction} className="grid gap-3 p-4">
@@ -130,6 +126,15 @@ export default async function MembershipsPage() {
               <label className="text-sm"><span className="label">套票方案</span><select name="plan_id" required className="input" defaultValue=""><option value="" disabled>請選擇方案</option>{planRows.filter((plan) => plan.active).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.credits_total} 堂</option>)}</select></label>
               <label className="text-sm"><span className="label">發放備註（選填）</span><input name="note" className="input" /></label>
               <SubmitButton className="btn btn-primary">確認發放套票</SubmitButton>
+            </form>
+          </section>
+          <section className="admin-section self-start">
+            <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">記錄商品／課程／線下兌換</h2><p className="mt-0.5 text-xs text-slate-500">每次送出扣除一次並新增不可覆蓋的使用紀錄。</p></div></div>
+            <form action={redeemPatientMembershipAction} className="grid gap-3 p-4">
+              <label className="text-sm"><span className="label">顧客套票</span><select name="membership_id" required className="input" defaultValue=""><option value="" disabled>請選擇可兌換套票</option>{manuallyRedeemable.map((membership) => <option key={membership.id} value={membership.id}>{membership.patients?.name ?? "顧客"} · {membership.membership_plans?.name ?? "套票"} · 剩 {membership.credits_remaining} 次</option>)}</select></label>
+              <label className="text-sm"><span className="label">本次用途</span><select name="channel" required className="input" defaultValue=""><option value="" disabled>請選擇用途</option><option value="product">商品兌換</option><option value="course">課程購買／兌換</option><option value="offline">線下兌換</option></select></label>
+              <label className="text-sm"><span className="label">兌換內容</span><input name="note" required className="input" placeholder="例如：兌換一組居家保養品" /></label>
+              <SubmitButton className="btn btn-primary" disabled={manuallyRedeemable.length === 0}>確認扣除一次</SubmitButton>
             </form>
           </section>
         </div>
@@ -155,22 +160,12 @@ export default async function MembershipsPage() {
       )}
 
       <div className="admin-workbench-grid">
-        <section className="admin-table-shell admin-table-mobile-cards">
+        <section className="admin-section">
           <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">套票方案</h2><p className="mt-0.5 text-xs text-slate-500">{planRows.length} 筆方案</p></div></div>
-          <table className="tbl">
-            <thead><tr><th>方案</th><th>堂數</th><th>適用範圍</th><th>狀態</th><th>操作</th></tr></thead>
-            <tbody>
-              {planRows.length === 0 ? <tr><td colSpan={5} data-mobile-empty="true" className="py-8 text-center text-slate-400">尚未建立套票方案</td></tr> : planRows.map((plan) => (
-                <tr key={plan.id}>
-                  <td data-label="方案"><span className="font-medium text-slate-800">{plan.name}</span><div className="text-xs text-slate-500">NT${plan.price.toLocaleString("zh-TW")}{plan.valid_days ? ` · ${plan.valid_days} 天` : " · 不限期"}</div></td>
-                  <td data-label="堂數">{plan.credits_total}</td>
-                  <td data-label="適用範圍">{usageScopeLabel(plan.usage_scope)}</td>
-                  <td data-label="狀態"><span className={`badge ${plan.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{plan.active ? "啟用" : "停用"}</span></td>
-                  <td data-label="操作">{canEdit ? <form action={toggleMembershipPlanAction}><input type="hidden" name="id" value={plan.id} /><input type="hidden" name="active" value={String(plan.active)} /><SubmitButton className="admin-inline-action">{plan.active ? "停用方案" : "啟用方案"}</SubmitButton></form> : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {planRows.length === 0 ? <p className="p-8 text-center text-sm text-slate-400">尚未建立套票方案</p> : <div className="grid gap-3 p-4 sm:grid-cols-2">{planRows.map((plan) => <article key={plan.id} className="relative min-h-48 overflow-hidden rounded-xl p-5 text-white shadow-sm" style={{ background: plan.card_theme === "sand" ? "linear-gradient(135deg,#d7c29f,#f2eadb)" : plan.card_theme === "clay" ? "linear-gradient(135deg,#824f43,#c27a64)" : plan.card_theme === "ink" ? "linear-gradient(135deg,#172033,#34415c)" : "linear-gradient(135deg,#12362f,#1d6a58)", color: plan.card_theme === "sand" ? "#29261f" : "#fff" }}>
+            {plan.card_image_url && <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: `url(${plan.card_image_url})` }} />}
+            <div className="relative flex h-full flex-col justify-between gap-5"><div><div className="flex items-start justify-between gap-3"><span className="text-[10px] font-semibold tracking-[.16em]" style={{ color: plan.card_accent }}>MEMBERSHIP PASS</span><span className="border border-current/30 px-2 py-1 text-xs">{plan.credits_total} 次</span></div><h3 className="mt-3 text-lg font-semibold">{plan.name}</h3><p className="mt-1 text-xs opacity-75">{usageScopeLabel(plan.usage_scope)} · {plan.valid_days ? `${plan.valid_days} 天` : "不限期"}</p></div><div className="flex items-end justify-between gap-3"><strong>NT${plan.price.toLocaleString("zh-TW")}</strong>{canEdit && <form action={toggleMembershipPlanAction}><input type="hidden" name="id" value={plan.id} /><input type="hidden" name="active" value={String(plan.active)} /><SubmitButton className="border border-current/40 px-3 py-1.5 text-xs">{plan.active ? "停用" : "啟用"}</SubmitButton></form>}</div></div>
+          </article>)}</div>}
         </section>
 
         <section className="admin-table-shell admin-table-mobile-cards">

@@ -26,7 +26,7 @@ export async function createTreatmentRecordAction(fd: FormData): Promise<void> {
   const assessment = text(fd, "assessment");
   const content = text(fd, "content");
   const aftercare = text(fd, "aftercare");
-  if (!appointmentId || !treatmentName || !content) throw new Error("請選擇預約並填寫療程名稱與服務內容");
+  if (!appointmentId || !treatmentName || !content) throw new Error("請選擇預約並填寫紀錄標題與服務內容");
   const service = createServiceClient();
   const { data: appointment, error: appointmentError } = await service.from("appointments").select("id, patient_id").eq("id", appointmentId).eq("clinic_id", clinicId).maybeSingle();
   if (appointmentError) throw new Error(appointmentError.message);
@@ -49,6 +49,7 @@ export async function createTreatmentRecordAction(fd: FormData): Promise<void> {
   });
   if (error) throw new Error(error.message);
   revalidatePath("/admin/beauty");
+  revalidatePath("/admin/operations/service-records");
 }
 
 export async function createInventoryItemAction(fd: FormData): Promise<void> {

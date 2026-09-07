@@ -11,7 +11,7 @@ interface Membership {
   credits_remaining: number;
   starts_at: string;
   expires_at: string | null;
-  membership_plans: { name: string; description: string | null; price: number } | { name: string; description: string | null; price: number }[] | null;
+  membership_plans: { name: string; description: string | null; price: number; card_image_url: string | null; card_theme: string; card_accent: string; redeem_channels: string[]; redemption_note: string | null } | { name: string; description: string | null; price: number; card_image_url: string | null; card_theme: string; card_accent: string; redeem_channels: string[]; redemption_note: string | null }[] | null;
 }
 
 interface Plan {
@@ -22,6 +22,11 @@ interface Plan {
   credits_total: number;
   valid_days: number | null;
   usage_scope: "appointment" | "registration" | "both";
+  card_image_url: string | null;
+  card_theme: string;
+  card_accent: string;
+  redeem_channels: string[];
+  redemption_note: string | null;
 }
 
 interface PaymentForm {
@@ -58,6 +63,17 @@ function storedCustomerToken(): string | null {
 
 function formatPrice(price: number): string {
   return `NT$${price.toLocaleString("zh-TW")}`;
+}
+
+function cardBackground(theme: string): string {
+  if (theme === "ink") return "linear-gradient(135deg,#172033,#34415c)";
+  if (theme === "clay") return "linear-gradient(135deg,#824f43,#c27a64)";
+  if (theme === "sand") return "linear-gradient(135deg,#d7c29f,#f2eadb)";
+  return "linear-gradient(135deg,#12362f,#1d6a58)";
+}
+
+function channelLabel(channel: string): string {
+  return ({ appointment: "預約", registration: "活動", product: "商品", course: "課程", offline: "線下兌換" } as Record<string, string>)[channel] ?? channel;
 }
 
 export default function MembershipPage() {
@@ -182,7 +198,7 @@ export default function MembershipPage() {
 
       <section className="space-y-3">
         <div><h2 className="text-lg font-semibold text-slate-900">可購買套票</h2><p className="mt-1 text-sm text-slate-500">付款完成後，套票會自動發放到目前驗證的顧客帳戶。</p></div>
-        {plans.length === 0 ? <div className="card p-6 text-center text-sm text-slate-400">查詢後顯示品牌目前開放的套票方案。</div> : <div className="grid gap-4 md:grid-cols-2">{plans.map((plan) => <article key={plan.id} className="card flex flex-col gap-4 p-5"><div><h3 className="font-semibold text-slate-900">{plan.name}</h3><p className="mt-1 text-sm text-slate-500">{plan.description || "可用於品牌開放的預約或活動報名。"}</p></div><div className="flex items-end justify-between gap-3"><div><p className="text-2xl font-bold text-slate-950">{formatPrice(plan.price)}</p><p className="text-xs text-slate-500">{plan.credits_total} 堂{plan.valid_days ? ` · ${plan.valid_days} 天有效` : " · 不限期"}</p></div><button type="button" className="btn btn-secondary" disabled={!token || buying === plan.id || plan.price <= 0} onClick={() => void purchase(plan)}>{buying === plan.id ? "前往付款…" : plan.price <= 0 ? "洽櫃檯" : "購買套票"}</button></div></article>)}</div>}
+        {plans.length === 0 ? <div className="card p-6 text-center text-sm text-slate-400">查詢後顯示品牌目前開放的套票方案。</div> : <div className="grid gap-4 md:grid-cols-2">{plans.map((plan) => <article key={plan.id} className="overflow-hidden rounded-[22px] shadow-[0_16px_40px_rgba(15,23,42,.14)]"><div className="relative aspect-[1.58/1] p-5" style={{ background: cardBackground(plan.card_theme), color: plan.card_theme === "sand" ? "#29261f" : "#fff" }}>{plan.card_image_url && <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: `url(${plan.card_image_url})` }} />}<div className="relative flex h-full flex-col justify-between"><div><span className="text-[10px] font-semibold tracking-[.16em]" style={{ color: plan.card_accent }}>MEMBERSHIP PASS</span><h3 className="mt-3 text-lg font-semibold">{plan.name}</h3><p className="mt-1 line-clamp-2 text-sm opacity-75">{plan.description || "品牌專屬套票方案"}</p></div><div className="flex items-end justify-between"><strong className="text-xl">{formatPrice(plan.price)}</strong><span className="text-xs">{plan.credits_total} 次 · {plan.valid_days ? `${plan.valid_days} 天` : "不限期"}</span></div></div></div><div className="space-y-3 bg-white p-4"><div className="flex flex-wrap gap-1">{plan.redeem_channels.map((channel) => <span key={channel} className="badge bg-slate-100 text-slate-600">{channelLabel(channel)}</span>)}</div>{plan.redemption_note && <p className="text-xs leading-5 text-slate-500">{plan.redemption_note}</p>}<button type="button" className="btn btn-primary w-full" disabled={!token || buying === plan.id || plan.price <= 0} onClick={() => void purchase(plan)}>{buying === plan.id ? "前往付款…" : plan.price <= 0 ? "洽櫃檯" : "購買套票"}</button></div></article>)}</div>}
       </section>
 
       <section className="space-y-3">

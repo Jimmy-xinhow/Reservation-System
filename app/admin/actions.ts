@@ -22,7 +22,7 @@ export async function setActiveClinicAction(fd: FormData): Promise<void> {
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
   });
-  redirect("/admin");
+  redirect("/admin/dashboard");
 }
 
 /** 建立新品牌並將目前登入帳號設為該品牌管理者；實際交易由 DB function 原子完成。 */

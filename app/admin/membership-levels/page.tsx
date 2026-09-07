@@ -4,7 +4,6 @@ import { requireAdmin } from "@/lib/admin";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 import {
-  assignPatientMembershipLevelAction,
   createMembershipLevelAction,
   saveMembershipPlanLevelPriceAction,
   toggleMembershipLevelAction,
@@ -14,7 +13,6 @@ export const dynamic = "force-dynamic";
 
 interface Level { id: string; code: string; name: string; sort_order: number; discount_percent: number; active: boolean; }
 interface Plan { id: string; name: string; price: number; }
-interface Patient { id: string; name: string; phone: string; membership_level_id: string | null; }
 interface PriceRule { id: string; plan_id: string; level_id: string; price: number; }
 
 export default async function MembershipLevelsPage() {
@@ -25,24 +23,20 @@ export default async function MembershipLevelsPage() {
     { data: levels, error: levelsError },
     { data: plans, error: plansError },
     { data: prices, error: pricesError },
-    { data: patients, error: patientsError },
   ] = await Promise.all([
     service.from("membership_levels").select("id, code, name, sort_order, discount_percent, active").eq("clinic_id", clinicId).order("sort_order").order("name"),
     service.from("membership_plans").select("id, name, price").eq("clinic_id", clinicId).eq("active", true).order("name"),
     service.from("membership_plan_level_prices").select("id, plan_id, level_id, price").eq("clinic_id", clinicId),
-    service.from("patients").select("id, name, phone, membership_level_id").eq("clinic_id", clinicId).eq("active", true).order("name").limit(500),
   ]);
-  const firstError = levelsError ?? plansError ?? pricesError ?? patientsError;
+  const firstError = levelsError ?? plansError ?? pricesError;
   if (firstError) throw new Error(`讀取會員等級資料失敗：${firstError.message}`);
 
   const levelRows = (levels ?? []) as Level[];
   const planRows = (plans ?? []) as Plan[];
   const priceRows = (prices ?? []) as PriceRule[];
-  const patientRows = (patients ?? []) as Patient[];
   const levelName = new Map(levelRows.map((level) => [level.id, level.name]));
   const planName = new Map(planRows.map((plan) => [plan.id, plan.name]));
   const activeLevelCount = levelRows.filter((level) => level.active).length;
-  const assignedPatientCount = patientRows.filter((patient) => patient.membership_level_id).length;
 
   return (
     <div className="admin-page">
@@ -54,10 +48,9 @@ export default async function MembershipLevelsPage() {
         </div>
       </div>
 
-      <div className="admin-metric-strip grid-cols-3">
+      <div className="admin-metric-strip grid-cols-2">
         <div className="admin-metric"><span className="admin-metric-label">啟用等級</span><strong className="admin-metric-value">{activeLevelCount}</strong></div>
         <div className="admin-metric"><span className="admin-metric-label">專屬價格</span><strong className="admin-metric-value">{priceRows.length}</strong></div>
-        <div className="admin-metric"><span className="admin-metric-label">已指派顧客</span><strong className="admin-metric-value">{assignedPatientCount}</strong></div>
       </div>
 
       <div className="admin-workbench-grid">
@@ -119,27 +112,6 @@ export default async function MembershipLevelsPage() {
         </section>
       </div>
 
-      <section className="admin-table-shell admin-table-mobile-cards">
-        <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">顧客等級指派</h2><p className="mt-0.5 text-xs text-slate-500">調整單一顧客的會員等級；選擇一般顧客可移除等級。</p></div><span className="text-xs tabular-nums text-slate-500">{patientRows.length} 位顧客</span></div>
-        <table className="tbl">
-          <thead><tr><th>顧客</th><th>目前等級</th><th>調整與儲存</th></tr></thead>
-          <tbody>
-            {patientRows.length === 0 ? <tr><td colSpan={3} data-mobile-empty="true" className="py-8 text-center text-slate-400">尚無顧客資料</td></tr> : patientRows.map((patient) => (
-              <tr key={patient.id}>
-                <td data-label="顧客"><span className="font-medium text-slate-800">{patient.name}</span><div className="text-xs text-slate-500">{patient.phone}</div></td>
-                <td data-label="目前等級">{patient.membership_level_id ? levelName.get(patient.membership_level_id) ?? "等級已移除" : "一般顧客"}</td>
-                <td data-label="調整與儲存">
-                  <form action={assignPatientMembershipLevelAction} className="flex flex-wrap items-center gap-2">
-                    <input type="hidden" name="patient_id" value={patient.id} />
-                    <select className="input min-w-44 flex-1" name="level_id" defaultValue={patient.membership_level_id ?? ""}><option value="">一般顧客</option>{levelRows.filter((level) => level.active).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select>
-                    <SubmitButton className="admin-inline-action">儲存顧客等級</SubmitButton>
-                  </form>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
     </div>
   );
 }

@@ -272,7 +272,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </label>
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" name="beauty_operations_enabled" defaultChecked={s.beauty_operations_enabled} className="mt-1" />
-            <span><span className="block">啟用美業營運</span><span className="block text-xs leading-5 text-slate-500">包含療程紀錄、私密照片、耗材庫存與服務獎金試算；不是完整會計或 POS。</span></span>
+            <span><span className="block">啟用服務營運與庫存</span><span className="block text-xs leading-5 text-slate-500">各產業都可使用服務過程紀錄、私密照片、耗材／商品庫存與服務獎金試算；不包含會計、發票或完整 POS。</span></span>
           </label>
           <div className="w-full rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-500">
             LINE 官方帳號入口：{s.line_channel_enabled ? "已啟用" : "未啟用"}。連線識別碼與檢查請到 <a href="/admin/line" className="font-medium text-brand-700 underline">LINE 官方帳號連線</a> 管理。

@@ -25,6 +25,7 @@ export async function createHandoffTaskAction(fd: FormData): Promise<void> {
   const { error } = await member.supabase.from("handoff_tasks").insert({ clinic_id: member.clinicId, title, category, priority, due_at: dueAt, assigned_to: assignedTo || null, note: note || null, created_by: member.user.id });
   if (error) throw new Error(`建立交班待辦失敗：${error.message}`);
   revalidatePath("/admin/handoff");
+  revalidatePath("/admin/dashboard");
 }
 
 export async function updateHandoffTaskAction(fd: FormData): Promise<void> {
@@ -38,4 +39,5 @@ export async function updateHandoffTaskAction(fd: FormData): Promise<void> {
   const { error } = await member.supabase.from("handoff_tasks").update({ status, priority }).eq("id", id).eq("clinic_id", member.clinicId);
   if (error) throw new Error(`更新交班待辦失敗：${error.message}`);
   revalidatePath("/admin/handoff");
+  revalidatePath("/admin/dashboard");
 }

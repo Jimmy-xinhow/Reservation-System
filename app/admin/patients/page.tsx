@@ -4,6 +4,7 @@ import { requireMember, canViewSensitiveCustomerData } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { DeletePatientButton } from "./DeletePatientButton";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { assignPatientMembershipLevelAction } from "../memberships/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,14 @@ interface Patient {
   phone: string;
   tags: string | null;
   blocked_until: string | null;
+  membership_level_id: string | null;
   created_at: string;
 }
 
+interface MembershipLevel { id: string; name: string; active: boolean; }
+
 const PAGE_SIZE = 30;
-const SELECT = "id, name, phone, tags, blocked_until, created_at";
+const SELECT = "id, name, phone, tags, blocked_until, membership_level_id, created_at";
 
 function isBlocked(p: Patient): boolean {
   return !!p.blocked_until && new Date(p.blocked_until) > new Date();
@@ -38,6 +42,13 @@ export default async function PatientsPage({
     return <p className="card p-6 text-sm text-slate-500">目前角色只能查看被分配的工作，不開放完整顧客名單。</p>;
   }
   const supabase = await createSupabaseServer();
+  const canManageMembershipLevels = role === "owner" || role === "admin";
+  const { data: membershipLevels, error: membershipLevelsError } = canManageMembershipLevels
+    ? await supabase.from("membership_levels").select("id, name, active").eq("clinic_id", clinicId).order("sort_order").order("name")
+    : { data: [] as MembershipLevel[], error: null };
+  if (membershipLevelsError) throw new Error(`讀取會員等級失敗：${membershipLevelsError.message}`);
+  const levelRows = (membershipLevels ?? []) as MembershipLevel[];
+  const levelName = new Map(levelRows.map((level) => [level.id, level.name]));
   let segmentName: string | null = null;
   let segmentPatientIds: string[] | null = null;
   if (segmentId) {
@@ -152,13 +163,14 @@ export default async function PatientsPage({
               <th>預約</th>
               <th>未到</th>
               <th>狀態</th>
+              <th>會員等級</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {patients.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-400" data-mobile-empty="true">
+                <td colSpan={8} className="py-8 text-center text-slate-400" data-mobile-empty="true">
                   {segmentId && !segmentName ? "找不到指定分眾" : keyword ? "查無符合的顧客" : segmentId ? "此分眾目前沒有顧客" : "尚無顧客"}
                 </td>
               </tr>
@@ -193,6 +205,9 @@ export default async function PatientsPage({
                     ) : (
                       <span className="badge bg-accent-500/10 text-accent-600">正常</span>
                     )}
+                  </td>
+                  <td data-label="會員等級">
+                    {canManageMembershipLevels ? <form action={assignPatientMembershipLevelAction} className="flex min-w-52 items-center gap-2"><input type="hidden" name="patient_id" value={p.id} /><select className="input py-1.5 text-xs" name="level_id" defaultValue={p.membership_level_id ?? ""}><option value="">一般顧客</option>{levelRows.filter((level) => level.active).map((level) => <option key={level.id} value={level.id}>{level.name}</option>)}</select><SubmitButton className="btn btn-secondary px-2 py-1.5 text-xs">儲存</SubmitButton></form> : <span className="text-slate-500">{p.membership_level_id ? levelName.get(p.membership_level_id) ?? "會員" : "一般顧客"}</span>}
                   </td>
                   <td data-label="操作">
                     <div className="flex items-center gap-3">

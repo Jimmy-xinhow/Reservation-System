@@ -7,7 +7,7 @@ import { createServiceClient } from "@/lib/supabase";
 
 function text(fd: FormData, key: string): string { return String(fd.get(key) ?? "").trim(); }
 function number(fd: FormData, key: string): number { const value = Number(text(fd, key)); if (!Number.isFinite(value)) throw new Error("數量或金額格式不正確"); return value; }
-function refresh(): void { revalidatePath("/admin/beauty/supply"); revalidatePath("/admin/beauty"); }
+function refresh(): void { revalidatePath("/admin/beauty/supply"); revalidatePath("/admin/beauty"); revalidatePath("/admin/operations/finance"); revalidatePath("/admin/dashboard"); }
 
 export async function createSupplierAction(fd: FormData): Promise<void> {
   const member = await requireAdmin(); const name = text(fd, "name"); if (!name) throw new Error("請填供應商名稱");
