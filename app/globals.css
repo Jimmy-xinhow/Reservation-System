@@ -834,6 +834,17 @@ body {
 .line-message-card-actions span { display: grid; min-height: 33px; place-items: center; border: 1px solid #173f35; border-radius: 4px; background: #173f35; color: #fff; font-size: 10px; font-variation-settings: "wght" 700; }
 .line-message-card-actions .secondary { border-color: #cbd4d0; background: #fff; color: #214e42; }
 
+.message-composer-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(300px, .88fr); }
+.message-composer-editor { display: grid; gap: 16px; min-width: 0; padding: 18px; }
+.message-preset-panel { padding: 12px; border-left: 3px solid #2b735e; background: #f1f6f3; }
+.message-composer-preview { min-width: 0; border-left: 1px solid var(--admin-border); background: #eef2ef; }
+.message-composer-preview-head { display: flex; min-height: 43px; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #d5ddd8; color: #4b5852; font-size: 11px; }
+.message-composer-preview-head strong { color: #26342e; font-size: 12px; }
+.message-composer-preview .line-preview-canvas { padding: 22px 16px; }
+.line-text-bubble { width: 84%; margin: 16px 12px; padding: 11px 12px; border-radius: 3px 11px 11px 11px; background: #fff; color: #25322c; font-size: 12px; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.line-card-image-placeholder { display: grid; aspect-ratio: 1.51 / 1; place-items: center; background: #e7ece9; color: #7a8580; font-size: 10px; }
+.message-composer-preview-note { padding: 0 16px 16px; color: #69756f; font-size: 10px; line-height: 1.55; }
+
 .admin-login-shell { min-height: 100dvh; display: grid; grid-template-columns: minmax(280px,.78fr) minmax(420px,1.22fr); background: #f2f3f2; }
 .admin-login-aside { display: flex; flex-direction: column; justify-content: space-between; min-height: 100%; padding: clamp(28px,5vw,72px); background: #17231f; color: #f5f4ee; }
 .admin-login-aside h1 { max-width: 9ch; margin-top: auto; font-family: "Chiron Sung HK Variable", serif; font-size: clamp(42px,6vw,76px); font-weight: 560; letter-spacing: -.055em; line-height: 1.03; }
@@ -860,6 +871,8 @@ body {
   .line-settings-grid { grid-template-columns: 1fr; }
   .platform-brand-progress { grid-template-columns: repeat(3,minmax(0,1fr)); }
   .line-template-list { grid-template-columns: 1fr; }
+  .message-composer-grid { grid-template-columns: 1fr; }
+  .message-composer-preview { border-top: 1px solid var(--admin-border); border-left: 0; }
 }
 
 @media (max-width: 720px) {

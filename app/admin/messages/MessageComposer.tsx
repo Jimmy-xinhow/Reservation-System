@@ -33,14 +33,17 @@ export default function MessageComposer({
     kind === "text" ? { text } : kind === "card" ? { card } : { cards };
 
   return (
-    <form action={saveAction} className="card space-y-4 p-5">
-      <h2 className="font-semibold text-slate-900">{initial ? "編輯訊息" : "新增訊息"}</h2>
+    <form action={saveAction} className="admin-section overflow-hidden">
+      <div className="admin-section-header"><div><h2>{initial ? "編輯訊息" : "新增訊息"}</h2><p className="mt-0.5 text-xs text-slate-500">先選內容格式，再編輯文字與按鈕；預覽不會實際發送。</p></div><span className="text-xs font-medium text-brand-700">{kind === "text" ? "文字" : kind === "card" ? "圖文卡" : "多頁訊息"}</span></div>
       {initial && <input type="hidden" name="id" value={initial.id} />}
       <input type="hidden" name="kind" value={kind} />
       <input type="hidden" name="data" value={JSON.stringify(data)} />
 
+      <div className="message-composer-grid">
+      <div className="message-composer-editor">
+
       {!initial && (
-        <div className="rounded-xl border border-brand-100 bg-brand-50 p-3">
+        <div className="message-preset-panel">
           <p className="mb-2 text-sm font-medium text-brand-900">從常用範本開始</p>
           <div className="flex flex-wrap gap-2">
             {TEXT_PRESETS.map((preset) => (
@@ -113,8 +116,41 @@ export default function MessageComposer({
         </div>
       )}
 
-      <SubmitButton className="btn btn-primary">儲存訊息</SubmitButton>
+      <SubmitButton className="btn btn-primary">儲存訊息素材</SubmitButton>
+      </div>
+      <MessagePreview kind={kind} text={text} card={card} cards={cards} />
+      </div>
     </form>
+  );
+}
+
+function MessagePreview({ kind, text, card, cards }: { kind: MsgKind; text: string; card: MsgCard; cards: MsgCard[] }) {
+  const activeCard = kind === "carousel" ? cards[0] ?? emptyCard() : card;
+  return (
+    <aside className="message-composer-preview" aria-label="LINE 訊息即時預覽">
+      <div className="message-composer-preview-head"><strong>顧客畫面預覽</strong><span>{kind === "text" ? "文字訊息" : kind === "card" ? "圖文卡" : `第 1／${cards.length} 頁`}</span></div>
+      <div className="line-preview-canvas">
+        <div className="line-phone">
+          <div className="line-phone-header"><span className="status-dot bg-[#06c755]" /><strong>品牌官方帳號</strong></div>
+          {kind === "text" ? (
+            <div className="line-text-bubble">{text.trim() || "在左側輸入訊息內容，這裡會同步顯示。"}</div>
+          ) : (
+            <div className="line-message-bubble">
+              {activeCard.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={activeCard.imageUrl} alt="訊息圖片預覽" className="aspect-[1.51/1] w-full object-cover" />
+              ) : <div className="line-card-image-placeholder">圖片預覽</div>}
+              <div className="line-message-accent" />
+              <div className="line-message-body"><p className="line-message-status">品牌訊息</p><h3 className="line-message-title">{activeCard.title?.trim() || "圖文卡標題"}</h3><p className="line-message-copy whitespace-pre-wrap">{activeCard.text?.trim() || "在左側輸入內文，顧客會在這裡看到完整說明。"}</p></div>
+              <div className="line-message-actions">
+                {activeCard.buttons.filter((button) => button.label.trim()).length > 0 ? activeCard.buttons.filter((button) => button.label.trim()).map((button, index) => <span key={`${button.label}-${index}`}>{button.label}</span>) : <span>尚未設定按鈕</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      <p className="message-composer-preview-note">此預覽用來確認資訊層級與按鈕文字；LINE 實際寬度會依手機略有差異。</p>
+    </aside>
   );
 }
 
