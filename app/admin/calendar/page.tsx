@@ -1,4 +1,3 @@
-import { createSupabaseServer } from "@/lib/supabase-server";
 import { canOperate, getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { CalendarWorkspace } from "./CalendarWorkspace";
 import AppointmentEditor from "../appointments/AppointmentEditor";
@@ -12,10 +11,9 @@ function todayTaipei(): string {
 }
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ modal?: string; appointment_id?: string; date?: string }> }) {
-  const params = await searchParams;
-  const member = await requireMember();
-  const supabase = await createSupabaseServer();
-  const assigned = await getAssignedDoctorIds(member);
+  const [params, member] = await Promise.all([searchParams, requireMember()]);
+  const supabase = member.supabase;
+  const assigned = member.role === "provider" ? await getAssignedDoctorIds(member) : [];
   let query = supabase.from("doctors").select("id, name").eq("clinic_id", member.clinicId).eq("active", true).order("name");
   if (member.role === "provider") query = query.in("id", assigned.length ? assigned : ["00000000-0000-0000-0000-000000000000"]);
   const { data, error } = await query;

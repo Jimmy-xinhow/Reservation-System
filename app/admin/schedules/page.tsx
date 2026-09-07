@@ -11,6 +11,7 @@ import {
 } from "../schedule-actions";
 import ScheduleEditor from "../_components/ScheduleEditor";
 import EntityManager from "../_components/EntityManager";
+import { ServiceSetupTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +68,8 @@ export default async function SchedulesPage() {
           <p className="admin-page-description">先建立服務人員，再設定每週可預約時段；場地或設備型服務可直接用服務建立時段。</p>
         </div>
       </header>
+
+      <ServiceSetupTabs active="schedules" />
 
       <section className="admin-metric-strip grid-cols-3" aria-label="排班摘要">
         <div className="admin-metric"><span className="admin-metric-label">啟用服務人員</span><strong className="admin-metric-value">{activeDoctors}</strong></div>

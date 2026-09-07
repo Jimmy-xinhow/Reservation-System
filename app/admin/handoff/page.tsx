@@ -23,8 +23,7 @@ const STATUS: Record<string, string> = { open: "待處理", in_progress: "處理
 const PRIORITY: Record<string, string> = { low: "低", normal: "一般", high: "高" };
 
 export default async function HandoffPage({ searchParams }: { searchParams: Promise<{ status?: string; category?: string; priority?: string; assignee?: string }> }) {
-  const member = await requireOperator();
-  const params = await searchParams;
+  const [member, params] = await Promise.all([requireOperator(), searchParams]);
   let query = member.supabase
     .from("handoff_tasks")
     .select("id, title, category, status, priority, due_at, assigned_to, note, created_at")
@@ -38,15 +37,13 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
   if (Object.hasOwn(PRIORITY, params.priority ?? "")) query = query.eq("priority", params.priority!);
   if (params.assignee) query = query.eq("assigned_to", params.assignee);
 
-  const [{ data, error }, { data: members, error: membersError }] = await Promise.all([
+  const service = createServiceClient();
+  const [{ data, error }, { data: members, error: membersError }, { data: authUsers, error: authError }] = await Promise.all([
     query,
     member.supabase.from("clinic_members").select("user_id, access_type").eq("clinic_id", member.clinicId),
+    service.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ]);
-  if (error || membersError) throw new Error(error?.message ?? membersError?.message ?? "讀取交班待辦失敗");
-
-  const service = createServiceClient();
-  const { data: authUsers, error: authError } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (authError) throw new Error(`讀取品牌成員失敗：${authError.message}`);
+  if (error || membersError || authError) throw new Error(error?.message ?? membersError?.message ?? authError?.message ?? "讀取交班待辦失敗");
   const emailById = new Map(authUsers.users.map((user) => [user.id, user.email ?? user.id]));
   const tasks = (data ?? []) as Task[];
   const openCount = tasks.filter((task) => task.status !== "done").length;
@@ -55,7 +52,7 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
     <div className="admin-page">
       <header className="admin-page-header">
         <div>
-          <p className="eyebrow">日常交接</p>
+          <p className="eyebrow">員工管理</p>
           <h1 className="admin-page-title">交班待辦</h1>
           <p className="admin-page-description">集中交接預約、付款、顧客與渠道問題，讓下一位負責人清楚知道狀態與期限。</p>
         </div>

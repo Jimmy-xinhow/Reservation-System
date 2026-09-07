@@ -41,6 +41,6 @@ export default async function SalesOrderEditor({ appointmentId, registrationId, 
   const requestedSource = appointmentId ? `appointment:${appointmentId}` : registrationId ? `registration:${registrationId}` : "";
   const defaultSource = options.some((option) => option.value === requestedSource) ? requestedSource : "";
   const form = <CreateSalesOrderForm options={options} defaultSource={defaultSource} closeHref="/admin/checkout" embedded={variant === "modal"} />;
-  if (variant === "modal") return <AdminModal title="建立銷售單" description="先選結帳來源與實際成交金額，建立後即可加入服務、商品、套票或自訂品項。" closeHref="/admin/checkout" size="wide">{form}</AdminModal>;
+  if (variant === "modal") return <AdminModal title="建立銷售單" description="先選結帳來源與實際成交金額，建立後即可加入服務、商品或套票。" closeHref="/admin/checkout" size="wide">{form}</AdminModal>;
   return <div className="admin-page checkout-create-page"><div className="admin-page-header"><div><p className="eyebrow">結帳中心</p><h1 className="admin-page-title">建立銷售單</h1><p className="admin-page-description">單獨完成來源、成交金額與折扣設定，再進入品項與收款。</p></div><Link href="/admin/checkout" className="btn btn-secondary">← 返回結帳中心</Link></div>{form}</div>;
 }

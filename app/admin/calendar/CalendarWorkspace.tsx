@@ -178,9 +178,8 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
             return (
               <div className="calendar-event-content">
                 <div className="calendar-event-meta"><span>{info.event.startStr ? formatTime(info.event.startStr) : "未定"}</span><span>{props.statusLabel}</span></div>
-                <strong>{props.customerName}</strong>
-                <span>{props.serviceName}</span>
-                <small className="calendar-provider" style={{ color: staffColor }}><i style={{ backgroundColor: staffColor }} />{props.providerName}</small>
+                <div className="calendar-event-main"><span title={props.serviceName}>{props.serviceName}</span><strong title={props.customerName}>{props.customerName}</strong></div>
+                <div className="calendar-event-staff"><span>服務人員</span><small className="calendar-provider" style={{ color: staffColor }}><i style={{ backgroundColor: staffColor }} />{props.providerName}</small></div>
               </div>
             );
           }}

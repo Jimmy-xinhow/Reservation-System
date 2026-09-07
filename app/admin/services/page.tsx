@@ -4,6 +4,7 @@ import { createServiceAction, updateServiceAction, toggleServiceAction, deleteSe
 import ServiceManager, { type ServiceItem } from "./ServiceManager";
 import { ServiceAddonManager, type ServiceAddon } from "./ServiceAddonManager";
 import { createServiceAddonAction, toggleServiceAddonAction, updateServiceAddonAction } from "./addon-actions";
+import { ServiceSetupTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +26,12 @@ export default async function ServicesPage() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <p className="eyebrow">預約基礎設定</p>
-          <h1 className="admin-page-title">服務項目與加購</h1>
-          <p className="admin-page-description">設定顧客可預約的服務、售價、所需時間與表單欄位；場地及設備請到資源管理綁定。</p>
+          <p className="eyebrow">營運中心</p>
+          <h1 className="admin-page-title">服務方案與排程設定</h1>
+          <p className="admin-page-description">從服務方案、人員資源、每週排程到例外日期，依頁籤完成整套可預約設定。</p>
         </div>
       </div>
+      <ServiceSetupTabs active="services" />
       <div className="admin-metric-strip grid-cols-3">
         <div className="admin-metric"><span className="admin-metric-label">啟用服務</span><strong className="admin-metric-value">{activeServices.length}</strong></div>
         <div className="admin-metric"><span className="admin-metric-label">免指定人員</span><strong className="admin-metric-value">{resourceOnlyServices.length}</strong></div>

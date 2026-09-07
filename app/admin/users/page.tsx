@@ -17,14 +17,13 @@ export default async function UsersPage() {
   const [staff, doctors] = await Promise.all([listStaff(), listClinicDoctors()]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">品牌人員與權限</h1>
-        <p className="text-sm text-slate-400">品牌管理者擁有完整品牌權限；其他帳號統一為品牌員工，再依工作內容授予權限。</p>
-      </div>
+    <div className="admin-page">
+      <header className="admin-page-header">
+        <div><p className="eyebrow">員工管理</p><h1 className="admin-page-title">員工與權限</h1><p className="admin-page-description">建立品牌員工帳號，依工作內容設定操作權限與可查看的服務提供者。</p></div>
+      </header>
 
       {/* 新增帳號 */}
-      <form action={createStaffAction} className="card flex flex-wrap items-end gap-3 p-5">
+      <form action={createStaffAction} className="admin-section flex flex-wrap items-end gap-3 p-5">
         <label className="text-sm">
           <span className="mb-1 block font-medium text-slate-600">Email</span>
           <input name="email" type="email" required autoComplete="email" className="input" placeholder="staff@clinic.com" />
@@ -39,7 +38,7 @@ export default async function UsersPage() {
       </form>
 
       {/* 帳號列表 */}
-      <div className="card overflow-x-auto">
+      <div className="admin-section overflow-x-auto">
         <table className="tbl">
           <thead>
             <tr>

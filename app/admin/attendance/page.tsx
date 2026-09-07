@@ -87,22 +87,23 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
     .limit(2000);
   if (!isBrandAdmin) eventsQuery = eventsQuery.eq("user_id", member.user.id);
 
-  const [{ data: settingsData, error: settingsError }, { data: staffData, error: staffError }, { data: eventsData, error: eventsError }, { data: members, error: membersError }] = await Promise.all([
+  const [{ data: settingsData, error: settingsError }, { data: staffData, error: staffError }, { data: eventsData, error: eventsError }, { data: members, error: membersError }, { data: authUsers, error: authError }] = await Promise.all([
     service.from("attendance_settings").select("click_enabled, qr_enabled, line_enabled, qr_refresh_seconds").eq("clinic_id", member.clinicId).maybeSingle(),
     isBrandAdmin ? service.from("attendance_staff").select("user_id, display_name, line_user_id, active").eq("clinic_id", member.clinicId) : Promise.resolve({ data: [], error: null }),
     eventsQuery,
     isBrandAdmin
       ? member.supabase.from("clinic_members").select("user_id, access_type").eq("clinic_id", member.clinicId)
       : Promise.resolve({ data: [{ user_id: member.user.id, access_type: member.accessType }], error: null }),
+    isBrandAdmin
+      ? service.auth.admin.listUsers({ page: 1, perPage: 1000 })
+      : Promise.resolve({ data: { users: [] }, error: null }),
   ]);
-  const attendanceError = settingsError ?? staffError ?? eventsError ?? membersError;
+  const attendanceError = settingsError ?? staffError ?? eventsError ?? membersError ?? authError;
   if (attendanceError && attendanceError.code !== "42P01") throw new Error(`讀取出勤資料失敗：${attendanceError.message}`);
 
   const emailById = new Map<string, string>();
   if (isBrandAdmin) {
-    const { data: authUsers, error: authError } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
-    if (authError) throw new Error(`讀取員工帳號失敗：${authError.message}`);
-    for (const user of authUsers.users) emailById.set(user.id, user.email ?? user.id);
+    for (const user of authUsers?.users ?? []) emailById.set(user.id, user.email ?? user.id);
   } else emailById.set(member.user.id, member.user.email ?? "我的帳號");
 
   const settings = settingsData ?? { click_enabled: true, qr_enabled: false, line_enabled: false, qr_refresh_seconds: 60 };
@@ -116,7 +117,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
 
   return <div className="admin-page">
     <header className="admin-page-header">
-      <div><p className="eyebrow">人員出勤</p><h1 className="admin-page-title">出勤打卡</h1><p className="admin-page-description">上下班打卡、動態 QR、LINE 綁定與工時紀錄集中在這裡，不再混入交班待辦。</p></div>
+      <div><p className="eyebrow">員工管理</p><h1 className="admin-page-title">出勤打卡</h1><p className="admin-page-description">上下班打卡、動態 QR、LINE 綁定與工時紀錄集中在這裡，不再混入交班待辦。</p></div>
       <Link href="/admin/handoff" className="btn btn-secondary">前往交班待辦</Link>
     </header>
 

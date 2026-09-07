@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/admin";
 import { createExceptionAction, deleteExceptionAction } from "../schedule-actions";
 import ExceptionForm from "../_components/ExceptionForm";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { ServiceSetupTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,8 @@ export default async function ExceptionsPage() {
           <p className="admin-page-description">在固定排班之外，設定特定日期的休假、停課或臨時加開時段。</p>
         </div>
       </header>
+
+      <ServiceSetupTabs active="exceptions" />
 
       <section className="admin-metric-strip grid-cols-3" aria-label="例外日期摘要">
         <div className="admin-metric"><span className="admin-metric-label">未來休假／停課</span><strong className="admin-metric-value">{futureClosures}</strong></div>

@@ -3,7 +3,8 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { createSupabaseServer } from "./supabase-server";
+import { cache } from "react";
+import { getSupabaseServerAuth } from "./supabase-server";
 import { CLINIC_ID, createServiceClient } from "./supabase";
 import {
   normalizeBrandPermissions,
@@ -64,11 +65,8 @@ function normalizeBrandAccessType(value: unknown, role: Role): BrandAccessType {
   return isAdminRole(role) ? "brand_admin" : "employee";
 }
 
-async function findMemberContext(): Promise<MemberContext | null> {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+const findMemberContext = cache(async function findMemberContext(): Promise<MemberContext | null> {
+  const { supabase, user } = await getSupabaseServerAuth();
   if (!user) return null;
 
   const { data, error } = await supabase
@@ -119,7 +117,7 @@ async function findMemberContext(): Promise<MemberContext | null> {
     permissions: selected.permissions,
     clinics,
   };
-}
+});
 
 /** Optional auth context for layouts that need to render login-safe chrome. */
 export async function getOptionalMember(): Promise<MemberContext | null> {

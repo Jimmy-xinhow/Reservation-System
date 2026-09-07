@@ -1,4 +1,3 @@
-import { createSupabaseServer } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase";
 import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, getOptionalMember } from "@/lib/admin";
 import { getOptionalPlatformAdmin } from "@/lib/platform";
@@ -74,17 +73,16 @@ export default async function TodayPage({
 }: {
   searchParams: Promise<{ doctor?: string; status?: string; date?: string; modal?: string; appointment_id?: string }>;
 }) {
-  const sp = await searchParams;
+  const [sp, member, platformAdmin] = await Promise.all([searchParams, getOptionalMember(), getOptionalPlatformAdmin()]);
   const fDoctor = sp.doctor ?? "";
   const fStatus = sp.status ?? "";
 
-  const [member, platformAdmin] = await Promise.all([getOptionalMember(), getOptionalPlatformAdmin()]);
   if (!member && platformAdmin) redirect("/admin/platform");
   if (!member) redirect("/admin/login?reason=no-access");
   const { clinicId, role } = member;
-  const supabase = await createSupabaseServer();
-  const assignedDoctorIds = await getAssignedDoctorIds(member);
   const providerOnly = role === "provider";
+  const supabase = member.supabase;
+  const assignedDoctorIds = providerOnly ? await getAssignedDoctorIds(member) : [];
   const settingsClient = providerOnly ? createServiceClient() : supabase;
   const today = taipeiToday();
   const viewDate = sp.date && /^\d{4}-\d{2}-\d{2}$/.test(sp.date) ? sp.date : today;

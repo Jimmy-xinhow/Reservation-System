@@ -51,7 +51,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
 
   return <div className="admin-page">
     <div className="admin-page-header">
-      <div><p className="eyebrow">預約營運</p><h1 className="admin-page-title">結帳中心</h1><p className="admin-page-description">從預約、活動報名或顧客建立銷售單，再加入服務、商品、套票或自訂品項。</p></div>
+      <div><p className="eyebrow">預約營運</p><h1 className="admin-page-title">結帳中心</h1><p className="admin-page-description">從預約、活動報名或顧客建立銷售單，再加入已設定的服務、商品或套票。</p></div>
       <div className="flex flex-wrap gap-2">{canManageProducts && <Link href="/admin/products" className="btn btn-secondary">商品管理</Link>}<Link href="/admin/services" className="btn btn-secondary">設定服務售價</Link><Link href="/admin/checkout?modal=new-sale" className="btn btn-primary"><span aria-hidden="true">＋</span>建立銷售單</Link></div>
     </div>
 

@@ -3,12 +3,13 @@ import "server-only";
 import { cookies } from "next/headers";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 
 /**
  * 後台用的 Supabase server client(authenticated,帶使用者 session cookie)。
  * 走 RLS,只能存取自己診所的資料。
  */
-export async function createSupabaseServer(): Promise<SupabaseClient> {
+export const createSupabaseServer = cache(async function createSupabaseServer(): Promise<SupabaseClient> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) {
@@ -29,4 +30,11 @@ export async function createSupabaseServer(): Promise<SupabaseClient> {
       },
     },
   });
-}
+});
+
+/** 同一個 Server Component 請求只向 Supabase Auth 驗證一次登入者。 */
+export const getSupabaseServerAuth = cache(async () => {
+  const supabase = await createSupabaseServer();
+  const { data: { user } } = await supabase.auth.getUser();
+  return { supabase, user };
+});

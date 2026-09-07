@@ -10,6 +10,7 @@ interface Item {
   href: string;
   label: string;
   icon: IconName;
+  activePrefixes?: string[];
   adminOnly?: boolean;
   systemAdminOnly?: boolean;
   systemPermission?: SystemPermission;
@@ -65,8 +66,6 @@ const GROUPS: Group[] = [
       { href: "/admin/calendar", label: "預約日曆", icon: "calendar" },
       { href: "/admin", label: "預約列表", icon: "list", exact: true },
       { href: "/admin/checkout", label: "結帳中心", icon: "membership" },
-      { href: "/admin/attendance", label: "出勤打卡", icon: "checkin" },
-      { href: "/admin/handoff", label: "交班待辦", icon: "checkin" },
       { href: "/admin/queue", label: "舊版服務進度", icon: "queue", module: "legacy" },
     ],
   },
@@ -84,18 +83,23 @@ const GROUPS: Group[] = [
     label: "顧客與會員",
     items: [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
-      { href: "/admin/documents", label: "同意書與簽署", icon: "list" },
-      { href: "/admin/memberships", label: "會員與套票", icon: "membership", module: "memberships" },
-      { href: "/admin/customer-value", label: "儲值、點數與訂閱", icon: "membership", module: "memberships" },
-      { href: "/admin/membership-levels", label: "會員等級與價格", icon: "membership", module: "memberships", adminOnly: true },
+      { href: "/admin/memberships", label: "會員、套票、儲值訂閱管理", icon: "membership", module: "memberships", activePrefixes: ["/admin/customer-value", "/admin/membership-levels"] },
       { href: "/admin/crm", label: "顧客回訪與自動提醒", icon: "crm", module: "crm", adminOnly: true },
       { href: "/admin/followups", label: "指定日期回訪", icon: "message", module: "crm" },
     ],
   },
   {
+    label: "員工管理",
+    items: [
+      { href: "/admin/users", label: "員工與權限", icon: "users", adminOnly: true },
+      { href: "/admin/attendance", label: "出勤打卡", icon: "checkin" },
+      { href: "/admin/handoff", label: "交班待辦", icon: "list" },
+    ],
+  },
+  {
     label: "營運中心",
     items: [
-      { href: "/admin/products", label: "商品管理", icon: "membership", adminOnly: true },
+      { href: "/admin/services", label: "服務方案與排程設定", icon: "service", adminOnly: true, activePrefixes: ["/admin/resources", "/admin/schedules", "/admin/exceptions"] },
       { href: "/admin/beauty", label: "服務營運總覽", icon: "service", exact: true },
       { href: "/admin/operations/service-records", label: "服務過程紀錄", icon: "list" },
       { href: "/admin/beauty/supply", label: "採購與盤點", icon: "list", module: "beauty" },
@@ -120,13 +124,10 @@ const GROUPS: Group[] = [
       { href: "/admin/settings/add-ons", label: "擴充功能規劃", icon: "settings" },
       { href: "/admin/import", label: "匯入顧客與預約資料", icon: "list" },
       { href: "/admin/channels", label: "通知與付款測試", icon: "line" },
-      { href: "/admin/services", label: "服務與方案", icon: "service" },
-      { href: "/admin/resources", label: "人員與資源", icon: "service" },
-      { href: "/admin/schedules", label: "服務排程", icon: "schedule" },
-      { href: "/admin/exceptions", label: "例外日期", icon: "calendar" },
+      { href: "/admin/products", label: "商品管理", icon: "membership" },
+      { href: "/admin/documents", label: "同意書與簽署", icon: "list" },
       { href: "/admin/line", label: "LINE 官方帳號連線", icon: "line" },
       { href: "/admin/richmenu", label: "LINE 圖文選單", icon: "menu", module: "line" },
-      { href: "/admin/users", label: "團隊與權限", icon: "users" },
       { href: "/admin/audit", label: "操作紀錄", icon: "settings" },
     ],
   },
@@ -146,6 +147,10 @@ const GROUPS: Group[] = [
 
 function isActive(pathname: string, href: string, exact = false): boolean {
   return href === "/admin" || exact ? pathname === href : pathname.startsWith(href);
+}
+
+function isItemActive(pathname: string, item: Item): boolean {
+  return isActive(pathname, item.href, item.exact) || (item.activePrefixes?.some((prefix) => pathname.startsWith(prefix)) ?? false);
 }
 
 function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: string }) {
@@ -195,7 +200,7 @@ function Icon({ name, className = "h-5 w-5" }: { name: IconName; className?: str
 function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; unread: number; close: () => void; mode: "brand" | "platform" }) {
   const pathname = usePathname();
   const navId = useId().replace(/:/g, "");
-  const activeGroupLabel = groups.find((group) => group.items.some((item) => isActive(pathname, item.href, item.exact)))?.label ?? null;
+  const activeGroupLabel = groups.find((group) => group.items.some((item) => isItemActive(pathname, item)))?.label ?? null;
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroupLabel);
 
   useEffect(() => {
@@ -244,7 +249,7 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
 }
 
 function NavItem({ item, pathname, unread, close }: { item: Item; pathname: string; unread: number; close: () => void }) {
-  const active = isActive(pathname, item.href, item.exact);
+  const active = isItemActive(pathname, item);
   const showBadge = item.href === "/admin/chat" && unread > 0;
   return (
     <Link

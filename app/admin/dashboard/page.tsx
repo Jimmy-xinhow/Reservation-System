@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { createSupabaseServer } from "@/lib/supabase-server";
 import { getAssignedDoctorIds, hasBrandPermission, requireMember } from "@/lib/admin";
 import { taipeiDateString } from "@/lib/slots";
 import { AutoRefresh } from "@/components/AutoRefresh";
@@ -8,6 +7,7 @@ import { ScheduleTimeline, TrendLineChart } from "@/components/admin/OperationsC
 import { SubmitButton } from "@/components/SubmitButton";
 import { buildThreads } from "@/lib/chatQueries";
 import { recordButtonAttendanceAction } from "../handoff/attendance-actions";
+import { LiveTaipeiClock } from "@/components/LiveTaipeiClock";
 
 export const dynamic = "force-dynamic";
 
@@ -64,19 +64,18 @@ function taipeiMinute(value: string): number {
 }
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const params = await searchParams;
-  const member = await requireMember();
+  const [params, member] = await Promise.all([searchParams, requireMember()]);
   const canManageProducts = hasBrandPermission(member, "brand.manage");
   const { clinicId, role } = member;
-  const supabase = await createSupabaseServer();
+  const supabase = member.supabase;
   const { data: productSettings, error: productSettingsError } = await supabase
     .from("clinic_settings")
     .select("public_booking_enabled, public_registration_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, email_enabled, deposit_enabled, brand_page_enabled")
     .eq("clinic_id", clinicId)
     .maybeSingle();
   if (productSettingsError || !productSettings) throw new Error(productSettingsError?.message ?? "品牌設定載入失敗");
-  const setupReads = role === "owner" || role === "admin"
-    ? await Promise.all([
+  const setupReadsPromise = role === "owner" || role === "admin"
+    ? Promise.all([
         supabase.from("clinics").select("name, slug").eq("id", clinicId).maybeSingle(),
         supabase.from("services").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("active", true),
         supabase.from("events").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId),
@@ -87,23 +86,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         supabase.from("line_richmenu").select("published_version_id, published_id").eq("clinic_id", clinicId).maybeSingle(),
         supabase.from("clinic_payment_settings").select("active").eq("clinic_id", clinicId).maybeSingle(),
       ])
-    : null;
-  if (setupReads?.some((result) => result.error)) throw new Error(setupReads.find((result) => result.error)?.error?.message ?? "品牌開通資料載入失敗");
-  const setupItems = setupReads ? buildSetupItems({
-    brandReady: Boolean(setupReads[0].data?.name && setupReads[0].data?.slug),
-    brandPageReady: productSettings.brand_page_enabled === true && Boolean(setupReads[0].data?.slug),
-    serviceReady: (setupReads[1].count ?? 0) > 0 || (productSettings.events_enabled && (setupReads[2].count ?? 0) > 0),
-    peopleOrResourcesReady: (setupReads[3].count ?? 0) > 0 || (setupReads[4].count ?? 0) > 0,
-    scheduleReady: (setupReads[5].count ?? 0) > 0,
-    publicFlowReady: productSettings.public_booking_enabled || (productSettings.events_enabled && productSettings.public_registration_enabled),
-    lineEnabled: productSettings.line_channel_enabled,
-    lineReady: setupReads[6].data?.verification_status === "ready" && Boolean(setupReads[6].data?.liff_id),
-    richMenuReady: Boolean(setupReads[7].data?.published_version_id || setupReads[7].data?.published_id),
-    notificationReady: productSettings.email_enabled || productSettings.line_channel_enabled,
-    paymentRequired: productSettings.deposit_enabled,
-    paymentReady: setupReads[8].data?.active === true,
-  }) : [];
-  const assignedDoctorIds = await getAssignedDoctorIds(member);
+    : Promise.resolve(null);
+  const assignedDoctorIds = role === "provider" ? await getAssignedDoctorIds(member) : [];
   const eventsEnabled = productSettings.events_enabled === true;
   const crmEnabled = productSettings.crm_automation_enabled === true;
   const today = taipeiToday();
@@ -126,24 +110,27 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     appointmentsQuery = appointmentsQuery.in("doctor_id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
   }
 
-  const [{ data: appointmentData, error: appointmentError }, { data: registrationData, error: registrationError }, { data: paymentData, error: paymentError }, { data: deliveryData, error: deliveryError }, { count: patientCount }] = await Promise.all([
+  const [
+    { data: appointmentData, error: appointmentError },
+    { data: registrationData, error: registrationError },
+    { data: paymentData, error: paymentError },
+    { data: deliveryData, error: deliveryError },
+    { count: patientCount },
+    attendanceSettingsResult,
+    attendanceResult,
+    handoffResult,
+    salesPaymentsResult,
+    salesOrdersResult,
+    purchaseOrdersResult,
+    inventoryResult,
+    chatThreads,
+    setupReads,
+  ] = await Promise.all([
     appointmentsQuery,
     role === "provider" || !eventsEnabled ? Promise.resolve({ data: [], error: null }) : supabase.from("registrations").select("created_at, status, payment_status, amount").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso),
     role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso),
     role === "provider" || !crmEnabled ? Promise.resolve({ data: [], error: null }) : supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso),
     role === "provider" ? Promise.resolve({ count: null as number | null }) : supabase.from("patients").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("active", true),
-  ]);
-
-  if (appointmentError || registrationError || paymentError || deliveryError) {
-    throw new Error(appointmentError?.message ?? registrationError?.message ?? paymentError?.message ?? deliveryError?.message ?? "營運資料載入失敗");
-  }
-
-  const appointments = (appointmentData ?? []) as unknown as AppointmentRow[];
-  const registrations = (registrationData ?? []) as unknown as RegistrationRow[];
-  const payments = (paymentData ?? []) as unknown as PaymentRow[];
-  const deliveries = (deliveryData ?? []) as unknown as DeliveryRow[];
-
-  const [attendanceSettingsResult, attendanceResult, handoffResult, salesPaymentsResult, salesOrdersResult, purchaseOrdersResult, inventoryResult, chatThreads] = await Promise.all([
     supabase.from("attendance_settings").select("click_enabled, qr_enabled").eq("clinic_id", clinicId).maybeSingle(),
     supabase.from("attendance_events").select("event_type, occurred_at").eq("clinic_id", clinicId).eq("user_id", member.user.id).gte("occurred_at", todayStartIso).lte("occurred_at", todayEndIso).order("occurred_at", { ascending: false }).limit(20),
     role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("handoff_tasks").select("id, priority, status", { count: "exact" }).eq("clinic_id", clinicId).neq("status", "done").limit(50),
@@ -152,7 +139,33 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("purchase_orders").select("status, purchase_order_items(quantity, unit_cost)").eq("clinic_id", clinicId).in("status", ["ordered", "received"]).gte("created_at", monthStartIso).lte("created_at", todayEndIso),
     role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("inventory_items").select("stock_on_hand, reorder_level, retail_price").eq("clinic_id", clinicId).eq("active", true),
     role === "provider" || productSettings.line_channel_enabled !== true ? Promise.resolve([]) : buildThreads(supabase, clinicId),
+    setupReadsPromise,
   ]);
+
+  if (appointmentError || registrationError || paymentError || deliveryError) {
+    throw new Error(appointmentError?.message ?? registrationError?.message ?? paymentError?.message ?? deliveryError?.message ?? "營運資料載入失敗");
+  }
+  if (setupReads?.some((result) => result.error)) throw new Error(setupReads.find((result) => result.error)?.error?.message ?? "品牌開通資料載入失敗");
+  const setupItems = setupReads ? buildSetupItems({
+    brandReady: Boolean(setupReads[0].data?.name && setupReads[0].data?.slug),
+    brandPageReady: productSettings.brand_page_enabled === true && Boolean(setupReads[0].data?.slug),
+    serviceReady: (setupReads[1].count ?? 0) > 0 || (productSettings.events_enabled && (setupReads[2].count ?? 0) > 0),
+    peopleOrResourcesReady: (setupReads[3].count ?? 0) > 0 || (setupReads[4].count ?? 0) > 0,
+    scheduleReady: (setupReads[5].count ?? 0) > 0,
+    publicFlowReady: productSettings.public_booking_enabled || (productSettings.events_enabled && productSettings.public_registration_enabled),
+    lineEnabled: productSettings.line_channel_enabled,
+    lineReady: setupReads[6].data?.verification_status === "ready" && Boolean(setupReads[6].data?.liff_id),
+    richMenuReady: Boolean(setupReads[7].data?.published_version_id || setupReads[7].data?.published_id),
+    notificationReady: productSettings.email_enabled || productSettings.line_channel_enabled,
+    paymentRequired: productSettings.deposit_enabled,
+    paymentReady: setupReads[8].data?.active === true,
+  }) : [];
+
+  const appointments = (appointmentData ?? []) as unknown as AppointmentRow[];
+  const registrations = (registrationData ?? []) as unknown as RegistrationRow[];
+  const payments = (paymentData ?? []) as unknown as PaymentRow[];
+  const deliveries = (deliveryData ?? []) as unknown as DeliveryRow[];
+
   const supplementalError = [attendanceSettingsResult.error, attendanceResult.error, handoffResult.error, salesPaymentsResult.error, salesOrdersResult.error, purchaseOrdersResult.error, inventoryResult.error].find(Boolean);
   if (supplementalError && supplementalError.code !== "42P01") throw new Error(`工作台摘要載入失敗：${supplementalError.message}`);
 
@@ -196,7 +209,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <div className="admin-page">
       <AutoRefresh seconds={30} />
-      <div className="admin-page-header"><div><p className="eyebrow">今日營運</p><h1 className="admin-page-title">{role === "provider" ? "我的今日工作台" : "今日工作台"}</h1><p className="admin-page-description">{role === "provider" ? "只顯示已指派給你的預約與今日工作。" : "先處理需要行動的事項，再查看營運趨勢。"}</p></div><div className="flex flex-wrap gap-2">{publicBrandUrl && <Link href={publicBrandUrl} target="_blank" className="btn btn-secondary">品牌形象頁 ↗</Link>}<Link href="/admin/calendar" className="btn btn-secondary">日曆</Link>{role !== "provider" && <Link href="/admin/reports" className="btn btn-primary">報表</Link>}</div></div>
+      <div className="admin-page-header"><div><p className="eyebrow">今日營運</p><h1 className="admin-page-title">{role === "provider" ? "我的今日工作台" : "今日工作台"}</h1><p className="admin-page-description">{role === "provider" ? "只顯示已指派給你的預約與今日工作。" : "先處理需要行動的事項，再查看營運趨勢。"}</p></div><div className="flex flex-wrap items-center gap-2"><LiveTaipeiClock compact />{publicBrandUrl && <Link href={publicBrandUrl} target="_blank" className="btn btn-secondary">品牌形象頁 ↗</Link>}<Link href="/admin/calendar" className="btn btn-secondary">日曆</Link>{role !== "provider" && <Link href="/admin/reports" className="btn btn-primary">報表</Link>}</div></div>
 
       {params.notice === "permission" && (
         <div role="status" className="flex flex-col gap-2 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 sm:flex-row sm:items-center sm:justify-between">

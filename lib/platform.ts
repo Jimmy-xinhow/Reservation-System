@@ -2,7 +2,8 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { createSupabaseServer } from "./supabase-server";
+import { getSupabaseServerAuth } from "./supabase-server";
+import { cache } from "react";
 import { createServiceClient } from "./supabase";
 import {
   normalizeSystemPermissions,
@@ -43,11 +44,8 @@ function isMissingPlatformTable(error: { code?: string; message?: string } | nul
   return error?.code === "42P01" || Boolean(error?.message?.includes("platform_admins"));
 }
 
-async function findPlatformContext(): Promise<PlatformContext | null> {
-  const supabase = await createSupabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+const findPlatformContext = cache(async function findPlatformContext(): Promise<PlatformContext | null> {
+  const { supabase, user } = await getSupabaseServerAuth();
   if (!user) return null;
 
   if (envPlatformAdminIds().has(user.id)) {
@@ -78,7 +76,7 @@ async function findPlatformContext(): Promise<PlatformContext | null> {
     if (error instanceof Error && /SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_SUPABASE_URL/.test(error.message)) return null;
     throw error;
   }
-}
+});
 
 export async function getOptionalPlatformAdmin(): Promise<PlatformContext | null> {
   return findPlatformContext();

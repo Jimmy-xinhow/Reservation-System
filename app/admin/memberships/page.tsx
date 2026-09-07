@@ -12,6 +12,7 @@ import {
   toggleMembershipPlanAction,
 } from "./actions";
 import { MembershipPlanDesigner } from "./MembershipPlanDesigner";
+import { MembershipManagementTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -102,11 +103,13 @@ export default async function MembershipsPage() {
     <div className="admin-page">
       <div className="admin-page-header">
         <div>
-          <p className="eyebrow">顧客優惠</p>
-          <h1 className="admin-page-title">套票與優惠碼</h1>
-          <p className="admin-page-description">{clinicName} 的堂數方案、顧客套票與促銷代碼集中管理；套票每次可扣抵一筆預約或一張活動票。</p>
+          <p className="eyebrow">顧客與會員</p>
+          <h1 className="admin-page-title">會員、套票、儲值訂閱管理</h1>
+          <p className="admin-page-description">{clinicName} 的套票、禮券、顧客資產、訂閱與會員價格集中在同一個管理入口。</p>
         </div>
       </div>
+
+      <MembershipManagementTabs active="memberships" showPricing={canEdit} />
 
       <div className="admin-metric-strip grid-cols-2 sm:grid-cols-4">
         <div className="admin-metric"><span className="admin-metric-label">啟用方案</span><strong className="admin-metric-value">{activePlanCount}</strong></div>

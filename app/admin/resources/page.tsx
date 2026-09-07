@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import ResourceManager, { type ResourceAssignment, type ResourceItem } from "./ResourceManager";
 import { assignResourceAction, createResourceAction, removeAssignmentAction, toggleResourceAction } from "./actions";
+import { ServiceSetupTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,8 @@ export default async function ResourcesPage() {
           <p className="admin-page-description">管理教室、房間與器材的可用數量，避免不同服務預約到同一個資源。</p>
         </div>
       </header>
+
+      <ServiceSetupTabs active="resources" />
 
       <section className="admin-metric-strip grid-cols-3" aria-label="資源摘要">
         <div className="admin-metric"><span className="admin-metric-label">啟用資源</span><strong className="admin-metric-value">{activeResources.length}</strong></div>

@@ -8,6 +8,7 @@ import {
   saveMembershipPlanLevelPriceAction,
   toggleMembershipLevelAction,
 } from "../memberships/actions";
+import { MembershipManagementTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +48,8 @@ export default async function MembershipLevelsPage() {
           <p className="admin-page-description">先建立會員等級，再設定個別套票的專屬售價；未指定等級或價格時，顧客會使用方案原價。</p>
         </div>
       </div>
+
+      <MembershipManagementTabs active="levels" />
 
       <div className="admin-metric-strip grid-cols-2">
         <div className="admin-metric"><span className="admin-metric-label">啟用等級</span><strong className="admin-metric-value">{activeLevelCount}</strong></div>

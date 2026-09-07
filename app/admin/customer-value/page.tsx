@@ -10,6 +10,7 @@ import {
   setPatientSubscriptionStatusAction,
   toggleSubscriptionPlanAction,
 } from "./actions";
+import { MembershipManagementTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -52,8 +53,9 @@ export default async function CustomerValuePage() {
           <h1 className="admin-page-title">顧客資產與訂閱</h1>
           <p className="admin-page-description">管理儲值金、點數與週期訂閱。每次人工調整都會留下流水紀錄；正式自動扣款需完成金流帳號接入。</p>
         </div>
-        <Link href="/admin/memberships" className="btn btn-secondary">前往套票管理</Link>
       </div>
+
+      <MembershipManagementTabs active="value" showPricing={canManagePlans} />
 
       <div className="admin-metric-strip grid-cols-3">
         <div className="admin-metric"><span className="admin-metric-label">儲值總餘額</span><strong className="admin-metric-value">{money(totalWallet)}</strong></div>

@@ -48,7 +48,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
   return <div className="admin-page">
     <header className="admin-page-header">
-      <div><p className="eyebrow">營運中心</p><h1 className="admin-page-title">商品管理</h1><p className="admin-page-description">這裡建立的商品會直接出現在結帳、採購、盤點與工作台庫存，不需要另外重複設定。</p></div>
+      <div><p className="eyebrow">設定中心</p><h1 className="admin-page-title">商品管理</h1><p className="admin-page-description">這裡建立的商品會直接出現在結帳、採購、盤點與工作台庫存，不需要另外重複設定。</p></div>
       <div className="flex flex-wrap gap-2"><Link href="/admin/beauty/supply" className="btn btn-secondary">採購與盤點</Link><Link href="/admin/checkout" className="btn btn-primary">前往結帳中心</Link></div>
     </header>
 
