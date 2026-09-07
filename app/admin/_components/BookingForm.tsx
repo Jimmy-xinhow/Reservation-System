@@ -65,6 +65,8 @@ export default function BookingForm({
   appointments,
   clinicSlug,
   defaultDate,
+  initialTargetId,
+  returnTo,
   createAction,
   rescheduleAction,
 }: {
@@ -74,11 +76,13 @@ export default function BookingForm({
   appointments: ApptOption[];
   clinicSlug?: string;
   defaultDate?: string;
+  initialTargetId?: string;
+  returnTo?: string;
   createAction: ServerAction;
   rescheduleAction: ServerAction;
 }) {
   const singleDoctor = doctors.length === 1 ? doctors[0] : null;
-  const [targetId, setTargetId] = useState(""); // 空=新增,有值=改期
+  const targetId = initialTargetId ?? "";
   const [doctorId, setDoctorId] = useState(singleDoctor?.id ?? "");
   const [serviceId, setServiceId] = useState(services.length === 1 ? services[0].id : "");
   const [visitType, setVisitType] = useState<"first" | "return">("return");
@@ -192,30 +196,16 @@ export default function BookingForm({
   const action = isReschedule ? rescheduleAction : createAction;
 
   return (
-    <form action={action} className="card overflow-hidden">
-      {/* 表頭 + 動作切換 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-3">
-        <h2 className="font-semibold text-slate-900">
-          {isReschedule ? "改期預約" : "建立預約"}
-        </h2>
-        <label className="flex items-center gap-2 text-sm text-slate-500">
-          動作
-          <select
-            className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm"
-            value={targetId}
-            onChange={(e) => setTargetId(e.target.value)}
-          >
-            <option value="">＋ 新增預約</option>
-            {appointments.map((a) => (
-              <option key={a.id} value={a.id}>
-                改期:{a.label}
-              </option>
-            ))}
-          </select>
-        </label>
+    <form action={action} className="admin-section appointment-editor-form overflow-hidden">
+      <div className="border-b border-slate-200 px-5 py-4">
+        <h2 className="font-semibold text-slate-950">{isReschedule ? "改期預約" : "建立預約"}</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          {isReschedule ? "保留原預約紀錄，選擇新的日期與可用時段。" : "依序選擇顧客、服務與時段，確認後儲存。"}
+        </p>
       </div>
 
       <input type="hidden" name="mode" value={mode} />
+      <input type="hidden" name="return_to" value={returnTo ?? "/admin"} />
       {isReschedule && <input type="hidden" name="old_id" value={targetId} />}
       <input type="hidden" name={mode === "time" ? "start_at" : "template_id"} value={picked} />
       {mode === "number" && <input type="hidden" name="date" value={date} />}

@@ -1,16 +1,13 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase";
-import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, getOptionalMember, hasBrandPermission } from "@/lib/admin";
+import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, getOptionalMember } from "@/lib/admin";
 import { getOptionalPlatformAdmin } from "@/lib/platform";
 import { redirect } from "next/navigation";
 import { formatTime } from "@/lib/slots";
-import BookingForm from "./_components/BookingForm";
 import {
   setStatusAction,
   cancelAppointmentAction,
   setDepositAction,
-  createAppointmentAction,
-  rescheduleAppointmentAction,
   cancelAppointmentWaitlistAction,
 } from "./appointment-actions";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -89,7 +86,6 @@ export default async function TodayPage({
   if (!member && platformAdmin) redirect("/admin/platform");
   if (!member) redirect("/admin/login?reason=no-access");
   const { clinicId, role } = member;
-  const canManageBrand = hasBrandPermission(member, "brand.manage");
   const supabase = await createSupabaseServer();
   const assignedDoctorIds = await getAssignedDoctorIds(member);
   const providerOnly = role === "provider";
@@ -116,7 +112,7 @@ export default async function TodayPage({
     );
   }
 
-  const [{ data: settings }, { data: doctors }, { data: appts }, { data: services }, { data: waitlistData }, { data: clinic }] = await Promise.all([
+  const [{ data: settings }, { data: doctors }, { data: appts }, { data: waitlistData }] = await Promise.all([
     settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
     (() => {
       let query = supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true);
@@ -124,7 +120,6 @@ export default async function TodayPage({
       return query.order("name");
     })(),
     apptQuery.order("start_at").order("queue_number", { nullsFirst: true }),
-    supabase.from("services").select("id, name, booking_target, booking_fields").eq("clinic_id", clinicId).eq("active", true).order("created_at"),
     providerOnly
       ? Promise.resolve({ data: [] })
       : supabase
@@ -134,8 +129,6 @@ export default async function TodayPage({
           .eq("requested_date", viewDate)
           .in("status", ["waiting", "offered"])
           .order("position"),
-    // 後台空檔查詢需要明確的品牌 slug；用 server-only client 讀取目前已驗證成員的品牌，避免受 RLS 讀取範圍影響而漏傳租戶識別。
-    createServiceClient().from("clinics").select("slug").eq("id", clinicId).maybeSingle(),
   ]);
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
@@ -145,15 +138,6 @@ export default async function TodayPage({
   const waitlistRows = (waitlistData ?? []) as unknown as WaitlistRow[];
   const offeredAppointmentIds = new Set(waitlistRows.filter((item) => item.status === "offered" && item.appointment_id).map((item) => item.appointment_id));
   const rows = ((appts ?? []) as unknown as Row[]).filter((item) => !offeredAppointmentIds.has(item.id));
-  const rescheduleOptions = rows
-    .filter((r) => r.status === "booked" || r.status === "confirmed")
-    .map((r) => ({
-      id: r.id,
-      doctor_id: r.doctor_id,
-      service_id: r.service_id,
-      label: `${r.patients?.name ?? ""} ${mode === "time" ? formatTime(r.start_at) : `第${r.queue_number}號`}`,
-    }));
-
   // 切換日期時保留服務提供者/狀態篩選
   const dayLink = (d: string) => {
     const u = new URLSearchParams();
@@ -172,15 +156,17 @@ export default async function TodayPage({
             預約列表 · {viewDate}
             {viewDate === today && <span className="ml-2 text-sm font-normal text-accent-600">今天</span>}
           </h1>
-          <p className="admin-page-description">先查看與處理當日預約；需要建立或改期時再展開操作區。</p>
+          <p className="admin-page-description">集中查看當日預約；新增、改期與結帳使用各自的操作頁，避免表單混在列表中。</p>
         </div>
-        <span className="badge bg-brand-50 text-brand-700">
-          {settingsUnavailable ? "讀不到設定" : mode === "time" ? "時間制" : "號次制"}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="badge bg-brand-50 text-brand-700">
+            {settingsUnavailable ? "讀不到設定" : mode === "time" ? "時間制" : "號次制"}
+          </span>
+          {canOperate(role) && <a href={`/admin/appointments/new?date=${viewDate}&return_to=${encodeURIComponent(dayLink(viewDate))}`} className="btn btn-primary"><span aria-hidden="true">＋</span>新增預約</a>}
+        </div>
       </div>
 
-      {/* 日期切換 */}
-      <div className="admin-toolbar text-sm">
+      <form className="admin-toolbar appointment-list-toolbar text-sm">
         <a href={dayLink(shiftDate(viewDate, -1))} className="btn btn-secondary px-3 py-1.5">
           ← 前一天
         </a>
@@ -190,7 +176,30 @@ export default async function TodayPage({
         <a href={dayLink(shiftDate(viewDate, 1))} className="btn btn-secondary px-3 py-1.5">
           後一天 →
         </a>
-      </div>
+        <div className="appointment-toolbar-field">
+          <label className="label">日期</label>
+          <input type="date" name="date" defaultValue={viewDate} className="input" />
+        </div>
+        {(doctors ?? []).length > 1 && (
+          <div className="appointment-toolbar-field">
+            <label className="label">服務人員</label>
+            <select name="doctor" defaultValue={fDoctor} className="input">
+              <option value="">全部人員</option>
+              {(doctors ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="appointment-toolbar-field">
+          <label className="label">狀態</label>
+          <select name="status" defaultValue={fStatus} className="input">
+            <option value="">全部狀態</option>
+            {Object.entries(STATUS_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+        <SubmitButton className="btn btn-secondary">套用</SubmitButton>
+        {(fDoctor || fStatus) && <a href={`/admin?date=${viewDate}`} className="btn btn-ghost">清除篩選</a>}
+        <span className="appointment-toolbar-count">{rows.length} 筆</span>
+      </form>
 
       {settingsUnavailable && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
@@ -198,85 +207,6 @@ export default async function TodayPage({
           否則畫面模式與部分功能會不正確。
         </p>
       )}
-
-      <details className="admin-section group">
-        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-semibold text-slate-800">
-          <span>新增或改期預約</span>
-          <span className="text-xs font-medium text-brand-700 group-open:hidden">展開操作</span>
-          <span className="hidden text-xs font-medium text-slate-500 group-open:inline">收合</span>
-        </summary>
-        <div className="border-t border-slate-200 p-4">
-      {!canOperate(role) ? (
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-slate-700">服務提供者僅能查看已指派的工作資料。</p>
-          <p className="text-xs text-slate-500">
-            {assignedDoctorIds.length > 0 ? "目前已套用指派範圍；顧客電話已遮罩。" : "目前尚未設定指派範圍，請由品牌管理員在帳號管理中設定。"}
-          </p>
-        </div>
-      ) : (doctors ?? []).length === 0 && (services ?? []).length === 0 ? (
-        <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-slate-600">尚未建立服務提供者或服務項目，顧客目前無法預約。</p>
-          {canManageBrand ? (
-            <a href="/admin/schedules" className="btn btn-primary">
-              前往服務排程新增服務提供者
-            </a>
-          ) : (
-            <p className="text-xs text-slate-500">請聯絡品牌管理者完成服務與排程設定。</p>
-          )}
-        </div>
-      ) : (
-        <BookingForm
-          mode={mode}
-          doctors={doctors ?? []}
-          services={services ?? []}
-          appointments={rescheduleOptions}
-          clinicSlug={typeof clinic?.slug === "string" ? clinic.slug : undefined}
-          defaultDate={viewDate}
-          createAction={createAppointmentAction}
-          rescheduleAction={rescheduleAppointmentAction}
-        />
-      )}
-        </div>
-      </details>
-
-      {/* 篩選列 + 筆數 */}
-      <form className="admin-toolbar">
-        <div>
-          <label className="label">日期</label>
-          <input type="date" name="date" defaultValue={viewDate} className="input" />
-        </div>
-        {(doctors ?? []).length > 1 && (
-          <div>
-            <label className="label">服務提供者</label>
-            <select name="doctor" defaultValue={fDoctor} className="input">
-              <option value="">全部服務提供者</option>
-              {(doctors ?? []).map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-        <div>
-          <label className="label">狀態</label>
-          <select name="status" defaultValue={fStatus} className="input">
-            <option value="">全部狀態</option>
-            {Object.entries(STATUS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </div>
-        <SubmitButton className="btn btn-secondary">套用</SubmitButton>
-        {(fDoctor || fStatus) && (
-          <a href="/admin" className="btn btn-ghost">
-            清除
-          </a>
-        )}
-        <span className="ml-auto self-center text-sm text-slate-400">{rows.length} 筆</span>
-      </form>
 
       {!providerOnly && waitlistRows.length > 0 && (
         <section className="card overflow-hidden">
@@ -366,7 +296,8 @@ export default async function TodayPage({
                 </td>
                 <td data-label="操作">
                   <div className="flex flex-wrap gap-1.5">
-                    {!providerOnly && ["booked", "confirmed", "done"].includes(r.status) && <a href={`/admin/checkout?appointment_id=${r.id}`} className="admin-inline-action text-brand-700">結帳</a>}
+                    {!providerOnly && ["booked", "confirmed", "done"].includes(r.status) && <a href={`/admin/checkout/new?appointment_id=${r.id}`} className="admin-inline-action admin-inline-action-primary">{r.status === "done" ? "結帳" : "完成／結帳"}</a>}
+                    {!providerOnly && ["booked", "confirmed"].includes(r.status) && <a href={`/admin/appointments/${r.id}/reschedule?return_to=${encodeURIComponent(dayLink(viewDate))}`} className="admin-inline-action">改期</a>}
                   {r.status !== "cancelled" && r.status !== "done" && (
                     <>
                       {r.status === "booked" && <StatusBtn id={r.id} status="confirmed" label="確認" />}

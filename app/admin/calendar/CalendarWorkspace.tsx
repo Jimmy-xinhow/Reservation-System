@@ -37,12 +37,12 @@ const STATUS_LEGEND = [
   { key: "cancelled", label: "已取消", color: "#dc2626" },
 ];
 
-function taipeiDate(value: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(value));
-}
-
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(new Date(value));
+}
+
+function taipeiDate(value: Date | string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(value));
 }
 
 function formatTime(value: string): string {
@@ -53,6 +53,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
   const calendarRef = useRef<FullCalendar | null>(null);
   const didMount = useRef(false);
   const [doctorId, setDoctorId] = useState("");
+  const [calendarDate, setCalendarDate] = useState(initialDate);
   const [selected, setSelected] = useState<CalendarAppointment | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -115,7 +116,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
     <div className="admin-page">
       <div className="admin-page-header">
         <div><p className="eyebrow">預約營運</p><h1 className="admin-page-title">預約日曆</h1><p className="admin-page-description">以月曆掌握全局，切換週／日檢視後查看人員工作量；點擊預約可直接處理狀態。</p></div>
-        <Link href={`/admin?date=${initialDate}`} className="btn btn-primary"><span aria-hidden="true">＋</span>新增預約</Link>
+        {canOperate && <Link href={`/admin/appointments/new?date=${calendarDate}&return_to=${encodeURIComponent("/admin/calendar")}`} className="btn btn-primary"><span aria-hidden="true">＋</span>新增預約</Link>}
       </div>
 
       <section className="admin-toolbar calendar-toolbar">
@@ -146,6 +147,7 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
           headerToolbar={{ left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" }}
           buttonText={{ today: "今天", month: "月", week: "週", day: "日", list: "列表" }}
           events={loadEvents}
+          datesSet={(info) => setCalendarDate(taipeiDate(info.view.currentStart))}
           eventClick={handleEventClick}
           dateClick={handleDateClick}
           dayMaxEvents={3}
@@ -159,6 +161,17 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
           expandRows
           height="auto"
           eventTimeFormat={{ hour: "2-digit", minute: "2-digit", hour12: false }}
+          eventContent={(info) => {
+            const props = info.event.extendedProps as Omit<CalendarAppointment, "id" | "start" | "end">;
+            return (
+              <div className="calendar-event-content">
+                <div className="calendar-event-meta"><span>{info.event.startStr ? formatTime(info.event.startStr) : "未定"}</span><span>{props.statusLabel}</span></div>
+                <strong>{props.customerName}</strong>
+                <span>{props.serviceName}</span>
+                <small>{props.providerName}</small>
+              </div>
+            );
+          }}
           eventDidMount={(info) => { info.el.title = `${info.event.title}｜點擊查看詳情`; }}
         />
       </section>
@@ -177,7 +190,8 @@ export function CalendarWorkspace({ doctors, initialDate, canOperate }: { doctor
               <Detail label="聯絡電話" value={selected.customerPhone} />
             </dl>
             <div className="calendar-detail-actions">
-              <Link href={`/admin?date=${taipeiDate(selected.start)}`} className="btn btn-secondary"><span aria-hidden="true">✎</span>編輯或重新排程</Link>
+              {canOperate && <Link href={`/admin/appointments/${selected.id}/reschedule?return_to=${encodeURIComponent("/admin/calendar")}`} className="btn btn-secondary"><span aria-hidden="true">✎</span>改期預約</Link>}
+              {canOperate && ["booked", "confirmed", "done"].includes(selected.status) && <Link href={`/admin/checkout/new?appointment_id=${selected.id}`} className="btn btn-primary"><span aria-hidden="true">✓</span>{selected.status === "done" ? "前往結帳" : "完成／結帳"}</Link>}
               {canOperate && (selected.status === "booked" || selected.status === "confirmed") && <>
                 {selected.status === "booked" && <form action={updateStatus}><input type="hidden" name="id" value={selected.id} /><input type="hidden" name="status" value="confirmed" /><SubmitButton className="btn btn-primary"><span aria-hidden="true">✓</span>確認預約</SubmitButton></form>}
                 <div className="calendar-detail-secondary-actions">

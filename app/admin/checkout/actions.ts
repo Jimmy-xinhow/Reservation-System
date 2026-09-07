@@ -21,6 +21,14 @@ function nonNegativeInteger(fd: FormData, key: string): number {
   return Math.round(value);
 }
 
+function optionalNonNegativeInteger(fd: FormData, key: string): number | null {
+  const raw = text(fd, key);
+  if (!raw) return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) throw new Error("金額格式不正確");
+  return Math.round(value);
+}
+
 function parseScopedValue(value: string): { kind: string; id: string } {
   const [kind, id] = value.split(":", 2);
   if (!kind || !/^[0-9a-f-]{36}$/i.test(id ?? "")) throw new Error("選擇的資料格式不正確");
@@ -41,15 +49,76 @@ export async function createSalesOrderAction(fd: FormData): Promise<void> {
     p_note: text(fd, "note") || null,
   };
   if (!["appointment", "registration", "patient"].includes(source.kind)) throw new Error("結帳來源不正確");
-  const { data, error } = await createServiceClient().rpc("create_sales_order", args);
+  const service = createServiceClient();
+  const existingQuery = service
+    .from("sales_orders")
+    .select("id")
+    .eq("clinic_id", member.clinicId)
+    .neq("status", "void");
+  const { data: existing } = source.kind === "appointment"
+    ? await existingQuery.eq("appointment_id", source.id).maybeSingle()
+    : source.kind === "registration"
+      ? await existingQuery.eq("registration_id", source.id).maybeSingle()
+      : { data: null };
+  const { data, error } = await service.rpc("create_sales_order", args);
   if (error) {
     if (error.message.includes("discount exceeds")) throw new Error("折扣不可超過銷售金額");
     if (error.message.includes("not eligible")) throw new Error("這筆預約或報名目前不能結帳");
     throw new Error(error.message);
   }
   if (typeof data !== "string") throw new Error("銷售單建立失敗");
+  const sourceAmount = optionalNonNegativeInteger(fd, "source_amount");
+  if (!existing && source.kind !== "patient" && sourceAmount !== null) {
+    const { data: sourceItem, error: itemError } = await service
+      .from("sales_order_items")
+      .select("id")
+      .eq("clinic_id", member.clinicId)
+      .eq("order_id", data)
+      .eq("kind", "service")
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    if (itemError) throw new Error(itemError.message);
+    if (sourceItem) await setSalesOrderItemPrice(member.clinicId, data, sourceItem.id, sourceAmount);
+  }
   revalidatePath("/admin/checkout");
   redirect(`/admin/checkout?order_id=${encodeURIComponent(data)}`);
+}
+
+async function setSalesOrderItemPrice(clinicId: string, orderId: string, itemId: string, unitPrice: number): Promise<void> {
+  const service = createServiceClient();
+  const [{ data: order, error: orderError }, { data: items, error: itemsError }] = await Promise.all([
+    service.from("sales_orders").select("id, status, discount_amount, paid_amount").eq("id", orderId).eq("clinic_id", clinicId).maybeSingle(),
+    service.from("sales_order_items").select("id, quantity, line_total").eq("order_id", orderId).eq("clinic_id", clinicId),
+  ]);
+  if (orderError) throw new Error(orderError.message);
+  if (itemsError) throw new Error(itemsError.message);
+  if (!order || order.status === "paid" || order.status === "void") throw new Error("已結清或作廢的銷售單不能修改金額");
+  const item = (items ?? []).find((row) => row.id === itemId);
+  if (!item) throw new Error("找不到要修改的銷售品項");
+  const proposedLineTotal = Math.round(Number(item.quantity) * unitPrice);
+  const proposedSubtotal = (items ?? []).reduce((sum, row) => sum + (row.id === itemId ? proposedLineTotal : Number(row.line_total)), 0);
+  const proposedTotal = proposedSubtotal - Number(order.discount_amount);
+  if (proposedTotal < 0) throw new Error("調整後金額不可低於整單折扣");
+  if (proposedTotal < Number(order.paid_amount)) throw new Error("調整後金額不可低於已收款金額");
+  const { error: updateError } = await service
+    .from("sales_order_items")
+    .update({ unit_price: unitPrice, line_total: proposedLineTotal })
+    .eq("id", itemId)
+    .eq("order_id", orderId)
+    .eq("clinic_id", clinicId);
+  if (updateError) throw new Error(updateError.message);
+  const { error: recalculateError } = await service.rpc("recalculate_sales_order", { p_clinic_id: clinicId, p_order_id: orderId });
+  if (recalculateError) throw new Error(recalculateError.message);
+}
+
+export async function updateSalesOrderItemAction(fd: FormData): Promise<void> {
+  const member = await requireOperator();
+  const orderId = text(fd, "order_id");
+  const itemId = text(fd, "item_id");
+  if (!/^[0-9a-f-]{36}$/i.test(orderId) || !/^[0-9a-f-]{36}$/i.test(itemId)) throw new Error("銷售品項格式不正確");
+  await setSalesOrderItemPrice(member.clinicId, orderId, itemId, nonNegativeInteger(fd, "unit_price"));
+  revalidatePath("/admin/checkout");
 }
 
 export async function addCatalogSalesItemAction(fd: FormData): Promise<void> {

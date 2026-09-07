@@ -976,8 +976,17 @@ body {
 .operations-calendar .fc .fc-col-header-cell-cushion { padding: 10px 6px; color: #475569; font-weight: 700; }
 .operations-calendar .fc .fc-daygrid-day-number { padding: 8px; color: #475569; font-weight: 650; }
 .operations-calendar .fc .fc-daygrid-day-frame { min-height: 112px; }
-.operations-calendar .fc .fc-event { cursor: pointer; border-left-width: 3px; border-radius: 4px; padding: 2px 4px; box-shadow: none; font-weight: 600; }
-.operations-calendar .fc .fc-event:hover { filter: brightness(.96); }
+.operations-calendar .fc .fc-event { cursor: pointer; border-width: 0; border-radius: 4px; padding: 0; box-shadow: none; font-weight: 600; }
+.operations-calendar .fc .fc-event:hover { filter: brightness(.92); }
+.operations-calendar .fc .fc-event-main { color: inherit; }
+.calendar-event-content { min-width: 0; padding: 5px 6px 6px; color: inherit; line-height: 1.25; }
+.calendar-event-meta { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-bottom: 3px; font-size: 10px; font-weight: 750; opacity: .9; }
+.calendar-event-content strong,
+.calendar-event-content > span,
+.calendar-event-content small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-event-content strong { font-size: 12px; font-weight: 800; }
+.calendar-event-content > span { margin-top: 2px; font-size: 10px; }
+.calendar-event-content small { margin-top: 2px; font-size: 10px; opacity: .82; }
 .operations-calendar .fc .fc-daygrid-more-link { color: #1d4ed8; font-weight: 700; }
 .operations-calendar .fc .fc-list-event:hover td { background: #f8fafc; }
 .calendar-loading { position: absolute; top: 14px; right: 16px; z-index: 5; display: inline-flex; align-items: center; gap: 8px; color: #64748b; font-size: 12px; }
@@ -1000,6 +1009,34 @@ body {
 .calendar-detail-actions .btn { width: 100%; }
 .calendar-detail-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
+.appointment-list-toolbar { width: 100%; align-items: end; }
+.appointment-toolbar-field { min-width: 150px; }
+.appointment-toolbar-field .input { width: 100%; }
+.appointment-toolbar-count { margin-left: auto; align-self: center; color: #64748b; font-size: 13px; font-variant-numeric: tabular-nums; }
+.admin-inline-action-primary { border-color: #155c4b; background: #155c4b; color: #fff; }
+.admin-inline-action-primary:hover { border-color: #10493c; background: #10493c; color: #fff; }
+
+.appointment-editor-page,
+.checkout-create-page { max-width: 980px; }
+.appointment-editor-form { max-width: 900px; }
+.checkout-create-form { max-width: 900px; }
+.checkout-form-section { padding: 20px; border-bottom: 1px solid var(--admin-border); }
+.checkout-form-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.checkout-form-heading > span { display: grid; width: 28px; height: 28px; flex: 0 0 auto; place-items: center; border-radius: 999px; background: #155c4b; color: #fff; font-size: 12px; font-weight: 800; }
+.checkout-form-heading h2 { color: #172027; font-size: 15px; font-weight: 750; }
+.checkout-form-heading p { margin-top: 2px; color: #64748b; font-size: 13px; line-height: 1.55; }
+.checkout-form-hint { margin-top: 10px; border-left: 3px solid #cbd5e1; padding: 8px 10px; background: #f8fafc; color: #52606b; font-size: 13px; line-height: 1.55; }
+.checkout-form-grid { display: grid; grid-template-columns: minmax(160px, .45fr) minmax(260px, 1fr); gap: 14px; }
+.checkout-money-input { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: center; min-height: 42px; border: 1px solid #b9c2c9; background: #fff; }
+.checkout-money-input:focus-within { border-color: #155c4b; box-shadow: 0 0 0 2px rgba(21,92,75,.12); }
+.checkout-money-input span { padding-left: 12px; color: #52606b; font-size: 13px; font-weight: 700; }
+.checkout-money-input input { width: 100%; min-height: 40px; border: 0; padding: 0 12px 0 8px; background: transparent; color: #172027; font: inherit; font-weight: 700; outline: 0; }
+.checkout-create-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; background: #f8fafc; }
+.sales-price-editor { display: inline-grid; grid-template-columns: auto 92px auto; align-items: center; gap: 6px; }
+.sales-price-editor > span { color: #64748b; font-size: 12px; }
+.sales-price-editor input { width: 92px; min-height: 34px; border: 1px solid #cbd5e1; border-radius: 3px; padding: 4px 7px; background: #fff; color: #172027; font-size: 13px; font-weight: 700; }
+.sales-price-editor input:focus { border-color: #155c4b; outline: 2px solid rgba(21,92,75,.12); outline-offset: 0; }
+
 .chart-frame { width: 100%; height: 260px; margin-top: 12px; }
 .timeline-chart { width: 100%; min-height: 190px; margin-top: 10px; }
 .funnel-chart { width: 100%; height: 260px; margin-top: 12px; }
@@ -1015,8 +1052,22 @@ body {
   .operations-calendar .fc .fc-toolbar { align-items: stretch; flex-direction: column; }
   .operations-calendar .fc .fc-toolbar-chunk { display: flex; justify-content: center; }
   .operations-calendar .fc .fc-daygrid-day-frame { min-height: 82px; }
-  .operations-calendar .fc .fc-event-title { font-size: 10px; }
+  .calendar-event-content { padding: 4px; }
+  .operations-calendar .fc-dayGridMonth-view .calendar-event-meta span:last-child,
+  .operations-calendar .fc-dayGridMonth-view .calendar-event-content > span,
+  .operations-calendar .fc-dayGridMonth-view .calendar-event-content small { display: none; }
+  .calendar-event-content strong { font-size: 10px; }
   .calendar-detail { width: 100%; }
+
+  .appointment-list-toolbar { align-items: stretch; }
+  .appointment-list-toolbar > .btn { flex: 1 1 calc(33.333% - 6px); }
+  .appointment-toolbar-field { min-width: 0; flex: 1 1 100%; }
+  .appointment-toolbar-count { width: 100%; margin-left: 0; text-align: right; }
+  .checkout-form-section { padding: 16px; }
+  .checkout-form-grid { grid-template-columns: 1fr; }
+  .checkout-create-actions { position: sticky; bottom: 0; z-index: 5; padding: 12px 16px; border-top: 1px solid var(--admin-border); }
+  .checkout-create-actions .btn { flex: 1; }
+  .sales-price-editor { grid-template-columns: auto minmax(72px, 1fr) auto; }
 
   .admin-table-mobile-cards { overflow: visible; border: 0; background: transparent; }
   .admin-table-mobile-cards .tbl,

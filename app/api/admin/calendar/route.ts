@@ -16,11 +16,11 @@ interface AppointmentRow {
 }
 
 const STATUS: Record<string, { label: string; color: string; text: string }> = {
-  booked: { label: "待確認", color: "#dbeafe", text: "#1e40af" },
-  confirmed: { label: "已確認", color: "#d1fae5", text: "#065f46" },
-  done: { label: "已完成", color: "#e2e8f0", text: "#334155" },
-  no_show: { label: "未到", color: "#fef3c7", text: "#92400e" },
-  cancelled: { label: "已取消", color: "#fee2e2", text: "#991b1b" },
+  booked: { label: "待確認", color: "#2563eb", text: "#ffffff" },
+  confirmed: { label: "已確認", color: "#047857", text: "#ffffff" },
+  done: { label: "已完成", color: "#475569", text: "#ffffff" },
+  no_show: { label: "未到", color: "#b45309", text: "#ffffff" },
+  cancelled: { label: "已取消", color: "#b91c1c", text: "#ffffff" },
 };
 
 function one<T>(value: T | T[] | null): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       const patient = one(row.patients);
       const service = one(row.services);
       const doctor = one(row.doctors);
-      const state = STATUS[row.status] ?? { label: "其他狀態", color: "#f1f5f9", text: "#334155" };
+      const state = STATUS[row.status] ?? { label: "其他狀態", color: "#475569", text: "#ffffff" };
       const customerName = patient?.name ?? "未命名顧客";
       const serviceName = service?.name ?? "未指定服務";
       return {

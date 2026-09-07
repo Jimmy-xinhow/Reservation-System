@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireOperator, requireStatusOperator } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
@@ -20,6 +21,11 @@ function bool(fd: FormData, key: string): boolean {
 function intOr(fd: FormData, key: string, fallback: number): number {
   const value = Number(str(fd, key));
   return Number.isFinite(value) ? value : fallback;
+}
+
+function safeAdminReturn(fd: FormData): string {
+  const value = str(fd, "return_to");
+  return value.startsWith("/admin") && !value.startsWith("//") ? value : "/admin";
 }
 
 const STATUSES = ["booked", "confirmed", "cancelled", "done", "no_show"] as const;
@@ -470,6 +476,8 @@ export async function createAppointmentAction(fd: FormData) {
     serviceId: serviceId || undefined,
   });
   revalidatePath("/admin");
+  revalidatePath("/admin/calendar");
+  redirect(safeAdminReturn(fd));
 }
 
 export async function rescheduleAppointmentAction(fd: FormData) {
@@ -515,4 +523,6 @@ export async function rescheduleAppointmentAction(fd: FormData) {
     createdBy: user.id,
   });
   revalidatePath("/admin");
+  revalidatePath("/admin/calendar");
+  redirect(safeAdminReturn(fd));
 }
