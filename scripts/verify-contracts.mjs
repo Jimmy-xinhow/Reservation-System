@@ -613,6 +613,8 @@ const adminActions = [
   read("app/admin/users/actions.ts"),
 ].join("\n");
 const richMenuLibrary = read("lib/richmenu.ts");
+const richMenuArtwork = read("lib/richmenu-art.ts");
+const richMenuEditor = read("app/admin/richmenu/RichMenuEditor.tsx");
 const lineLibrary = read("lib/line.ts");
 const richMenuAdminPage = read("app/admin/richmenu/page.tsx");
 const richMenuPublishForm = read("app/admin/richmenu/PublishForm.tsx");
@@ -1054,6 +1056,21 @@ invariant(
     paymentStatusApi.includes("rateLimitResponse") &&
     paymentResultPage.includes("/api/payment/status") &&
     read("app/register/page.tsx").includes("localStorage.setItem(`registration:")
+);
+invariant(
+  "Rich Menu visual labels and icons are optional while custom HTTPS links remain editable",
+  richMenuLibrary.includes("showIcon?: boolean") &&
+    richMenuLibrary.includes("showLabel?: boolean") &&
+    richMenuLibrary.includes('value: "uri", label: "自訂跳轉連結"') &&
+    richMenuEditor.includes("show_icon_") &&
+    richMenuEditor.includes("show_label_") &&
+    richMenuEditor.includes("自訂跳轉網址（HTTPS）") &&
+    richMenuEditor.includes('type={s.action === "uri" ? "url" : "text"}') &&
+    saveRichMenuAction.includes("showIcon:") &&
+    saveRichMenuAction.includes("showLabel:") &&
+    richMenuArtwork.includes("showIcon = slot.showIcon !== false") &&
+    richMenuArtwork.includes("showLabel = slot.showLabel !== false") &&
+    richMenuArtwork.includes("visualGap = 40"),
 );
 invariant(
   "registration lists and check-in are scoped by event, session, and date",

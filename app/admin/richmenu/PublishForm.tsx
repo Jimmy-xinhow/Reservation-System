@@ -256,7 +256,7 @@ export default function PublishForm({
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {previewSlots.map(({ slot, browserTarget, lineTarget, actionLabel }, index) => (
             <div key={`${index}-${slot.label}`} className="border-l-2 border-slate-300 bg-slate-50 p-3 text-sm">
-              <p className="font-medium text-slate-800">{index + 1}. {slot.label}</p>
+              <p className="font-medium text-slate-800">{index + 1}. {slot.showLabel !== false && slot.label.trim() ? slot.label : slot.accessibilityLabel || "不顯示文字"}</p>
               <p className="mt-0.5 text-xs text-slate-500">{actionLabel}</p>
               <div className="mt-2 flex min-h-11 flex-wrap items-center gap-2">
                 {browserTarget ? <a href={browserTarget} target="_blank" rel="noreferrer" className="btn btn-secondary px-3 py-2 text-xs">瀏覽器測試</a> : <span className="text-xs text-amber-700">此動作只能在 LINE 內驗收</span>}

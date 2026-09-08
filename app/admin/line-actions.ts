@@ -343,6 +343,8 @@ export async function saveRichMenuAction(fd: FormData) {
       label: str(fd, `label_${i}`),
       accessibilityLabel: str(fd, `accessibility_label_${i}`),
       icon: isRichMenuIconKey(rawIcon) ? rawIcon : undefined,
+      showIcon: fd.get(`show_icon_${i}`) === "on",
+      showLabel: fd.get(`show_label_${i}`) === "on",
       action: (str(fd, `action_${i}`) || "none") as Slot["action"],
       value: str(fd, `value_${i}`) || undefined,
     });

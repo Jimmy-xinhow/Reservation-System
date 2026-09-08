@@ -37,28 +37,41 @@ export async function renderRichMenuPng(layout: Layout, slots: Slot[], templateK
   const background = await sharp(artworkFile).resize(spec.width, spec.height, { fit: "cover", position: "centre" }).png().toBuffer();
   const compact = spec.height === 843;
   const iconSize = compact ? 128 : 116;
+  const fontSize = compact ? 60 : 58;
+  const labelHeight = Math.ceil(fontSize * 1.65);
+  const visualGap = 40;
+  const dividerHeight = 6;
   const contrast = theme.ink.toLowerCase() === "#ffffff" || theme.ink.toLowerCase().startsWith("#f") ? "#101815" : "#fffdf8";
-  const decoration = bounds.map((box, index) => {
+  const visualLayout = bounds.map((box, index) => {
     const slot = slots[index] ?? { label: "品牌資訊", action: "brand" as const };
+    const showIcon = slot.showIcon !== false;
+    const showLabel = slot.showLabel !== false;
+    const showDivider = showIcon && showLabel;
+    const groupHeight = (showIcon ? iconSize : 0)
+      + (showDivider ? visualGap + dividerHeight + visualGap : 0)
+      + (showLabel ? labelHeight : 0);
+    let cursor = box.y + (box.height - groupHeight) / 2;
     const iconX = box.x + box.width / 2 - iconSize / 2;
-    const iconY = box.y + (compact ? 172 : 238);
-    return `<g>
-      <line x1="${box.x + box.width / 2 - 42}" y1="${box.y + box.height - 228}" x2="${box.x + box.width / 2 + 42}" y2="${box.y + box.height - 228}" stroke="${theme.accent}" stroke-width="6" stroke-linecap="round"/>
-      <g opacity="0.58">${icon(slot.icon ?? richMenuIconForAction(slot.action), iconX, iconY, iconSize, contrast, 11)}</g>
-      ${icon(slot.icon ?? richMenuIconForAction(slot.action), iconX, iconY, iconSize, theme.ink)}
-    </g>`;
-  }).join("");
+    const iconY = cursor;
+    if (showIcon) cursor += iconSize;
+    const dividerY = showDivider ? cursor + visualGap + dividerHeight / 2 : null;
+    if (showDivider) cursor += visualGap + dividerHeight + visualGap;
+    return { slot, box, showIcon, showLabel, showDivider, iconX, iconY, dividerY, labelTop: Math.round(cursor) };
+  });
+  const decoration = visualLayout.map(({ slot, box, showIcon, showDivider, iconX, iconY, dividerY }) => `<g>
+      ${showDivider && dividerY !== null ? `<line x1="${box.x + box.width / 2 - 42}" y1="${dividerY}" x2="${box.x + box.width / 2 + 42}" y2="${dividerY}" stroke="${theme.accent}" stroke-width="${dividerHeight}" stroke-linecap="round"/>` : ""}
+      ${showIcon ? `<g opacity="0.58">${icon(slot.icon ?? richMenuIconForAction(slot.action), iconX, iconY, iconSize, contrast, 11)}</g>` : ""}
+      ${showIcon ? icon(slot.icon ?? richMenuIconForAction(slot.action), iconX, iconY, iconSize, theme.ink) : ""}
+    </g>`).join("");
   const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${spec.width}" height="${spec.height}" viewBox="0 0 ${spec.width} ${spec.height}">
     ${decoration}
   </svg>`);
-  const labels = await Promise.all(bounds.map(async (box, index) => {
-    const slot = slots[index] ?? { label: "品牌資訊", action: "brand" as const };
-    const fontSize = compact ? 60 : 58;
-    const labelBuffer: Buffer = await sharp({ text: { text: `<span foreground="${theme.ink}">${escapeXml(slot.label)}</span>`, font: `Noto Sans CJK TC Bold ${fontSize}`, fontfile: fontFile, width: box.width - 120, height: Math.ceil(fontSize * 1.65), align: "center", rgba: true } }).png().toBuffer();
+  const labels = await Promise.all(visualLayout.map(async ({ slot, box, showLabel, labelTop }) => {
+    if (!showLabel) return [];
+    const labelBuffer: Buffer = await sharp({ text: { text: `<span foreground="${theme.ink}">${escapeXml(slot.label)}</span>`, font: `Noto Sans CJK TC Bold ${fontSize}`, fontfile: fontFile, width: box.width - 120, height: labelHeight, align: "center", rgba: true } }).png().toBuffer();
     const shadow = await sharp(labelBuffer).tint(contrast).blur(5).png().toBuffer();
     const left = box.x + 60;
-    const top = Math.round(box.y + box.height - 188);
-    return [{ input: shadow, left, top }, { input: labelBuffer, left, top }] as const;
+    return [{ input: shadow, left, top: labelTop }, { input: labelBuffer, left, top: labelTop }] as const;
   }));
   return sharp(background).composite([{ input: overlay, left: 0, top: 0 }, ...labels.flat()]).png({ compressionLevel: 9, palette: true, quality: 82, colours: 128 }).toBuffer();
 }

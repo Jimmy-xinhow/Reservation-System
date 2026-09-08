@@ -22,6 +22,10 @@ export interface Slot {
   label: string;
   accessibilityLabel?: string;
   icon?: RichMenuIconKey;
+  /** 視覺圖稿是否顯示圖示；舊資料未設定時視為顯示。 */
+  showIcon?: boolean;
+  /** 視覺圖稿是否顯示文字；舊資料未設定時視為顯示。 */
+  showLabel?: boolean;
   action: "booking" | "appointments" | "query" | "events" | "tickets" | "membership" | "support" | "brand" | "progress" | "info" | "uri" | "message" | "richmenuswitch" | "none";
   value?: string; // uri=網址;message=訊息素材 id;richmenuswitch=alias id
 }
@@ -170,9 +174,9 @@ export function validateRichMenuSlots(layout: Layout, slots: Slot[], availabilit
   if (slots.length !== expected) errors.push(`版型需要 ${expected} 個區塊`);
   slots.slice(0, expected).forEach((slot, index) => {
     const prefix = `第 ${index + 1} 格`;
-    if (!slot.label?.trim()) errors.push(`${prefix}缺少顯示名稱`);
+    if (slot.showLabel !== false && !slot.label?.trim()) errors.push(`${prefix}缺少顯示名稱`);
     if (!slot.accessibilityLabel?.trim()) errors.push(`${prefix}缺少無障礙標籤`);
-    if (slot.icon && !isRichMenuIconKey(slot.icon)) errors.push(`${prefix}圖示不正確`);
+    if (slot.showIcon !== false && slot.icon && !isRichMenuIconKey(slot.icon)) errors.push(`${prefix}圖示不正確`);
     if ((slot.accessibilityLabel ?? "").trim().length > 20) errors.push(`${prefix}無障礙標籤不可超過 20 字`);
     if (slot.action === "none") errors.push(`${prefix}沒有有效動作`);
     if (slot.action === "booking" && !availability.booking) errors.push(`${prefix}使用了未開放的預約入口`);
@@ -284,7 +288,7 @@ export const ACTION_OPTIONS: { value: Slot["action"]; label: string }[] = [
   { value: "support", label: "LINE 客服" },
   { value: "brand", label: "品牌資訊" },
   { value: "progress", label: "服務進度（舊版）" },
-  { value: "uri", label: "自訂連結" },
+  { value: "uri", label: "自訂跳轉連結" },
   { value: "message", label: "回覆訊息素材" },
   { value: "richmenuswitch", label: "切換 Rich Menu 頁籤" },
   { value: "none", label: "(不設定)" },

@@ -140,7 +140,13 @@ export default function RichMenuEditor({
               第 {i + 1} 格
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <label className="text-sm"><span className="mb-1 block text-slate-500">顯示名稱</span><input name={`label_${i}`} value={s.label ?? ""} onChange={(e) => setSlot(i, { label: e.target.value })} className="input" maxLength={40} required /></label>
+              <fieldset className="flex min-h-11 items-center gap-5 border-y border-slate-200 px-1 py-2 sm:col-span-2">
+                <legend className="sr-only">第 {i + 1} 格顯示內容</legend>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" name={`show_icon_${i}`} checked={s.showIcon !== false} onChange={(e) => setSlot(i, { showIcon: e.target.checked })} className="h-4 w-4 accent-emerald-800" />顯示圖示</label>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" name={`show_label_${i}`} checked={s.showLabel !== false} onChange={(e) => setSlot(i, { showLabel: e.target.checked })} className="h-4 w-4 accent-emerald-800" />顯示文字</label>
+                <span className="text-xs text-slate-500">可只保留背景與點擊動作</span>
+              </fieldset>
+              <label className="text-sm"><span className="mb-1 block text-slate-500">顯示名稱</span><input name={`label_${i}`} value={s.label ?? ""} onChange={(e) => setSlot(i, { label: e.target.value })} className="input" maxLength={40} required={s.showLabel !== false} placeholder={s.showLabel === false ? "已隱藏，可保留名稱供日後使用" : "輸入顯示文字"} /></label>
               <label className="text-sm"><span className="mb-1 block text-slate-500">圖示</span><select name={`icon_${i}`} value={s.icon ?? richMenuIconForAction(s.action)} onChange={(e) => setSlot(i, { icon: e.target.value as RichMenuIconKey })} className="input">{RICH_MENU_ICON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
               <label className="text-sm"><span className="mb-1 block text-slate-500">無障礙標籤（LINE 上限 20 字）</span><input name={`accessibility_label_${i}`} value={s.accessibilityLabel ?? ""} onChange={(e) => setSlot(i, { accessibilityLabel: e.target.value })} className="input" maxLength={20} required /></label>
               <label className="text-sm">
@@ -160,7 +166,7 @@ export default function RichMenuEditor({
               </label>
               <label className="text-sm">
                 <span className="mb-1 block text-slate-500">
-                  {s.action === "uri" ? "連結網址" : s.action === "message" ? "選擇訊息素材" : s.action === "richmenuswitch" ? "切換到另一個選單" : "(此動作免填)"}
+                  {s.action === "uri" ? "自訂跳轉網址（HTTPS）" : s.action === "message" ? "選擇訊息素材" : s.action === "richmenuswitch" ? "切換到另一個選單" : "(此動作免填)"}
                 </span>
                 {s.action === "message" ? (
                   <>
@@ -199,10 +205,14 @@ export default function RichMenuEditor({
                 ) : (
                   <input
                     name={`value_${i}`}
+                    type={s.action === "uri" ? "url" : "text"}
+                    inputMode={s.action === "uri" ? "url" : undefined}
+                    autoComplete={s.action === "uri" ? "url" : undefined}
                     value={s.value ?? ""}
                     onChange={(e) => setSlot(i, { value: e.target.value })}
                     disabled={s.action !== "uri"}
-                    placeholder={s.action === "uri" ? "https://..." : ""}
+                    required={s.action === "uri"}
+                    placeholder={s.action === "uri" ? "https://example.com/your-page" : ""}
                     className="input disabled:bg-slate-50"
                   />
                 )}
@@ -235,9 +245,10 @@ export default function RichMenuEditor({
                 <img src={RICH_MENU_TEMPLATES[template].artwork} alt="目前模板背景預覽" className="absolute inset-0 z-0 h-full w-full object-cover" />
               )}
               {slots.map((slot, index) => (
-                <div key={`${index}-${slot.label}`} className="line-richmenu-slot">
-                  <RichMenuIconPreview icon={slot.icon ?? richMenuIconForAction(slot.action)} />
-                  <strong>{slot.label.trim() || `第 ${index + 1} 格`}</strong>
+                <div key={`${index}-${slot.label}`} className="line-richmenu-slot" aria-label={slot.accessibilityLabel || `第 ${index + 1} 格`}>
+                  {slot.showIcon !== false && <RichMenuIconPreview icon={slot.icon ?? richMenuIconForAction(slot.action)} />}
+                  {slot.showIcon !== false && slot.showLabel !== false && <span className="line-richmenu-divider" aria-hidden="true" />}
+                  {slot.showLabel !== false && <strong>{slot.label.trim() || `第 ${index + 1} 格`}</strong>}
                 </div>
               ))}
             </div>
@@ -269,7 +280,7 @@ function RichMenuIconPreview({ icon }: { icon: RichMenuIconKey }) {
     case "location": content = <><path d="M12 22s7-6.3 7-13a7 7 0 1 0-14 0c0 6.7 7 13 7 13z" /><circle cx="12" cy="9" r="2.5" /></>; break;
     default: content = <><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10h.01" /></>;
   }
-  return <svg viewBox="0 0 24 24" aria-hidden="true" className="mb-1 h-5 w-5" {...common}>{content}</svg>;
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" {...common}>{content}</svg>;
 }
 
 function normalize(slots: Slot[], count: number): Slot[] {
