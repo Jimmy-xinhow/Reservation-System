@@ -10,6 +10,7 @@ import { trackFunnelEvent } from "@/lib/funnel-client";
 import MyAppointments, { type MyAppt } from "./MyAppointments";
 import { bookingApi as api } from "./client-api";
 import { getBookingFlowState } from "./booking-flow-state";
+import { liffEntryParams } from "@/lib/liff-entry-state";
 import {
   CalendarButtons,
   Centered,
@@ -86,7 +87,7 @@ export default function BookPage() {
   // 所有 Rich Menu 都進同一個 LIFF，再由 view 分流；保留舊 tab 參數相容。
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
+    const params = liffEntryParams(window.location.search);
     const requested = params.get("view");
     if (["home", "booking", "appointments", "events", "tickets", "membership", "support", "brand"].includes(requested ?? "")) {
       setView(requested as CustomerView);

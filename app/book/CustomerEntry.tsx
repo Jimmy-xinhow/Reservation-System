@@ -230,6 +230,8 @@ function PrivatePortalView({ view, idToken }: { view: "tickets" | "membership"; 
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [binding, setBinding] = useState(false);
+  const [bindingIdentity, setBindingIdentity] = useState({ name: "", phone: "", birthday: "" });
 
   const load = useCallback(async (patientId?: string) => {
     if (!idToken) return;
@@ -262,9 +264,45 @@ function PrivatePortalView({ view, idToken }: { view: "tickets" | "membership"; 
   }, [idToken]);
 
   useEffect(() => { if (idToken) void load(); }, [idToken, load]);
+
+  async function bindMember(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!idToken) return;
+    setBinding(true);
+    setError(null);
+    try {
+      const response = await fetch(scopedPath("/api/customer/bind-line"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, ...bindingIdentity }),
+        cache: "no-store",
+      });
+      const body = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+      if (!response.ok || !body?.ok) throw new Error(body?.error ?? "會員綁定失敗");
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "會員綁定失敗");
+    } finally {
+      setBinding(false);
+    }
+  }
+
   if (!idToken || loading) return <Message>確認 LINE 身分並載入資料中…</Message>;
+  if (error && !data) return <Message tone="error">{error}</Message>;
+  if (!data?.patient) return (
+    <section className="space-y-4">
+      <div><p className="eyebrow">LINE 會員綁定</p><h1 className="mt-1 text-xl font-bold text-slate-900">綁定我的會員資料</h1><p className="mt-2 text-sm leading-6 text-slate-500">輸入品牌留存的姓名、電話與生日；完成後可直接在 LINE 查看套票、票券與會員權益。</p></div>
+      <form onSubmit={bindMember} className="card grid gap-4 p-5 sm:grid-cols-2">
+        <label className="text-sm sm:col-span-2"><span className="label">姓名</span><input className="input" value={bindingIdentity.name} onChange={(event) => setBindingIdentity((current) => ({ ...current, name: event.target.value }))} autoComplete="name" required /></label>
+        <label className="text-sm"><span className="label">電話</span><input className="input" value={bindingIdentity.phone} onChange={(event) => setBindingIdentity((current) => ({ ...current, phone: event.target.value }))} inputMode="tel" autoComplete="tel" required /></label>
+        <label className="text-sm"><span className="label">出生年月日</span><input type="date" className="input" value={bindingIdentity.birthday} onChange={(event) => setBindingIdentity((current) => ({ ...current, birthday: event.target.value }))} required /></label>
+        {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 sm:col-span-2">{error}</p>}
+        <button className="btn btn-primary sm:col-span-2" disabled={binding}>{binding ? "綁定中…" : "綁定並查看會員資料"}</button>
+      </form>
+      <p className="text-xs leading-5 text-slate-500">LINE 身分只會綁定目前這個品牌；資料不會與其他品牌共用。</p>
+    </section>
+  );
   if (error) return <Message tone="error">{error}</Message>;
-  if (!data?.patient) return <Message>尚未綁定顧客資料；完成一次預約或報名後即可在這裡查看。</Message>;
 
   return (
     <section className="space-y-4">

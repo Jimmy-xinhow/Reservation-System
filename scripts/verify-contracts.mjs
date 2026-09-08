@@ -659,6 +659,9 @@ const lineWebhook = [
   read("lib/line-webhook-status.ts"),
 ].join("\n");
 const bookingPageSource = read("app/book/page.tsx");
+const bookingClientApi = read("app/book/client-api.ts");
+const liffEntryState = read("lib/liff-entry-state.ts");
+const customerBindLineApi = read("app/api/customer/bind-line/route.ts");
 const publicBrand = read("lib/public-brand.ts");
 const homePage = read("app/page.tsx");
 const marketingHome = read("components/MarketingHome.tsx");
@@ -675,6 +678,23 @@ const saveRichMenuAction = between(adminActions, "export async function saveRich
 const publishRichMenuAction = between(adminActions, "export async function publishRichMenuAction", "export async function unpublishRichMenuAction");
 const rollbackRichMenuAction = between(adminActions, "export async function rollbackRichMenuVersionAction", "export async function updateLineConfigAction");
 
+invariant(
+  "LIFF primary redirect restores tenant scope before customer APIs load",
+  liffEntryState.includes('const LIFF_STATE_KEY = "liff.state"') &&
+    liffEntryState.includes("stateUrl.searchParams") &&
+    bookingClientApi.includes("liffEntryParams(window.location.search)") &&
+    bookingPageSource.includes("liffEntryParams(window.location.search)"),
+);
+invariant(
+  "LINE membership binding verifies channel identity and remains tenant scoped",
+  customerBindLineApi.includes("verifyClinicLiffIdToken") &&
+    customerBindLineApi.includes("resolvePublicClinicId") &&
+    customerBindLineApi.includes("settings.memberships_enabled") &&
+    customerBindLineApi.includes('rpc("create_or_get_public_patient"') &&
+    customerBindLineApi.includes("p_line_user_id: lineUserId") &&
+    customerEntryView.includes('scopedPath("/api/customer/bind-line")') &&
+    customerEntryView.includes("綁定並查看會員資料"),
+);
 invariant(
   "Rich Menu presets are module-aware and accessible",
   ["booking:", "events:", "mixed:"].every((key) => richMenuLibrary.includes(key)) &&

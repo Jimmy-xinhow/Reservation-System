@@ -1,3 +1,5 @@
+import { liffEntryParams } from "@/lib/liff-entry-state";
+
 export async function bookingApi<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(withBookingBrandScope(url), init);
   const json = (await res.json().catch(() => null)) as
@@ -11,7 +13,7 @@ export async function bookingApi<T>(url: string, init?: RequestInit): Promise<T>
 
 function withBookingBrandScope(url: string): string {
   if (typeof window === "undefined" || !url.startsWith("/api/")) return url;
-  const source = new URLSearchParams(window.location.search);
+  const source = liffEntryParams(window.location.search);
   const scope = new URLSearchParams();
   const clinicSlug = source.get("clinic_slug")?.trim();
   const clinicId = source.get("clinic_id")?.trim();

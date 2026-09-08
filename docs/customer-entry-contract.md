@@ -22,6 +22,8 @@
 
 LIFF URL 固定為 `https://liff.line.me/{brand_liff_id}?clinic_slug={slug}&view={view}`。一般瀏覽器 URL 以品牌公開 origin 加上備援路徑及 `clinic_slug`。若品牌採獨立渠道，禁止回退其他品牌或全域 LIFF ID。
 
+LINE 第一次導向 LIFF Endpoint 時，會暫時把永久連結的額外 query 放在 `liff.state`，等 `liff.init()` 完成後才還原。顧客入口在初始化品牌設定前必須唯讀解析 `liff.state` 內的 `clinic_slug`／`view`，不可先套用全域預設品牌，也不可改寫或刪除任何 `liff.*` 參數。
+
 程式中的唯一來源是 `lib/customer-entry.ts`；Rich Menu、webhook 與顧客中心不得各自維護另一份路徑表。
 
 ## 身分與租戶規則
@@ -31,6 +33,7 @@ LIFF URL 固定為 `https://liff.line.me/{brand_liff_id}?clinic_slug={slug}&view
 3. 驗證後的 `sub` 仍須在 `clinic_id` 範圍內尋找顧客，不可跨品牌共用查詢結果。
 4. 瀏覽器備援 token 必須包含並比對 `clinicId`。
 5. 未啟用領域不產生按鈕；直接存取時 server route 仍須拒絕。
+6. 未綁定顧客可在 LINE 會員頁輸入姓名、電話與生日完成綁定；server 必須先以目前品牌的 Login Channel 驗證 ID token，再於同一 `clinic_id` 內比對／建立顧客，禁止跨品牌或覆蓋其他 LINE 帳號。
 
 ## 狀態與相容界線
 
