@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { formatDateSession, formatTime } from "@/lib/slots";
+import { liffEntryParams } from "@/lib/liff-entry-state";
 import { bookingApi as api } from "./client-api";
 
 export interface MyAppt {
@@ -154,7 +155,7 @@ export default function MyAppointments({
   }
 
   function openReschedule(id: string) {
-    const source = new URLSearchParams(window.location.search);
+    const source = liffEntryParams(window.location.search);
     const params = new URLSearchParams({ appointment_id: id });
     const clinicSlug = source.get("clinic_slug")?.trim();
     const clinicId = source.get("clinic_id")?.trim();

@@ -662,6 +662,7 @@ const bookingPageSource = read("app/book/page.tsx");
 const bookingClientApi = read("app/book/client-api.ts");
 const liffEntryState = read("lib/liff-entry-state.ts");
 const customerBindLineApi = read("app/api/customer/bind-line/route.ts");
+const bookingFlowUi = read("app/book/BookingFlowUi.tsx");
 const publicBrand = read("lib/public-brand.ts");
 const homePage = read("app/page.tsx");
 const marketingHome = read("components/MarketingHome.tsx");
@@ -683,7 +684,10 @@ invariant(
   liffEntryState.includes('const LIFF_STATE_KEY = "liff.state"') &&
     liffEntryState.includes("stateUrl.searchParams") &&
     bookingClientApi.includes("liffEntryParams(window.location.search)") &&
-    bookingPageSource.includes("liffEntryParams(window.location.search)"),
+    bookingPageSource.includes("liffEntryParams(window.location.search)") &&
+    customerEntryView.includes("liffEntryParams(window.location.search)") &&
+    bookingFlowUi.includes("liffEntryParams(window.location.search)") &&
+    funnelClient.includes("liffEntryParams(window.location.search)"),
 );
 invariant(
   "LINE membership binding verifies channel identity and remains tenant scoped",

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createQrSvg } from "@/lib/qr";
 import { formatEventDate } from "@/lib/registration";
 import { safeLocalStorageSet } from "@/lib/browser-storage";
+import { liffEntryParams } from "@/lib/liff-entry-state";
 import {
   enabledCustomerEntries,
   type CustomerEntryAvailability,
@@ -184,7 +185,7 @@ function one<T>(value: T | T[] | null): T | null {
 
 function scopedPath(path: string, extra?: Record<string, string>): string {
   if (typeof window === "undefined") return path;
-  const source = new URLSearchParams(window.location.search);
+  const source = liffEntryParams(window.location.search);
   const params = new URLSearchParams(extra);
   const slug = source.get("clinic_slug")?.trim();
   const clinicId = source.get("clinic_id")?.trim();
@@ -249,7 +250,7 @@ function PrivatePortalView({ view, idToken }: { view: "tickets" | "membership"; 
       setData(body.data);
       setSelectedPatientId(body.data.patient?.id ?? "");
       if (body.data.browser_token) {
-        const source = new URLSearchParams(window.location.search);
+        const source = liffEntryParams(window.location.search);
         const scope = source.get("clinic_slug")?.trim() || source.get("clinic_id")?.trim() || "default";
         safeLocalStorageSet([
           [`customer_browser_token:${scope}`, body.data.browser_token],

@@ -348,7 +348,7 @@ export default function BookPage() {
 
   function changeView(nextView: CustomerView) {
     setView(nextView);
-    const params = new URLSearchParams(window.location.search);
+    const params = liffEntryParams(window.location.search);
     params.delete("tab");
     params.set("view", nextView);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { linkify } from "@/lib/linkify";
+import { liffEntryParams } from "@/lib/liff-entry-state";
 
 interface ChatMsg {
   id: string;
@@ -27,7 +28,7 @@ async function post<T>(url: string, payload: unknown): Promise<T> {
 
 function withPublicBrandScope(url: string): string {
   if (typeof window === "undefined" || !url.startsWith("/api/chat")) return url;
-  const source = new URLSearchParams(window.location.search);
+  const source = liffEntryParams(window.location.search);
   const target = new URL(url, window.location.origin);
   const clinicSlug = source.get("clinic_slug")?.trim();
   const clinicId = source.get("clinic_id")?.trim();

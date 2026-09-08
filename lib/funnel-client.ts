@@ -1,3 +1,5 @@
+import { liffEntryParams } from "@/lib/liff-entry-state";
+
 export type FunnelEventName =
   | "portal_view"
   | "booking_view"
@@ -17,7 +19,7 @@ export function trackFunnelEvent(eventName: FunnelEventName, metadata: Record<st
     const stored = window.sessionStorage.getItem(storageKey);
     const anonymousId = stored || (typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
     if (!stored) window.sessionStorage.setItem(storageKey, anonymousId);
-    const source = new URLSearchParams(window.location.search);
+    const source = liffEntryParams(window.location.search);
     const scope = new URLSearchParams();
     const clinicSlug = source.get("clinic_slug")?.trim();
     const clinicId = source.get("clinic_id")?.trim();

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Brand } from "@/components/Brand";
 import { googleCalendarUrl, type CalEvent } from "@/lib/calendar";
 import type { CustomerEntryKey as CustomerView } from "@/lib/customer-entry";
+import { liffEntryParams } from "@/lib/liff-entry-state";
 
 export interface ServiceAddon {
   id: string;
@@ -232,7 +233,7 @@ export function browserFallbackUrl(view: CustomerView): string {
           ? "/"
           : "/my";
   if (typeof window === "undefined") return path;
-  const source = new URLSearchParams(window.location.search);
+  const source = liffEntryParams(window.location.search);
   const params = new URLSearchParams();
   const slug = source.get("clinic_slug")?.trim();
   const clinicId = source.get("clinic_id")?.trim();
