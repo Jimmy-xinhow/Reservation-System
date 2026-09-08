@@ -49,6 +49,11 @@ export default async function SystemPeoplePage() {
     lastSignInAt: user.last_sign_in_at ?? null,
   }]));
   const members = (rows ?? []) as SystemMemberRow[];
+  const passwordTargets = members.map((member) => ({
+    userId: member.user_id,
+    email: usersById.get(member.user_id)?.email ?? member.user_id,
+    isSelf: member.user_id === actor.user.id,
+  }));
 
   return (
     <div className="platform-workbench">
@@ -64,17 +69,24 @@ export default async function SystemPeoplePage() {
       </section>
 
       <section className="platform-panel space-y-5 p-5 sm:p-6">
-        <div><p className="eyebrow">新增人員</p><h2 className="mt-1 text-lg font-bold text-slate-900">新增系統人員</h2><p className="mt-1 text-sm leading-6 text-slate-500">可直接設定初始密碼並立即交付登入；若密碼兩欄都留空，系統會寄送邀請信，由人員自行設定密碼。</p></div>
+        <div><p className="eyebrow">新增人員</p><h2 className="mt-1 text-lg font-bold text-slate-900">新增系統人員</h2><p className="mt-1 text-sm leading-6 text-slate-500">輸入 Email 並設定身分與權限。新帳號會收到設定密碼邀請；既有帳號只更新權限，不會在這裡變更密碼。</p></div>
         <form action={upsertPlatformAdminAction} className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_200px_minmax(180px,0.72fr)_minmax(180px,0.72fr)] lg:items-end">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-end">
             <label className="text-sm"><span className="label">Email</span><input className="input" name="email" type="email" required autoComplete="email" placeholder="staff@example.com" /></label>
             <label className="text-sm"><span className="label">帳號身分</span><select className="input" name="access_type" defaultValue="employee"><option value="employee">系統員工</option><option value="system_admin">系統管理者</option></select></label>
-            <label className="text-sm"><span className="label">初始密碼（至少 8 碼）</span><input className="input" name="password" type="password" minLength={8} autoComplete="new-password" placeholder="留空則寄邀請信" /></label>
-            <label className="text-sm"><span className="label">再次輸入初始密碼</span><input className="input" name="password_confirmation" type="password" minLength={8} autoComplete="new-password" placeholder="再次輸入" /></label>
           </div>
-          <p className="text-xs leading-5 text-slate-500">若 Email 已經是既有登入帳號，填寫初始密碼會重設該帳號密碼；未填密碼則保留原本登入憑證。</p>
           <PermissionChecklist />
-          <div className="flex justify-end"><SubmitButton className="btn btn-primary min-h-11">新增帳號並授權</SubmitButton></div>
+          <div className="flex justify-end"><SubmitButton className="btn btn-primary min-h-11">新增人員並儲存權限</SubmitButton></div>
+        </form>
+      </section>
+
+      <section className="platform-panel space-y-4 p-5 sm:p-6">
+        <div><p className="eyebrow">登入憑證</p><h2 className="mt-1 text-lg font-bold text-slate-900">設定系統人員密碼</h2><p className="mt-1 text-sm leading-6 text-slate-500">先選擇唯一的系統人員，再設定該帳號的新密碼；一次送出只會更新所選帳號。</p></div>
+        <form action={setPlatformAdminPasswordAction} autoComplete="off" className="grid gap-4 lg:grid-cols-[minmax(240px,1fr)_minmax(180px,0.8fr)_minmax(180px,0.8fr)_auto] lg:items-end">
+          <label className="text-sm"><span className="label">要設定密碼的系統人員</span><select className="input" name="user_id" required defaultValue=""><option value="" disabled>請選擇系統人員</option>{passwordTargets.map((target) => <option key={target.userId} value={target.userId}>{target.email}{target.isSelf ? "（目前登入）" : ""}</option>)}</select></label>
+          <label className="text-sm"><span className="label">新密碼（至少 8 碼）</span><input className="input" name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="輸入所選帳號的新密碼" /></label>
+          <label className="text-sm"><span className="label">再次輸入新密碼</span><input className="input" name="password_confirmation" type="password" required minLength={8} autoComplete="new-password" placeholder="再次輸入" /></label>
+          <SubmitButton className="btn btn-primary min-h-11 whitespace-nowrap">只更新所選帳號</SubmitButton>
         </form>
       </section>
 
@@ -91,18 +103,7 @@ export default async function SystemPeoplePage() {
               <article key={member.user_id} className="space-y-4 px-5 py-5 sm:px-6">
                 <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-medium text-slate-900">{email}{isSelf && <span className="ml-2 badge bg-emerald-50 text-emerald-700">目前登入</span>}</p><p className="mt-1 text-xs text-slate-500">加入於 {formatDate(member.created_at)}</p><TechnicalDetails className="mt-1" summary="查看帳號識別碼" items={[{ label: "帳號識別碼", value: member.user_id }]} /></div><div className="flex flex-wrap items-center gap-2"><span className={`badge ${credential.className}`}>{credential.label}</span><span className={`badge ${member.access_type === "system_admin" ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-600"}`}>{platformAccessLabel(member.access_type)}</span><span className={`badge ${member.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{member.active ? "啟用中" : "已停用"}</span></div></div>
                 {!isSelf && <form action={upsertPlatformAdminAction} className="space-y-3 border-l-2 border-slate-300 bg-slate-50 px-4 py-3"><input type="hidden" name="email" value={email} /><label className="block max-w-56 text-sm"><span className="label">帳號身分</span><select className="input" name="access_type" defaultValue={member.access_type}><option value="employee">系統員工</option><option value="system_admin">系統管理者</option></select></label><PermissionChecklist defaults={permissions} /><SubmitButton className="btn btn-secondary min-h-10 px-3 text-xs">更新身分與權限</SubmitButton></form>}
-                {!isSelf && <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                  <form action={setPlatformAdminPasswordAction} className="grid gap-3 border-l-2 border-emerald-600 bg-emerald-50/50 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-                    <input type="hidden" name="user_id" value={member.user_id} />
-                    <label className="text-sm"><span className="label">設定／重設登入密碼</span><input className="input bg-white" name="password" type="password" required minLength={8} autoComplete="new-password" placeholder="至少 8 碼" /></label>
-                    <label className="text-sm"><span className="label">再次輸入新密碼</span><input className="input bg-white" name="password_confirmation" type="password" required minLength={8} autoComplete="new-password" placeholder="再次輸入" /></label>
-                    <SubmitButton className="btn btn-primary min-h-11 whitespace-nowrap">儲存登入密碼</SubmitButton>
-                  </form>
-                  <form action={sendPlatformPasswordSetupAction} className="px-1 pb-3 lg:pb-0">
-                    <input type="hidden" name="user_id" value={member.user_id} />
-                    <SubmitButton className="btn btn-secondary min-h-11 whitespace-nowrap">寄送設定密碼信</SubmitButton>
-                  </form>
-                </div>}
+                {!isSelf && <form action={sendPlatformPasswordSetupAction}><input type="hidden" name="user_id" value={member.user_id} /><SubmitButton className="btn btn-secondary min-h-10">寄送設定密碼信給 {email}</SubmitButton></form>}
                 {!isSelf && <form action={setPlatformAdminActiveAction}><input type="hidden" name="user_id" value={member.user_id} /><input type="hidden" name="active" value={member.active ? "false" : "true"} /><SubmitButton className="admin-inline-action text-rose-700">{member.active ? "停用系統存取" : "重新啟用"}</SubmitButton></form>}
               </article>
             );

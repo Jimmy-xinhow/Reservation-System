@@ -62,12 +62,14 @@ const envExample = read(".env.example");
 
 const checks = [
   ["auth invites return to the deployed app and support password setup", ["lib/auth-invite.ts|authInviteRedirectUrl", "app/admin/platform/actions.ts|redirectTo: authInviteRedirectUrl()", "app/admin/platform/admins/actions.ts|redirectTo: authInviteRedirectUrl()", "app/auth/accept-invite/page.tsx|exchangeCodeForSession", "app/auth/accept-invite/page.tsx|updateUser({ password })", "components/AuthCallbackBridge.tsx|window.location.replace"]],
-  ["system staff can receive an initial password or a fresh password-setup email", [
+  ["one explicitly selected system staff account receives the password update or setup email", [
+    "app/admin/platform/admins/page.tsx|name=\"user_id\" required defaultValue=\"\"",
+    "app/admin/platform/admins/page.tsx|要設定密碼的系統人員",
+    "app/admin/platform/admins/page.tsx|一次送出只會更新所選帳號",
     "app/admin/platform/admins/page.tsx|name=\"password\" type=\"password\"",
     "app/admin/platform/admins/page.tsx|name=\"password_confirmation\" type=\"password\"",
     "app/admin/platform/admins/page.tsx|setPlatformAdminPasswordAction",
     "app/admin/platform/admins/page.tsx|sendPlatformPasswordSetupAction",
-    "app/admin/platform/admins/actions.ts|createUser({ email, password, email_confirm: true })",
     "app/admin/platform/admins/actions.ts|updateUserById(userId, { password, email_confirm: true })",
     "app/admin/platform/admins/actions.ts|resetPasswordForEmail(authUser.user.email",
     "app/admin/platform/admins/actions.ts|requireSystemAdmin()",
