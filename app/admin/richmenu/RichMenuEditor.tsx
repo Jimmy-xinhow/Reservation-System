@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LAYOUTS, ACTION_OPTIONS, RICH_MENU_TEMPLATES, richMenuTemplate, type BuiltInRichMenuTemplateKey, type Layout, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
+import { LAYOUTS, ACTION_OPTIONS, RICH_MENU_ICON_OPTIONS, RICH_MENU_TEMPLATES, richMenuIconForAction, richMenuTemplate, type BuiltInRichMenuTemplateKey, type Layout, type RichMenuIconKey, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
 import { SubmitButton } from "@/components/SubmitButton";
 
 type ServerAction = (fd: FormData) => Promise<void>;
@@ -139,6 +139,7 @@ export default function RichMenuEditor({
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <label className="text-sm"><span className="mb-1 block text-slate-500">顯示名稱</span><input name={`label_${i}`} value={s.label ?? ""} onChange={(e) => setSlot(i, { label: e.target.value })} className="input" maxLength={40} required /></label>
+              <label className="text-sm"><span className="mb-1 block text-slate-500">圖示</span><select name={`icon_${i}`} value={s.icon ?? richMenuIconForAction(s.action)} onChange={(e) => setSlot(i, { icon: e.target.value as RichMenuIconKey })} className="input">{RICH_MENU_ICON_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
               <label className="text-sm"><span className="mb-1 block text-slate-500">無障礙標籤（LINE 上限 20 字）</span><input name={`accessibility_label_${i}`} value={s.accessibilityLabel ?? ""} onChange={(e) => setSlot(i, { accessibilityLabel: e.target.value })} className="input" maxLength={20} required /></label>
               <label className="text-sm">
                 <span className="mb-1 block text-slate-500">動作</span>
@@ -231,6 +232,7 @@ export default function RichMenuEditor({
               )}
               {slots.map((slot, index) => (
                 <div key={`${index}-${slot.label}`} className="line-richmenu-slot">
+                  <RichMenuIconPreview icon={slot.icon ?? richMenuIconForAction(slot.action)} />
                   <strong>{slot.label.trim() || `第 ${index + 1} 格`}</strong>
                   <span>{ACTION_OPTIONS.find((option) => option.value === slot.action)?.label ?? "尚未設定"}</span>
                 </div>
@@ -245,6 +247,26 @@ export default function RichMenuEditor({
       </div>
     </form>
   );
+}
+
+function RichMenuIconPreview({ icon }: { icon: RichMenuIconKey }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  let content;
+  switch (icon) {
+    case "calendar": content = <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 9h18M8 3v4M16 3v4m-8 8 2.2 2.2L16 12" /></>; break;
+    case "clock": content = <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3.5 2" /></>; break;
+    case "book": content = <><path d="M3 5h6a3 3 0 0 1 3 3v13a4 4 0 0 0-4-4H3zM21 5h-6a3 3 0 0 0-3 3v13a4 4 0 0 1 4-4h5z" /></>; break;
+    case "ticket": content = <><path d="M3 6h18v12H3zM14 6v2m0 2v2m0 2v4M6 10h5M6 14h4" /></>; break;
+    case "heart": content = <path d="M12 21S3 16 3 9.5A4.5 4.5 0 0 1 12 8a4.5 4.5 0 0 1 9 1.5C21 16 12 21 12 21z" />; break;
+    case "chat": content = <><path d="M4 4h16v12H9l-5 4z" /><path d="M8 9h8M8 12h5" /></>; break;
+    case "profile": content = <><circle cx="12" cy="8" r="4" /><path d="M4 21c1-5 3.7-7 8-7s7 2 8 7" /></>; break;
+    case "sparkles": content = <><path d="M12 2c.7 4.8 2.8 7 7 8-4.2 1-6.3 3.2-7 8-.7-4.8-2.8-7-7-8 4.2-1 6.3-3.2 7-8zM5 3v4M3 5h4m12 12v4m-2-2h4" /></>; break;
+    case "bag": content = <><path d="M4 8h16l-1 13H5zM8 9V6a4 4 0 0 1 8 0v3" /></>; break;
+    case "gift": content = <><path d="M3 10h18v11H3zM2 6h20v4H2zM12 6v15M12 6c-4 0-6-1.5-5-4 1-2.5 5 1 5 4zm0 0c4 0 6-1.5 5-4-1-2.5-5 1-5 4z" /></>; break;
+    case "location": content = <><path d="M12 22s7-6.3 7-13a7 7 0 1 0-14 0c0 6.7 7 13 7 13z" /><circle cx="12" cy="9" r="2.5" /></>; break;
+    default: content = <><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10h.01" /></>;
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true" className="mb-1 h-5 w-5" {...common}>{content}</svg>;
 }
 
 function normalize(slots: Slot[], count: number): Slot[] {

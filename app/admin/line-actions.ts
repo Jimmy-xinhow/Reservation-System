@@ -26,6 +26,7 @@ import {
   LAYOUTS,
   RICH_MENU_ALIAS_ID_PATTERN,
   isBuiltInRichMenuTemplate,
+  isRichMenuIconKey,
   slotBounds,
   slotAction,
   validateRichMenuSlots,
@@ -337,9 +338,11 @@ export async function saveRichMenuAction(fd: FormData) {
   const count = LAYOUTS[layout].slots;
   const slots: Slot[] = [];
   for (let i = 0; i < count; i++) {
+    const rawIcon = str(fd, `icon_${i}`);
     slots.push({
       label: str(fd, `label_${i}`),
       accessibilityLabel: str(fd, `accessibility_label_${i}`),
+      icon: isRichMenuIconKey(rawIcon) ? rawIcon : undefined,
       action: (str(fd, `action_${i}`) || "none") as Slot["action"],
       value: str(fd, `value_${i}`) || undefined,
     });

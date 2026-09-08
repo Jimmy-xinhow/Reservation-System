@@ -21,8 +21,48 @@ export const LAYOUTS: Record<Layout, LayoutSpec> = {
 export interface Slot {
   label: string;
   accessibilityLabel?: string;
+  icon?: RichMenuIconKey;
   action: "booking" | "appointments" | "query" | "events" | "tickets" | "membership" | "support" | "brand" | "progress" | "info" | "uri" | "message" | "richmenuswitch" | "none";
   value?: string; // uri=網址;message=訊息素材 id;richmenuswitch=alias id
+}
+
+export const RICH_MENU_ICON_KEYS = [
+  "calendar", "clock", "book", "ticket", "heart", "chat",
+  "profile", "sparkles", "bag", "gift", "location", "info",
+] as const;
+export type RichMenuIconKey = typeof RICH_MENU_ICON_KEYS[number];
+export const RICH_MENU_ICON_OPTIONS: ReadonlyArray<{ value: RichMenuIconKey; label: string }> = [
+  { value: "calendar", label: "行事曆" },
+  { value: "clock", label: "時間／紀錄" },
+  { value: "book", label: "課程／內容" },
+  { value: "ticket", label: "票券" },
+  { value: "heart", label: "會員／收藏" },
+  { value: "chat", label: "客服／對話" },
+  { value: "profile", label: "品牌／人物" },
+  { value: "sparkles", label: "美容／精選" },
+  { value: "bag", label: "商品／購物" },
+  { value: "gift", label: "優惠／贈禮" },
+  { value: "location", label: "門市／地點" },
+  { value: "info", label: "資訊" },
+];
+
+export function isRichMenuIconKey(value: string): value is RichMenuIconKey {
+  return (RICH_MENU_ICON_KEYS as readonly string[]).includes(value);
+}
+
+export function richMenuIconForAction(action: Slot["action"]): RichMenuIconKey {
+  switch (action) {
+    case "booking": return "calendar";
+    case "appointments":
+    case "query": return "clock";
+    case "events": return "book";
+    case "tickets": return "ticket";
+    case "membership": return "heart";
+    case "support": return "chat";
+    case "brand":
+    case "info": return "profile";
+    default: return "info";
+  }
 }
 
 export const RICH_MENU_ALIAS_ID_PATTERN = /^[a-z0-9_-]{1,32}$/;
@@ -58,28 +98,28 @@ interface RichMenuTemplateDefinition {
 }
 
 const bookingSlots: Slot[] = [
-  { label: "立即預約", accessibilityLabel: "開啟線上預約", action: "booking" },
-  { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", action: "appointments" },
-  { label: "服務方案", accessibilityLabel: "查看品牌服務與方案", action: "brand" },
-  { label: "活動課程", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
-  { label: "會員套票", accessibilityLabel: "查看會員套票與堂數", action: "membership" },
-  { label: "聯絡我們", accessibilityLabel: "開啟品牌客服", action: "support" },
+  { label: "立即預約", accessibilityLabel: "開啟線上預約", icon: "sparkles", action: "booking" },
+  { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", icon: "clock", action: "appointments" },
+  { label: "服務方案", accessibilityLabel: "查看品牌服務與方案", icon: "profile", action: "brand" },
+  { label: "活動課程", accessibilityLabel: "瀏覽活動與課程報名", icon: "calendar", action: "events" },
+  { label: "會員套票", accessibilityLabel: "查看會員套票與堂數", icon: "heart", action: "membership" },
+  { label: "聯絡我們", accessibilityLabel: "開啟品牌客服", icon: "chat", action: "support" },
 ];
 const eventSlots: Slot[] = [
-  { label: "最新課程", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
-  { label: "我的票券", accessibilityLabel: "查看報名與票券", action: "tickets" },
-  { label: "預約諮詢", accessibilityLabel: "開啟預約諮詢", action: "booking" },
-  { label: "學習紀錄", accessibilityLabel: "查看會員與學習權益", action: "membership" },
-  { label: "品牌介紹", accessibilityLabel: "查看品牌資訊", action: "brand" },
-  { label: "課程客服", accessibilityLabel: "開啟品牌客服", action: "support" },
+  { label: "最新課程", accessibilityLabel: "瀏覽活動與課程報名", icon: "book", action: "events" },
+  { label: "我的票券", accessibilityLabel: "查看報名與票券", icon: "ticket", action: "tickets" },
+  { label: "預約諮詢", accessibilityLabel: "開啟預約諮詢", icon: "calendar", action: "booking" },
+  { label: "學習紀錄", accessibilityLabel: "查看會員與學習權益", icon: "clock", action: "membership" },
+  { label: "品牌介紹", accessibilityLabel: "查看品牌資訊", icon: "profile", action: "brand" },
+  { label: "課程客服", accessibilityLabel: "開啟品牌客服", icon: "chat", action: "support" },
 ];
 const mixedSlots: Slot[] = [
-  { label: "立即預約", accessibilityLabel: "開啟線上預約", action: "booking" },
-  { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", action: "appointments" },
-  { label: "課程報名", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
-  { label: "我的票券", accessibilityLabel: "查看報名與票券", action: "tickets" },
-  { label: "會員套票", accessibilityLabel: "查看會員套票與堂數", action: "membership" },
-  { label: "LINE 客服", accessibilityLabel: "開啟品牌客服", action: "support" },
+  { label: "立即預約", accessibilityLabel: "開啟線上預約", icon: "calendar", action: "booking" },
+  { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", icon: "clock", action: "appointments" },
+  { label: "課程報名", accessibilityLabel: "瀏覽活動與課程報名", icon: "book", action: "events" },
+  { label: "我的票券", accessibilityLabel: "查看報名與票券", icon: "ticket", action: "tickets" },
+  { label: "會員套票", accessibilityLabel: "查看會員套票與堂數", icon: "heart", action: "membership" },
+  { label: "LINE 客服", accessibilityLabel: "開啟品牌客服", icon: "chat", action: "support" },
 ];
 
 export const RICH_MENU_TEMPLATES: Record<BuiltInRichMenuTemplateKey, RichMenuTemplateDefinition> = {
@@ -119,7 +159,7 @@ export function richMenuTemplate(key: BuiltInRichMenuTemplateKey, availability: 
           : slot.action === "support"
             ? availability.line
             : slot.action !== "progress" || availability.legacyProgress;
-    return allowed ? { ...slot } : { label: "品牌資訊", accessibilityLabel: "查看品牌資訊與聯絡方式", action: "brand" as const };
+    return allowed ? { ...slot } : { label: "品牌資訊", accessibilityLabel: "查看品牌資訊與聯絡方式", icon: "profile" as const, action: "brand" as const };
   });
   return { ...template, slots };
 }
@@ -132,6 +172,7 @@ export function validateRichMenuSlots(layout: Layout, slots: Slot[], availabilit
     const prefix = `第 ${index + 1} 格`;
     if (!slot.label?.trim()) errors.push(`${prefix}缺少顯示名稱`);
     if (!slot.accessibilityLabel?.trim()) errors.push(`${prefix}缺少無障礙標籤`);
+    if (slot.icon && !isRichMenuIconKey(slot.icon)) errors.push(`${prefix}圖示不正確`);
     if ((slot.accessibilityLabel ?? "").trim().length > 20) errors.push(`${prefix}無障礙標籤不可超過 20 字`);
     if (slot.action === "none") errors.push(`${prefix}沒有有效動作`);
     if (slot.action === "booking" && !availability.booking) errors.push(`${prefix}使用了未開放的預約入口`);

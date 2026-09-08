@@ -1782,6 +1782,14 @@ invariant(
     read("app/admin/richmenu/PublishForm.tsx").includes("下載 PNG"),
 );
 invariant(
+  "Rich Menu text and icons are independently editable and share the live render path",
+  read("app/admin/richmenu/RichMenuEditor.tsx").includes("name={`icon_${i}`}") &&
+    read("app/admin/richmenu/RichMenuEditor.tsx").includes("RichMenuIconPreview") &&
+    read("app/admin/line-actions.ts").includes("isRichMenuIconKey(rawIcon)") &&
+    read("lib/richmenu-art.ts").includes("slot.icon ?? richMenuIconForAction(slot.action)") &&
+    read("lib/richmenu.ts").includes("RICH_MENU_ICON_OPTIONS"),
+);
+invariant(
   "course learning tables and tenant policies are synchronized",
   schema.includes("create table if not exists course_units") &&
     schema.includes("create table if not exists course_unit_progress") &&
