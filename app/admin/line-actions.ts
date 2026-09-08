@@ -25,6 +25,7 @@ import {
 import {
   LAYOUTS,
   RICH_MENU_ALIAS_ID_PATTERN,
+  isBuiltInRichMenuTemplate,
   slotBounds,
   slotAction,
   validateRichMenuSlots,
@@ -345,7 +346,8 @@ export async function saveRichMenuAction(fd: FormData) {
   }
   const name = str(fd, "name") || `Rich Menu ${new Date().toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}`;
   const chatBarText = str(fd, "chat_bar_text") || "選單";
-  const templateKey = (["booking", "events", "mixed", "custom"] as const).includes(str(fd, "template_key") as RichMenuTemplateKey) ? str(fd, "template_key") as RichMenuTemplateKey : "custom";
+  const rawTemplateKey = str(fd, "template_key");
+  const templateKey = rawTemplateKey === "custom" || isBuiltInRichMenuTemplate(rawTemplateKey) ? rawTemplateKey as RichMenuTemplateKey : "custom";
   const errors = validateRichMenuSlots(layout, slots, await richMenuAvailability(supabase, clinicId));
   if (chatBarText.length > 14) errors.push("選單列文字不可超過 14 字");
   if (errors.length > 0) redirect(`/admin/richmenu?err=${encodeURIComponent(errors.join("；").slice(0, 500))}`);

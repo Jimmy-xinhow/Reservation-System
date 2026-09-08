@@ -12,16 +12,23 @@ export async function GET(request: NextRequest) {
     if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) return fail("此品牌未啟用活動與報名", 403);
     const date = request.nextUrl.searchParams.get("date")?.trim() || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("日期格式不正確");
+    const eventId = request.nextUrl.searchParams.get("event_id")?.trim() ?? "";
+    const sessionId = request.nextUrl.searchParams.get("session_id")?.trim() ?? "";
+    if (eventId && !/^[0-9a-f-]{36}$/i.test(eventId)) return fail("活動識別碼不正確");
+    if (sessionId && !/^[0-9a-f-]{36}$/i.test(sessionId)) return fail("場次識別碼不正確");
     const start = new Date(`${date}T00:00:00+08:00`).toISOString();
     const end = new Date(`${date}T23:59:59+08:00`).toISOString();
-    const { data, error } = await member.supabase.from("registrations")
-      .select("id, registration_no, status, name, phone, events(title), event_sessions!inner(name, start_at, end_at)")
+    let query = member.supabase.from("registrations")
+      .select("id, event_id, session_id, registration_no, status, name, phone, events(title), event_sessions!inner(name, start_at, end_at)")
       .eq("clinic_id", member.clinicId)
       .in("status", ["confirmed", "attended", "no_show"])
       .gte("event_sessions.start_at", start)
       .lte("event_sessions.start_at", end)
       .order("created_at", { ascending: true })
       .limit(200);
+    if (eventId) query = query.eq("event_id", eventId);
+    if (sessionId) query = query.eq("session_id", sessionId);
+    const { data, error } = await query;
     if (error) return fail(error.message, 500);
     return ok(data ?? []);
   } catch (error) {

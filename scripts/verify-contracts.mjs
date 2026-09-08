@@ -506,6 +506,10 @@ const registrationApi = read("app/api/registration/register/route.ts");
 const registrationEventsApi = read("app/api/registration/events/route.ts");
 const bookingReserveApi = read("app/api/booking/reserve/route.ts");
 const checkinSearchApi = read("app/api/registration/checkin-search/route.ts");
+const checkinLiveApi = read("app/api/registration/checkin-live/route.ts");
+const checkinPage = read("app/admin/checkin/page.tsx");
+const registrationsPage = read("app/admin/registrations/page.tsx");
+const registrationsExport = read("app/api/admin/registrations/route.ts");
 const adminNav = read("components/AdminNav.tsx");
 const adminLayout = read("app/admin/layout.tsx");
 const adminDashboard = read("app/admin/dashboard/page.tsx");
@@ -1050,6 +1054,20 @@ invariant(
     paymentStatusApi.includes("rateLimitResponse") &&
     paymentResultPage.includes("/api/payment/status") &&
     read("app/register/page.tsx").includes("localStorage.setItem(`registration:")
+);
+invariant(
+  "registration lists and check-in are scoped by event, session, and date",
+  registrationsPage.includes('name="event_id"') &&
+    registrationsPage.includes('name="session_id"') &&
+    registrationsPage.includes('name="registered_from"') &&
+    registrationsPage.includes('name="registered_to"') &&
+    registrationsPage.includes('groups = new Map') &&
+    registrationsExport.includes('params.get("event_id")') &&
+    registrationsExport.includes('params.get("session_id")') &&
+    checkinLiveApi.includes('searchParams.get("event_id")') &&
+    checkinLiveApi.includes('searchParams.get("session_id")') &&
+    checkinPage.includes("groupedLiveRows") &&
+    checkinPage.includes("場次報到工作台"),
 );
 
 invariant(
@@ -1754,7 +1772,10 @@ invariant(
   "Rich Menu built-in artwork is authenticated and produces LINE-sized PNG",
   read("app/api/admin/richmenu-template/route.ts").includes("requireAdmin") &&
     read("app/api/admin/richmenu-template/route.ts").includes("renderRichMenuPng") &&
-    read("lib/richmenu-art.ts").includes("sharp(Buffer.from(svg)).png") &&
+    read("lib/richmenu-art.ts").includes("sharp(artworkFile).resize") &&
+    read("lib/richmenu-art.ts").includes("templateKey: BuiltInRichMenuTemplateKey") &&
+    ["booking", "events", "mixed", "clay-atelier", "course-paper", "event-cobalt", "member-oxblood", "retail-monochrome", "mineral-wellness", "family-coral", "swiss-editorial", "seasonal-burgundy"]
+      .every((key) => read("lib/richmenu.ts").includes(`\"${key}\"`)) &&
     read("lib/richmenu.ts").includes("width: 2500, height: 1686") &&
     read("lib/richmenu.ts").includes("width: 2500, height: 843") &&
     read("app/admin/richmenu/PublishForm.tsx").includes("套用內建圖稿") &&

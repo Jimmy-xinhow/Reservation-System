@@ -94,7 +94,11 @@ export default function PublishForm({
     setLoadingTemplate(true);
     setErr(null);
     try {
-      const response = await fetch(`/api/admin/richmenu-template?template=${encodeURIComponent(templateKey)}`, { cache: "no-store" });
+      const response = await fetch("/api/admin/richmenu-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template: templateKey, layout, slots: slots.slice(0, spec.slots) }),
+      });
       if (!response.ok) throw new Error("內建圖稿產生失敗");
       const blob = await response.blob();
       pick(new File([blob], `richmenu-${templateKey}.png`, { type: "image/png" }));

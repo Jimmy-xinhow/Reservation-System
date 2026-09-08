@@ -27,7 +27,13 @@ export interface Slot {
 
 export const RICH_MENU_ALIAS_ID_PATTERN = /^[a-z0-9_-]{1,32}$/;
 
-export type RichMenuTemplateKey = "booking" | "events" | "mixed" | "custom";
+export const RICH_MENU_TEMPLATE_KEYS = [
+  "booking", "events", "mixed", "clay-atelier", "course-paper", "event-cobalt",
+  "member-oxblood", "retail-monochrome", "mineral-wellness", "family-coral",
+  "swiss-editorial", "seasonal-burgundy",
+] as const;
+export type BuiltInRichMenuTemplateKey = typeof RICH_MENU_TEMPLATE_KEYS[number];
+export type RichMenuTemplateKey = BuiltInRichMenuTemplateKey | "custom";
 export interface RichMenuModuleAvailability { booking: boolean; events: boolean; tickets: boolean; memberships: boolean; line: boolean; legacyProgress: boolean; }
 export interface RichMenuEntryUrls {
   booking: string;
@@ -39,28 +45,67 @@ export interface RichMenuEntryUrls {
   brand: string;
 }
 
-export const RICH_MENU_TEMPLATES: Record<Exclude<RichMenuTemplateKey, "custom">, { label: string; layout: Layout; slots: Slot[] }> = {
-  booking: { label: "預約型", layout: "full-3", slots: [
-    { label: "立即預約", accessibilityLabel: "開啟線上預約", action: "booking" },
-    { label: "我的預約", accessibilityLabel: "查詢、取消或改期我的預約", action: "appointments" },
-    { label: "品牌資訊", accessibilityLabel: "查看品牌資訊與聯絡方式", action: "brand" },
-  ] },
-  events: { label: "活動型", layout: "full-3", slots: [
-    { label: "活動／課程", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
-    { label: "我的票券", accessibilityLabel: "查看我的報名與票券 QR", action: "tickets" },
-    { label: "品牌資訊", accessibilityLabel: "查看品牌資訊與聯絡方式", action: "brand" },
-  ] },
-  mixed: { label: "綜合型", layout: "full-6", slots: [
-    { label: "立即預約", accessibilityLabel: "開啟線上預約", action: "booking" },
-    { label: "我的預約", accessibilityLabel: "查詢、取消或改期我的預約", action: "appointments" },
-    { label: "活動／課程", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
-    { label: "我的票券", accessibilityLabel: "查看我的報名與票券 QR", action: "tickets" },
-    { label: "會員／套票", accessibilityLabel: "查看會員方案、套票與剩餘堂數", action: "membership" },
-    { label: "LINE 客服", accessibilityLabel: "開啟品牌 LINE 客服", action: "support" },
-  ] },
+interface RichMenuTemplateDefinition {
+  label: string;
+  category: string;
+  description: string;
+  layout: Layout;
+  artwork: string;
+  ink: string;
+  panel: string;
+  accent: string;
+  slots: Slot[];
+}
+
+const bookingSlots: Slot[] = [
+  { label: "立即預約", accessibilityLabel: "開啟線上預約", action: "booking" },
+  { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", action: "appointments" },
+  { label: "服務方案", accessibilityLabel: "查看品牌服務與方案", action: "brand" },
+  { label: "活動課程", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
+  { label: "會員套票", accessibilityLabel: "查看會員套票與堂數", action: "membership" },
+  { label: "聯絡我們", accessibilityLabel: "開啟品牌客服", action: "support" },
+];
+const eventSlots: Slot[] = [
+  { label: "最新課程", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
+  { label: "我的票券", accessibilityLabel: "查看報名與票券", action: "tickets" },
+  { label: "預約諮詢", accessibilityLabel: "開啟預約諮詢", action: "booking" },
+  { label: "學習紀錄", accessibilityLabel: "查看會員與學習權益", action: "membership" },
+  { label: "品牌介紹", accessibilityLabel: "查看品牌資訊", action: "brand" },
+  { label: "課程客服", accessibilityLabel: "開啟品牌客服", action: "support" },
+];
+const mixedSlots: Slot[] = [
+  { label: "立即預約", accessibilityLabel: "開啟線上預約", action: "booking" },
+  { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", action: "appointments" },
+  { label: "課程報名", accessibilityLabel: "瀏覽活動與課程報名", action: "events" },
+  { label: "我的票券", accessibilityLabel: "查看報名與票券", action: "tickets" },
+  { label: "會員套票", accessibilityLabel: "查看會員套票與堂數", action: "membership" },
+  { label: "LINE 客服", accessibilityLabel: "開啟品牌客服", action: "support" },
+];
+
+export const RICH_MENU_TEMPLATES: Record<BuiltInRichMenuTemplateKey, RichMenuTemplateDefinition> = {
+  booking: { label: "瓷白鼠尾草", category: "美業／保養", description: "柔霧瓷白、鼠尾草綠與香檳金，適合美容、護膚與髮藝。", layout: "full-6", artwork: "/richmenu/themes/porcelain-sage.webp", ink: "#24342f", panel: "#f9f6ef", accent: "#9c7a43", slots: bookingSlots },
+  events: { label: "靛藍學院", category: "課程／知識", description: "沉穩靛藍與紙白層次，適合線上課程、補教與顧問。", layout: "full-6", artwork: "/richmenu/themes/indigo-academy.webp", ink: "#f7f3ea", panel: "#172848", accent: "#d6a94f", slots: eventSlots },
+  mixed: { label: "深林黃銅", category: "運動／身心", description: "深綠與黃銅質感，適合皮拉提斯、瑜珈與精品健身。", layout: "full-6", artwork: "/richmenu/themes/forest-brass.webp", ink: "#f8f2e4", panel: "#14352d", accent: "#caa84a", slots: mixedSlots },
+  "clay-atelier": { label: "陶土工作室", category: "手作／沙龍", description: "陶土、亞麻與暖灰，適合手作課、攝影與生活風格品牌。", layout: "full-6", artwork: "/richmenu/themes/clay-linen.webp", ink: "#382c27", panel: "#eee2d5", accent: "#a45e42", slots: bookingSlots },
+  "course-paper": { label: "編輯紙本", category: "教育／出版", description: "米色紙感與墨黑排版，適合講座、閱讀與專業培訓。", layout: "full-6", artwork: "/richmenu/themes/parchment-course.webp", ink: "#22211e", panel: "#f0e7d5", accent: "#b03b31", slots: eventSlots },
+  "event-cobalt": { label: "鈷藍節慶", category: "展演／活動", description: "鮮明鈷藍與柑橘色，適合展演、快閃與大型活動。", layout: "full-6", artwork: "/richmenu/themes/festival-cobalt.webp", ink: "#ffffff", panel: "#174cad", accent: "#ff8a33", slots: eventSlots },
+  "member-oxblood": { label: "勃根地會員", category: "會員／會所", description: "酒紅、奶油與金屬細節，適合高端會員與俱樂部。", layout: "full-6", artwork: "/richmenu/themes/membership-oxblood.webp", ink: "#f7eee3", panel: "#5c1f2d", accent: "#c3a264", slots: mixedSlots },
+  "retail-monochrome": { label: "黑白選品", category: "零售／選物", description: "高對比黑白與俐落網格，適合選物、服飾與商品販售。", layout: "full-6", artwork: "/richmenu/themes/retail-monochrome.webp", ink: "#f7f7f5", panel: "#202020", accent: "#b5b5ad", slots: bookingSlots },
+  "mineral-wellness": { label: "礦物療癒", category: "健康／療癒", description: "石灰灰、礦物藍與安靜留白，適合身心療癒與健康服務。", layout: "full-6", artwork: "/richmenu/themes/mineral-wellness.webp", ink: "#23323a", panel: "#dce2df", accent: "#6e8f91", slots: mixedSlots },
+  "family-coral": { label: "珊瑚親子", category: "親子／社群", description: "溫暖珊瑚與奶油黃，適合親子、社群與家庭服務。", layout: "full-6", artwork: "/richmenu/themes/family-coral.webp", ink: "#3b2b2b", panel: "#fff1df", accent: "#e96e5d", slots: mixedSlots },
+  "swiss-editorial": { label: "瑞士編輯", category: "商務／顧問", description: "理性灰白、精準紅點與編輯格線，適合 B2B 與專業服務。", layout: "full-6", artwork: "/richmenu/themes/swiss-monochrome.webp", ink: "#181818", panel: "#f1f0eb", accent: "#d64636", slots: bookingSlots },
+  "seasonal-burgundy": { label: "節慶酒紅", category: "節慶／限定", description: "深酒紅與柔金光澤，適合週年、年節與檔期限定選單。", layout: "full-6", artwork: "/richmenu/themes/seasonal-burgundy.webp", ink: "#fff6e7", panel: "#652b38", accent: "#d6b66f", slots: mixedSlots },
 };
 
-export function richMenuTemplate(key: Exclude<RichMenuTemplateKey, "custom">, availability: RichMenuModuleAvailability) {
+export function isBuiltInRichMenuTemplate(value: string): value is BuiltInRichMenuTemplateKey {
+  return (RICH_MENU_TEMPLATE_KEYS as readonly string[]).includes(value);
+}
+
+export function richMenuTemplateLabel(key: RichMenuTemplateKey): string {
+  return key === "custom" ? "自訂" : RICH_MENU_TEMPLATES[key].label;
+}
+
+export function richMenuTemplate(key: BuiltInRichMenuTemplateKey, availability: RichMenuModuleAvailability) {
   const template = RICH_MENU_TEMPLATES[key];
   const slots = template.slots.map((slot) => {
     const allowed = slot.action === "booking"

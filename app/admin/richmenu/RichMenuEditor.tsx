@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LAYOUTS, ACTION_OPTIONS, RICH_MENU_TEMPLATES, richMenuTemplate, type Layout, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
+import { LAYOUTS, ACTION_OPTIONS, RICH_MENU_TEMPLATES, richMenuTemplate, type BuiltInRichMenuTemplateKey, type Layout, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
 import { SubmitButton } from "@/components/SubmitButton";
 
 type ServerAction = (fd: FormData) => Promise<void>;
@@ -33,6 +33,7 @@ export default function RichMenuEditor({
   const [chatBar, setChatBar] = useState(initialChatBar);
   const spec = LAYOUTS[layout];
   const [slots, setSlots] = useState<Slot[]>(() => normalize(initialSlots, spec.slots));
+  const templateEntries = Object.entries(RICH_MENU_TEMPLATES) as Array<[BuiltInRichMenuTemplateKey, (typeof RICH_MENU_TEMPLATES)[BuiltInRichMenuTemplateKey]]>;
 
   function changeLayout(l: Layout) {
     setTemplate("custom");
@@ -47,7 +48,6 @@ export default function RichMenuEditor({
     setSlots(normalize(next.slots, LAYOUTS[next.layout].slots));
   }
   function setSlot(i: number, patch: Partial<Slot>) {
-    setTemplate("custom");
     setSlots((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
   }
 
@@ -65,7 +65,7 @@ export default function RichMenuEditor({
       {/* ① 基本設定 */}
       <section className="space-y-2">
         <h3 className="font-semibold text-slate-900">步驟 1　基本設定</h3>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
           <span className="mb-1 block font-medium text-slate-600">草稿名稱</span>
           <input name="name" value={name} onChange={(event) => setName(event.target.value)} className="input" maxLength={120} required />
@@ -74,8 +74,22 @@ export default function RichMenuEditor({
           <span className="mb-1 block font-medium text-slate-600">聊天室下方的選單名稱</span>
           <input name="chat_bar_text" value={chatBar} onChange={(event) => setChatBar(event.target.value)} className="input" maxLength={14} required />
         </label>
-        <label className="block text-sm"><span className="mb-1 block font-medium text-slate-600">快速模板</span><select value={template} onChange={(event) => applyTemplate(event.target.value as RichMenuTemplateKey)} className="input"><option value="custom">自訂</option>{Object.entries(RICH_MENU_TEMPLATES).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
         </div>
+      </section>
+
+      <section className="space-y-3 border-t border-slate-200 pt-5" aria-labelledby="richmenu-template-gallery-title">
+        <div className="flex flex-wrap items-end justify-between gap-2"><div><h3 id="richmenu-template-gallery-title" className="font-semibold text-slate-900">專業套板</h3><p className="mt-1 text-sm text-slate-500">12 套可直接使用的品牌視覺；套用後仍可修改每格文字、圖示與點擊動作，不會失去背景風格。</p></div><span className="badge bg-emerald-50 text-emerald-700">目前：{template === "custom" ? "自訂圖片" : RICH_MENU_TEMPLATES[template].label}</span></div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {templateEntries.map(([key, item]) => <button key={key} type="button" onClick={() => applyTemplate(key)} aria-pressed={template === key} className={`group overflow-hidden border text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700 ${template === key ? "border-emerald-700 ring-1 ring-emerald-700" : "border-slate-200 hover:border-slate-400"}`}>
+            <span className="relative block aspect-[2500/1686] overflow-hidden bg-slate-100">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={item.artwork} alt="" className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" />
+              <span className="absolute inset-x-0 bottom-0 bg-slate-950/72 px-3 py-2 text-xs font-medium text-white">{template === key ? "已套用，可繼續修改" : "使用這套"}</span>
+            </span>
+            <span className="block bg-white px-3 py-3"><span className="block text-xs font-semibold tracking-wide text-emerald-700">{item.category}</span><strong className="mt-1 block text-sm text-slate-900">{item.label}</strong><span className="mt-1 block text-xs leading-5 text-slate-500">{item.description}</span></span>
+          </button>)}
+        </div>
+        <button type="button" onClick={() => setTemplate("custom")} className="btn btn-secondary">改用自行上傳的背景圖</button>
       </section>
 
       {/* ② 版型 */}
@@ -104,7 +118,7 @@ export default function RichMenuEditor({
         >
           {template !== "custom" && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={`/api/admin/richmenu-template?template=${encodeURIComponent(template)}`} alt={`${RICH_MENU_TEMPLATES[template].label}實際 PNG 圖稿`} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
+            <img src={RICH_MENU_TEMPLATES[template].artwork} alt={`${RICH_MENU_TEMPLATES[template].label}模板背景`} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
           )}
           {slots.map((s, i) => (
             <div key={i} className={`relative z-10 flex items-end justify-center rounded border border-white/80 px-1 pb-2 text-center text-[11px] font-semibold sm:text-xs ${template === "custom" ? "bg-white text-slate-500" : "bg-slate-950/5 text-slate-700"}`}>
@@ -213,7 +227,7 @@ export default function RichMenuEditor({
             >
               {template !== "custom" && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={`/api/admin/richmenu-template?template=${encodeURIComponent(template)}`} alt="目前模板預覽" className="absolute inset-0 h-full w-full object-cover" />
+                <img src={RICH_MENU_TEMPLATES[template].artwork} alt="目前模板背景預覽" className="absolute inset-0 h-full w-full object-cover" />
               )}
               {slots.map((slot, index) => (
                 <div key={`${index}-${slot.label}`} className="line-richmenu-slot">

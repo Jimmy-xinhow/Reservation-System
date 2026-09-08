@@ -5941,7 +5941,7 @@ create table if not exists public.line_richmenu_versions (
   clinic_id uuid not null references public.clinics(id) on delete restrict,
   version_no integer not null check (version_no > 0),
   name text not null default '未命名版本',
-  template_key text not null default 'custom' check (template_key in ('booking', 'events', 'mixed', 'custom')),
+  template_key text not null default 'custom' check (template_key in ('booking','events','mixed','clay-atelier','course-paper','event-cobalt','member-oxblood','retail-monochrome','mineral-wellness','family-coral','swiss-editorial','seasonal-burgundy','custom')),
   layout text not null check (layout in ('full-3', 'full-6', 'compact-2', 'compact-3')),
   chat_bar_text text not null default '選單',
   slots jsonb not null default '[]'::jsonb,
@@ -6076,7 +6076,7 @@ begin
   if not exists (select 1 from public.clinic_members member where member.clinic_id = p_clinic_id and member.user_id = p_actor_user_id and member.role in ('owner', 'admin'))
     then raise exception 'brand admin access required'; end if;
   if p_layout not in ('full-3', 'full-6', 'compact-2', 'compact-3') then raise exception 'invalid rich menu layout'; end if;
-  if p_template_key not in ('booking', 'events', 'mixed', 'custom') then raise exception 'invalid rich menu template'; end if;
+  if p_template_key not in ('booking','events','mixed','clay-atelier','course-paper','event-cobalt','member-oxblood','retail-monochrome','mineral-wellness','family-coral','swiss-editorial','seasonal-burgundy','custom') then raise exception 'invalid rich menu template'; end if;
   if jsonb_typeof(coalesce(p_slots, '[]'::jsonb)) <> 'array' then raise exception 'rich menu slots must be an array'; end if;
   if length(btrim(coalesce(p_name, ''))) not between 1 and 120 then raise exception 'rich menu version name is invalid'; end if;
   if length(btrim(coalesce(p_chat_bar_text, ''))) not between 1 and 14 then raise exception 'rich menu chat bar text is invalid'; end if;

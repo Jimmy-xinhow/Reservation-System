@@ -1,6 +1,6 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { createServiceClient } from "@/lib/supabase";
-import { ACTION_OPTIONS, LAYOUTS, richMenuTemplate, slotBounds, type Layout, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
+import { ACTION_OPTIONS, LAYOUTS, richMenuTemplate, richMenuTemplateLabel, slotBounds, type Layout, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
 import {
   cancelRichMenuScheduleAction,
   cloneRichMenuVersionAction,
@@ -75,13 +75,6 @@ const SCHEDULE_STATUS: Record<ScheduleRow["status"], string> = {
   completed: "已完成", cancelled: "已取消", failed: "失敗",
 };
 
-const TEMPLATE_LABEL: Record<RichMenuTemplateKey, string> = {
-  booking: "預約型",
-  events: "活動型",
-  mixed: "綜合型",
-  custom: "自訂",
-};
-
 function formatTaipei(value: string): string {
   return new Date(value).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false });
 }
@@ -101,7 +94,7 @@ function richMenuActionLabel(action: Slot["action"]): string {
 function versionDifferences(target: VersionRow, baseline: VersionRow): string[] {
   const differences: string[] = [];
   if (target.name !== baseline.name) differences.push(`名稱：${baseline.name} → ${target.name}`);
-  if (target.template_key !== baseline.template_key) differences.push(`模板：${TEMPLATE_LABEL[baseline.template_key]} → ${TEMPLATE_LABEL[target.template_key]}`);
+  if (target.template_key !== baseline.template_key) differences.push(`模板：${richMenuTemplateLabel(baseline.template_key)} → ${richMenuTemplateLabel(target.template_key)}`);
   if (target.layout !== baseline.layout) differences.push(`版型：${LAYOUTS[baseline.layout]?.label ?? "未辨識版型"} → ${LAYOUTS[target.layout]?.label ?? "未辨識版型"}`);
   if (target.chat_bar_text !== baseline.chat_bar_text) differences.push(`選單列：${baseline.chat_bar_text} → ${target.chat_bar_text}`);
   const count = Math.max(target.slots.length, baseline.slots.length);
@@ -292,7 +285,7 @@ export default async function RichMenuPage({
                     <div>
                       <p className="text-sm font-medium text-slate-900">v{version.version_no} · {version.name}</p>
                       <p className="mt-1 text-xs text-slate-500">
-                        {TEMPLATE_LABEL[version.template_key]} · {LAYOUTS[version.layout]?.label ?? "未辨識版型"}{version.source_version_id ? " · 複製版本" : ""}
+                        {richMenuTemplateLabel(version.template_key)} · {LAYOUTS[version.layout]?.label ?? "未辨識版型"}{version.source_version_id ? " · 複製版本" : ""}
                       </p>
                     </div>
                     <span className="badge bg-slate-100 text-slate-600">{STATUS_LABEL[version.status]}</span>
