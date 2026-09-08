@@ -1790,6 +1790,14 @@ invariant(
     read("lib/richmenu.ts").includes("RICH_MENU_ICON_OPTIONS"),
 );
 invariant(
+  "Rich Menu built-in art stays visually continuous without per-cell gray panels",
+  read("lib/richmenu-art.ts").includes('id="row-wash"') &&
+    !read("lib/richmenu-art.ts").includes('fill-opacity="0.82"') &&
+    read("app/admin/richmenu/RichMenuEditor.tsx").includes("line-richmenu-shade") &&
+    read("app/admin/richmenu/RichMenuEditor.tsx").includes("bg-transparent text-white") &&
+    !read("app/globals.css").includes("background: rgba(18,34,27,.16)"),
+);
+invariant(
   "course learning tables and tenant policies are synchronized",
   schema.includes("create table if not exists course_units") &&
     schema.includes("create table if not exists course_unit_progress") &&

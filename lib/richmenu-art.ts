@@ -36,23 +36,41 @@ export async function renderRichMenuPng(layout: Layout, slots: Slot[], templateK
   const artworkFile = path.join(process.cwd(), "public", theme.artwork.replace(/^\//, ""));
   const background = await sharp(artworkFile).resize(spec.width, spec.height, { fit: "cover", position: "centre" }).png().toBuffer();
   const compact = spec.height === 843;
-  const iconSize = compact ? 155 : 145;
+  const iconSize = compact ? 128 : 116;
   const decoration = bounds.map((box, index) => {
     const slot = slots[index] ?? { label: "品牌資訊", action: "brand" as const };
     const iconX = box.x + box.width / 2 - iconSize / 2;
-    const iconY = box.y + (compact ? 130 : 120);
+    const iconY = box.y + (compact ? 172 : 238);
     return `<g>
-      <rect x="${box.x + 22}" y="${box.y + 22}" width="${box.width - 44}" height="${box.height - 44}" rx="20" fill="${theme.panel}" fill-opacity="0.82" stroke="${theme.accent}" stroke-opacity="0.52" stroke-width="3"/>
-      <line x1="${box.x + 80}" y1="${box.y + box.height - 112}" x2="${box.x + box.width - 80}" y2="${box.y + box.height - 112}" stroke="${theme.accent}" stroke-width="5" stroke-opacity="0.9"/>
+      <line x1="${box.x + box.width / 2 - 42}" y1="${box.y + box.height - 228}" x2="${box.x + box.width / 2 + 42}" y2="${box.y + box.height - 228}" stroke="${theme.accent}" stroke-width="6" stroke-linecap="round"/>
       ${icon(slot.icon ?? richMenuIconForAction(slot.action), iconX, iconY, iconSize, theme.ink)}
     </g>`;
   }).join("");
-  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${spec.width}" height="${spec.height}" viewBox="0 0 ${spec.width} ${spec.height}">${decoration}</svg>`);
+  const rowHeight = spec.height / spec.rows;
+  const rowWashes = Array.from({ length: spec.rows }, (_, row) => `<rect x="0" y="${row * rowHeight}" width="${spec.width}" height="${rowHeight}" fill="url(#row-wash)"/>`).join("");
+  const verticalRules = Array.from({ length: spec.cols - 1 }, (_, column) => {
+    const x = ((column + 1) * spec.width) / spec.cols;
+    return `<line x1="${x}" y1="0" x2="${x}" y2="${spec.height}" stroke="${theme.ink}" stroke-opacity="0.24" stroke-width="2"/>`;
+  }).join("");
+  const horizontalRules = Array.from({ length: spec.rows - 1 }, (_, row) => {
+    const y = ((row + 1) * spec.height) / spec.rows;
+    return `<line x1="0" y1="${y}" x2="${spec.width}" y2="${y}" stroke="${theme.ink}" stroke-opacity="0.24" stroke-width="2"/>`;
+  }).join("");
+  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${spec.width}" height="${spec.height}" viewBox="0 0 ${spec.width} ${spec.height}">
+    <defs>
+      <linearGradient id="row-wash" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="${theme.panel}" stop-opacity="0.08"/>
+        <stop offset="0.48" stop-color="${theme.panel}" stop-opacity="0.34"/>
+        <stop offset="1" stop-color="${theme.panel}" stop-opacity="0.9"/>
+      </linearGradient>
+    </defs>
+    ${rowWashes}${verticalRules}${horizontalRules}${decoration}
+  </svg>`);
   const labels = await Promise.all(bounds.map(async (box, index) => {
     const slot = slots[index] ?? { label: "品牌資訊", action: "brand" as const };
-    const fontSize = compact ? 61 : 56;
+    const fontSize = compact ? 60 : 58;
     const input = await sharp({ text: { text: `<span foreground="${theme.ink}"><b>${escapeXml(slot.label)}</b></span>`, font: `Noto Sans TC ${fontSize}`, fontfile: fontFile, width: box.width - 120, height: Math.ceil(fontSize * 1.65), align: "center", rgba: true } }).png().toBuffer();
-    return { input, left: box.x + 60, top: Math.round(box.y + box.height - (compact ? 220 : 245)) };
+    return { input, left: box.x + 60, top: Math.round(box.y + box.height - 188) };
   }));
   return sharp(background).composite([{ input: overlay, left: 0, top: 0 }, ...labels]).png({ compressionLevel: 9, palette: true, quality: 82, colours: 128 }).toBuffer();
 }

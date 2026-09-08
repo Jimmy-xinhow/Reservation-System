@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { LAYOUTS, ACTION_OPTIONS, RICH_MENU_ICON_OPTIONS, RICH_MENU_TEMPLATES, richMenuIconForAction, richMenuTemplate, type BuiltInRichMenuTemplateKey, type Layout, type RichMenuIconKey, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -32,6 +32,7 @@ export default function RichMenuEditor({
   const [name, setName] = useState(initialName);
   const [chatBar, setChatBar] = useState(initialChatBar);
   const spec = LAYOUTS[layout];
+  const selectedTheme = template === "custom" ? null : RICH_MENU_TEMPLATES[template];
   const [slots, setSlots] = useState<Slot[]>(() => normalize(initialSlots, spec.slots));
   const templateEntries = Object.entries(RICH_MENU_TEMPLATES) as Array<[BuiltInRichMenuTemplateKey, (typeof RICH_MENU_TEMPLATES)[BuiltInRichMenuTemplateKey]]>;
 
@@ -110,9 +111,10 @@ export default function RichMenuEditor({
         </div>
         {/* 實際圖稿與版面示意 */}
         <div
-          className="relative isolate grid gap-1 overflow-hidden rounded-sm border border-slate-300 bg-slate-100 p-1"
+          className="relative isolate grid overflow-hidden rounded-sm border border-slate-300 bg-slate-100"
           style={{
             gridTemplateColumns: `repeat(${spec.cols}, 1fr)`,
+            gridTemplateRows: `repeat(${spec.rows}, 1fr)`,
             aspectRatio: `${spec.width} / ${spec.height}`,
           }}
         >
@@ -121,8 +123,8 @@ export default function RichMenuEditor({
             <img src={RICH_MENU_TEMPLATES[template].artwork} alt={`${RICH_MENU_TEMPLATES[template].label}模板背景`} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
           )}
           {slots.map((s, i) => (
-            <div key={i} className={`relative z-10 flex items-end justify-center rounded border border-white/80 px-1 pb-2 text-center text-[11px] font-semibold sm:text-xs ${template === "custom" ? "bg-white text-slate-500" : "bg-slate-950/5 text-slate-700"}`}>
-              <span className="rounded-sm border border-slate-200 bg-white/90 px-2 py-1">{i + 1}. {ACTION_OPTIONS.find((o) => o.value === s.action)?.label ?? "尚未設定"}</span>
+            <div key={i} className={`relative z-10 flex items-end justify-center border-b border-r px-1 pb-2 text-center text-[11px] font-semibold sm:text-xs ${template === "custom" ? "border-slate-300 bg-white text-slate-500" : "border-white/45 bg-transparent text-white [text-shadow:0_1px_6px_rgba(0,0,0,.72)]"}`}>
+              <span className={template === "custom" ? "px-2 py-1" : "border-t-2 border-amber-300 px-2 pt-1"}>{i + 1}. {ACTION_OPTIONS.find((o) => o.value === s.action)?.label ?? "尚未設定"}</span>
             </div>
           ))}
         </div>
@@ -224,12 +226,23 @@ export default function RichMenuEditor({
                 gridTemplateColumns: `repeat(${spec.cols}, minmax(0, 1fr))`,
                 gridTemplateRows: `repeat(${spec.rows}, minmax(0, 1fr))`,
                 aspectRatio: `${spec.width} / ${spec.height}`,
-              }}
+                "--richmenu-ink": selectedTheme?.ink ?? "#ffffff",
+                "--richmenu-panel": selectedTheme?.panel ?? "#15231d",
+                "--richmenu-accent": selectedTheme?.accent ?? "#d7b867",
+              } as CSSProperties}
             >
               {template !== "custom" && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={RICH_MENU_TEMPLATES[template].artwork} alt="目前模板背景預覽" className="absolute inset-0 h-full w-full object-cover" />
+                <img src={RICH_MENU_TEMPLATES[template].artwork} alt="目前模板背景預覽" className="absolute inset-0 z-0 h-full w-full object-cover" />
               )}
+              <span
+                aria-hidden="true"
+                className="line-richmenu-shade"
+                style={{
+                  backgroundImage: `linear-gradient(to bottom, ${selectedTheme?.panel ?? "#15231d"}14 0%, ${selectedTheme?.panel ?? "#15231d"}57 48%, ${selectedTheme?.panel ?? "#15231d"}e6 100%)`,
+                  backgroundSize: `100% ${100 / spec.rows}%`,
+                }}
+              />
               {slots.map((slot, index) => (
                 <div key={`${index}-${slot.label}`} className="line-richmenu-slot">
                   <RichMenuIconPreview icon={slot.icon ?? richMenuIconForAction(slot.action)} />
