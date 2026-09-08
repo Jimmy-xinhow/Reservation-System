@@ -123,18 +123,18 @@ const mixedSlots: Slot[] = [
 ];
 
 export const RICH_MENU_TEMPLATES: Record<BuiltInRichMenuTemplateKey, RichMenuTemplateDefinition> = {
-  booking: { label: "瓷白鼠尾草", category: "美業／保養", description: "柔霧瓷白、鼠尾草綠與香檳金，適合美容、護膚與髮藝。", layout: "full-6", artwork: "/richmenu/themes/porcelain-sage.webp", ink: "#24342f", panel: "#f9f6ef", accent: "#9c7a43", slots: bookingSlots },
-  events: { label: "靛藍學院", category: "課程／知識", description: "沉穩靛藍與紙白層次，適合線上課程、補教與顧問。", layout: "full-6", artwork: "/richmenu/themes/indigo-academy.webp", ink: "#f7f3ea", panel: "#172848", accent: "#d6a94f", slots: eventSlots },
-  mixed: { label: "深林黃銅", category: "運動／身心", description: "深綠與黃銅質感，適合皮拉提斯、瑜珈與精品健身。", layout: "full-6", artwork: "/richmenu/themes/forest-brass.webp", ink: "#f8f2e4", panel: "#14352d", accent: "#caa84a", slots: mixedSlots },
-  "clay-atelier": { label: "陶土工作室", category: "手作／沙龍", description: "陶土、亞麻與暖灰，適合手作課、攝影與生活風格品牌。", layout: "full-6", artwork: "/richmenu/themes/clay-linen.webp", ink: "#382c27", panel: "#eee2d5", accent: "#a45e42", slots: bookingSlots },
-  "course-paper": { label: "編輯紙本", category: "教育／出版", description: "米色紙感與墨黑排版，適合講座、閱讀與專業培訓。", layout: "full-6", artwork: "/richmenu/themes/parchment-course.webp", ink: "#22211e", panel: "#f0e7d5", accent: "#b03b31", slots: eventSlots },
-  "event-cobalt": { label: "鈷藍節慶", category: "展演／活動", description: "鮮明鈷藍與柑橘色，適合展演、快閃與大型活動。", layout: "full-6", artwork: "/richmenu/themes/festival-cobalt.webp", ink: "#ffffff", panel: "#174cad", accent: "#ff8a33", slots: eventSlots },
-  "member-oxblood": { label: "勃根地會員", category: "會員／會所", description: "酒紅、奶油與金屬細節，適合高端會員與俱樂部。", layout: "full-6", artwork: "/richmenu/themes/membership-oxblood.webp", ink: "#f7eee3", panel: "#5c1f2d", accent: "#c3a264", slots: mixedSlots },
-  "retail-monochrome": { label: "黑白選品", category: "零售／選物", description: "高對比黑白與俐落網格，適合選物、服飾與商品販售。", layout: "full-6", artwork: "/richmenu/themes/retail-monochrome.webp", ink: "#f7f7f5", panel: "#202020", accent: "#b5b5ad", slots: bookingSlots },
-  "mineral-wellness": { label: "礦物療癒", category: "健康／療癒", description: "石灰灰、礦物藍與安靜留白，適合身心療癒與健康服務。", layout: "full-6", artwork: "/richmenu/themes/mineral-wellness.webp", ink: "#23323a", panel: "#dce2df", accent: "#6e8f91", slots: mixedSlots },
-  "family-coral": { label: "珊瑚親子", category: "親子／社群", description: "溫暖珊瑚與奶油黃，適合親子、社群與家庭服務。", layout: "full-6", artwork: "/richmenu/themes/family-coral.webp", ink: "#3b2b2b", panel: "#fff1df", accent: "#e96e5d", slots: mixedSlots },
-  "swiss-editorial": { label: "瑞士編輯", category: "商務／顧問", description: "理性灰白、精準紅點與編輯格線，適合 B2B 與專業服務。", layout: "full-6", artwork: "/richmenu/themes/swiss-monochrome.webp", ink: "#181818", panel: "#f1f0eb", accent: "#d64636", slots: bookingSlots },
-  "seasonal-burgundy": { label: "節慶酒紅", category: "節慶／限定", description: "深酒紅與柔金光澤，適合週年、年節與檔期限定選單。", layout: "full-6", artwork: "/richmenu/themes/seasonal-burgundy.webp", ink: "#fff6e7", panel: "#652b38", accent: "#d6b66f", slots: mixedSlots },
+  booking: { label: "瓷白鼠尾草", category: "美業／保養", description: "柔霧瓷白、鼠尾草綠與香檳金，適合美容、護膚與髮藝。", layout: "full-6", artwork: "/richmenu/themes/porcelain-sage-editorial.webp", ink: "#24342f", panel: "#f9f6ef", accent: "#9c7a43", slots: bookingSlots },
+  events: { label: "靛藍學院", category: "課程／知識", description: "沉穩靛藍與紙白層次，適合線上課程、補教與顧問。", layout: "full-6", artwork: "/richmenu/themes/indigo-academy-editorial.webp", ink: "#f7f3ea", panel: "#172848", accent: "#d6a94f", slots: eventSlots },
+  mixed: { label: "深林黃銅", category: "運動／身心", description: "深綠與黃銅質感，適合皮拉提斯、瑜珈與精品健身。", layout: "full-6", artwork: "/richmenu/themes/forest-brass-editorial.webp", ink: "#f8f2e4", panel: "#14352d", accent: "#caa84a", slots: mixedSlots },
+  "clay-atelier": { label: "陶土工作室", category: "手作／沙龍", description: "陶土、亞麻與暖灰，適合手作課、攝影與生活風格品牌。", layout: "full-6", artwork: "/richmenu/themes/clay-linen-editorial.webp", ink: "#382c27", panel: "#eee2d5", accent: "#a45e42", slots: bookingSlots },
+  "course-paper": { label: "編輯紙本", category: "教育／出版", description: "米色紙感與墨黑排版，適合講座、閱讀與專業培訓。", layout: "full-6", artwork: "/richmenu/themes/parchment-course-editorial.webp", ink: "#22211e", panel: "#f0e7d5", accent: "#b03b31", slots: eventSlots },
+  "event-cobalt": { label: "鈷藍節慶", category: "展演／活動", description: "鮮明鈷藍與柑橘色，適合展演、快閃與大型活動。", layout: "full-6", artwork: "/richmenu/themes/festival-cobalt-editorial.webp", ink: "#ffffff", panel: "#174cad", accent: "#ff8a33", slots: eventSlots },
+  "member-oxblood": { label: "勃根地會員", category: "會員／會所", description: "酒紅、奶油與金屬細節，適合高端會員與俱樂部。", layout: "full-6", artwork: "/richmenu/themes/membership-oxblood-editorial.webp", ink: "#f7eee3", panel: "#5c1f2d", accent: "#c3a264", slots: mixedSlots },
+  "retail-monochrome": { label: "黑白選品", category: "零售／選物", description: "高對比黑白與俐落網格，適合選物、服飾與商品販售。", layout: "full-6", artwork: "/richmenu/themes/retail-monochrome-editorial.webp", ink: "#f7f7f5", panel: "#202020", accent: "#b5b5ad", slots: bookingSlots },
+  "mineral-wellness": { label: "礦物療癒", category: "健康／療癒", description: "石灰灰、礦物藍與安靜留白，適合身心療癒與健康服務。", layout: "full-6", artwork: "/richmenu/themes/mineral-wellness-editorial.webp", ink: "#23323a", panel: "#dce2df", accent: "#6e8f91", slots: mixedSlots },
+  "family-coral": { label: "珊瑚親子", category: "親子／社群", description: "溫暖珊瑚與奶油黃，適合親子、社群與家庭服務。", layout: "full-6", artwork: "/richmenu/themes/family-coral-editorial.webp", ink: "#3b2b2b", panel: "#fff1df", accent: "#e96e5d", slots: mixedSlots },
+  "swiss-editorial": { label: "瑞士編輯", category: "商務／顧問", description: "理性灰白、精準紅點與編輯格線，適合 B2B 與專業服務。", layout: "full-6", artwork: "/richmenu/themes/swiss-monochrome-editorial.webp", ink: "#181818", panel: "#f1f0eb", accent: "#d64636", slots: bookingSlots },
+  "seasonal-burgundy": { label: "節慶酒紅", category: "節慶／限定", description: "深酒紅與柔金光澤，適合週年、年節與檔期限定選單。", layout: "full-6", artwork: "/richmenu/themes/seasonal-burgundy-editorial.webp", ink: "#fff6e7", panel: "#652b38", accent: "#d6b66f", slots: mixedSlots },
 };
 
 export function isBuiltInRichMenuTemplate(value: string): value is BuiltInRichMenuTemplateKey {
