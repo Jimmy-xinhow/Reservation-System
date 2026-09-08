@@ -1792,6 +1792,7 @@ invariant(
 invariant(
   "Rich Menu built-in art stays visually continuous without per-cell gray panels",
   read("lib/richmenu-art.ts").includes('id="row-wash"') &&
+    read("lib/richmenu-art.ts").includes("NotoSansCJKtc-Bold.otf") &&
     !read("lib/richmenu-art.ts").includes('fill-opacity="0.82"') &&
     read("app/admin/richmenu/RichMenuEditor.tsx").includes("line-richmenu-shade") &&
     read("app/admin/richmenu/RichMenuEditor.tsx").includes("bg-transparent text-white") &&

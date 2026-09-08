@@ -32,7 +32,7 @@ export async function renderRichMenuPng(layout: Layout, slots: Slot[], templateK
   const spec = LAYOUTS[layout];
   const theme = RICH_MENU_TEMPLATES[templateKey];
   const bounds = slotBounds(layout);
-  const fontFile = path.join(process.cwd(), "assets", "fonts", "NotoSansTC-RichMenu.ttf");
+  const fontFile = path.join(process.cwd(), "assets", "fonts", "NotoSansCJKtc-Bold.otf");
   const artworkFile = path.join(process.cwd(), "public", theme.artwork.replace(/^\//, ""));
   const background = await sharp(artworkFile).resize(spec.width, spec.height, { fit: "cover", position: "centre" }).png().toBuffer();
   const compact = spec.height === 843;
@@ -69,7 +69,7 @@ export async function renderRichMenuPng(layout: Layout, slots: Slot[], templateK
   const labels = await Promise.all(bounds.map(async (box, index) => {
     const slot = slots[index] ?? { label: "品牌資訊", action: "brand" as const };
     const fontSize = compact ? 60 : 58;
-    const input = await sharp({ text: { text: `<span foreground="${theme.ink}"><b>${escapeXml(slot.label)}</b></span>`, font: `Noto Sans TC ${fontSize}`, fontfile: fontFile, width: box.width - 120, height: Math.ceil(fontSize * 1.65), align: "center", rgba: true } }).png().toBuffer();
+    const input = await sharp({ text: { text: `<span foreground="${theme.ink}">${escapeXml(slot.label)}</span>`, font: `Noto Sans CJK TC Bold ${fontSize}`, fontfile: fontFile, width: box.width - 120, height: Math.ceil(fontSize * 1.65), align: "center", rgba: true } }).png().toBuffer();
     return { input, left: box.x + 60, top: Math.round(box.y + box.height - 188) };
   }));
   return sharp(background).composite([{ input: overlay, left: 0, top: 0 }, ...labels]).png({ compressionLevel: 9, palette: true, quality: 82, colours: 128 }).toBuffer();
