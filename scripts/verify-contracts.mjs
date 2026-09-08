@@ -1790,13 +1790,19 @@ invariant(
     read("lib/richmenu.ts").includes("RICH_MENU_ICON_OPTIONS"),
 );
 invariant(
-  "Rich Menu built-in art stays visually continuous without per-cell gray panels",
-  read("lib/richmenu-art.ts").includes('id="row-wash"') &&
+  "Rich Menu artwork stays continuous and previews do not cover it with masks",
+  !read("lib/richmenu-art.ts").includes('id="row-wash"') &&
+    !read("lib/richmenu-art.ts").includes("verticalRules") &&
     read("lib/richmenu-art.ts").includes("NotoSansCJKtc-Bold.otf") &&
-    !read("lib/richmenu-art.ts").includes('fill-opacity="0.82"') &&
-    read("app/admin/richmenu/RichMenuEditor.tsx").includes("line-richmenu-shade") &&
-    read("app/admin/richmenu/RichMenuEditor.tsx").includes("bg-transparent text-white") &&
-    !read("app/globals.css").includes("background: rgba(18,34,27,.16)"),
+    read("lib/richmenu-art.ts").includes("blur(5)") &&
+    !read("app/admin/richmenu/RichMenuEditor.tsx").includes("line-richmenu-shade") &&
+    !read("app/admin/richmenu/PublishForm.tsx").includes("bg-slate-950/45"),
+);
+invariant(
+  "LINE identity UI distinguishes the site logo from the official account avatar",
+  read("app/admin/line/page.tsx").includes("品牌 Logo 與 LINE 頭像是兩項設定") &&
+    read("app/admin/line/page.tsx").includes("https://manager.line.biz/") &&
+    read("app/admin/settings/BrandPageEditor.tsx").includes("不會變更 LINE 官方帳號頭像"),
 );
 invariant(
   "course learning tables and tenant policies are synchronized",

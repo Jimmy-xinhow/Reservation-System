@@ -70,6 +70,7 @@ export default function PublishForm({
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loadingTemplate, setLoadingTemplate] = useState(false);
+  const [showHotspots, setShowHotspots] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const spec = LAYOUTS[layout];
   const previewSlots = useMemo(() => slots.slice(0, spec.slots).map((slot) => ({
@@ -203,6 +204,21 @@ export default function PublishForm({
         onChange={(e) => pick(e.target.files?.[0] ?? null)}
         className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-sm file:border-0 file:bg-emerald-800 file:px-4 file:py-2 file:text-white"
       />
+      {preview && (
+        <div className="flex flex-col gap-2 border-y border-slate-200 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm leading-6 text-slate-600">
+            預設畫面就是實際送往 LINE 的圖稿，不會覆蓋遮罩或操作文字。
+          </p>
+          <button
+            type="button"
+            aria-pressed={showHotspots}
+            onClick={() => setShowHotspots((current) => !current)}
+            className="btn btn-secondary min-h-11 shrink-0"
+          >
+            {showHotspots ? "隱藏點擊熱區" : "顯示點擊熱區"}
+          </button>
+        </div>
+      )}
       {preview ? (
         <div
           className="relative isolate overflow-hidden rounded-sm border border-slate-300 bg-slate-100"
@@ -210,25 +226,28 @@ export default function PublishForm({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={preview} alt="Rich Menu 背景與點擊區預覽" className="absolute inset-0 h-full w-full object-cover" />
-          <div
-            className="absolute inset-0 grid"
-            style={{
-              gridTemplateColumns: `repeat(${spec.cols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${spec.rows}, minmax(0, 1fr))`,
-            }}
-          >
-            {previewSlots.map(({ slot, browserTarget, actionLabel }, index) => {
-              const className = "flex min-h-11 flex-col items-center justify-center border border-white/90 bg-slate-950/45 px-1.5 text-center text-white outline-none transition hover:bg-brand-700/75 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white";
-              const content = <><span className="text-xs font-semibold sm:text-sm">{index + 1}. {slot.label}</span><span className="mt-0.5 hidden text-[10px] opacity-85 sm:block">{actionLabel}</span></>;
-              return browserTarget
-                ? <a key={`${index}-${slot.label}`} href={browserTarget} target="_blank" rel="noreferrer" className={className} aria-label={`測試第 ${index + 1} 格：${slot.label}`}>{content}</a>
-                : <div key={`${index}-${slot.label}`} className={className} title="此動作只能在 LINE 內執行">{content}<span className="mt-0.5 text-[10px] opacity-85">LINE 內執行</span></div>;
-            })}
-          </div>
+          {showHotspots && (
+            <div
+              aria-label="LINE 點擊熱區輔助線"
+              className="pointer-events-none absolute inset-0 grid"
+              style={{
+                gridTemplateColumns: `repeat(${spec.cols}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${spec.rows}, minmax(0, 1fr))`,
+              }}
+            >
+              {previewSlots.map(({ slot }, index) => (
+                <div key={`${index}-${slot.label}`} className="relative border border-dashed border-amber-300/90">
+                  <span className="absolute left-2 top-2 grid h-7 min-w-7 place-items-center rounded-full bg-amber-300 px-2 text-xs font-bold text-slate-950 shadow-sm">
+                    {index + 1}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <div className="flex min-h-32 items-center justify-center rounded-sm border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-sm text-slate-500">
-          選擇圖片後，這裡會疊合顯示實際背景與每一格點擊區。
+          選擇圖片後，這裡會原樣顯示實際送往 LINE 的圖稿。
         </div>
       )}
 

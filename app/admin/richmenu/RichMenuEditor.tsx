@@ -227,7 +227,6 @@ export default function RichMenuEditor({
                 gridTemplateRows: `repeat(${spec.rows}, minmax(0, 1fr))`,
                 aspectRatio: `${spec.width} / ${spec.height}`,
                 "--richmenu-ink": selectedTheme?.ink ?? "#ffffff",
-                "--richmenu-panel": selectedTheme?.panel ?? "#15231d",
                 "--richmenu-accent": selectedTheme?.accent ?? "#d7b867",
               } as CSSProperties}
             >
@@ -235,19 +234,10 @@ export default function RichMenuEditor({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={RICH_MENU_TEMPLATES[template].artwork} alt="目前模板背景預覽" className="absolute inset-0 z-0 h-full w-full object-cover" />
               )}
-              <span
-                aria-hidden="true"
-                className="line-richmenu-shade"
-                style={{
-                  backgroundImage: `linear-gradient(to bottom, ${selectedTheme?.panel ?? "#15231d"}14 0%, ${selectedTheme?.panel ?? "#15231d"}57 48%, ${selectedTheme?.panel ?? "#15231d"}e6 100%)`,
-                  backgroundSize: `100% ${100 / spec.rows}%`,
-                }}
-              />
               {slots.map((slot, index) => (
                 <div key={`${index}-${slot.label}`} className="line-richmenu-slot">
                   <RichMenuIconPreview icon={slot.icon ?? richMenuIconForAction(slot.action)} />
                   <strong>{slot.label.trim() || `第 ${index + 1} 格`}</strong>
-                  <span>{ACTION_OPTIONS.find((option) => option.value === slot.action)?.label ?? "尚未設定"}</span>
                 </div>
               ))}
             </div>
@@ -255,7 +245,7 @@ export default function RichMenuEditor({
           </div>
         </div>
         <dl className="richmenu-live-summary"><div><dt>草稿</dt><dd>{name.trim() || "未命名草稿"}</dd></div><div><dt>版型</dt><dd>{spec.label}</dd></div><div><dt>格數</dt><dd>{spec.slots} 格</dd></div></dl>
-        <p className="message-composer-preview-note">模板、格數、顯示名稱、點擊動作與聊天室選單名稱會同步更新；自訂背景圖會在發布步驟疊合預覽。</p>
+        <p className="message-composer-preview-note">這裡不會加深色遮罩；發布區會顯示真正送往 LINE 的完整圖稿，點擊熱區可另外開啟檢查。</p>
       </aside>
       </div>
     </form>

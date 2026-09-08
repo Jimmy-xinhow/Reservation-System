@@ -27,7 +27,7 @@ export default async function LinePage({
   const service = createServiceClient();
   const [{ data: clinic }, { data: settings }, { data: channel }] = await Promise.all([
     supabase.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
-    supabase.from("clinic_settings").select("line_channel_enabled").eq("clinic_id", clinicId).maybeSingle(),
+    supabase.from("clinic_settings").select("line_channel_enabled, brand_logo_url").eq("clinic_id", clinicId).maybeSingle(),
     supabase
       .from("clinic_line_channels")
       .select("connection_mode, login_channel_id, liff_id, liff_endpoint_path, verification_status, verification_error, last_verified_at")
@@ -95,6 +95,43 @@ export default async function LinePage({
           <ConnectionStep number="1" title="官方帳號連線" ready={isConnected} detail={bot ? `${bot.displayName} ${bot.basicId ?? ""}` : "需要授權資料"} />
           <ConnectionStep number="2" title="系統連線檢查" ready={isVerified} detail={isVerified ? "系統檢查已通過" : "等待重新檢查"} />
           <ConnectionStep number="3" title="顧客入口" ready={isEntryReady} detail={isEntryReady ? "LINE 入口已啟用" : "需要啟用並填入 LIFF"} />
+        </div>
+      </section>
+
+      <section className="line-panel" aria-labelledby="line-identity-title">
+        <div className="line-panel-header">
+          <div>
+            <h2 id="line-identity-title">品牌 Logo 與 LINE 頭像是兩項設定</h2>
+            <p>系統可以上傳形象頁 Logo；官方帳號頭像由 LINE 管理，兩者不會自動互相覆蓋。</p>
+          </div>
+        </div>
+        <div className="grid gap-px bg-slate-200 sm:grid-cols-2">
+          <div className="flex min-w-0 items-center gap-4 bg-white p-4">
+            <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 text-sm font-bold text-slate-500">
+              {settings?.brand_logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={settings.brand_logo_url} alt="目前形象頁品牌 Logo" className="h-full w-full object-contain p-1" />
+              ) : "未設定"}
+            </div>
+            <div className="min-w-0">
+              <strong className="block text-sm text-slate-900">形象頁品牌 Logo</strong>
+              <p className="mt-1 text-xs leading-5 text-slate-600">顯示在品牌公開網站，不會改動 LINE 官方帳號。</p>
+              <Link href="/admin/settings?section=brand-page" className="mt-2 inline-flex text-sm font-semibold text-emerald-800 underline underline-offset-4">管理形象頁 Logo</Link>
+            </div>
+          </div>
+          <div className="flex min-w-0 items-center gap-4 bg-white p-4">
+            <div className="grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full border border-slate-200 bg-slate-50 text-sm font-bold text-slate-500">
+              {bot?.pictureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={bot.pictureUrl} alt="目前 LINE 官方帳號頭像" className="h-full w-full object-cover" />
+              ) : "未取得"}
+            </div>
+            <div className="min-w-0">
+              <strong className="block text-sm text-slate-900">LINE 官方帳號頭像</strong>
+              <p className="mt-1 text-xs leading-5 text-slate-600">朋友列表與聊天室顯示的頭像，需在每個官方帳號的 LINE 後台各自更換。</p>
+              <a href="https://manager.line.biz/" target="_blank" rel="noreferrer" className="mt-2 inline-flex text-sm font-semibold text-emerald-800 underline underline-offset-4">開啟 LINE Official Account Manager</a>
+            </div>
+          </div>
         </div>
       </section>
 

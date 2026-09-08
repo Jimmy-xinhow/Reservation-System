@@ -8,8 +8,8 @@ function escapeXml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[character] ?? character);
 }
 
-function icon(iconKey: RichMenuIconKey, x: number, y: number, size: number, stroke: string): string {
-  const sw = Math.max(9, Math.round(size * 0.052));
+function icon(iconKey: RichMenuIconKey, x: number, y: number, size: number, stroke: string, strokeBonus = 0): string {
+  const sw = Math.max(9, Math.round(size * 0.052)) + strokeBonus;
   const common = `fill="none" stroke="${stroke}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"`;
   const unit = size / 100;
   switch (iconKey) {
@@ -37,40 +37,28 @@ export async function renderRichMenuPng(layout: Layout, slots: Slot[], templateK
   const background = await sharp(artworkFile).resize(spec.width, spec.height, { fit: "cover", position: "centre" }).png().toBuffer();
   const compact = spec.height === 843;
   const iconSize = compact ? 128 : 116;
+  const contrast = theme.ink.toLowerCase() === "#ffffff" || theme.ink.toLowerCase().startsWith("#f") ? "#101815" : "#fffdf8";
   const decoration = bounds.map((box, index) => {
     const slot = slots[index] ?? { label: "品牌資訊", action: "brand" as const };
     const iconX = box.x + box.width / 2 - iconSize / 2;
     const iconY = box.y + (compact ? 172 : 238);
     return `<g>
       <line x1="${box.x + box.width / 2 - 42}" y1="${box.y + box.height - 228}" x2="${box.x + box.width / 2 + 42}" y2="${box.y + box.height - 228}" stroke="${theme.accent}" stroke-width="6" stroke-linecap="round"/>
+      <g opacity="0.58">${icon(slot.icon ?? richMenuIconForAction(slot.action), iconX, iconY, iconSize, contrast, 11)}</g>
       ${icon(slot.icon ?? richMenuIconForAction(slot.action), iconX, iconY, iconSize, theme.ink)}
     </g>`;
   }).join("");
-  const rowHeight = spec.height / spec.rows;
-  const rowWashes = Array.from({ length: spec.rows }, (_, row) => `<rect x="0" y="${row * rowHeight}" width="${spec.width}" height="${rowHeight}" fill="url(#row-wash)"/>`).join("");
-  const verticalRules = Array.from({ length: spec.cols - 1 }, (_, column) => {
-    const x = ((column + 1) * spec.width) / spec.cols;
-    return `<line x1="${x}" y1="0" x2="${x}" y2="${spec.height}" stroke="${theme.ink}" stroke-opacity="0.24" stroke-width="2"/>`;
-  }).join("");
-  const horizontalRules = Array.from({ length: spec.rows - 1 }, (_, row) => {
-    const y = ((row + 1) * spec.height) / spec.rows;
-    return `<line x1="0" y1="${y}" x2="${spec.width}" y2="${y}" stroke="${theme.ink}" stroke-opacity="0.24" stroke-width="2"/>`;
-  }).join("");
   const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${spec.width}" height="${spec.height}" viewBox="0 0 ${spec.width} ${spec.height}">
-    <defs>
-      <linearGradient id="row-wash" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="${theme.panel}" stop-opacity="0.08"/>
-        <stop offset="0.48" stop-color="${theme.panel}" stop-opacity="0.34"/>
-        <stop offset="1" stop-color="${theme.panel}" stop-opacity="0.9"/>
-      </linearGradient>
-    </defs>
-    ${rowWashes}${verticalRules}${horizontalRules}${decoration}
+    ${decoration}
   </svg>`);
   const labels = await Promise.all(bounds.map(async (box, index) => {
     const slot = slots[index] ?? { label: "品牌資訊", action: "brand" as const };
     const fontSize = compact ? 60 : 58;
-    const input = await sharp({ text: { text: `<span foreground="${theme.ink}">${escapeXml(slot.label)}</span>`, font: `Noto Sans CJK TC Bold ${fontSize}`, fontfile: fontFile, width: box.width - 120, height: Math.ceil(fontSize * 1.65), align: "center", rgba: true } }).png().toBuffer();
-    return { input, left: box.x + 60, top: Math.round(box.y + box.height - 188) };
+    const labelBuffer: Buffer = await sharp({ text: { text: `<span foreground="${theme.ink}">${escapeXml(slot.label)}</span>`, font: `Noto Sans CJK TC Bold ${fontSize}`, fontfile: fontFile, width: box.width - 120, height: Math.ceil(fontSize * 1.65), align: "center", rgba: true } }).png().toBuffer();
+    const shadow = await sharp(labelBuffer).tint(contrast).blur(5).png().toBuffer();
+    const left = box.x + 60;
+    const top = Math.round(box.y + box.height - 188);
+    return [{ input: shadow, left, top }, { input: labelBuffer, left, top }] as const;
   }));
-  return sharp(background).composite([{ input: overlay, left: 0, top: 0 }, ...labels]).png({ compressionLevel: 9, palette: true, quality: 82, colours: 128 }).toBuffer();
+  return sharp(background).composite([{ input: overlay, left: 0, top: 0 }, ...labels.flat()]).png({ compressionLevel: 9, palette: true, quality: 82, colours: 128 }).toBuffer();
 }

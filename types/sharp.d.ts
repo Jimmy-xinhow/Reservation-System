@@ -8,6 +8,8 @@ declare module "sharp" {
 
   interface SharpPipeline {
     resize(width: number, height: number, options?: { fit?: "cover" | "contain" | "fill" | "inside" | "outside"; position?: string }): SharpPipeline;
+    tint(colour: string): SharpPipeline;
+    blur(sigma?: number): SharpPipeline;
     png(options?: PngOptions): SharpPipeline;
     composite(inputs: Array<{ input: Buffer; left: number; top: number }>): SharpPipeline;
     toBuffer(): Promise<Buffer>;
