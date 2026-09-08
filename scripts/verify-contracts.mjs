@@ -62,6 +62,16 @@ const envExample = read(".env.example");
 
 const checks = [
   ["auth invites return to the deployed app and support password setup", ["lib/auth-invite.ts|authInviteRedirectUrl", "app/admin/platform/actions.ts|redirectTo: authInviteRedirectUrl()", "app/admin/platform/admins/actions.ts|redirectTo: authInviteRedirectUrl()", "app/auth/accept-invite/page.tsx|exchangeCodeForSession", "app/auth/accept-invite/page.tsx|updateUser({ password })", "components/AuthCallbackBridge.tsx|window.location.replace"]],
+  ["system staff can receive an initial password or a fresh password-setup email", [
+    "app/admin/platform/admins/page.tsx|name=\"password\" type=\"password\"",
+    "app/admin/platform/admins/page.tsx|name=\"password_confirmation\" type=\"password\"",
+    "app/admin/platform/admins/page.tsx|setPlatformAdminPasswordAction",
+    "app/admin/platform/admins/page.tsx|sendPlatformPasswordSetupAction",
+    "app/admin/platform/admins/actions.ts|createUser({ email, password, email_confirm: true })",
+    "app/admin/platform/admins/actions.ts|updateUserById(userId, { password, email_confirm: true })",
+    "app/admin/platform/admins/actions.ts|resetPasswordForEmail(authUser.user.email",
+    "app/admin/platform/admins/actions.ts|requireSystemAdmin()",
+  ]],
   ["registration payment migration has core tables", ["create table if not exists events", "create table if not exists registrations", "create table if not exists payment_orders"]],
   ["registration answer snapshot is in consolidated schema", ["create table if not exists registration_answers", "insert into registration_answers"]],
   ["status and notification audit tables are in consolidated schema", ["create table if not exists appointment_status_events", "create table if not exists appointment_notification_logs", "create table if not exists registration_status_events", "create table if not exists registration_notification_logs", "create table if not exists payment_status_events"]],

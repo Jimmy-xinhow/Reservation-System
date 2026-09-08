@@ -111,7 +111,27 @@ test("系統管理者可進入系統人員頁", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "系統管理控制台" })).toBeVisible();
   await page.goto(`${baseUrl}/admin/platform/admins`);
   await expect(page.getByRole("heading", { name: "系統人員與權限" })).toBeVisible();
+  await expect(page.getByLabel("初始密碼（至少 8 碼）")).toBeVisible();
+  await expect(page.getByLabel("再次輸入初始密碼")).toBeVisible();
   await expectNoHorizontalOverflow(page);
+});
+
+test("系統管理者可替既有系統員工設定密碼且員工能登入", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page, "system-admin", "platform");
+  await page.goto(`${baseUrl}/admin/platform/admins`);
+
+  const account = fixture.users["system-employee"];
+  const nextPassword = `${account.password.slice(0, -4)}Z9!q`;
+  const member = page.locator("article").filter({ hasText: account.email });
+  await member.getByLabel("設定／重設登入密碼").fill(nextPassword);
+  await member.getByLabel("再次輸入新密碼").fill(nextPassword);
+  await member.getByRole("button", { name: "儲存登入密碼" }).click();
+  await expect(member.getByLabel("設定／重設登入密碼")).toHaveValue("");
+
+  fixture.users["system-employee"].password = nextPassword;
+  await login(page, "system-employee", "platform");
+  await expect(page.getByRole("heading", { name: "系統管理控制台" })).toBeVisible();
 });
 
 test("系統員工只能進入獲授權的系統總覽", async ({ page }) => {
