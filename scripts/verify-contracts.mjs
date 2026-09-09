@@ -56,6 +56,8 @@ const migrationCheckoutLintCleanup = read("supabase/migrations/202609040005_chec
 const migrationCheckoutRegistrationSync = read("supabase/migrations/202609040006_checkout_registration_sync.sql");
 const migrationChannelSecrets = read("supabase/migrations/202609060003_channel_secret_self_service.sql");
 const migrationLineFirst = read("supabase/migrations/202609090001_line_first_customer_journeys.sql");
+const migrationLineNativeIdentity = read("supabase/migrations/202609090002_line_native_member_identity.sql");
+const migrationLineAccountLinkDigestFix = read("supabase/migrations/202609090003_line_account_link_digest_fix.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 const projectReadme = read("README.md");
@@ -1984,16 +1986,23 @@ invariant(
     !read("app/api/line/account-link/complete/route.ts").includes('new URL("/line/account-link", request.url)'),
 );
 invariant(
-  "LINE member onboarding separates first-time creation from existing-record recovery",
-  read("lib/line-customer-journeys.ts").includes("第一次使用・建立會員") &&
-    read("lib/line-customer-journeys.ts").includes('serviceUrl(context, "membership", { task: "1" })') &&
-    read("lib/line-customer-journeys.ts").includes("已有會員・連回資料") &&
-    read("lib/line-webhook-messages.ts").includes("firstTimeUrl") &&
-    read("app/line/account-link/page.tsx").includes("這次是建立，還是找回？") &&
+  "LINE member onboarding binds the signed chat identity without forcing a web page",
+  read("lib/line-customer-journeys.ts").includes('data: "action=bind_member"') &&
+    read("lib/line-customer-journeys.ts").includes("直接綁定目前 LINE") &&
+    read("lib/line-webhook-messages.ts").includes('data: "action=bind_member"') &&
+    read("app/api/line/webhook/route.ts").includes('action === "bind_member"') &&
+    read("app/api/line/webhook/route.ts").includes("ensureLineCustomerIdentity") &&
+    read("app/api/line/webhook/route.ts").includes('.from("line_customer_identities").update({ active: false, patient_id: null })') &&
+    read("lib/line.ts").includes("getLineUserProfile") &&
+    migrationLineNativeIdentity.includes("create table if not exists public.line_customer_identities") &&
+    migrationLineNativeIdentity.includes("revoke all on table public.line_customer_identities from public, anon, authenticated") &&
+    migrationLineAccountLinkDigestFix.includes("extensions.digest") &&
+    migrationLineAccountLinkDigestFix.includes("set search_path = public, extensions, pg_temp") &&
+    schema.includes("create table if not exists public.line_customer_identities") &&
     read("app/line/account-link/page.tsx").includes('params.mode === "existing"') &&
     read("app/api/line/account-link/complete/route.ts").includes('mode !== "existing"') &&
     customerBindLineApi.includes('rpc("create_or_get_public_patient"') &&
-    customerEntryView.includes("建立會員並綁定 LINE"),
+    customerBindLineApi.includes("saveLineCustomerIdentity"),
 );
 invariant(
   "LINE native customer journeys use the brand palette and designed Flex hierarchy",

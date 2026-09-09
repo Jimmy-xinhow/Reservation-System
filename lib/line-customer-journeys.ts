@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { customerEntryUrl } from "@/lib/customer-entry";
 import { issueLineAccountLinkToken, replyMessages, type LineMessage } from "@/lib/line";
+import { getLineCustomerIdentity } from "@/lib/line-customer-identity";
 import { clearLineCustomerSession, getLineCustomerSession, saveLineCustomerSession } from "@/lib/line-session";
 import { isClinicOpenNow } from "@/lib/queue";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
@@ -340,19 +341,34 @@ function accountLinkUrl(context: LineCustomerJourneyContext, linkToken: string):
 }
 
 async function replyAccountLinkPrompt(replyToken: string, lineUserId: string, context: LineCustomerJourneyContext): Promise<void> {
-  const linkToken = await issueLineAccountLinkToken(lineUserId, context.lineAccessToken);
+  const linkToken = await issueLineAccountLinkToken(lineUserId, context.lineAccessToken).catch(() => null);
   await replyMessages(replyToken, [brandedCard(context, {
     altText: `${context.clinicName}｜綁定 LINE 會員資料`,
     badge: "會員服務",
-    title: "第一次使用，還是已有會員？",
-    body: "請依你的情況選擇；第一次使用會建立品牌會員，已有資料則安全連回原紀錄。",
-    highlight: ["第一次使用", "建立會員並綁定 LINE"],
-    details: [["已有會員", "比對後連回原紀錄"], ["資料範圍", "只處理目前品牌"]],
+    title: "啟用 LINE 會員",
+    body: "直接使用目前這個 LINE 帳號完成綁定，不需要離開聊天室。",
+    highlight: ["綁定方式", "LINE 內一鍵完成"],
+    details: [["個人資料", "需要預約或付款時再補"]],
     buttons: [
-      ...(context.liffId ? [{ label: "第一次使用・建立會員", primary: true, action: { type: "uri" as const, uri: serviceUrl(context, "membership", { task: "1" }) } }] : []),
-      { label: "已有會員・連回資料", action: { type: "uri", uri: accountLinkUrl(context, linkToken) } },
+      { label: "直接綁定目前 LINE", primary: true, action: { type: "postback", data: "action=bind_member", displayText: "啟用 LINE 會員" } },
+      ...(linkToken ? [{ label: "找回品牌既有會員", action: { type: "uri" as const, uri: accountLinkUrl(context, linkToken) } }] : []),
     ],
   })], context.lineAccessToken);
+}
+
+export function lineNativeMemberLinkedMessage(context: LineBranding, displayName?: string | null): LineMessage {
+  return brandedCard(context, {
+    altText: `${context.clinicName}｜LINE 會員已啟用`,
+    badge: "綁定完成",
+    title: displayName ? `${displayName}，LINE 會員已啟用` : "LINE 會員已啟用",
+    body: "已綁定目前 LINE 帳號。電話與生日會在預約、付款等真正需要時再請你補充。",
+    highlight: ["目前狀態", "已綁定這個品牌"],
+    details: [["操作位置", "繼續留在 LINE 使用"]],
+    buttons: [
+      { label: "查看會員／套票", primary: true, action: { type: "postback", data: "action=membership", displayText: "查看會員／套票" } },
+      { label: "回到服務選單", action: { type: "postback", data: "action=home", displayText: "回到服務選單" } },
+    ],
+  });
 }
 
 export function lineAccountLinkedMessage(context: LineBranding, patientName?: string | null): LineMessage {
@@ -383,8 +399,11 @@ export async function replyTickets(replyToken: string, lineUserId: string | unde
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as unknown as RegistrationRow[];
   if (!rows.length) {
-    const { count } = await context.service.from("patients").select("id", { count: "exact", head: true }).eq("clinic_id", context.clinicId).eq("line_user_id", lineUserId).eq("active", true);
-    if (!count) return replyAccountLinkPrompt(replyToken, lineUserId, context);
+    const [{ count }, identity] = await Promise.all([
+      context.service.from("patients").select("id", { count: "exact", head: true }).eq("clinic_id", context.clinicId).eq("line_user_id", lineUserId).eq("active", true),
+      getLineCustomerIdentity(context.service, context.clinicId, lineUserId),
+    ]);
+    if (!count && !identity) return replyAccountLinkPrompt(replyToken, lineUserId, context);
     await replyMessages(replyToken, [brandedCard(context, {
       altText: `${context.clinicName}｜目前沒有可用票券`,
       badge: "我的票券",
@@ -423,7 +442,20 @@ export async function replyMemberships(replyToken: string, lineUserId: string | 
     .eq("active", true);
   if (patientError) throw new Error(patientError.message);
   const patientIds = (patients ?? []).map((patient) => String(patient.id));
-  if (!patientIds.length) return replyAccountLinkPrompt(replyToken, lineUserId, context);
+  if (!patientIds.length) {
+    const identity = await getLineCustomerIdentity(context.service, context.clinicId, lineUserId);
+    if (!identity) return replyAccountLinkPrompt(replyToken, lineUserId, context);
+    await replyMessages(replyToken, [brandedCard(context, {
+      altText: `${context.clinicName}｜LINE 會員已啟用`,
+      badge: "會員權益",
+      title: "LINE 會員已啟用",
+      body: "目前沒有使用中的套票；需要個人資料時，系統會在操作當下再請你補充。",
+      highlight: ["使用中方案", "0 組"],
+      details: [["LINE 身分", "已完成綁定"]],
+      buttons: [{ label: "查看可購買方案", primary: true, action: { type: "uri", uri: serviceUrl(context, "membership", { task: "1" }) } }],
+    })], context.lineAccessToken);
+    return;
+  }
   const { data, error } = await context.service
     .from("patient_memberships")
     .select("membership_code, status, credits_total, credits_remaining, expires_at, membership_plans(name)")

@@ -335,6 +335,27 @@ export async function deleteRichMenuAlias(aliasId: string, accessTokenOverride?:
   if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
 }
 
+export interface LineUserProfile {
+  userId: string;
+  displayName: string;
+  pictureUrl?: string;
+  statusMessage?: string;
+  language?: string;
+}
+
+/** 以品牌 Messaging API token 取得已加好友使用者的 LINE 公開個人資料。 */
+export async function getLineUserProfile(userId: string, accessTokenOverride?: string): Promise<LineUserProfile> {
+  const res = await fetch(`${LINE_API}/profile/${encodeURIComponent(userId)}`, {
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+  });
+  if (!res.ok) throw new Error(`LINE 使用者資料讀取失敗 (${res.status})`);
+  const data = (await res.json()) as Partial<LineUserProfile>;
+  if (typeof data.userId !== "string" || typeof data.displayName !== "string") {
+    throw new Error("LINE 使用者資料格式不正確");
+  }
+  return data as LineUserProfile;
+}
+
 /** 對單一使用者套用指定 Rich Menu；會員／員工選單不得改成全帳號預設。 */
 export async function linkRichMenuToUser(
   userId: string,

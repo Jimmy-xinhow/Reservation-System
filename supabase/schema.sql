@@ -9426,6 +9426,37 @@ create or replace function public.sync_subscription_freezes() returns integer la
 create or replace function public.issue_course_certificate_if_complete(p_clinic_id uuid,p_registration_id uuid) returns text language plpgsql security definer set search_path=public,extensions as $$ declare registration public.registrations%rowtype;required_count integer;completed_count integer;certificate text;begin select * into registration from public.registrations where id=p_registration_id and clinic_id=p_clinic_id and status in('confirmed','attended');if not found then return null;end if;select count(*)into required_count from public.course_units where clinic_id=p_clinic_id and event_id=registration.event_id and active;select count(*)into completed_count from public.course_unit_progress where clinic_id=p_clinic_id and event_id=registration.event_id and registration_id=p_registration_id;if required_count=0 or completed_count<required_count then return null;end if;insert into public.course_certificates(clinic_id,event_id,registration_id,patient_id)values(p_clinic_id,registration.event_id,p_registration_id,registration.patient_id)on conflict(registration_id)do nothing;select certificate_no into certificate from public.course_certificates where registration_id=p_registration_id;return certificate;end;$$;revoke all on function public.issue_course_certificate_if_complete(uuid,uuid) from public,anon,authenticated;grant execute on function public.issue_course_certificate_if_complete(uuid,uuid) to service_role;
 commit;
 
+-- Native LINE member identity. Canonical migration:
+-- supabase/migrations/202609090002_line_native_member_identity.sql
+begin;
+create table if not exists public.line_customer_identities (
+  clinic_id uuid not null references public.clinics(id) on delete restrict,
+  line_user_id text not null,
+  patient_id uuid references public.patients(id) on delete set null,
+  display_name text,
+  picture_url text,
+  profile_completed boolean not null default false,
+  active boolean not null default true,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (clinic_id, line_user_id),
+  constraint line_customer_identities_user_length check (length(line_user_id) between 1 and 160),
+  constraint line_customer_identities_name_length check (display_name is null or length(display_name) <= 100),
+  constraint line_customer_identities_picture_length check (picture_url is null or length(picture_url) <= 2048)
+);
+create index if not exists line_customer_identities_patient_idx
+  on public.line_customer_identities (clinic_id, patient_id) where patient_id is not null;
+drop trigger if exists trg_line_customer_identities_touch on public.line_customer_identities;
+create trigger trg_line_customer_identities_touch before update on public.line_customer_identities
+for each row execute function public.touch_updated_at();
+alter table public.line_customer_identities enable row level security;
+revoke all on table public.line_customer_identities from public, anon, authenticated;
+grant select, insert, update, delete on table public.line_customer_identities to service_role;
+
+commit;
+
 -- Visual membership cards and operator-recorded redemption channels.
 -- Canonical migration: supabase/migrations/202609070003_membership_card_and_redemption.sql
 begin;
@@ -9969,7 +10000,7 @@ $$;
 
 create or replace function public.complete_line_account_link(p_clinic_id uuid, p_nonce text, p_line_user_id text)
 returns table (patient_id uuid, patient_name text)
-language plpgsql security definer set search_path = public, pg_temp as $$
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
 declare
   v_nonce_hash text;
   v_link public.line_account_link_nonces%rowtype;
@@ -9980,7 +10011,7 @@ begin
     raise exception 'invalid account link request';
   end if;
   if length(p_nonce) > 256 or length(v_line_user_id) > 160 then raise exception 'account link value is too long'; end if;
-  v_nonce_hash := encode(digest(p_nonce, 'sha256'), 'hex');
+  v_nonce_hash := encode(extensions.digest(p_nonce, 'sha256'), 'hex');
   select * into v_link from public.line_account_link_nonces
   where clinic_id = p_clinic_id and nonce_hash = v_nonce_hash and used_at is null and expires_at > now() for update;
   if not found then raise exception 'account link nonce is invalid or expired'; end if;
@@ -9999,4 +10030,38 @@ revoke all on function public.claim_line_webhook_event(uuid, text, text) from pu
 grant execute on function public.claim_line_webhook_event(uuid, text, text) to service_role;
 revoke all on function public.complete_line_account_link(uuid, text, text) from public, anon, authenticated;
 grant execute on function public.complete_line_account_link(uuid, text, text) to service_role;
+commit;
+
+-- Final replay of native LINE identity recovery after the account-link tables exist.
+begin;
+create or replace function public.complete_line_account_link(p_clinic_id uuid, p_nonce text, p_line_user_id text)
+returns table (patient_id uuid, patient_name text)
+language plpgsql security definer set search_path = public, extensions, pg_temp as $$
+declare
+  v_nonce_hash text;
+  v_link public.line_account_link_nonces%rowtype;
+  v_line_user_id text := nullif(btrim(coalesce(p_line_user_id, '')), '');
+  v_patient public.patients%rowtype;
+begin
+  if p_clinic_id is null or nullif(btrim(coalesce(p_nonce, '')), '') is null or v_line_user_id is null then raise exception 'invalid account link request'; end if;
+  if length(p_nonce) > 256 or length(v_line_user_id) > 160 then raise exception 'account link value is too long'; end if;
+  perform pg_advisory_xact_lock(hashtext('line-identity:' || p_clinic_id::text || ':' || v_line_user_id));
+  v_nonce_hash := encode(extensions.digest(p_nonce, 'sha256'), 'hex');
+  select * into v_link from public.line_account_link_nonces
+   where clinic_id=p_clinic_id and nonce_hash=v_nonce_hash and used_at is null and expires_at>now() for update;
+  if not found then raise exception 'account link nonce is invalid or expired'; end if;
+  select * into v_patient from public.patients where id=v_link.patient_id and clinic_id=p_clinic_id and active for update;
+  if not found then raise exception 'account link patient is unavailable'; end if;
+  if v_patient.line_user_id is not null and v_patient.line_user_id<>v_line_user_id then raise exception 'patient is already linked to another LINE account'; end if;
+  update public.patients set line_user_id=v_line_user_id where id=v_patient.id and clinic_id=p_clinic_id;
+  insert into public.line_customer_identities (clinic_id,line_user_id,patient_id,display_name,profile_completed,active,last_seen_at)
+  values (p_clinic_id,v_line_user_id,v_patient.id,v_patient.name,true,true,now())
+  on conflict (clinic_id,line_user_id) do update set patient_id=excluded.patient_id,
+    display_name=coalesce(public.line_customer_identities.display_name,excluded.display_name),profile_completed=true,active=true,last_seen_at=now();
+  update public.line_account_link_nonces set used_at=now() where id=v_link.id;
+  return query select v_patient.id,v_patient.name;
+end;
+$$;
+revoke all on function public.complete_line_account_link(uuid,text,text) from public,anon,authenticated;
+grant execute on function public.complete_line_account_link(uuid,text,text) to service_role;
 commit;

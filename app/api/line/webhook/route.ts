@@ -11,6 +11,7 @@ import {
   handleLineSupportText,
   lineAccountLinkConfirmation,
   lineAccountLinkedMessage,
+  lineNativeMemberLinkedMessage,
   lineHomeMessage,
   replyBookingContinue,
   replyBookingDatePrompt,
@@ -23,6 +24,7 @@ import {
   startLineSupport,
   type LineCustomerJourneyContext,
 } from "@/lib/line-customer-journeys";
+import { ensureLineCustomerIdentity } from "@/lib/line-customer-identity";
 import { handleLineStaffCommand } from "@/lib/line-staff-journeys";
 import { claimLineWebhookEvent, finishLineWebhookEvent } from "@/lib/line-session";
 import { resetLineAudienceMenu, syncLineAudienceMenu } from "@/lib/line-audience-menu";
@@ -162,6 +164,11 @@ export async function POST(req: NextRequest) {
           if (error) throw new Error(error.message);
           await syncLineAudienceMenu(svc, clinicId, ev.source.userId, "member", lineAccessToken).catch(() => false);
           const linked = Array.isArray(data) ? data[0] : data;
+          await ensureLineCustomerIdentity(svc, {
+            clinicId,
+            lineUserId: ev.source.userId,
+            lineAccessToken,
+          });
           await replyMessages(ev.replyToken, [lineAccountLinkedMessage(journeyContext, linked?.patient_name as string | null | undefined)], lineAccessToken);
         }
       } else if (ev.type === "message" && ev.message?.type === "text") {
@@ -263,6 +270,15 @@ export async function POST(req: NextRequest) {
           await replyTickets(ev.replyToken, ev.source?.userId, journeyContext);
         } else if (action === "membership") {
           await replyMemberships(ev.replyToken, ev.source?.userId, journeyContext);
+        } else if (action === "bind_member") {
+          if (!ev.source?.userId) throw new Error("無法取得 LINE 身分");
+          const identity = await ensureLineCustomerIdentity(svc, {
+            clinicId,
+            lineUserId: ev.source.userId,
+            lineAccessToken,
+          });
+          await syncLineAudienceMenu(svc, clinicId, ev.source.userId, "member", lineAccessToken).catch(() => false);
+          await replyMessages(ev.replyToken, [lineNativeMemberLinkedMessage(journeyContext, identity.displayName)], lineAccessToken);
         } else if (action === "support") {
           await startLineSupport(ev.replyToken, ev.source?.userId, journeyContext);
         } else if (action === "support_end") {
@@ -278,11 +294,14 @@ export async function POST(req: NextRequest) {
           await replyMessages(ev.replyToken, [lineAccountLinkConfirmation(journeyContext)], lineAccessToken);
         } else if (action === "unlink_confirm") {
           if (!ev.source?.userId) throw new Error("無法取得 LINE 身分");
-          const [{ error: patientError }, { error: registrationError }] = await Promise.all([
+          const [{ error: patientError }, { error: registrationError }, { error: identityError }] = await Promise.all([
             svc.from("patients").update({ line_user_id: null }).eq("clinic_id", clinicId).eq("line_user_id", ev.source.userId),
             svc.from("registrations").update({ line_user_id: null }).eq("clinic_id", clinicId).eq("line_user_id", ev.source.userId),
+            svc.from("line_customer_identities").update({ active: false, patient_id: null }).eq("clinic_id", clinicId).eq("line_user_id", ev.source.userId),
           ]);
-          if (patientError || registrationError) throw new Error(patientError?.message ?? registrationError?.message ?? "解除綁定失敗");
+          if (patientError || registrationError || identityError) {
+            throw new Error(patientError?.message ?? registrationError?.message ?? identityError?.message ?? "解除綁定失敗");
+          }
           await resetLineAudienceMenu(ev.source.userId, lineAccessToken).catch(() => undefined);
           await safeReply(ev.replyToken, "已解除這個品牌的會員綁定，其他品牌不受影響。", lineAccessToken);
         } else if (action === "msg") {

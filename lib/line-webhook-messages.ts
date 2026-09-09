@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getClinicSettings } from "@/lib/http";
 import { issueLineAccountLinkToken, replyMessages, type LineMessage } from "@/lib/line";
+import { getLineCustomerIdentity } from "@/lib/line-customer-identity";
 import { buildLineMessage, type MsgData, type MsgKind } from "@/lib/lineMessage";
 import { safeReply } from "@/lib/line-webhook-reply";
 import { getPatientQueueToday, getQueueForDate, taipeiToday } from "@/lib/queue";
@@ -194,30 +195,43 @@ export async function replyMyAppointments(
   const ids = (patients ?? []).map((p) => p.id);
   if (ids.length === 0) {
     if (navigation?.clinicSlug) {
-      const linkToken = await issueLineAccountLinkToken(lineUserId, lineAccessToken);
+      const identity = await getLineCustomerIdentity(svc, clinicId, lineUserId);
+      const theme = lineBrandTheme(navigation.brandTemplate, navigation.brandPrimaryColor, navigation.brandAccentColor);
+      if (identity) {
+        await replyMessages(replyToken, [buildLineExperienceCard({
+          altText: `${navigation.clinicName ?? "品牌"}｜目前沒有未來預約`,
+          context: navigation.clinicName ?? "品牌官方帳號",
+          badge: "我的預約",
+          title: "目前沒有即將到來的預約",
+          body: "LINE 會員身分已綁定；完成預約後，日期與服務會顯示在這裡。",
+          accent: theme.primary,
+          softAccent: theme.soft,
+          markerColor: theme.accent,
+          highlight: ["未來預約", "0 筆"],
+          details: [["LINE 身分", "已完成綁定"]],
+          buttons: [{ label: "立即選擇預約服務", primary: true, action: { type: "postback", data: "action=booking", displayText: "立即預約" } }],
+        })], lineAccessToken);
+        return;
+      }
+      const linkToken = await issueLineAccountLinkToken(lineUserId, lineAccessToken).catch(() => null);
       const linkUrl = new URL("/line/account-link", navigation.baseUrl);
       linkUrl.searchParams.set("clinic_slug", navigation.clinicSlug);
-      linkUrl.searchParams.set("linkToken", linkToken);
+      if (linkToken) linkUrl.searchParams.set("linkToken", linkToken);
       linkUrl.searchParams.set("mode", "existing");
-      const firstTimeUrl = navigation.liffId ? new URL(`https://liff.line.me/${navigation.liffId}`) : null;
-      firstTimeUrl?.searchParams.set("clinic_slug", navigation.clinicSlug);
-      firstTimeUrl?.searchParams.set("view", "membership");
-      firstTimeUrl?.searchParams.set("task", "1");
-      const theme = lineBrandTheme(navigation.brandTemplate, navigation.brandPrimaryColor, navigation.brandAccentColor);
       await replyMessages(replyToken, [buildLineExperienceCard({
         altText: `${navigation.clinicName ?? "品牌"}｜綁定 LINE 會員資料`,
         context: navigation.clinicName ?? "品牌官方帳號",
         badge: "會員服務",
-        title: "第一次使用，還是已有會員？",
-        body: "第一次使用會建立品牌會員；已有資料則比對後連回原紀錄。",
+        title: "啟用 LINE 會員",
+        body: "直接使用目前這個 LINE 帳號完成綁定，不需要離開聊天室。",
         accent: theme.primary,
         softAccent: theme.soft,
         markerColor: theme.accent,
-        highlight: ["第一次使用", "建立會員並綁定 LINE"],
-        details: [["已有會員", "比對後連回原紀錄"], ["資料範圍", "只處理目前品牌"]],
+        highlight: ["綁定方式", "LINE 內一鍵完成"],
+        details: [["個人資料", "需要預約或付款時再補"]],
         buttons: [
-          ...(firstTimeUrl ? [{ label: "第一次使用・建立會員", primary: true, action: { type: "uri" as const, uri: firstTimeUrl.toString() } }] : []),
-          { label: "已有會員・連回資料", action: { type: "uri", uri: linkUrl.toString() } },
+          { label: "直接綁定目前 LINE", primary: true, action: { type: "postback", data: "action=bind_member", displayText: "啟用 LINE 會員" } },
+          ...(linkToken ? [{ label: "找回品牌既有會員", action: { type: "uri" as const, uri: linkUrl.toString() } }] : []),
         ],
       })], lineAccessToken);
     } else {

@@ -4,6 +4,7 @@ import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolvePublicClinicId } from "@/lib/public-brand";
+import { saveLineCustomerIdentity } from "@/lib/line-customer-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,9 +45,11 @@ export async function POST(req: NextRequest) {
 
     // 驗證 LINE 身分(信任前先驗)，且 aud 必須符合目前品牌渠道。
     let lineUserId: string;
+    let lineDisplayName: string | null = null;
     try {
       const profile = await verifyClinicLiffIdToken(svc, clinicId, body.idToken);
       lineUserId = profile.sub;
+      lineDisplayName = profile.name?.trim() || null;
     } catch {
       return fail("LINE 身分驗證失敗，請重新開啟預約頁。", 401);
     }
@@ -65,6 +68,13 @@ export async function POST(req: NextRequest) {
     if (error) return fail(translatePatientError(error.message), 409);
     const row = Array.isArray(data) ? data[0] : data;
     if (!row?.patient_id) return fail("建立顧客失敗", 500);
+    await saveLineCustomerIdentity(svc, {
+      clinicId,
+      lineUserId,
+      patientId: String(row.patient_id),
+      displayName: lineDisplayName ?? name,
+      profileCompleted: true,
+    });
     return ok({ patient_id: row.patient_id, reused: row.reused === true });
   } catch (e) {
     return fail(e instanceof Error ? e.message : "建立顧客失敗", 500);

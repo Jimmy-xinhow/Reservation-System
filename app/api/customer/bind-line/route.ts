@@ -4,6 +4,7 @@ import { fail, getClinicSettings, ok } from "@/lib/http";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { verifyClinicLiffIdToken } from "@/lib/line-channel";
+import { saveLineCustomerIdentity } from "@/lib/line-customer-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,8 +39,11 @@ export async function POST(request: NextRequest) {
     if (!settings.memberships_enabled) return fail("此品牌目前未啟用會員與套票", 403);
 
     let lineUserId: string;
+    let lineDisplayName: string | null = null;
     try {
-      lineUserId = (await verifyClinicLiffIdToken(service, clinicId, idToken)).sub;
+      const profile = await verifyClinicLiffIdToken(service, clinicId, idToken);
+      lineUserId = profile.sub;
+      lineDisplayName = profile.name?.trim() || null;
     } catch {
       return fail("LINE 身分驗證失敗，請從官方帳號重新開啟。", 401);
     }
@@ -54,6 +58,13 @@ export async function POST(request: NextRequest) {
     if (error) return fail(bindLineError(error.message), 409);
     const patient = Array.isArray(data) ? data[0] : data;
     if (!patient?.patient_id) return fail("會員綁定失敗，請稍後再試", 500);
+    await saveLineCustomerIdentity(service, {
+      clinicId,
+      lineUserId,
+      patientId: String(patient.patient_id),
+      displayName: lineDisplayName ?? name,
+      profileCompleted: true,
+    });
     return ok({ patient_id: patient.patient_id, reused: patient.reused === true });
   } catch (error) {
     return fail(error instanceof Error ? error.message : "會員綁定失敗", 500);

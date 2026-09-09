@@ -9,6 +9,7 @@ import { encryptRegistrationToken } from "@/lib/registration-credentials";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { createBrowserBookingToken } from "@/lib/browser-booking";
+import { saveLineCustomerIdentity } from "@/lib/line-customer-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -140,6 +141,15 @@ export async function POST(req: NextRequest) {
     if (patientError) return fail(patientError.message, 409);
     const patientRow = Array.isArray(patientData) ? patientData[0] : patientData;
     if (!patientRow?.patient_id) return fail("顧客身分建立失敗", 500);
+    if (lineUserId) {
+      await saveLineCustomerIdentity(svc, {
+        clinicId: event.clinic_id,
+        lineUserId,
+        patientId: String(patientRow.patient_id),
+        displayName: name,
+        profileCompleted: true,
+      });
+    }
     const { data, error } = await svc.rpc("register_for_event_with_terms", {
       p_clinic_id: event.clinic_id,
       p_event_id: body.event_id,
