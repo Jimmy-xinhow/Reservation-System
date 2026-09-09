@@ -335,6 +335,7 @@ function accountLinkUrl(context: LineCustomerJourneyContext, linkToken: string):
   const url = new URL("/line/account-link", context.baseUrl);
   if (context.clinicSlug) url.searchParams.set("clinic_slug", context.clinicSlug);
   url.searchParams.set("linkToken", linkToken);
+  url.searchParams.set("mode", "existing");
   return url.toString();
 }
 
@@ -342,12 +343,15 @@ async function replyAccountLinkPrompt(replyToken: string, lineUserId: string, co
   const linkToken = await issueLineAccountLinkToken(lineUserId, context.lineAccessToken);
   await replyMessages(replyToken, [brandedCard(context, {
     altText: `${context.clinicName}｜綁定 LINE 會員資料`,
-    badge: "會員身分驗證",
-    title: "把既有會員資料連回 LINE",
-    body: "只需驗證一次；完成後即可直接查詢預約、電子票券與會員權益。",
-    highlight: ["驗證資料", "姓名・電話・生日"],
-    details: [["資料範圍", "只綁定目前品牌"], ["連結效期", "一次性使用・10 分鐘"]],
-    buttons: [{ label: "開始安全綁定", primary: true, action: { type: "uri", uri: accountLinkUrl(context, linkToken) } }],
+    badge: "會員服務",
+    title: "第一次使用，還是已有會員？",
+    body: "請依你的情況選擇；第一次使用會建立品牌會員，已有資料則安全連回原紀錄。",
+    highlight: ["第一次使用", "建立會員並綁定 LINE"],
+    details: [["已有會員", "比對後連回原紀錄"], ["資料範圍", "只處理目前品牌"]],
+    buttons: [
+      ...(context.liffId ? [{ label: "第一次使用・建立會員", primary: true, action: { type: "uri" as const, uri: serviceUrl(context, "membership", { task: "1" }) } }] : []),
+      { label: "已有會員・連回資料", action: { type: "uri", uri: accountLinkUrl(context, linkToken) } },
+    ],
   })], context.lineAccessToken);
 }
 

@@ -698,7 +698,7 @@ invariant(
     customerBindLineApi.includes('rpc("create_or_get_public_patient"') &&
     customerBindLineApi.includes("p_line_user_id: lineUserId") &&
     customerEntryView.includes('scopedPath("/api/customer/bind-line")') &&
-    customerEntryView.includes("綁定並查看會員資料"),
+    customerEntryView.includes("建立會員並綁定 LINE"),
 );
 invariant(
   "Rich Menu presets are module-aware and accessible",
@@ -1982,6 +1982,18 @@ invariant(
     read("lib/public-origin.ts").includes('throw new Error("正式環境缺少可用的公開 APP_URL")') &&
     read("app/api/line/account-link/complete/route.ts").includes("publicRequestOrigin(request.nextUrl.origin)") &&
     !read("app/api/line/account-link/complete/route.ts").includes('new URL("/line/account-link", request.url)'),
+);
+invariant(
+  "LINE member onboarding separates first-time creation from existing-record recovery",
+  read("lib/line-customer-journeys.ts").includes("第一次使用・建立會員") &&
+    read("lib/line-customer-journeys.ts").includes('serviceUrl(context, "membership", { task: "1" })') &&
+    read("lib/line-customer-journeys.ts").includes("已有會員・連回資料") &&
+    read("lib/line-webhook-messages.ts").includes("firstTimeUrl") &&
+    read("app/line/account-link/page.tsx").includes("這次是建立，還是找回？") &&
+    read("app/line/account-link/page.tsx").includes('params.mode === "existing"') &&
+    read("app/api/line/account-link/complete/route.ts").includes('mode !== "existing"') &&
+    customerBindLineApi.includes('rpc("create_or_get_public_patient"') &&
+    customerEntryView.includes("建立會員並綁定 LINE"),
 );
 invariant(
   "LINE native customer journeys use the brand palette and designed Flex hierarchy",

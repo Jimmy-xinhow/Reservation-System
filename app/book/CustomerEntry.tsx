@@ -292,15 +292,15 @@ function PrivatePortalView({ view, idToken }: { view: "tickets" | "membership"; 
   if (error && !data) return <Message tone="error">{error}</Message>;
   if (!data?.patient) return (
     <section className="space-y-4">
-      <div><p className="eyebrow">LINE 會員綁定</p><h1 className="mt-1 text-xl font-bold text-slate-900">綁定我的會員資料</h1><p className="mt-2 text-sm leading-6 text-slate-500">輸入品牌留存的姓名、電話與生日；完成後可直接在 LINE 查看套票、票券與會員權益。</p></div>
+      <div><p className="eyebrow">第一次使用</p><h1 className="mt-1 text-xl font-bold text-slate-900">建立品牌會員並綁定 LINE</h1><p className="mt-2 text-sm leading-6 text-slate-500">請建立姓名、電話與生日。若品牌已有完全相同且尚未綁定的資料，系統會安全連回原紀錄，不會重複建立。</p></div>
       <form onSubmit={bindMember} className="card grid gap-4 p-5 sm:grid-cols-2">
         <label className="text-sm sm:col-span-2"><span className="label">姓名</span><input className="input" value={bindingIdentity.name} onChange={(event) => setBindingIdentity((current) => ({ ...current, name: event.target.value }))} autoComplete="name" required /></label>
         <label className="text-sm"><span className="label">電話</span><input className="input" value={bindingIdentity.phone} onChange={(event) => setBindingIdentity((current) => ({ ...current, phone: event.target.value }))} inputMode="tel" autoComplete="tel" required /></label>
         <label className="text-sm"><span className="label">出生年月日</span><input type="date" className="input" value={bindingIdentity.birthday} onChange={(event) => setBindingIdentity((current) => ({ ...current, birthday: event.target.value }))} required /></label>
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 sm:col-span-2">{error}</p>}
-        <button className="btn btn-primary sm:col-span-2" disabled={binding}>{binding ? "綁定中…" : "綁定並查看會員資料"}</button>
+        <button className="btn btn-primary sm:col-span-2" disabled={binding}>{binding ? "建立並綁定中…" : "建立會員並綁定 LINE"}</button>
       </form>
-      <p className="text-xs leading-5 text-slate-500">LINE 身分只會綁定目前這個品牌；資料不會與其他品牌共用。</p>
+      <p className="text-xs leading-5 text-slate-500">系統已驗證目前的 LINE 身分；會員資料只會建立在這個品牌，不會與其他品牌共用。</p>
     </section>
   );
   if (error) return <Message tone="error">{error}</Message>;

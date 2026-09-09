@@ -8,11 +8,12 @@ import { publicRequestOrigin } from "@/lib/public-origin";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function retryUrl(request: NextRequest, clinicSlug: string, linkToken: string): URL {
+function retryUrl(request: NextRequest, clinicSlug: string, linkToken: string, error = "identity"): URL {
   const url = new URL("/line/account-link", publicRequestOrigin(request.nextUrl.origin));
   url.searchParams.set("clinic_slug", clinicSlug);
   url.searchParams.set("linkToken", linkToken);
-  url.searchParams.set("error", "identity");
+  url.searchParams.set("mode", "existing");
+  url.searchParams.set("error", error);
   return url;
 }
 
@@ -21,12 +22,13 @@ export async function POST(request: NextRequest) {
   const form = await request.formData().catch(() => null);
   const clinicSlug = String(form?.get("clinic_slug") ?? "").trim();
   const linkToken = String(form?.get("link_token") ?? "").trim();
+  const mode = String(form?.get("mode") ?? "").trim();
   if (!rate.allowed) return Response.redirect(retryUrl(request, clinicSlug, linkToken), 303);
 
   const name = String(form?.get("name") ?? "").trim();
   const phone = String(form?.get("phone") ?? "").trim();
   const birthday = String(form?.get("birthday") ?? "").trim();
-  if (!clinicSlug || clinicSlug.length > 100 || !linkToken || linkToken.length > 2048 || /\s/.test(linkToken)) {
+  if (mode !== "existing" || !clinicSlug || clinicSlug.length > 100 || !linkToken || linkToken.length > 2048 || /\s/.test(linkToken)) {
     return new Response("invalid account link request", { status: 400 });
   }
   if (!name || name.length > 100 || !phone || phone.length > 40 || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
@@ -48,7 +50,7 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .maybeSingle();
   if (patientError) return new Response("account link unavailable", { status: 503 });
-  if (!patient?.id) return Response.redirect(retryUrl(request, clinicSlug, linkToken), 303);
+  if (!patient?.id) return Response.redirect(retryUrl(request, clinicSlug, linkToken, "not_found"), 303);
 
   const nonce = randomBytes(32).toString("base64url");
   const nonceHash = createHash("sha256").update(nonce).digest("hex");

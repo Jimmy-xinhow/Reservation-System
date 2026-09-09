@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
 
 function bindLineError(message: string): string {
   if (message.includes("bound to another LINE")) return "這筆顧客資料已綁定其他 LINE 帳號，請洽品牌人員協助。";
-  if (message.includes("phone already")) return "電話已登記其他顧客，請確認姓名與生日或洽品牌人員。";
+  if (message.includes("phone already")) return "此電話已有不同的會員資料；請改用「已有會員・連回資料」，或洽品牌人員確認。";
   if (message.includes("patient limit")) return "此電話可綁定的人數已達上限，請洽品牌人員。";
-  return "姓名、電話或生日與顧客資料不符，請確認後再試。";
+  return "目前無法建立或綁定會員，請稍後再試；若品牌已有會員資料，請改用既有會員連結流程。";
 }

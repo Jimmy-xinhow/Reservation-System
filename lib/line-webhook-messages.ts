@@ -177,7 +177,7 @@ export async function replyMyAppointments(
   svc: SupabaseClient,
   clinicId: string,
   lineAccessToken: string,
-  navigation?: { baseUrl: string; clinicSlug: string | null } & Partial<LineMessageBranding>,
+  navigation?: { baseUrl: string; clinicSlug: string | null; liffId?: string | null } & Partial<LineMessageBranding>,
 ): Promise<void> {
   if (!lineUserId) {
     await safeReply(replyToken, "無法取得您的 LINE 身分，請稍後再試。", lineAccessToken);
@@ -198,19 +198,27 @@ export async function replyMyAppointments(
       const linkUrl = new URL("/line/account-link", navigation.baseUrl);
       linkUrl.searchParams.set("clinic_slug", navigation.clinicSlug);
       linkUrl.searchParams.set("linkToken", linkToken);
+      linkUrl.searchParams.set("mode", "existing");
+      const firstTimeUrl = navigation.liffId ? new URL(`https://liff.line.me/${navigation.liffId}`) : null;
+      firstTimeUrl?.searchParams.set("clinic_slug", navigation.clinicSlug);
+      firstTimeUrl?.searchParams.set("view", "membership");
+      firstTimeUrl?.searchParams.set("task", "1");
       const theme = lineBrandTheme(navigation.brandTemplate, navigation.brandPrimaryColor, navigation.brandAccentColor);
       await replyMessages(replyToken, [buildLineExperienceCard({
         altText: `${navigation.clinicName ?? "品牌"}｜綁定 LINE 會員資料`,
         context: navigation.clinicName ?? "品牌官方帳號",
-        badge: "會員身分驗證",
-        title: "先連結你的會員資料",
-        body: "驗證一次後，就能直接在 LINE 查詢預約、電子票券與會員權益。",
+        badge: "會員服務",
+        title: "第一次使用，還是已有會員？",
+        body: "第一次使用會建立品牌會員；已有資料則比對後連回原紀錄。",
         accent: theme.primary,
         softAccent: theme.soft,
         markerColor: theme.accent,
-        highlight: ["驗證方式", "姓名・電話・生日"],
-        details: [["資料範圍", "只綁定目前品牌"], ["安全機制", "一次性連結・10 分鐘失效"]],
-        buttons: [{ label: "開始安全綁定", primary: true, action: { type: "uri", uri: linkUrl.toString() } }],
+        highlight: ["第一次使用", "建立會員並綁定 LINE"],
+        details: [["已有會員", "比對後連回原紀錄"], ["資料範圍", "只處理目前品牌"]],
+        buttons: [
+          ...(firstTimeUrl ? [{ label: "第一次使用・建立會員", primary: true, action: { type: "uri" as const, uri: firstTimeUrl.toString() } }] : []),
+          { label: "已有會員・連回資料", action: { type: "uri", uri: linkUrl.toString() } },
+        ],
       })], lineAccessToken);
     } else {
       await safeReply(replyToken, "查無您名下的預約。若為初次使用，請先完成預約。", lineAccessToken);
