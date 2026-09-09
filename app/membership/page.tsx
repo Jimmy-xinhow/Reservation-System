@@ -121,7 +121,7 @@ export default function MembershipPage() {
           // 儲存空間不可用時，仍在目前畫面清除失效身分。
         }
       }
-      setError(loadError instanceof Error ? loadError.message : "會員資料查詢失敗");
+      setError(browserToken ? "為保護會員資料，請重新驗證身分。" : loadError instanceof Error ? loadError.message : "會員資料查詢失敗");
     } finally {
       setLoading(false);
     }
