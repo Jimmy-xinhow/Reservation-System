@@ -3,12 +3,13 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
+import { publicRequestOrigin } from "@/lib/public-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function retryUrl(request: NextRequest, clinicSlug: string, linkToken: string): URL {
-  const url = new URL("/line/account-link", request.url);
+  const url = new URL("/line/account-link", publicRequestOrigin(request.nextUrl.origin));
   url.searchParams.set("clinic_slug", clinicSlug);
   url.searchParams.set("linkToken", linkToken);
   url.searchParams.set("error", "identity");

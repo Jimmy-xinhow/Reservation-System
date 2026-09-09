@@ -5,6 +5,7 @@ import { buildLineMessage, type MsgData, type MsgKind } from "@/lib/lineMessage"
 import { safeReply } from "@/lib/line-webhook-reply";
 import { getPatientQueueToday, getQueueForDate, taipeiToday } from "@/lib/queue";
 import { formatDateSession, formatTime } from "@/lib/slots";
+import { buildLineExperienceCard, lineBrandTheme, type LineFlexButton } from "@/lib/line-ui-templates";
 
 // ── 訊息樣板 ────────────────────────────────────────────────
 function liffUrl(liffId: string | null, clinicSlug?: string | null): string | null {
@@ -25,85 +26,65 @@ export interface MenuConfig {
   linkUrl: string | null;
 }
 
-// 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
-function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig): LineMessage {
-  const c = cfg ?? { title: null, booking: true, query: true, progress: false, info: true, linkLabel: null, linkUrl: null };
-  const buttons: LineMessage[] = [];
-  if (c.booking) {
-    buttons.push({
-      type: "button",
-      style: "primary",
-      color: "#2563eb",
-      height: "sm",
-      action: { type: "postback", label: "立即預約", data: "action=booking", displayText: "立即預約" },
-    });
-  }
-  if (c.query) {
-    buttons.push({
-      type: "button",
-      style: "secondary",
-      height: "sm",
-      action: { type: "postback", label: "查詢我的預約", data: "action=my", displayText: "查詢我的預約" },
-    });
-  }
-  if (c.progress) {
-    buttons.push({
-      type: "button",
-      style: "secondary",
-      height: "sm",
-      action: { type: "postback", label: "服務進度", data: "action=progress", displayText: "服務進度" },
-    });
-  }
-  if (c.info) {
-    buttons.push({
-      type: "button",
-      style: "link",
-      height: "sm",
-      action: { type: "postback", label: "品牌資訊", data: "action=brand", displayText: "品牌資訊" },
-    });
-  }
-  if (c.linkLabel && c.linkUrl) {
-    buttons.push({
-      type: "button",
-      style: "link",
-      height: "sm",
-      action: { type: "uri", label: c.linkLabel, uri: c.linkUrl },
-    });
-  }
-  return {
-    type: "flex",
-    altText: title,
-    contents: {
-      type: "bubble",
-      body: {
-        type: "box",
-        layout: "vertical",
-        spacing: "md",
-        contents: [
-          { type: "text", text: title, weight: "bold", size: "lg", color: "#0d9488", wrap: true },
-          { type: "text", text: body, size: "sm", color: "#555555", wrap: true },
-        ],
-      },
-      footer: { type: "box", layout: "vertical", spacing: "sm", contents: buttons },
-    },
-  };
+interface LineMessageBranding {
+  clinicName: string;
+  brandTemplate: string | null;
+  brandPrimaryColor: string | null;
+  brandAccentColor: string | null;
 }
 
-export function welcomeMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+// 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
+function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig, branding?: LineMessageBranding): LineMessage {
+  void baseUrl;
+  const c = cfg ?? { title: null, booking: true, query: true, progress: false, info: true, linkLabel: null, linkUrl: null };
+  const theme = lineBrandTheme(branding?.brandTemplate, branding?.brandPrimaryColor, branding?.brandAccentColor);
+  const buttons: LineFlexButton[] = [];
+  if (c.booking) {
+    buttons.push({ label: "立即預約", primary: true, action: { type: "postback", data: "action=booking", displayText: "立即預約" } });
+  }
+  if (c.query) {
+    buttons.push({ label: "查詢我的預約", action: { type: "postback", data: "action=my", displayText: "查詢我的預約" } });
+  }
+  if (c.progress) {
+    buttons.push({ label: "服務進度", action: { type: "postback", data: "action=progress", displayText: "服務進度" } });
+  }
+  if (c.info) {
+    buttons.push({ label: "品牌資訊", action: { type: "postback", data: "action=brand", displayText: "品牌資訊" } });
+  }
+  if (c.linkLabel && c.linkUrl) {
+    buttons.push({ label: c.linkLabel, action: { type: "uri", uri: c.linkUrl } });
+  }
+  return buildLineExperienceCard({
+    altText: title,
+    context: branding?.clinicName ?? title,
+    badge: "官方服務台",
+    title,
+    body,
+    accent: theme.primary,
+    softAccent: theme.soft,
+    markerColor: theme.accent,
+    highlight: ["快速入口", "預約・查詢・品牌服務"],
+    details: [["使用方式", "直接點選下方需要辦理的事項"]],
+    buttons: buttons.slice(0, 5),
+  });
+}
+
+export function welcomeMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台", branding?: LineMessageBranding): LineMessage {
   void liffId;
   void clinicSlug;
   return menuBubble(
-    cfg?.title || `歡迎加入${clinicName} 🌿`,
+    cfg?.title || `歡迎加入 ${clinicName}`,
     custom || "您可以在這裡線上預約、查詢或取消預約。請點下方按鈕開始。",
     baseUrl,
     cfg,
+    branding,
   );
 }
 
-export function menuMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+export function menuMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台", branding?: LineMessageBranding): LineMessage {
   void liffId;
   void clinicSlug;
-  return menuBubble(cfg?.title || clinicName, custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg);
+  return menuBubble(cfg?.title || clinicName, custom || "請選擇目前想辦理的服務。", baseUrl, cfg, branding);
 }
 
 export function bookingPrompt(baseUrl: string, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
@@ -196,7 +177,7 @@ export async function replyMyAppointments(
   svc: SupabaseClient,
   clinicId: string,
   lineAccessToken: string,
-  navigation?: { baseUrl: string; clinicSlug: string | null },
+  navigation?: { baseUrl: string; clinicSlug: string | null } & Partial<LineMessageBranding>,
 ): Promise<void> {
   if (!lineUserId) {
     await safeReply(replyToken, "無法取得您的 LINE 身分，請稍後再試。", lineAccessToken);
@@ -217,7 +198,20 @@ export async function replyMyAppointments(
       const linkUrl = new URL("/line/account-link", navigation.baseUrl);
       linkUrl.searchParams.set("clinic_slug", navigation.clinicSlug);
       linkUrl.searchParams.set("linkToken", linkToken);
-      await replyMessages(replyToken, [{ type: "template", altText: "綁定 LINE 會員資料", template: { type: "buttons", title: "尚未綁定會員資料", text: "完成一次安全驗證後，即可直接查詢既有預約、票券與會員權益。", actions: [{ type: "uri", label: "開始安全綁定", uri: linkUrl.toString() }] } }], lineAccessToken);
+      const theme = lineBrandTheme(navigation.brandTemplate, navigation.brandPrimaryColor, navigation.brandAccentColor);
+      await replyMessages(replyToken, [buildLineExperienceCard({
+        altText: `${navigation.clinicName ?? "品牌"}｜綁定 LINE 會員資料`,
+        context: navigation.clinicName ?? "品牌官方帳號",
+        badge: "會員身分驗證",
+        title: "先連結你的會員資料",
+        body: "驗證一次後，就能直接在 LINE 查詢預約、電子票券與會員權益。",
+        accent: theme.primary,
+        softAccent: theme.soft,
+        markerColor: theme.accent,
+        highlight: ["驗證方式", "姓名・電話・生日"],
+        details: [["資料範圍", "只綁定目前品牌"], ["安全機制", "一次性連結・10 分鐘失效"]],
+        buttons: [{ label: "開始安全綁定", primary: true, action: { type: "uri", uri: linkUrl.toString() } }],
+      })], lineAccessToken);
     } else {
       await safeReply(replyToken, "查無您名下的預約。若為初次使用，請先完成預約。", lineAccessToken);
     }
@@ -238,21 +232,40 @@ export async function replyMyAppointments(
 
   const rows = (data ?? []) as unknown as ApptRow[];
   if (rows.length === 0) {
-    await safeReply(replyToken, "您目前沒有未來的預約。", lineAccessToken);
+    if (navigation) {
+      const theme = lineBrandTheme(navigation.brandTemplate, navigation.brandPrimaryColor, navigation.brandAccentColor);
+      await replyMessages(replyToken, [buildLineExperienceCard({
+        altText: `${navigation.clinicName ?? "品牌"}｜目前沒有未來預約`,
+        context: navigation.clinicName ?? "品牌官方帳號",
+        badge: "我的預約",
+        title: "目前沒有即將到來的預約",
+        body: "完成預約後，日期、時間、服務與管理入口會集中顯示在這裡。",
+        accent: theme.primary,
+        softAccent: theme.soft,
+        markerColor: theme.accent,
+        highlight: ["未來預約", "0 筆"],
+        details: [["下一步", "選擇服務並查看可用時段"]],
+        buttons: [{ label: "立即選擇預約服務", primary: true, action: { type: "postback", data: "action=booking", displayText: "立即預約" } }],
+      })], lineAccessToken);
+    } else {
+      await safeReply(replyToken, "您目前沒有未來的預約。", lineAccessToken);
+    }
     return;
   }
+
+  const theme = lineBrandTheme(navigation?.brandTemplate, navigation?.brandPrimaryColor, navigation?.brandAccentColor);
 
   // 每筆一個 bubble:標題表頭 + 主視覺(日期/號碼)+ 分隔線 + 資訊列 + 取消
   const bubbles = rows.map((r) => {
     // 主視覺:診次(日期)與號碼/時間分開呈現
     const hero: LineMessage[] = [
-      { type: "text", text: formatDateSession(r.start_at), size: "sm", color: "#0d9488", align: "center", weight: "bold", wrap: true },
+      { type: "text", text: formatDateSession(r.start_at), size: "sm", color: theme.primary, align: "center", weight: "bold", wrap: true },
     ];
     if (mode === "number") {
       hero.push({
         type: "box",
         layout: "vertical",
-        backgroundColor: "#0d9488",
+        backgroundColor: theme.primary,
         cornerRadius: "lg",
         paddingAll: "md",
         margin: "md",
@@ -279,10 +292,12 @@ export async function replyMyAppointments(
       header: {
         type: "box",
         layout: "vertical",
-        backgroundColor: "#0d9488",
+        backgroundColor: theme.primary,
         paddingAll: "sm",
         contents: [
-          { type: "text", text: "我的預約", size: "md", weight: "bold", color: "#ffffff", align: "center" },
+          { type: "box", layout: "vertical", width: "36px", height: "3px", backgroundColor: theme.accent, contents: [{ type: "filler" }] },
+          { type: "text", text: navigation?.clinicName ?? "我的預約", size: "xs", weight: "bold", color: "#ffffff", margin: "md", wrap: true },
+          { type: "text", text: "我的預約", size: "lg", weight: "bold", color: "#ffffff", margin: "sm" },
         ],
       },
       body: {
@@ -307,12 +322,12 @@ export async function replyMyAppointments(
           {
             type: "box",
             layout: "vertical",
-            backgroundColor: "#f0fdfa",
+            backgroundColor: theme.soft,
             cornerRadius: "md",
             paddingAll: "sm",
             margin: "lg",
             contents: [
-              { type: "text", text: "✓ 預約成功", size: "xs", weight: "bold", align: "center", color: "#0d9488" },
+              { type: "text", text: "預約已確認", size: "xs", weight: "bold", align: "center", color: theme.primary },
             ],
           },
         ],
@@ -326,7 +341,7 @@ export async function replyMyAppointments(
           ...(navigation ? [{
             type: "button",
             style: "primary",
-            color: "#126248",
+            color: theme.primary,
             height: "sm",
             action: {
               type: "uri",

@@ -1976,6 +1976,33 @@ invariant(
     read("app/api/line/webhook/route.ts").includes('ev.type === "accountLink"'),
 );
 invariant(
+  "LINE account-link retries never redirect customers to a production loopback address",
+  read("lib/public-origin.ts").includes("RAILWAY_PUBLIC_DOMAIN") &&
+    read("lib/public-origin.ts").includes("LOOPBACK_HOSTS") &&
+    read("lib/public-origin.ts").includes('throw new Error("正式環境缺少可用的公開 APP_URL")') &&
+    read("app/api/line/account-link/complete/route.ts").includes("publicRequestOrigin(request.nextUrl.origin)") &&
+    !read("app/api/line/account-link/complete/route.ts").includes('new URL("/line/account-link", request.url)'),
+);
+invariant(
+  "LINE native customer journeys use the brand palette and designed Flex hierarchy",
+  read("lib/line-ui-templates.ts").includes("export function lineBrandTheme") &&
+    read("lib/line-ui-templates.ts").includes("export function buildLineExperienceCard") &&
+    read("lib/line-customer-journeys.ts").includes("brandedCard(context") &&
+    read("lib/line-customer-journeys.ts").includes("lineAccountLinkedMessage") &&
+    read("app/api/line/webhook/route.ts").includes("brand_page_template, brand_primary_color, brand_accent_color") &&
+    read("app/api/line/webhook/route.ts").includes("lineAccountLinkedMessage(journeyContext") &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-message-card-mark"),
+);
+invariant(
+  "LINE staff journeys share the branded hierarchy and actionable postbacks",
+  read("lib/line-staff-journeys.ts").includes("buildLineExperienceCard") &&
+    read("lib/line-staff-journeys.ts").includes('data: "action=staff_today"') &&
+    read("lib/line-staff-journeys.ts").includes('data: "action=staff_pending"') &&
+    read("lib/line-staff-journeys.ts").includes('data: "action=staff_checkin"') &&
+    read("app/api/line/webhook/route.ts").includes('action === "staff_today"') &&
+    read("app/api/line/webhook/route.ts").includes('handleLineStaffCommand(ev.replyToken'),
+);
+invariant(
   "task-focused LIFF closes back to LINE and admin support replies are actually pushed",
   read("lib/useLiff.ts").includes("closeLiffWindow") &&
     read("app/book/page.tsx").includes("taskMode ? null") &&

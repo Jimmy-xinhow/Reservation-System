@@ -36,12 +36,13 @@ export default function LineTemplateGallery() {
                 <p className="line-message-demo-label">顧客實際閱讀順序</p>
                 <div className="line-message-card">
                   <div className="line-message-card-status" style={{ backgroundColor: template.accent }}>
+                    <span className="line-message-card-mark" />
                     <div className="line-message-card-head"><span>品牌官方帳號</span><b>{template.badge}</b></div>
                     <h3>{template.headline}</h3>
                     <p>{template.body}</p>
                   </div>
                   <div className="line-message-card-body">
-                    {template.details[0] && <div className="line-message-card-highlight" style={{ backgroundColor: `${template.accent}12` }}><span>{template.details[0][0]}</span><strong>{template.details[0][1]}</strong></div>}
+                    {template.details[0] && <div className="line-message-card-highlight" style={{ backgroundColor: `${template.accent}12`, borderLeftColor: template.accent }}><span>{template.details[0][0]}</span><strong>{template.details[0][1]}</strong></div>}
                     <dl>{template.details.slice(1).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
                   </div>
                   <div className="line-message-card-actions">

@@ -48,13 +48,58 @@ export const LINE_UI_TEMPLATES: LineUiTemplateDefinition[] = [
   { key: "staff_today", category: "staff", title: "員工今日工作", trigger: "已綁定員工輸入今日工作", headline: "今天需要處理的工作", body: "依員工權限顯示今日行程、待確認事項與交班待辦；不回傳其他品牌資料。", details: [["今日行程", "6 筆"], ["待確認", "2 筆"], ["交班待辦", "1 筆"]], primaryAction: "查看今日行程", secondaryAction: "查看待確認", badge: "員工作業", accent: "#34495E", systemManaged: true },
 ];
 
-type FlexButton = {
+export type LineFlexButton = {
   label: string;
   primary?: boolean;
   action:
     | { type: "uri"; uri: string }
-    | { type: "postback"; data: string; displayText?: string };
+    | { type: "postback"; data: string; displayText?: string }
+    | { type: "datetimepicker"; data: string; mode: "date" | "time" | "datetime"; initial?: string; min?: string; max?: string };
 };
+
+export interface LineBrandTheme {
+  primary: string;
+  accent: string;
+  soft: string;
+  ink: string;
+}
+
+const LINE_BRAND_THEMES: Record<string, LineBrandTheme> = {
+  beauty: { primary: "#614B42", accent: "#C69A78", soft: "#F6EFEA", ink: "#2E2622" },
+  wellness: { primary: "#31584D", accent: "#B89C68", soft: "#EEF4F1", ink: "#1D302A" },
+  fitness: { primary: "#173C33", accent: "#D2A63D", soft: "#EDF3F0", ink: "#172923" },
+  education: { primary: "#233F6B", accent: "#C98B43", soft: "#EEF2F8", ink: "#17243A" },
+  consulting: { primary: "#293846", accent: "#B98A54", soft: "#F0F2F3", ink: "#1C2730" },
+  "pet-care": { primary: "#536B58", accent: "#D59A61", soft: "#F2F5EF", ink: "#26342A" },
+  venue: { primary: "#4B3D57", accent: "#C29A61", soft: "#F3F0F5", ink: "#2C2333" },
+  event: { primary: "#5A3F6E", accent: "#EA8C55", soft: "#F4EFF7", ink: "#2D2036" },
+};
+
+function usableDarkHex(value: string | null | undefined): string | null {
+  if (!value || !/^#[0-9A-Fa-f]{6}$/.test(value)) return null;
+  const red = Number.parseInt(value.slice(1, 3), 16);
+  const green = Number.parseInt(value.slice(3, 5), 16);
+  const blue = Number.parseInt(value.slice(5, 7), 16);
+  const luminance = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
+  return luminance < 0.58 ? value.toUpperCase() : null;
+}
+
+function usableHex(value: string | null | undefined): string | null {
+  return value && /^#[0-9A-Fa-f]{6}$/.test(value) ? value.toUpperCase() : null;
+}
+
+export function lineBrandTheme(
+  template: string | null | undefined,
+  primary?: string | null,
+  accent?: string | null,
+): LineBrandTheme {
+  const fallback = LINE_BRAND_THEMES[template ?? ""] ?? LINE_BRAND_THEMES.wellness;
+  return {
+    ...fallback,
+    primary: usableDarkHex(primary) ?? fallback.primary,
+    accent: usableHex(accent) ?? fallback.accent,
+  };
+}
 
 function detailRows(details: Array<[string, string]>): Array<Record<string, unknown>> {
   return details.flatMap(([label, value], index) => [
@@ -71,14 +116,24 @@ function detailRows(details: Array<[string, string]>): Array<Record<string, unkn
   ]);
 }
 
-function flexAction(button: FlexButton): Record<string, unknown> {
+function flexAction(button: LineFlexButton): Record<string, unknown> {
   const label = button.label.slice(0, 40);
-  return button.action.type === "uri"
-    ? { type: "uri", label, uri: button.action.uri }
-    : { type: "postback", label, data: button.action.data, ...(button.action.displayText ? { displayText: button.action.displayText } : {}) };
+  if (button.action.type === "uri") return { type: "uri", label, uri: button.action.uri };
+  if (button.action.type === "datetimepicker") {
+    return {
+      type: "datetimepicker",
+      label,
+      data: button.action.data,
+      mode: button.action.mode,
+      ...(button.action.initial ? { initial: button.action.initial } : {}),
+      ...(button.action.min ? { min: button.action.min } : {}),
+      ...(button.action.max ? { max: button.action.max } : {}),
+    };
+  }
+  return { type: "postback", label, data: button.action.data, ...(button.action.displayText ? { displayText: button.action.displayText } : {}) };
 }
 
-function statusCard(input: {
+export function buildLineExperienceCard(input: {
   altText: string;
   context: string;
   badge: string;
@@ -88,8 +143,29 @@ function statusCard(input: {
   softAccent: string;
   highlight: [string, string];
   details: Array<[string, string]>;
-  buttons: FlexButton[];
+  buttons: LineFlexButton[];
+  markerColor?: string;
 }): Record<string, unknown> {
+  const markerColor = input.markerColor ?? input.softAccent;
+  const footer = input.buttons.length > 0 ? {
+    type: "box",
+    layout: "vertical",
+    spacing: "sm",
+    paddingTop: "12px",
+    paddingBottom: "16px",
+    paddingStart: "16px",
+    paddingEnd: "16px",
+    backgroundColor: "#FAFBFA",
+    contents: input.buttons.map((button) => ({
+      type: "button",
+      height: "sm",
+      style: button.primary ? "primary" : "secondary",
+      color: button.primary ? input.accent : "#53615B",
+      scaling: true,
+      adjustMode: "shrink-to-fit",
+      action: flexAction(button),
+    })),
+  } : undefined;
   return {
     type: "flex",
     altText: input.altText.slice(0, 1500),
@@ -105,13 +181,27 @@ function statusCard(input: {
         paddingEnd: "20px",
         backgroundColor: input.accent,
         contents: [
+          { type: "box", layout: "vertical", width: "42px", height: "3px", backgroundColor: markerColor, cornerRadius: "2px", contents: [{ type: "filler" }] },
           {
             type: "box",
             layout: "horizontal",
             spacing: "md",
+            margin: "lg",
             contents: [
               { type: "text", text: input.context, size: "xs", color: "#FFFFFF", weight: "bold", wrap: true, flex: 7, scaling: true },
-              { type: "text", text: input.badge, size: "xs", color: "#FFFFFF", weight: "bold", align: "end", wrap: true, flex: 5, scaling: true },
+              {
+                type: "box",
+                layout: "vertical",
+                flex: 0,
+                borderWidth: "1px",
+                borderColor: "#FFFFFF",
+                cornerRadius: "999px",
+                paddingStart: "10px",
+                paddingEnd: "10px",
+                paddingTop: "4px",
+                paddingBottom: "4px",
+                contents: [{ type: "text", text: input.badge, size: "xxs", color: "#FFFFFF", weight: "bold", align: "center", scaling: true }],
+              },
             ],
           },
           { type: "text", text: input.title, size: "xl", weight: "bold", color: "#FFFFFF", wrap: true, margin: "lg", scaling: true },
@@ -128,40 +218,34 @@ function statusCard(input: {
         contents: [
           {
             type: "box",
-            layout: "vertical",
+            layout: "horizontal",
             backgroundColor: input.softAccent,
             cornerRadius: "8px",
-            paddingAll: "14px",
+            paddingAll: "0px",
             contents: [
-              { type: "text", text: input.highlight[0], size: "xs", color: "#68736E", weight: "bold", scaling: true },
-              { type: "text", text: input.highlight[1], size: "lg", color: "#17231E", weight: "bold", wrap: true, margin: "sm", scaling: true },
+              { type: "box", layout: "vertical", width: "5px", backgroundColor: markerColor, contents: [{ type: "filler" }] },
+              {
+                type: "box",
+                layout: "vertical",
+                paddingAll: "14px",
+                contents: [
+                  { type: "text", text: input.highlight[0], size: "xs", color: "#68736E", weight: "bold", scaling: true },
+                  { type: "text", text: input.highlight[1], size: "lg", color: "#17231E", weight: "bold", wrap: true, margin: "sm", scaling: true },
+                ],
+              },
             ],
           },
           { type: "box", layout: "vertical", margin: "xl", spacing: "md", contents: detailRows(input.details) },
         ],
       },
-      footer: {
-        type: "box",
-        layout: "vertical",
-        spacing: "sm",
-        paddingTop: "12px",
-        paddingBottom: "16px",
-        paddingStart: "16px",
-        paddingEnd: "16px",
-        backgroundColor: "#FAFBFA",
-        contents: input.buttons.map((button) => ({
-          type: "button",
-          height: "sm",
-          style: button.primary ? "primary" : "secondary",
-          color: button.primary ? input.accent : "#315C50",
-          scaling: true,
-          adjustMode: "shrink-to-fit",
-          action: flexAction(button),
-        })),
-      },
-      styles: { footer: { separator: true, separatorColor: "#E5E9E7" } },
+      ...(footer ? { footer } : {}),
+      styles: footer ? { footer: { separator: true, separatorColor: "#E5E9E7" } } : undefined,
     },
   };
+}
+
+function statusCard(input: Parameters<typeof buildLineExperienceCard>[0]): Record<string, unknown> {
+  return buildLineExperienceCard(input);
 }
 
 export type AppointmentFlexKind = "pending" | "confirmed" | "cancelled" | "rescheduled" | "reminder";
@@ -191,7 +275,7 @@ export function buildAppointmentStatusFlex(input: {
   ];
   if (input.queueNumber) details.push(["號碼", String(input.queueNumber)]);
   if (input.kind === "pending" && input.depositAmount) details.push(["待付訂金", `NT$ ${input.depositAmount.toLocaleString("zh-TW")}`]);
-  const buttons: FlexButton[] = [{ label: selected.action, primary: true, action: { type: "uri", uri: input.manageUrl } }];
+  const buttons: LineFlexButton[] = [{ label: selected.action, primary: true, action: { type: "uri", uri: input.manageUrl } }];
   if (input.kind === "reminder" && input.cancelPostbackData) {
     buttons.push({ label: "取消這筆預約", action: { type: "postback", data: input.cancelPostbackData, displayText: "取消這筆預約" } });
   }

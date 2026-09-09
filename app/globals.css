@@ -821,13 +821,14 @@ body {
 .line-message-demo { min-width: 0; padding: 16px; border-left: 1px solid var(--admin-border); background: #eef2ef; }
 .line-message-demo-label { margin-bottom: 8px; color: #707c76; font-size: 10px; font-variation-settings: "wght" 650; letter-spacing: .04em; }
 .line-message-card { overflow: hidden; border: 1px solid #d8dedb; border-radius: 8px; background: #fff; box-shadow: 0 3px 8px rgba(25, 45, 36, .06); }
-.line-message-card-status { padding: 14px 13px 16px; color: #fff; }
+.line-message-card-status { padding: 16px 15px 18px; color: #fff; }
+.line-message-card-mark { display: block; width: 38px; height: 3px; margin-bottom: 13px; border-radius: 999px; background: #e5c682; }
 .line-message-card-head { display: flex; min-height: 20px; align-items: center; justify-content: space-between; gap: 10px; color: rgba(255,255,255,.94); font-size: 9px; }
 .line-message-card-head b { font-size: 9px; font-variation-settings: "wght" 720; text-align: right; }
-.line-message-card-status h3 { margin-top: 12px; color: #fff; font-size: 15px; font-variation-settings: "wght" 730; line-height: 1.35; }
+.line-message-card-status h3 { margin-top: 15px; color: #fff; font-size: 16px; font-variation-settings: "wght" 730; line-height: 1.35; letter-spacing: -.015em; }
 .line-message-card-status > p { margin-top: 5px; color: rgba(255,255,255,.9); font-size: 10px; line-height: 1.55; }
 .line-message-card-body { padding: 12px; }
-.line-message-card-highlight { display: grid; gap: 3px; border-radius: 5px; padding: 9px 10px; }
+.line-message-card-highlight { display: grid; gap: 3px; border-left: 4px solid; border-radius: 5px; padding: 10px 11px; }
 .line-message-card-highlight span { color: #68736e; font-size: 8px; font-variation-settings: "wght" 650; }
 .line-message-card-highlight strong { color: #17231e; font-size: 12px; font-variation-settings: "wght" 720; line-height: 1.35; }
 .line-message-card-body dl { margin-top: 10px; border-top: 1px solid #e8ecea; }

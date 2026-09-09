@@ -10,6 +10,7 @@ import {
   endLineSupport,
   handleLineSupportText,
   lineAccountLinkConfirmation,
+  lineAccountLinkedMessage,
   lineHomeMessage,
   replyBookingContinue,
   replyBookingDatePrompt,
@@ -25,6 +26,7 @@ import {
 import { handleLineStaffCommand } from "@/lib/line-staff-journeys";
 import { claimLineWebhookEvent, finishLineWebhookEvent } from "@/lib/line-session";
 import { resetLineAudienceMenu, syncLineAudienceMenu } from "@/lib/line-audience-menu";
+import { publicRequestOrigin } from "@/lib/public-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -76,9 +78,7 @@ export async function POST(req: NextRequest) {
   }
   const events = payload.events ?? [];
 
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  const baseUrl = host ? `${proto}://${host}` : "";
+  const baseUrl = publicRequestOrigin(req.nextUrl.origin);
 
   const { data: destinationClinic } = destination
      ? await svc.from("clinics").select("id, slug, name").eq("line_destination", destination).eq("active", true).maybeSingle()
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     svc
       .from("clinic_settings")
       .select(
-        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url, legacy_progress_enabled",
+        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url, legacy_progress_enabled, brand_page_template, brand_primary_color, brand_accent_color",
       )
       .eq("clinic_id", clinicId)
       .maybeSingle(),
@@ -137,6 +137,9 @@ export async function POST(req: NextRequest) {
     liffId,
     baseUrl,
     lineAccessToken,
+    brandTemplate: (cs?.brand_page_template as string | null) ?? null,
+    brandPrimaryColor: (cs?.brand_primary_color as string | null) ?? null,
+    brandAccentColor: (cs?.brand_accent_color as string | null) ?? null,
   };
 
   for (const ev of events) {
@@ -146,7 +149,7 @@ export async function POST(req: NextRequest) {
       claimed = await claimLineWebhookEvent(svc, clinicId, ev.webhookEventId, ev.type);
       if (!claimed) continue;
       if (ev.type === "follow") {
-        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName), lineHomeMessage(journeyContext)], lineAccessToken);
+        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName, journeyContext), lineHomeMessage(journeyContext)], lineAccessToken);
       } else if (ev.type === "accountLink") {
         if (ev.link?.result !== "ok" || !ev.link.nonce || !ev.source?.userId) {
           await safeReply(ev.replyToken, "會員綁定未完成，請回到選單重新操作。", lineAccessToken);
@@ -159,10 +162,7 @@ export async function POST(req: NextRequest) {
           if (error) throw new Error(error.message);
           await syncLineAudienceMenu(svc, clinicId, ev.source.userId, "member", lineAccessToken).catch(() => false);
           const linked = Array.isArray(data) ? data[0] : data;
-          await replyMessages(ev.replyToken, [{ type: "text", text: `${linked?.patient_name ? `${linked.patient_name}，` : ""}會員綁定完成。現在可直接查詢預約、票券與會員權益。`, quickReply: { items: [
-            { type: "action", action: { type: "postback", label: "查看會員套票", data: "action=membership", displayText: "查看會員套票" } },
-            { type: "action", action: { type: "postback", label: "查看我的票券", data: "action=tickets", displayText: "查看我的票券" } },
-          ] } }], lineAccessToken);
+          await replyMessages(ev.replyToken, [lineAccountLinkedMessage(journeyContext, linked?.patient_name as string | null | undefined)], lineAccessToken);
         }
       } else if (ev.type === "message" && ev.message?.type === "text") {
         await (async () => {
@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
           return;
         }
         if (["我的預約", "查詢預約", "預約查詢"].includes(text)) {
-          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, { baseUrl, clinicSlug });
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, journeyContext);
           return;
         }
         if (["活動", "課程", "活動課程", "課程報名"].includes(text)) {
@@ -227,17 +227,17 @@ export async function POST(req: NextRequest) {
         if (rule?.action === "progress" && menuCfg.progress) {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (rule?.action === "query") {
-          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, { baseUrl, clinicSlug });
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, journeyContext);
         } else if (rule?.action === "booking") {
           await replyBookingServices(ev.replyToken, ev.source?.userId, journeyContext);
         } else if (rule?.action === "message" && rule.message_id) {
           const msg = await buildMessageById(svc, rule.message_id, baseUrl, clinicId, liffId, clinicSlug);
           if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
-          else await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName)], lineAccessToken);
+          else await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName, journeyContext)], lineAccessToken);
         } else if (rule?.action === "text" && rule.reply_text) {
           await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }], lineAccessToken);
         } else {
-          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName), lineHomeMessage(journeyContext)], lineAccessToken);
+          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName, journeyContext), lineHomeMessage(journeyContext)], lineAccessToken);
         }
         })();
       } else if (ev.type === "postback" && ev.postback?.data) {
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
         if (action === "home") {
           await replyLineHome(ev.replyToken, journeyContext);
         } else if (action === "my") {
-          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, { baseUrl, clinicSlug });
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, journeyContext);
         } else if (action === "progress" && menuCfg.progress) {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (action === "progress") {
@@ -269,8 +269,13 @@ export async function POST(req: NextRequest) {
           await endLineSupport(ev.replyToken, ev.source?.userId, journeyContext);
         } else if (action === "brand") {
           await replyBrandInfo(ev.replyToken, journeyContext);
+        } else if (action === "staff_today" || action === "staff_pending" || action === "staff_checkin") {
+          const command = action === "staff_pending" ? "待確認" : action === "staff_checkin" ? "報到狀況" : "今日工作";
+          if (!(await handleLineStaffCommand(ev.replyToken, ev.source?.userId, command, journeyContext))) {
+            await safeReply(ev.replyToken, "這個 LINE 帳號尚未綁定可用的員工身分。", lineAccessToken);
+          }
         } else if (action === "unlink_account") {
-          await replyMessages(ev.replyToken, [lineAccountLinkConfirmation()], lineAccessToken);
+          await replyMessages(ev.replyToken, [lineAccountLinkConfirmation(journeyContext)], lineAccessToken);
         } else if (action === "unlink_confirm") {
           if (!ev.source?.userId) throw new Error("無法取得 LINE 身分");
           const [{ error: patientError }, { error: registrationError }] = await Promise.all([
