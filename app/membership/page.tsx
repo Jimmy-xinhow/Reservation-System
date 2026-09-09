@@ -110,6 +110,17 @@ export default function MembershipPage() {
         // localStorage 不可用時不阻斷目前頁面的查詢結果。
       }
     } catch (loadError) {
+      if (browserToken) {
+        setToken(null);
+        setMemberships([]);
+        setPlans([]);
+        try {
+          window.localStorage.removeItem(customerTokenKey());
+          window.localStorage.removeItem("membership_browser_token");
+        } catch {
+          // 儲存空間不可用時，仍在目前畫面清除失效身分。
+        }
+      }
       setError(loadError instanceof Error ? loadError.message : "會員資料查詢失敗");
     } finally {
       setLoading(false);
