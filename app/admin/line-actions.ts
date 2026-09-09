@@ -21,6 +21,7 @@ import {
   createRichMenuAlias,
   updateRichMenuAlias,
   deleteRichMenuAlias,
+  getRichMenuImage,
 } from "@/lib/line";
 import {
   LAYOUTS,
@@ -388,15 +389,24 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
     const validationErrors = validateRichMenuSlots(layout, slots, await richMenuAvailability(supabase, clinicId));
     if (validationErrors.length > 0) throw new RichMenuUserError(validationErrors.join("；"));
 
-    const file = fd.get("image");
-    if (!(file instanceof File) || file.size === 0) throw new RichMenuUserError("請選擇圖片");
-    if (file.size > 1024 * 1024) throw new RichMenuUserError("圖片檔案需小於 1MB");
-    const imageBytes = await file.arrayBuffer();
-    const image = inspectRichMenuImage(imageBytes);
-    if (image.width !== spec.width || image.height !== spec.height) throw new RichMenuUserError(`圖片尺寸必須是 ${spec.width} × ${spec.height} 像素`);
     const context = await getRichMenuLineContext(supabase, clinicId, true);
     const baseUrl = reqBaseUrl(await headers());
     oldId = (cfg?.published_id as string | null) ?? null;
+    const file = fd.get("image");
+    let imageBytes: ArrayBuffer;
+    if (file instanceof File && file.size > 0) {
+      if (file.size > 1024 * 1024) throw new RichMenuUserError("圖片檔案需小於 1MB");
+      imageBytes = await file.arrayBuffer();
+    } else if (bool(fd, "reuse_published_image") && oldId) {
+      const publishedImage = await getRichMenuImage(oldId, context.accessToken);
+      if (!publishedImage) throw new RichMenuUserError("目前線上圖稿讀取失敗，請重新上傳圖片");
+      if (publishedImage.bytes.byteLength > 1024 * 1024) throw new RichMenuUserError("目前線上圖稿超過 1MB，請重新上傳圖片");
+      imageBytes = publishedImage.bytes;
+    } else {
+      throw new RichMenuUserError("請選擇圖片");
+    }
+    const image = inspectRichMenuImage(imageBytes);
+    if (image.width !== spec.width || image.height !== spec.height) throw new RichMenuUserError(`圖片尺寸必須是 ${spec.width} × ${spec.height} 像素`);
     const { error: readyError } = await service
       .from("line_richmenu_versions")
       .update({ status: "ready", validation_errors: [] })

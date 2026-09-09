@@ -738,6 +738,14 @@ invariant(
     publishRichMenuAction.indexOf("inspectRichMenuImage") < publishRichMenuAction.indexOf("buildAndPublishRichMenu"),
 );
 invariant(
+  "Rich Menu can reuse the tenant's current LINE artwork when only actions change",
+  richMenuPublishForm.includes("hasPublishedImage") &&
+    richMenuPublishForm.includes('fd.append("reuse_published_image", "1")') &&
+    richMenuAdminPage.includes("hasPublishedImage={Boolean(publishedId)}") &&
+    publishRichMenuAction.includes('bool(fd, "reuse_published_image") && oldId') &&
+    publishRichMenuAction.includes("getRichMenuImage(oldId, context.accessToken)"),
+);
+invariant(
   "existing Rich Menu configurations are backfilled as version one",
   migrationProductModulesLineRichMenu.includes("insert into public.line_richmenu_versions") &&
     migrationProductModulesLineRichMenu.includes("'既有 Rich Menu'") &&

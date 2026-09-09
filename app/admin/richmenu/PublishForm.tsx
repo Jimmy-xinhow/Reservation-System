@@ -16,6 +16,7 @@ interface PublishFormProps {
   liffId: string | null;
   versionId: string | null;
   templateKey: RichMenuTemplateKey;
+  hasPublishedImage?: boolean;
   disabled?: boolean;
 }
 
@@ -63,6 +64,7 @@ export default function PublishForm({
   liffId,
   versionId,
   templateKey,
+  hasPublishedImage = false,
   disabled,
 }: PublishFormProps) {
   const router = useRouter();
@@ -148,18 +150,22 @@ export default function PublishForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) {
+    if (!file && !hasPublishedImage) {
       setErr("請選擇圖片");
       return;
     }
     setBusy(true);
     setErr(null);
     try {
-      const blob = await resizeToBlob(file);
       const fd = new FormData();
       if (!versionId) throw new Error("請先另存草稿版本");
       fd.append("version_id", versionId);
-      fd.append("image", new File([blob], "menu.jpg", { type: "image/jpeg" }));
+      if (file) {
+        const blob = await resizeToBlob(file);
+        fd.append("image", new File([blob], "menu.jpg", { type: "image/jpeg" }));
+      } else {
+        fd.append("reuse_published_image", "1");
+      }
       const res = await publishRichMenuAction(fd);
       if (res.ok) {
         router.push("/admin/richmenu?ok=1");
@@ -204,6 +210,11 @@ export default function PublishForm({
         onChange={(e) => pick(e.target.files?.[0] ?? null)}
         className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-sm file:border-0 file:bg-emerald-800 file:px-4 file:py-2 file:text-white"
       />
+      {hasPublishedImage && !file && (
+        <p className="border-l-2 border-sky-500 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+          未選擇新圖片時，會沿用目前線上圖稿，只更新此草稿的點擊動作與選單設定。
+        </p>
+      )}
       {preview && (
         <div className="flex flex-col gap-2 border-y border-slate-200 py-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm leading-6 text-slate-600">
@@ -247,7 +258,7 @@ export default function PublishForm({
         </div>
       ) : (
         <div className="flex min-h-32 items-center justify-center rounded-sm border border-dashed border-slate-300 bg-slate-50 px-4 text-center text-sm text-slate-500">
-          選擇圖片後，這裡會原樣顯示實際送往 LINE 的圖稿。
+          {hasPublishedImage ? "這次會沿用右側的目前線上圖稿；選擇新圖片後可在此預覽替換結果。" : "選擇圖片後，這裡會原樣顯示實際送往 LINE 的圖稿。"}
         </div>
       )}
 

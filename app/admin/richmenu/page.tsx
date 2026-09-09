@@ -257,6 +257,7 @@ export default async function RichMenuPage({
             liffId={previewLiffId}
             versionId={draft?.id ?? null}
             templateKey={draft?.template_key ?? "mixed"}
+            hasPublishedImage={Boolean(publishedId)}
             disabled={!lineReady || !draft}
           />
         </div>
