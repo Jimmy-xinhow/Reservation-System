@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Brand } from "@/components/Brand";
 import { formatDateSession, formatTime } from "@/lib/slots";
-import { useLiff } from "@/lib/useLiff";
+import { closeLiffWindow, useLiff } from "@/lib/useLiff";
+import { liffEntryParams } from "@/lib/liff-entry-state";
 
 interface Doctor {
   id: string;
@@ -77,7 +78,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 
 function withBookingBrandScope(url: string): string {
   if (typeof window === "undefined" || (!url.startsWith("/api/booking") && !url.startsWith("/api/payment/create"))) return url;
-  const source = new URLSearchParams(window.location.search);
+  const source = liffEntryParams(window.location.search);
   const scope = new URLSearchParams();
   const clinicSlug = source.get("clinic_slug")?.trim();
   const clinicId = source.get("clinic_id")?.trim();
@@ -101,7 +102,7 @@ function todayStr(offset = 0): string {
 
 export default function ReschedulePage() {
   const [config, setConfig] = useState<Config | null>(null);
-  const { ready, idToken, error: liffError } = useLiff(config === null ? undefined : config.liff_id);
+  const { ready, idToken, error: liffError, isInClient } = useLiff(config === null ? undefined : config.liff_id);
   const [appointmentId, setAppointmentId] = useState("");
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [doctorId, setDoctorId] = useState("");
@@ -122,7 +123,7 @@ export default function ReschedulePage() {
   const [brandSuffix, setBrandSuffix] = useState("");
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const params = liffEntryParams(window.location.search);
     const id = params.get("appointment_id")?.trim() ?? "";
     const clinicSlug = params.get("clinic_slug")?.trim();
     const clinicId = params.get("clinic_id")?.trim();
@@ -292,6 +293,7 @@ export default function ReschedulePage() {
               {paymentError && <p className="rounded-lg bg-red-50 p-2 text-left text-xs text-red-700">{paymentError}</p>}
             </div>
           )}
+          {isInClient && result.deposit_status !== "pending" && <button type="button" className="btn btn-primary w-full" onClick={() => closeLiffWindow()}>完成並回到 LINE</button>}
           <Link className="btn btn-secondary w-full" href={`/book${brandSuffix}`}>返回預約頁</Link>
         </div>
       </Shell>

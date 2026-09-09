@@ -150,17 +150,35 @@ export async function insertStaffMessage(
   clinicId: string,
   lineUserId: string,
   body: string,
-): Promise<void> {
+): Promise<string> {
   const text = body.trim();
   if (!lineUserId) throw new Error("缺少對話對象");
   if (!text) throw new Error("請輸入訊息");
   if (text.length > 2000) throw new Error("訊息過長");
-  const { error } = await supabase.from("chat_messages").insert({
+  const { data, error } = await supabase.from("chat_messages").insert({
     clinic_id: clinicId,
     line_user_id: lineUserId,
     sender: "staff",
     body: text,
     read_by_staff: true,
-  });
+    delivery_status: "sending",
+  }).select("id").single();
+  if (error) throw new Error(error.message);
+  return String(data.id);
+}
+
+export async function updateStaffMessageDelivery(
+  supabase: SupabaseClient,
+  clinicId: string,
+  messageId: string,
+  status: "sent" | "failed",
+  errorMessage?: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("chat_messages")
+    .update({ delivery_status: status, delivery_error: errorMessage?.slice(0, 1000) ?? null })
+    .eq("clinic_id", clinicId)
+    .eq("id", messageId)
+    .eq("sender", "staff");
   if (error) throw new Error(error.message);
 }

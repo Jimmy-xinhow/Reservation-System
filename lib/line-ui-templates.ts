@@ -1,4 +1,4 @@
-export type LineUiCategory = "entry" | "booking" | "events" | "member" | "marketing" | "support";
+export type LineUiCategory = "entry" | "booking" | "events" | "member" | "marketing" | "support" | "staff";
 
 export interface LineUiTemplateDefinition {
   key: string;
@@ -23,11 +23,14 @@ export const LINE_UI_CATEGORIES: Array<{ key: "all" | LineUiCategory; label: str
   { key: "member", label: "會員經營" },
   { key: "marketing", label: "行銷回訪" },
   { key: "support", label: "客服支援" },
+  { key: "staff", label: "員工作業" },
 ];
 
 export const LINE_UI_TEMPLATES: LineUiTemplateDefinition[] = [
   { key: "welcome", category: "entry", title: "加入好友歡迎", trigger: "首次加入好友", headline: "歡迎加入，想先做什麼？", body: "用清楚入口取代一大段歡迎文字，讓顧客直接開始。", details: [["預約服務", "查看可約時間"], ["其他服務", "活動／會員"]], primaryAction: "開啟服務選單", secondaryAction: "聯絡客服", badge: "歡迎加入", accent: "#06A94D", systemManaged: true },
-  { key: "service_hub", category: "entry", title: "功能導覽中心", trigger: "點選選單／輸入關鍵字", headline: "所有服務，一次找到", body: "承接圖文選單放不下的說明，保留預約、活動、票券與會員四條主線。", details: [["預約", "查詢・改期・取消"], ["活動", "報名・票券・報到"]], primaryAction: "立即預約", secondaryAction: "瀏覽活動", badge: "服務導覽", accent: "#173F48", systemManaged: true },
+  { key: "service_hub", category: "entry", title: "LINE 原生服務選單", trigger: "點選圖文選單／輸入關鍵字", headline: "想先辦理哪一件事？", body: "直接在 LINE 選擇預約、活動、票券、會員或客服，不先跳到網站首頁。", details: [["主要入口", "預約・活動・票券"], ["帳戶服務", "會員・客服・品牌資訊"]], primaryAction: "立即預約", secondaryAction: "瀏覽活動", badge: "LINE 服務選單", accent: "#173F48", systemManaged: true },
+  { key: "booking_service_select", category: "booking", title: "選擇預約服務", trigger: "點選立即預約", headline: "先選擇要預約的服務", body: "以 LINE 快速選項顯示品牌目前開放的服務，顧客不必先進入完整網站。", details: [["選擇方式", "LINE 快速選項"], ["資料來源", "即時開放服務"]], primaryAction: "選擇一項服務", secondaryAction: "查看全部服務", badge: "步驟 1／2", accent: "#126248", systemManaged: true },
+  { key: "booking_date_select", category: "booking", title: "選擇預約日期", trigger: "選定服務", headline: "哪一天方便前來？", body: "使用 LINE 日期選擇器，依品牌可預約區間限制日期，再開啟單一時段任務頁。", details: [["已選服務", "體驗諮詢"], ["可選日期", "今天起 30 天內"]], primaryAction: "選擇日期", badge: "步驟 2／2", accent: "#126248", systemManaged: true },
   { key: "booking_confirmed", category: "booking", title: "預約成立", trigger: "預約確認／付款完成", headline: "時間已為你保留", body: "先突出最新預約時間，再列出服務與服務人員，避免顧客回頭翻找。", details: [["預約時間", "08/18（二）14:30"], ["服務", "體驗諮詢"], ["服務人員", "王老師"]], primaryAction: "查看／管理這筆預約", badge: "預約已確認", accent: "#126248", systemManaged: true },
   { key: "payment_pending", category: "booking", title: "訂金待付款", trigger: "建立需訂金的預約", headline: "訂金尚未完成", body: "先說明目前只是暫時保留，再讓顧客直接進入這筆預約完成付款。", details: [["預約時間", "08/18（二）14:30"], ["待付訂金", "NT$ 500"], ["付款狀態", "尚未完成"]], primaryAction: "前往完成訂金付款", badge: "待完成付款", accent: "#8A5A16", systemManaged: true },
   { key: "appointment_reminder", category: "booking", title: "行前提醒", trigger: "預約前 N 小時", headline: "你的預約快到了", body: "使用與預約成立相同的資訊順序，並提供管理預約與取消兩個明確動作。", details: [["預約時間", "08/18（二）14:30"], ["服務", "體驗諮詢"], ["服務人員", "王老師"]], primaryAction: "查看／管理這筆預約", secondaryAction: "取消這筆預約", badge: "預約行前提醒", accent: "#286675", systemManaged: true },
@@ -38,8 +41,11 @@ export const LINE_UI_TEMPLATES: LineUiTemplateDefinition[] = [
   { key: "registration_confirmed", category: "events", title: "活動報名成功", trigger: "報名／付款確認", headline: "報名完成", body: "先顯示活動名稱，再依序列出時間、場次、地點與報名編號。", details: [["活動／課程", "夏日體驗課"], ["日期時間", "08/29（六）10:00"], ["報名編號", "REG-20260829-001"]], primaryAction: "開啟這筆報名的電子票券", badge: "報名已確認", accent: "#594B99", systemManaged: true },
   { key: "ticket_ready", category: "events", title: "票券與 QR 報到", trigger: "報名完成／活動前提醒", headline: "電子票券可以使用了", body: "QR 留在已驗證的票券頁，不放進可轉傳的長文字。", details: [["票券", "一般票 × 2"], ["報到", "出示動態 QR"], ["狀態", "可使用"]], primaryAction: "開啟票券 QR", secondaryAction: "查看活動", badge: "電子票券", accent: "#6656B8", systemManaged: true },
   { key: "membership_balance", category: "member", title: "會員／套票餘額", trigger: "購買完成／餘額查詢", headline: "你的會員權益", body: "顯示方案、剩餘堂數與期限，並直接銜接可使用的預約入口。", details: [["方案", "安心體驗套票"], ["剩餘", "4 堂"], ["有效至", "2026/12/31"]], primaryAction: "使用套票預約", secondaryAction: "查看使用紀錄", badge: "會員權益", accent: "#9A7125", systemManaged: true },
+  { key: "account_link", category: "member", title: "LINE 會員綁定", trigger: "首次查詢個人資料", headline: "綁定後即可直接查詢", body: "透過 LINE 官方帳號連結流程驗證既有會員，不把會員資料或一次性憑證放在聊天訊息內。", details: [["完成後可用", "預約・票券・會員權益"], ["驗證方式", "姓名・電話・生日"]], primaryAction: "開始安全綁定", badge: "會員身分驗證", accent: "#315C50", systemManaged: true },
   { key: "campaign", category: "marketing", title: "分眾行銷活動", trigger: "CRM Lite 規則／人工發送", headline: "為你保留的本月活動", body: "一則訊息只服務一個目標，搭配同意、排除與不重複投遞規則。", details: [["對象", "90 天未回訪"], ["優惠", "指定服務 9 折"], ["期限", "08/31 前"]], primaryAction: "查看活動內容", secondaryAction: "暫停行銷通知", badge: "為你推薦", accent: "#A64F66", systemManaged: false },
   { key: "support_handoff", category: "support", title: "客服接手與離線回覆", trigger: "需要真人／非服務時段", headline: "已為你轉交客服", body: "說明回覆時段與案件狀態，避免顧客持續重複傳送。", details: [["案件狀態", "等待客服接手"], ["服務時間", "週一至週五 09:00–18:00"], ["預計回覆", "1 個工作日內"]], primaryAction: "查看常見問題", secondaryAction: "回到服務選單", badge: "客服處理中", accent: "#326C78", systemManaged: true },
+  { key: "support_active", category: "support", title: "LINE 客服對話", trigger: "點選 LINE 客服", headline: "請直接輸入你的問題", body: "顧客訊息會進入品牌後台對話；品牌人員的回覆會真正推送回同一個 LINE 帳號。", details: [["目前狀態", "客服對話中"], ["離線處理", "保留訊息，服務時間回覆"]], primaryAction: "結束客服", secondaryAction: "回到服務選單", badge: "客服已連線", accent: "#326C78", systemManaged: true },
+  { key: "staff_today", category: "staff", title: "員工今日工作", trigger: "已綁定員工輸入今日工作", headline: "今天需要處理的工作", body: "依員工權限顯示今日行程、待確認事項與交班待辦；不回傳其他品牌資料。", details: [["今日行程", "6 筆"], ["待確認", "2 筆"], ["交班待辦", "1 筆"]], primaryAction: "查看今日行程", secondaryAction: "查看待確認", badge: "員工作業", accent: "#34495E", systemManaged: true },
 ];
 
 type FlexButton = {

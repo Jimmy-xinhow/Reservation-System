@@ -335,6 +335,42 @@ export async function deleteRichMenuAlias(aliasId: string, accessTokenOverride?:
   if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
 }
 
+/** 對單一使用者套用指定 Rich Menu；會員／員工選單不得改成全帳號預設。 */
+export async function linkRichMenuToUser(
+  userId: string,
+  richMenuId: string,
+  accessTokenOverride?: string,
+): Promise<void> {
+  const res = await fetch(`${LINE_API}/user/${encodeURIComponent(userId)}/richmenu/${encodeURIComponent(richMenuId)}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+  });
+  if (!res.ok) throw new Error(`套用個人 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+}
+
+/** 移除使用者個人 Rich Menu，讓 LINE 自動回到品牌預設選單。 */
+export async function unlinkRichMenuFromUser(userId: string, accessTokenOverride?: string): Promise<void> {
+  const res = await fetch(`${LINE_API}/user/${encodeURIComponent(userId)}/richmenu`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`移除個人 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  }
+}
+
+/** 取得官方 Account Linking 一次性 link token（LINE 有效期 10 分鐘）。 */
+export async function issueLineAccountLinkToken(userId: string, accessTokenOverride?: string): Promise<string> {
+  const res = await fetch(`${LINE_API}/user/${encodeURIComponent(userId)}/linkToken`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+  });
+  if (!res.ok) throw new Error(`取得 LINE 綁定憑證失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  const data = (await res.json()) as { linkToken?: unknown };
+  if (typeof data.linkToken !== "string" || !data.linkToken) throw new Error("LINE 未回傳綁定憑證");
+  return data.linkToken;
+}
+
 export interface RichMenuInsightSummary {
   richMenuId: string;
   metricsFrom?: string;

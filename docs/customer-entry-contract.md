@@ -1,6 +1,6 @@
 # 統一顧客入口與深連結契約
 
-更新日期：2026-09-02
+更新日期：2026-09-09
 適用版本：產品重整 M2 起；2026-09 顧客中心整合
 
 ## 目的
@@ -20,7 +20,7 @@
 | `support` | LINE 客服 | `support` | `/`（品牌聯絡資訊） | `line_channel_enabled` |
 | `brand` | 品牌資訊 | `brand` | `/` | 永遠可用 |
 
-LIFF URL 固定為 `https://liff.line.me/{brand_liff_id}?clinic_slug={slug}&view={view}`。一般瀏覽器 URL 以品牌公開 origin 加上備援路徑及 `clinic_slug`。若品牌採獨立渠道，禁止回退其他品牌或全域 LIFF ID。
+Rich Menu 的內建功能固定使用 `postback`，由 webhook 在 LINE 內先完成導覽、查詢或選擇；只有複雜表單才產生 `https://liff.line.me/{brand_liff_id}?clinic_slug={slug}&view={view}&task=1`。一般瀏覽器 URL 以品牌公開 origin 加上備援路徑及 `clinic_slug`。自訂 HTTPS 連結仍可直接使用 URI。若品牌採獨立渠道，禁止回退其他品牌或全域 LIFF ID。
 
 LINE 第一次導向 LIFF Endpoint 時，會暫時把永久連結的額外 query 放在 `liff.state`，等 `liff.init()` 完成後才還原。顧客入口在初始化品牌設定前必須唯讀解析 `liff.state` 內的 `clinic_slug`／`view`，不可先套用全域預設品牌，也不可改寫或刪除任何 `liff.*` 參數。
 
@@ -34,6 +34,8 @@ LINE 第一次導向 LIFF Endpoint 時，會暫時把永久連結的額外 query
 4. 瀏覽器備援 token 必須包含並比對 `clinicId`。
 5. 未啟用領域不產生按鈕；直接存取時 server route 仍須拒絕。
 6. 未綁定顧客可在 LINE 會員頁輸入姓名、電話與生日完成綁定；server 必須先以目前品牌的 Login Channel 驗證 ID token，再於同一 `clinic_id` 內比對／建立顧客，禁止跨品牌或覆蓋其他 LINE 帳號。
+7. LINE 主流程使用官方 Account Linking：Messaging API 取得的 link token 不落庫，只保存 10 分鐘 nonce 雜湊；完成事件仍以 webhook destination 限定品牌。
+8. 解除綁定只清除目前 `clinic_id` 的顧客／報名 LINE 關聯，並移除個人 Rich Menu，不影響其他品牌。
 
 ## 狀態與相容界線
 
@@ -43,4 +45,6 @@ LINE 第一次導向 LIFF Endpoint 時，會暫時把永久連結的額外 query
 - 活動 LIFF 報名會把品牌驗證後的 ID token 送到 server；票券與會員依該 LINE 身分下的已綁定顧客切換，不跨品牌共用。
 - 暫停新增預約不會隱藏「我的預約」；暫停公開活動列表不會隱藏既有票券。
 - Rich Menu 只有在目標 view、模組狀態、圖片與 LINE 渠道驗證全部通過後才可發布。
+- `task=1` 的 LIFF 不顯示八宮格導覽；預約／候補／報名完成且不需付款時提供「完成並回到 LINE」。
+- 預約原生流程為「選服務 → 選日期 → 聚焦 LIFF 選時段及必要資料」；活動卡片直接開啟指定活動，不再先進活動總表。
 - `legacy_progress_enabled=false` 時，入口集合永遠不包含舊版服務進度。

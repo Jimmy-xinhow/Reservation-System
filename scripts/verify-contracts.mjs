@@ -55,6 +55,7 @@ const migrationIndustryPacks = read("supabase/migrations/202609040003_industry_p
 const migrationCheckoutLintCleanup = read("supabase/migrations/202609040005_checkout_lint_cleanup.sql");
 const migrationCheckoutRegistrationSync = read("supabase/migrations/202609040006_checkout_registration_sync.sql");
 const migrationChannelSecrets = read("supabase/migrations/202609060003_channel_secret_self_service.sql");
+const migrationLineFirst = read("supabase/migrations/202609090001_line_first_customer_journeys.sql");
 const stagingRunbook = read("docs/staging-acceptance-runbook.md");
 const smokePublic = read("scripts/smoke-public.mjs");
 const projectReadme = read("README.md");
@@ -1930,6 +1931,50 @@ invariant(
     read("app/admin/crm/AutomationMessageFields.tsx").includes("LINE 自動訊息即時預覽") &&
     read("app/admin/followups/FollowupComposer.tsx").includes("LINE 回訪即時預覽") &&
     read("app/admin/line/page.tsx").includes("測試推播實際內容"),
+);
+invariant(
+  "LINE-first built-in menu actions stay native while custom URLs remain configurable",
+  read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("booking")') &&
+    read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("events")') &&
+    read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("tickets")') &&
+    read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("membership")') &&
+    read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("support")') &&
+    read("lib/richmenu.ts").includes('case "uri":') &&
+    read("lib/richmenu.ts").includes("trackedUri(slot.value)"),
+);
+invariant(
+  "LINE webhook side effects are tenant-scoped, idempotent, and support native journeys",
+  migrationLineFirst.includes("create table if not exists public.line_webhook_events") &&
+    migrationLineFirst.includes("constraint line_webhook_events_clinic_event_unique unique (clinic_id, event_id)") &&
+    migrationLineFirst.includes("create or replace function public.claim_line_webhook_event") &&
+    migrationLineFirst.includes("revoke all on table public.line_webhook_events from public, anon, authenticated") &&
+    read("app/api/line/webhook/route.ts").includes("claimLineWebhookEvent") &&
+    read("app/api/line/webhook/route.ts").includes('action === "booking_service"') &&
+    read("app/api/line/webhook/route.ts").includes('action === "booking_date"') &&
+    read("app/api/line/webhook/route.ts").includes('action === "tickets"') &&
+    read("app/api/line/webhook/route.ts").includes('action === "membership"') &&
+    read("app/api/line/webhook/route.ts").includes('action === "support"'),
+);
+invariant(
+  "official LINE account linking uses short-lived hashed nonces and tenant-scoped completion",
+  migrationLineFirst.includes("create table if not exists public.line_account_link_nonces") &&
+    migrationLineFirst.includes("nonce_hash text not null") &&
+    migrationLineFirst.includes("expires_at > now()") &&
+    migrationLineFirst.includes("create or replace function public.complete_line_account_link") &&
+    migrationLineFirst.includes("where id = v_link.patient_id and clinic_id = p_clinic_id and active") &&
+    read("lib/line.ts").includes("issueLineAccountLinkToken") &&
+    read("app/api/line/account-link/complete/route.ts").includes('createHash("sha256")') &&
+    !read("app/api/line/account-link/complete/route.ts").includes("link_token:") &&
+    read("app/api/line/webhook/route.ts").includes('ev.type === "accountLink"'),
+);
+invariant(
+  "task-focused LIFF closes back to LINE and admin support replies are actually pushed",
+  read("lib/useLiff.ts").includes("closeLiffWindow") &&
+    read("app/book/page.tsx").includes("taskMode ? null") &&
+    read("app/book/page.tsx").includes("完成並回到 LINE") &&
+    read("app/register/page.tsx").includes("完成並回到 LINE") &&
+    read("app/api/admin/chat/route.ts").includes("pushMessages(payload.lineUserId") &&
+    read("app/api/admin/chat/route.ts").includes('updateStaffMessageDelivery(supabase, clinicId, messageId, "failed"'),
 );
 invariant(
   "public brand pages keep readable Chinese typography and explicit actions",

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getClinicSettings } from "@/lib/http";
-import { replyMessages, type LineMessage } from "@/lib/line";
+import { issueLineAccountLinkToken, replyMessages, type LineMessage } from "@/lib/line";
 import { buildLineMessage, type MsgData, type MsgKind } from "@/lib/lineMessage";
 import { safeReply } from "@/lib/line-webhook-reply";
 import { getPatientQueueToday, getQueueForDate, taipeiToday } from "@/lib/queue";
@@ -26,8 +26,7 @@ export interface MenuConfig {
 }
 
 // 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
-function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig, liffId: string | null = null, clinicSlug?: string | null): LineMessage {
-  const liff = liffUrl(liffId, clinicSlug);
+function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConfig): LineMessage {
   const c = cfg ?? { title: null, booking: true, query: true, progress: false, info: true, linkLabel: null, linkUrl: null };
   const buttons: LineMessage[] = [];
   if (c.booking) {
@@ -36,9 +35,7 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
       style: "primary",
       color: "#2563eb",
       height: "sm",
-      action: liff
-        ? { type: "uri", label: "立即預約", uri: liff }
-        : { type: "message", label: "立即預約", text: "預約" },
+      action: { type: "postback", label: "立即預約", data: "action=booking", displayText: "立即預約" },
     });
   }
   if (c.query) {
@@ -57,12 +54,12 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
       action: { type: "postback", label: "服務進度", data: "action=progress", displayText: "服務進度" },
     });
   }
-  if (c.info && baseUrl) {
+  if (c.info) {
     buttons.push({
       type: "button",
       style: "link",
       height: "sm",
-      action: { type: "uri", label: "品牌資訊", uri: baseUrl },
+      action: { type: "postback", label: "品牌資訊", data: "action=brand", displayText: "品牌資訊" },
     });
   }
   if (c.linkLabel && c.linkUrl) {
@@ -93,18 +90,20 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
 }
 
 export function welcomeMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
+  void liffId;
+  void clinicSlug;
   return menuBubble(
     cfg?.title || `歡迎加入${clinicName} 🌿`,
     custom || "您可以在這裡線上預約、查詢或取消預約。請點下方按鈕開始。",
     baseUrl,
     cfg,
-    liffId,
-    clinicSlug,
   );
 }
 
 export function menuMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
-  return menuBubble(cfg?.title || clinicName, custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg, liffId, clinicSlug);
+  void liffId;
+  void clinicSlug;
+  return menuBubble(cfg?.title || clinicName, custom || "請問需要什麼服務?請點下方按鈕。", baseUrl, cfg);
 }
 
 export function bookingPrompt(baseUrl: string, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台"): LineMessage {
@@ -176,7 +175,7 @@ export function bookingPrompt(baseUrl: string, liffId: string | null, clinicSlug
       },
     };
   }
-  return menuBubble(clinicName, "預約功能即將開放，請稍後或洽服務人員。", baseUrl, undefined, liffId, clinicSlug);
+  return menuBubble(clinicName, "預約功能即將開放，請稍後或洽服務人員。", baseUrl);
 }
 
 // ── 查詢我的預約 ────────────────────────────────────────────
@@ -197,6 +196,7 @@ export async function replyMyAppointments(
   svc: SupabaseClient,
   clinicId: string,
   lineAccessToken: string,
+  navigation?: { baseUrl: string; clinicSlug: string | null },
 ): Promise<void> {
   if (!lineUserId) {
     await safeReply(replyToken, "無法取得您的 LINE 身分，請稍後再試。", lineAccessToken);
@@ -212,7 +212,15 @@ export async function replyMyAppointments(
     .eq("line_user_id", lineUserId);
   const ids = (patients ?? []).map((p) => p.id);
   if (ids.length === 0) {
-    await safeReply(replyToken, "查無您名下的預約。若為初次使用，請先完成預約。", lineAccessToken);
+    if (navigation?.clinicSlug) {
+      const linkToken = await issueLineAccountLinkToken(lineUserId, lineAccessToken);
+      const linkUrl = new URL("/line/account-link", navigation.baseUrl);
+      linkUrl.searchParams.set("clinic_slug", navigation.clinicSlug);
+      linkUrl.searchParams.set("linkToken", linkToken);
+      await replyMessages(replyToken, [{ type: "template", altText: "綁定 LINE 會員資料", template: { type: "buttons", title: "尚未綁定會員資料", text: "完成一次安全驗證後，即可直接查詢既有預約、票券與會員權益。", actions: [{ type: "uri", label: "開始安全綁定", uri: linkUrl.toString() }] } }], lineAccessToken);
+    } else {
+      await safeReply(replyToken, "查無您名下的預約。若為初次使用，請先完成預約。", lineAccessToken);
+    }
     return;
   }
 
@@ -313,7 +321,19 @@ export async function replyMyAppointments(
         type: "box",
         layout: "vertical",
         paddingTop: "none",
+        spacing: "sm",
         contents: [
+          ...(navigation ? [{
+            type: "button",
+            style: "primary",
+            color: "#126248",
+            height: "sm",
+            action: {
+              type: "uri",
+              label: "改期這筆預約",
+              uri: `${navigation.baseUrl}/book/reschedule?appointment_id=${encodeURIComponent(r.id)}${navigation.clinicSlug ? `&clinic_slug=${encodeURIComponent(navigation.clinicSlug)}` : ""}&liff=1`,
+            },
+          }] : []),
           {
             type: "button",
             style: "secondary",

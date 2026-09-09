@@ -6,11 +6,13 @@
 
 ```mermaid
 flowchart LR
-  Customer[顧客：LINE LIFF／瀏覽器／嵌入元件] --> Web[Next.js App Router]
+  Customer[顧客：LINE 官方帳號／瀏覽器／嵌入元件] --> Line[LINE Messaging API]
+  Line --> Web[Next.js App Router]
+  Customer --> Web
   Staff[品牌成員：後台] --> Web
   Web --> DB[(Supabase Postgres + RLS)]
   Web --> Auth[Supabase Auth]
-  Web --> Line[LINE Messaging API]
+  Web --> Line
   Web --> Pay[綠界／藍新]
   Web --> Email[Email Provider]
   Cron[Vercel Cron／排程] --> Web
@@ -38,11 +40,12 @@ flowchart LR
 
 ### 顧客預約／報名
 
-1. 顧客從 LIFF、瀏覽器或嵌入入口取得公開品牌／活動資料。
-2. API 以活動／品牌資料庫關聯決定實際 `clinic_id`，不採信任意前端租戶欄位。
-3. LINE 身分以 ID token 驗證；非 LINE 流程使用必要的顧客資料與具品牌、顧客及期限簽章的 browser token。
-4. API 呼叫受保護的 SQL transaction／RPC 完成名額與狀態變更。
-5. 回傳最小必要結果；付款、通知與報到憑證使用不可猜測識別。
+1. 顧客主要從 Rich Menu postback 進入；服務、日期、活動、票券、會員、客服與品牌資訊先由 LINE 原生訊息承接。
+2. 只有時段選擇、必要資料、付款與報到憑證等複雜步驟開啟聚焦 LIFF；瀏覽器與嵌入入口保留完整備援。
+3. API 以活動／品牌資料庫關聯決定實際 `clinic_id`，不採信任意前端租戶欄位。
+4. LINE 身分以 ID token 或 Account Linking webhook 驗證；非 LINE 流程使用必要的顧客資料與具品牌、顧客及期限簽章的 browser token。
+5. API 呼叫受保護的 SQL transaction／RPC 完成名額與狀態變更。
+6. 回傳最小必要結果；付款、通知與報到憑證使用不可猜測識別。
 
 ### 顧客紀錄與行銷漏斗
 
@@ -63,6 +66,14 @@ flowchart LR
 2. 以外部 event id 或訂單號建立冪等紀錄。
 3. 只在事件屬於正確品牌且狀態轉移合法時更新資料。
 4. 失敗寫入可查詢的錯誤紀錄，回傳外部服務可接受的結果，不讓整批排程中斷。
+
+### LINE 原生互動與客服
+
+1. webhook 以 payload `destination` 取得品牌與該品牌 Vault 憑證；無法對應即拒絕，不回退其他品牌。
+2. 每一事件先寫入 `line_webhook_events` 原子認領，重送事件不重複執行取消、綁定、客服或打卡。
+3. `line_customer_sessions` 只保存短效意圖、步驟與必要識別，不保存輸入的顧客 PII 或秘密。
+4. 後台客服送出時同時呼叫 LINE push；`chat_messages.delivery_status` 明確區分送達與失敗，不以資料庫寫入冒充已送達。
+5. 會員綁定使用一次性 link token 與雜湊 nonce；完成後仍以 `clinic_id` 限定顧客，不跨品牌共用。
 
 ## Non-functional targets
 

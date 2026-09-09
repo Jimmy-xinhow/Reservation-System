@@ -7,6 +7,8 @@ interface LiffSdk {
   isLoggedIn: () => boolean;
   login: () => void;
   getIDToken: () => string | null;
+  isInClient?: () => boolean;
+  closeWindow?: () => void;
   openWindow?: (config: { url: string; external?: boolean }) => void;
 }
 
@@ -33,6 +35,7 @@ export interface LiffState {
   ready: boolean;
   idToken: string | null;
   error: string | null;
+  isInClient: boolean;
 }
 
 /**
@@ -40,12 +43,12 @@ export interface LiffState {
  * 代表該品牌沒有可用的 LIFF，避免先用全域 ID 初始化到錯誤渠道。
  */
 export function useLiff(liffId: string | null | undefined): LiffState {
-  const [state, setState] = useState<LiffState>({ ready: false, idToken: null, error: null });
+  const [state, setState] = useState<LiffState>({ ready: false, idToken: null, error: null, isInClient: false });
 
   useEffect(() => {
     if (liffId === undefined) return;
     if (!liffId) {
-      setState({ ready: false, idToken: null, error: "此品牌尚未完成 LIFF 設定" });
+      setState({ ready: false, idToken: null, error: "此品牌尚未完成 LIFF 設定", isInClient: false });
       return;
     }
     let cancelled = false;
@@ -60,13 +63,13 @@ export function useLiff(liffId: string | null | undefined): LiffState {
         const token = liff.getIDToken();
         if (cancelled) return;
         if (!token) {
-          setState({ ready: false, idToken: null, error: "無法取得 LINE 身分,請重新開啟" });
+          setState({ ready: false, idToken: null, error: "無法取得 LINE 身分,請重新開啟", isInClient: liff.isInClient?.() === true });
           return;
         }
-        setState({ ready: true, idToken: token, error: null });
+        setState({ ready: true, idToken: token, error: null, isInClient: liff.isInClient?.() === true });
       } catch (e) {
         if (!cancelled) {
-          setState({ ready: false, idToken: null, error: e instanceof Error ? e.message : "LIFF 初始化失敗" });
+          setState({ ready: false, idToken: null, error: e instanceof Error ? e.message : "LIFF 初始化失敗", isInClient: false });
         }
       }
     })();
@@ -76,4 +79,11 @@ export function useLiff(liffId: string | null | undefined): LiffState {
   }, [liffId]);
 
   return state;
+}
+
+/** 完成單一 LIFF 任務後回到 LINE；瀏覽器備援入口則回傳 false。 */
+export function closeLiffWindow(): boolean {
+  if (typeof window === "undefined" || window.liff?.isInClient?.() !== true || !window.liff.closeWindow) return false;
+  window.liff.closeWindow();
+  return true;
 }

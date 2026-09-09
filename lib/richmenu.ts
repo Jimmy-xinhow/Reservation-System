@@ -243,26 +243,34 @@ export function slotAction(
     url.searchParams.set("rm_slot", String(tracking.slotIndex + 1));
     return url.toString();
   };
+  const trackedPostback = (action: string): string => {
+    const params = new URLSearchParams({ action });
+    if (tracking) {
+      params.set("rm_version", tracking.versionId);
+      params.set("rm_slot", String(tracking.slotIndex + 1));
+    }
+    return params.toString();
+  };
   // 內建動作改用 postback:點了由 webhook 直接回覆,不需另設關鍵字規則
   switch (slot.action) {
     case "booking":
-      return withLabel({ type: "uri", uri: trackedUri(urls.booking) });
+      return withLabel({ type: "postback", data: trackedPostback("booking"), displayText: slot.label || "立即預約" });
     case "appointments":
     case "query":
-      return withLabel({ type: "uri", uri: trackedUri(urls.appointments) });
+      return withLabel({ type: "postback", data: trackedPostback("my"), displayText: slot.label || "我的預約" });
     case "events":
-      return withLabel({ type: "uri", uri: trackedUri(urls.events) });
+      return withLabel({ type: "postback", data: trackedPostback("events"), displayText: slot.label || "活動／課程" });
     case "tickets":
-      return withLabel({ type: "uri", uri: trackedUri(urls.tickets) });
+      return withLabel({ type: "postback", data: trackedPostback("tickets"), displayText: slot.label || "我的票券" });
     case "membership":
-      return withLabel({ type: "uri", uri: trackedUri(urls.membership) });
+      return withLabel({ type: "postback", data: trackedPostback("membership"), displayText: slot.label || "會員／套票" });
     case "support":
-      return withLabel({ type: "uri", uri: trackedUri(urls.support) });
+      return withLabel({ type: "postback", data: trackedPostback("support"), displayText: slot.label || "LINE 客服" });
     case "progress":
       return withLabel({ type: "postback", data: "action=progress", displayText: "服務進度" });
     case "brand":
     case "info":
-      return withLabel({ type: "uri", uri: trackedUri(urls.brand) });
+      return withLabel({ type: "postback", data: trackedPostback("brand"), displayText: slot.label || "品牌資訊" });
     case "uri":
       return slot.value ? withLabel({ type: "uri", uri: trackedUri(slot.value) }) : null;
     case "message":

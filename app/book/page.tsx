@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useLiff } from "@/lib/useLiff";
+import { closeLiffWindow, useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import ChatTab from "./ChatTab";
 import { CustomerEntryNav, CustomerHomeView, CustomerLiffView, type CustomerView } from "./CustomerEntry";
@@ -42,7 +42,7 @@ export default function BookPage() {
   const [entryConfig, setEntryConfig] = useState<EntryConfig | null>(null);
   const [entryError, setEntryError] = useState<string | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
-  const { ready, idToken, error: liffError } = useLiff(entryConfig === null ? undefined : entryConfig.liff_id);
+  const { ready, idToken, error: liffError, isInClient } = useLiff(entryConfig === null ? undefined : entryConfig.liff_id);
   const [loadErr, setLoadErr] = useState<string | null>(null);
 
   const [doctorId, setDoctorId] = useState("");
@@ -82,6 +82,7 @@ export default function BookPage() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const [view, setView] = useState<CustomerView>("home");
+  const [taskMode, setTaskMode] = useState(false);
   const trackedViews = useRef(new Set<string>());
 
   // 所有 Rich Menu 都進同一個 LIFF，再由 view 分流；保留舊 tab 參數相容。
@@ -89,6 +90,7 @@ export default function BookPage() {
     if (typeof window === "undefined") return;
     const params = liffEntryParams(window.location.search);
     const requested = params.get("view");
+    setTaskMode(params.get("task") === "1");
     if (["home", "booking", "appointments", "events", "tickets", "membership", "support", "brand"].includes(requested ?? "")) {
       setView(requested as CustomerView);
       return;
@@ -123,6 +125,16 @@ export default function BookPage() {
       .then(setConfig)
       .catch((e) => setLoadErr(e instanceof Error ? e.message : "預約設定載入失敗"));
   }, [entryConfig, view, config]);
+
+  // LINE 原生流程已先選好服務／日期時，LIFF 只承接剩餘必要步驟。
+  useEffect(() => {
+    if (!config || typeof window === "undefined") return;
+    const params = liffEntryParams(window.location.search);
+    const requestedService = params.get("service_id")?.trim() ?? "";
+    const requestedDate = params.get("date")?.trim() ?? "";
+    if (requestedService && config.services.some((service) => service.id === requestedService)) setServiceId(requestedService);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && requestedDate >= todayStr() && requestedDate <= todayStr(config.max_advance_days)) setDate(requestedDate);
+  }, [config]);
 
   // 取得此 LINE 身分已綁定的顧客
   const loadBound = useCallback(async () => {
@@ -369,7 +381,7 @@ export default function BookPage() {
   if (!entryConfig) return <Centered>載入顧客入口中…</Centered>;
   if (liffError) return <Centered tone="error"><span className="space-y-3"><span className="block">{liffError}</span><Link href={browserFallbackUrl(view)} className="btn btn-secondary inline-flex">改用瀏覽器入口</Link></span></Centered>;
 
-  const entryNav = <CustomerEntryNav view={view} availability={entryConfig.availability} onChange={changeView} />;
+  const entryNav = taskMode ? null : <CustomerEntryNav view={view} availability={entryConfig.availability} onChange={changeView} />;
   if (view === "home") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={{ clinicName: entryConfig.clinic_name, clinicSlug: entryConfig.clinic_slug, phone: entryConfig.phone, address: entryConfig.address, intro: entryConfig.intro, lineBasicId: entryConfig.line_basic_id, pageEnabled: entryConfig.brand_page_enabled }} onChange={changeView} /></Shell>;
   if (view === "appointments") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} /></Shell>;
   if (view === "events" && !entryConfig.availability.events) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前沒有開放中的活動報名。</div></Shell>;
@@ -397,6 +409,7 @@ export default function BookPage() {
           <div className="space-y-3 p-6 text-sm text-slate-600">
             <p>名額釋出後，系統會依順位暫時保留名額並透過 LINE／Email 通知；請在通知期限內至「我的預約」接受。</p>
             <button type="button" onClick={() => changeView("appointments")} className="btn btn-primary w-full">查看我的候補</button>
+            {taskMode && isInClient && <button type="button" onClick={() => closeLiffWindow()} className="btn btn-secondary w-full">完成並回到 LINE</button>}
             <button type="button" onClick={bookAnother} className="btn btn-secondary w-full">登記其他時段</button>
           </div>
         </div>
@@ -463,6 +476,9 @@ export default function BookPage() {
             <button onClick={bookAnother} className="btn btn-secondary w-full">
               再預約一筆
             </button>
+            {taskMode && isInClient && result.deposit_status !== "pending" && (
+              <button type="button" onClick={() => closeLiffWindow()} className="btn btn-primary w-full">完成並回到 LINE</button>
+            )}
           </div>
         </div>
       </Shell>

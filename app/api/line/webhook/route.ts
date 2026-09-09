@@ -2,10 +2,29 @@ import { NextRequest } from "next/server";
 import { createServiceClient, CLINIC_ID } from "@/lib/supabase";
 import { verifyLineSignature, replyMessages, lineCredentialsForDestination } from "@/lib/line";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
-import { bookingPrompt, buildMessageById, menuMessage, replyMyAppointments, replyProgress, welcomeMessage, type MenuConfig } from "@/lib/line-webhook-messages";
+import { buildMessageById, menuMessage, replyMyAppointments, replyProgress, welcomeMessage, type MenuConfig } from "@/lib/line-webhook-messages";
 import { safeReply } from "@/lib/line-webhook-reply";
 import { handleStatusPostback } from "@/lib/line-webhook-status";
 import { recordLineAttendance } from "@/lib/attendance";
+import {
+  endLineSupport,
+  handleLineSupportText,
+  lineAccountLinkConfirmation,
+  lineHomeMessage,
+  replyBookingContinue,
+  replyBookingDatePrompt,
+  replyBookingServices,
+  replyBrandInfo,
+  replyEvents,
+  replyLineHome,
+  replyMemberships,
+  replyTickets,
+  startLineSupport,
+  type LineCustomerJourneyContext,
+} from "@/lib/line-customer-journeys";
+import { handleLineStaffCommand } from "@/lib/line-staff-journeys";
+import { claimLineWebhookEvent, finishLineWebhookEvent } from "@/lib/line-session";
+import { resetLineAudienceMenu, syncLineAudienceMenu } from "@/lib/line-audience-menu";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +35,8 @@ interface LineEvent {
   replyToken?: string;
   source?: { userId?: string };
   message?: { type?: string; text?: string };
-  postback?: { data?: string };
+  postback?: { data?: string; params?: { date?: string; time?: string; datetime?: string } };
+  link?: { result?: "ok" | "failed"; nonce?: string };
 }
 
 interface LineWebhookBody {
@@ -109,12 +129,44 @@ export async function POST(req: NextRequest) {
     linkUrl: cs?.line_menu_link_url || null,
   };
 
+  const journeyContext: LineCustomerJourneyContext = {
+    service: svc,
+    clinicId,
+    clinicSlug,
+    clinicName,
+    liffId,
+    baseUrl,
+    lineAccessToken,
+  };
+
   for (const ev of events) {
     if (!ev.replyToken) continue;
+    let claimed = false;
     try {
+      claimed = await claimLineWebhookEvent(svc, clinicId, ev.webhookEventId, ev.type);
+      if (!claimed) continue;
       if (ev.type === "follow") {
-         await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName)], lineAccessToken);
+        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName), lineHomeMessage(journeyContext)], lineAccessToken);
+      } else if (ev.type === "accountLink") {
+        if (ev.link?.result !== "ok" || !ev.link.nonce || !ev.source?.userId) {
+          await safeReply(ev.replyToken, "會員綁定未完成，請回到選單重新操作。", lineAccessToken);
+        } else {
+          const { data, error } = await svc.rpc("complete_line_account_link", {
+            p_clinic_id: clinicId,
+            p_nonce: ev.link.nonce,
+            p_line_user_id: ev.source.userId,
+          });
+          if (error) throw new Error(error.message);
+          await syncLineAudienceMenu(svc, clinicId, ev.source.userId, "member", lineAccessToken).catch(() => false);
+          const linked = Array.isArray(data) ? data[0] : data;
+          await replyMessages(ev.replyToken, [{ type: "text", text: `${linked?.patient_name ? `${linked.patient_name}，` : ""}會員綁定完成。現在可直接查詢預約、票券與會員權益。`, quickReply: { items: [
+            { type: "action", action: { type: "postback", label: "查看會員套票", data: "action=membership", displayText: "查看會員套票" } },
+            { type: "action", action: { type: "postback", label: "查看我的票券", data: "action=tickets", displayText: "查看我的票券" } },
+          ] } }], lineAccessToken);
+        }
       } else if (ev.type === "message" && ev.message?.type === "text") {
+        await (async () => {
+        if (!ev.replyToken || !ev.message) return;
         const text = (ev.message.text ?? "").trim();
         if (text === "上班打卡" || text === "下班打卡") {
           const result = await recordLineAttendance(svc, {
@@ -124,8 +176,46 @@ export async function POST(req: NextRequest) {
             lineEventId: ev.webhookEventId,
           });
           await safeReply(ev.replyToken, result.message, lineAccessToken);
-          continue;
+          return;
         }
+        if (await handleLineStaffCommand(ev.replyToken, ev.source?.userId, text, journeyContext)) return;
+        if (text === "結束客服") {
+          await endLineSupport(ev.replyToken, ev.source?.userId, journeyContext);
+          return;
+        }
+        if (text === "選單" || text === "主選單" || text === "首頁") {
+          await replyLineHome(ev.replyToken, journeyContext);
+          return;
+        }
+        if (text === "預約" || text === "立即預約") {
+          await replyBookingServices(ev.replyToken, ev.source?.userId, journeyContext);
+          return;
+        }
+        if (["我的預約", "查詢預約", "預約查詢"].includes(text)) {
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, { baseUrl, clinicSlug });
+          return;
+        }
+        if (["活動", "課程", "活動課程", "課程報名"].includes(text)) {
+          await replyEvents(ev.replyToken, journeyContext);
+          return;
+        }
+        if (["票券", "我的票券"].includes(text)) {
+          await replyTickets(ev.replyToken, ev.source?.userId, journeyContext);
+          return;
+        }
+        if (["會員", "套票", "會員套票"].includes(text)) {
+          await replyMemberships(ev.replyToken, ev.source?.userId, journeyContext);
+          return;
+        }
+        if (["客服", "LINE客服", "聯絡客服"].includes(text)) {
+          await startLineSupport(ev.replyToken, ev.source?.userId, journeyContext);
+          return;
+        }
+        if (["品牌", "品牌資訊", "聯絡我們"].includes(text)) {
+          await replyBrandInfo(ev.replyToken, journeyContext);
+          return;
+        }
+        if (await handleLineSupportText(ev.replyToken, ev.source?.userId, text, journeyContext)) return;
         // 依後台規則(排序)找第一個命中的關鍵字
         const rule = replyRules.find((r) =>
           r.keywords
@@ -137,9 +227,9 @@ export async function POST(req: NextRequest) {
         if (rule?.action === "progress" && menuCfg.progress) {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (rule?.action === "query") {
-          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, { baseUrl, clinicSlug });
         } else if (rule?.action === "booking") {
-          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, liffId, clinicSlug, clinicName)], lineAccessToken);
+          await replyBookingServices(ev.replyToken, ev.source?.userId, journeyContext);
         } else if (rule?.action === "message" && rule.message_id) {
           const msg = await buildMessageById(svc, rule.message_id, baseUrl, clinicId, liffId, clinicSlug);
           if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
@@ -147,19 +237,49 @@ export async function POST(req: NextRequest) {
         } else if (rule?.action === "text" && rule.reply_text) {
           await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }], lineAccessToken);
         } else {
-          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName)], lineAccessToken);
+          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName), lineHomeMessage(journeyContext)], lineAccessToken);
         }
+        })();
       } else if (ev.type === "postback" && ev.postback?.data) {
         const params = new URLSearchParams(ev.postback.data);
         const action = params.get("action");
-        if (action === "my") {
-          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
+        if (action === "home") {
+          await replyLineHome(ev.replyToken, journeyContext);
+        } else if (action === "my") {
+          await replyMyAppointments(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken, { baseUrl, clinicSlug });
         } else if (action === "progress" && menuCfg.progress) {
           await replyProgress(ev.replyToken, ev.source?.userId, svc, clinicId, lineAccessToken);
         } else if (action === "progress") {
           await safeReply(ev.replyToken, "此品牌目前未開放服務進度查詢。", lineAccessToken);
         } else if (action === "booking") {
-          await replyMessages(ev.replyToken, [bookingPrompt(baseUrl, liffId, clinicSlug, clinicName)], lineAccessToken);
+          await replyBookingServices(ev.replyToken, ev.source?.userId, journeyContext);
+        } else if (action === "booking_service") {
+          await replyBookingDatePrompt(ev.replyToken, ev.source?.userId, params.get("service_id"), journeyContext);
+        } else if (action === "booking_date") {
+          await replyBookingContinue(ev.replyToken, ev.source?.userId, params.get("service_id"), ev.postback.params?.date, journeyContext);
+        } else if (action === "events") {
+          await replyEvents(ev.replyToken, journeyContext);
+        } else if (action === "tickets") {
+          await replyTickets(ev.replyToken, ev.source?.userId, journeyContext);
+        } else if (action === "membership") {
+          await replyMemberships(ev.replyToken, ev.source?.userId, journeyContext);
+        } else if (action === "support") {
+          await startLineSupport(ev.replyToken, ev.source?.userId, journeyContext);
+        } else if (action === "support_end") {
+          await endLineSupport(ev.replyToken, ev.source?.userId, journeyContext);
+        } else if (action === "brand") {
+          await replyBrandInfo(ev.replyToken, journeyContext);
+        } else if (action === "unlink_account") {
+          await replyMessages(ev.replyToken, [lineAccountLinkConfirmation()], lineAccessToken);
+        } else if (action === "unlink_confirm") {
+          if (!ev.source?.userId) throw new Error("無法取得 LINE 身分");
+          const [{ error: patientError }, { error: registrationError }] = await Promise.all([
+            svc.from("patients").update({ line_user_id: null }).eq("clinic_id", clinicId).eq("line_user_id", ev.source.userId),
+            svc.from("registrations").update({ line_user_id: null }).eq("clinic_id", clinicId).eq("line_user_id", ev.source.userId),
+          ]);
+          if (patientError || registrationError) throw new Error(patientError?.message ?? registrationError?.message ?? "解除綁定失敗");
+          await resetLineAudienceMenu(ev.source.userId, lineAccessToken).catch(() => undefined);
+          await safeReply(ev.replyToken, "已解除這個品牌的會員綁定，其他品牌不受影響。", lineAccessToken);
         } else if (action === "msg") {
           try {
             const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl, clinicId, liffId, clinicSlug);
@@ -183,8 +303,10 @@ export async function POST(req: NextRequest) {
           await safeReply(ev.replyToken, "無法辨識的操作", lineAccessToken);
         }
       }
-    } catch {
+      await finishLineWebhookEvent(svc, clinicId, ev.webhookEventId);
+    } catch (error) {
       await safeReply(ev.replyToken, "處理失敗,請稍後再試。", lineAccessToken);
+      if (claimed) await finishLineWebhookEvent(svc, clinicId, ev.webhookEventId, error).catch(() => undefined);
     }
   }
 

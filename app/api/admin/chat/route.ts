@@ -7,8 +7,12 @@ import {
   unreadCount,
   insertStaffMessage,
   setChatBlock,
+  updateStaffMessageDelivery,
 } from "@/lib/chatQueries";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
+import { createServiceClient } from "@/lib/supabase";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,7 +75,19 @@ export async function POST(req: NextRequest) {
       return ok({ blocked: false });
     }
     const body = payload.body ?? "";
-    await insertStaffMessage(supabase, clinicId, payload.lineUserId, body);
+    const messageId = await insertStaffMessage(supabase, clinicId, payload.lineUserId, body);
+    try {
+      const service = createServiceClient();
+      const lineContext = await getClinicLineChannelContext(service, clinicId);
+      if (!lineContext.enabled) throw new Error("此品牌尚未啟用 LINE 客服");
+      const accessToken = await lineAccessTokenForDestination(lineContext.destination ?? undefined);
+      await pushMessages(payload.lineUserId, [{ type: "text", text: body.trim() }], accessToken);
+      await updateStaffMessageDelivery(supabase, clinicId, messageId, "sent");
+    } catch (deliveryError) {
+      const detail = deliveryError instanceof Error ? deliveryError.message : "LINE 訊息傳送失敗";
+      await updateStaffMessageDelivery(supabase, clinicId, messageId, "failed", detail).catch(() => undefined);
+      throw new Error(`LINE 客服訊息未送達：${detail}`);
+    }
     const { data: patient } = await supabase
       .from("patients")
       .select("id")

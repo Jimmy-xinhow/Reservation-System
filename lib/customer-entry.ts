@@ -30,6 +30,8 @@ export interface CustomerEntryUrlContext {
   clinicSlug: string | null;
   liffId: string | null;
   preferLiff?: boolean;
+  /** Focused LIFF task parameters such as service/date/event. */
+  extraParams?: Record<string, string | null | undefined>;
 }
 
 export const CUSTOMER_ENTRY_DEFINITIONS: readonly CustomerEntryDefinition[] = [
@@ -61,5 +63,9 @@ export function customerEntryUrl(key: CustomerEntryKey, context: CustomerEntryUr
     : new URL(definition.browserPath, context.baseUrl);
   if (context.clinicSlug) url.searchParams.set("clinic_slug", context.clinicSlug);
   if (useLiff) url.searchParams.set("view", definition.liffView);
+  for (const [key, value] of Object.entries(context.extraParams ?? {})) {
+    const normalized = value?.trim();
+    if (normalized) url.searchParams.set(key, normalized);
+  }
   return url.toString();
 }
