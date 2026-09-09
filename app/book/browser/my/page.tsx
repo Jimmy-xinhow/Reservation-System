@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Brand } from "@/components/Brand";
 import { formatDateSession, formatTime } from "@/lib/slots";
 import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
+import { Shell as CustomerAppShell } from "../../BookingFlowUi";
 
 interface Appointment {
   id: string;
@@ -222,5 +222,5 @@ export default function BrowserMyAppointmentsPage() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-6 sm:px-6 sm:py-10"><header className="mb-6 flex items-center justify-between gap-3"><Brand subtitle="我的預約" /><Link href={scopePage("/my")} className="text-sm text-brand-700">我的紀錄</Link></header>{children}</main>;
+  return <CustomerAppShell><div className="mb-4 flex justify-end"><Link href={scopePage("/my")} className="text-sm text-brand-700">我的紀錄</Link></div>{children}</CustomerAppShell>;
 }

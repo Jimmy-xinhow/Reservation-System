@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Brand } from "@/components/Brand";
 import { formatDateSession, formatTime } from "@/lib/slots";
 import { closeLiffWindow, useLiff } from "@/lib/useLiff";
 import { liffEntryParams } from "@/lib/liff-entry-state";
+import { Shell as CustomerAppShell } from "../BookingFlowUi";
 
 interface Doctor {
   id: string;
@@ -342,7 +342,7 @@ export default function ReschedulePage() {
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto min-h-screen max-w-md px-4 pb-6"><header className="py-4"><Brand subtitle="預約改期" /></header>{children}</main>;
+  return <CustomerAppShell>{children}</CustomerAppShell>;
 }
 
 function Message({ children, tone }: { children: React.ReactNode; tone?: "error" }) {

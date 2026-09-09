@@ -11,6 +11,7 @@ import {
   type CustomerEntryAvailability,
   type CustomerEntryKey,
 } from "@/lib/customer-entry";
+import styles from "./CustomerApp.module.css";
 
 export type CustomerView = CustomerEntryKey;
 
@@ -22,6 +23,7 @@ export interface CustomerEntryBrand {
   intro: string | null;
   lineBasicId: string | null;
   pageEnabled: boolean;
+  logoUrl?: string | null;
 }
 
 const SHORT_LABELS: Record<CustomerView, string> = {
@@ -38,7 +40,7 @@ const SHORT_LABELS: Record<CustomerView, string> = {
 function EntryIcon({ entry }: { entry: CustomerView }) {
   const shared = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="mx-auto h-5 w-5" {...shared}>
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" {...shared}>
       {entry === "home" && <><path d="M3.5 10.5 12 3l8.5 7.5" /><path d="M5.5 9.5V21h13V9.5M9.5 21v-7h5v7" /></>}
       {entry === "booking" && <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M8 3v4M16 3v4M3 10h18M12 13v5M9.5 15.5h5" /></>}
       {entry === "appointments" && <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5V3h6v1.5M8.5 10h7M8.5 14h7M8.5 18h4" /></>}
@@ -54,17 +56,17 @@ function EntryIcon({ entry }: { entry: CustomerView }) {
 export function CustomerEntryNav({ view, availability, onChange }: { view: CustomerView; availability: CustomerEntryAvailability; onChange: (view: CustomerView) => void }) {
   const entries = enabledCustomerEntries(availability);
   return (
-    <nav aria-label="顧客服務" className="mb-4 grid grid-cols-4 gap-1 rounded-2xl bg-slate-100 p-1 sm:grid-cols-8">
+    <nav aria-label="顧客服務" className={styles.customerNav}>
       {entries.map((entry) => (
         <button
           key={entry.key}
           type="button"
           onClick={() => onChange(entry.key)}
           aria-current={view === entry.key ? "page" : undefined}
-          className={`min-h-14 rounded-xl px-1 py-2 text-xs font-medium transition ${view === entry.key ? "bg-white text-brand-700 shadow-sm" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}
+          className={styles.navButton}
         >
           <EntryIcon entry={entry.key} />
-          <span className="mt-1 block">{SHORT_LABELS[entry.key]}</span>
+          <span>{SHORT_LABELS[entry.key]}</span>
         </button>
       ))}
     </nav>
@@ -98,51 +100,52 @@ export function CustomerHomeView({
   const bookingDescription = bookingMode === "number" ? "選擇服務與開放場次" : HOME_DESCRIPTIONS.booking;
 
   return (
-    <section className="space-y-5">
-      <div className="card p-5 sm:p-6">
-        <p className="eyebrow">顧客服務中心</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
+    <section className={styles.home}>
+      <div className={styles.homeHero}>
+        <p className={styles.homeEyebrow}>WELCOME</p>
+        <h1 className={styles.homeTitle}>
           {brand.clinicName ?? "歡迎使用線上服務"}
         </h1>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
-          預約、活動報名、票券與會員資料集中在同一個入口，選擇要辦理的事項即可開始。
+        <p className={styles.homeLead}>
+          從今天想完成的事開始，我們會帶你走完需要的步驟。
         </p>
         {primary && (
-          <button type="button" onClick={() => onChange(primary.key)} className="btn btn-primary mt-5 w-full sm:w-auto">
-            <EntryIcon entry={primary.key} />
-            {primary.label}
+          <button type="button" onClick={() => onChange(primary.key)} className={styles.heroAction}>
+            <span className="flex items-center gap-2"><EntryIcon entry={primary.key} />{primary.label}</span>
+            <span aria-hidden>→</span>
           </button>
         )}
       </div>
 
       {secondary.length > 0 && (
         <div>
-          <h2 className="text-base font-semibold text-slate-900">常用服務</h2>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <h2 className={styles.menuLabel}>其他服務</h2>
+          <div className={`${styles.homeMenu} mt-3`}>
             {secondary.map((entry) => (
               <button
                 key={entry.key}
                 type="button"
                 onClick={() => onChange(entry.key)}
-                className="card flex min-h-20 items-center gap-4 p-4 text-left transition hover:border-brand-300 hover:bg-brand-50"
+                className={styles.homeMenuItem}
               >
-                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+                <span className={styles.menuIcon}>
                   <EntryIcon entry={entry.key} />
                 </span>
-                <span>
-                  <span className="block font-semibold text-slate-900">{entry.label}</span>
-                  <span className="mt-1 block text-sm leading-5 text-slate-500">
+                <span className={styles.menuCopy}>
+                  <span className={styles.menuTitle}>{entry.label}</span>
+                  <span className={styles.menuDescription}>
                     {entry.key === "booking" ? bookingDescription : entry.key === "home" ? "" : HOME_DESCRIPTIONS[entry.key]}
                   </span>
                 </span>
+                <span className={styles.menuArrow} aria-hidden>›</span>
               </button>
             ))}
           </div>
         </div>
       )}
 
-      <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">
-        查看個人預約、票券或會員資料時，系統會透過 LINE 確認身分，避免其他人看到您的資料。
+      <p className={styles.privacyNote}>
+        個人預約、票券與會員資料會先透過 LINE 驗證，再安全顯示。
       </p>
     </section>
   );
@@ -328,7 +331,30 @@ function MembershipList({ data }: { data: PortalData }) {
 
 function BrandView({ brand }: { brand: CustomerEntryBrand }) {
   const lineUrl = brand.lineBasicId ? `https://line.me/R/ti/p/${encodeURIComponent(brand.lineBasicId)}` : null;
-  return <section className="card overflow-hidden"><div className="bg-gradient-to-br from-brand-600 to-accent-600 p-6 text-white"><p className="text-sm text-white/75">品牌資訊</p><h1 className="mt-1 text-2xl font-bold">{brand.clinicName ?? "服務品牌"}</h1>{brand.intro && <p className="mt-3 text-sm leading-6 text-white/85">{brand.intro}</p>}</div><div className="space-y-3 p-5 text-sm text-slate-600">{brand.pageEnabled && <Link href={scopedPath("/")} className="btn btn-primary w-full">瀏覽品牌形象頁</Link>}{brand.phone && <a href={`tel:${brand.phone}`} className="block rounded-xl bg-slate-50 p-4">電話：{brand.phone}</a>}{brand.address && <p className="rounded-xl bg-slate-50 p-4">地址：{brand.address}</p>}{lineUrl && <a href={lineUrl} target="_blank" rel="noreferrer" className="btn w-full bg-[#06C755] text-white hover:opacity-90">開啟品牌 LINE</a>}</div></section>;
+  return (
+    <section className="card overflow-hidden">
+      <div className={styles.brandProfileHeader}>
+        <span className={styles.brandProfileLogo}>
+          {brand.logoUrl ? (
+            <>
+              {/* Tenant-owned logo URLs are validated when saved and intentionally bypass Next image hosts. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={brand.logoUrl} alt="" />
+            </>
+          ) : <span className="text-lg font-bold">{brand.clinicName?.slice(0, 1) ?? "B"}</span>}
+        </span>
+        <p className="text-xs font-semibold tracking-[0.12em] text-white/65">ABOUT</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">{brand.clinicName ?? "服務品牌"}</h1>
+        {brand.intro && <p className="mt-3 text-sm leading-7 text-white/75">{brand.intro}</p>}
+      </div>
+      <div className={styles.brandProfileBody}>
+        {brand.pageEnabled && <Link href={scopedPath("/")} className="btn btn-primary w-full">瀏覽品牌形象頁</Link>}
+        {brand.phone && <a href={`tel:${brand.phone}`} className={styles.brandContact}><span aria-hidden>☎</span><span>{brand.phone}</span></a>}
+        {brand.address && <p className={styles.brandContact}><span aria-hidden>⌖</span><span>{brand.address}</span></p>}
+        {lineUrl && <a href={lineUrl} target="_blank" rel="noreferrer" className="btn w-full bg-[#06C755] text-white hover:opacity-90">開啟品牌 LINE</a>}
+      </div>
+    </section>
+  );
 }
 
 function Message({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "error" }) {

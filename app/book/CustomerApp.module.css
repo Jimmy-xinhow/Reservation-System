@@ -1,0 +1,574 @@
+.viewport {
+  min-height: 100svh;
+  color: var(--customer-ink);
+  background: var(--customer-soft);
+}
+
+.shell {
+  --customer-primary: #31584d;
+  --customer-accent: #b89c68;
+  --customer-soft: #eef4f1;
+  --customer-ink: #1d302a;
+  --customer-line: color-mix(in srgb, var(--customer-primary) 14%, white);
+  min-height: 100svh;
+  font-family: var(--font-sans);
+}
+
+.appFrame {
+  position: relative;
+  min-height: 100svh;
+  margin-inline: auto;
+  overflow-x: clip;
+  background: color-mix(in srgb, var(--customer-soft) 42%, #fbfbf8);
+}
+
+.appHeader {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: max(0.75rem, env(safe-area-inset-top)) 1.25rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--customer-primary) 10%, white);
+  background: color-mix(in srgb, #fbfbf8 92%, transparent);
+  backdrop-filter: blur(18px) saturate(1.25);
+}
+
+.brandLockup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logoFrame {
+  display: grid;
+  width: 2.65rem;
+  height: 2.65rem;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--customer-primary) 14%, white);
+  border-radius: 1rem;
+  color: white;
+  background: var(--customer-primary);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--customer-primary) 18%, transparent);
+}
+
+.logoFrame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: white;
+}
+
+.logoFrame svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.brandName {
+  overflow: hidden;
+  color: var(--customer-ink);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brandSubtitle {
+  margin-top: 0.08rem;
+  color: color-mix(in srgb, var(--customer-ink) 58%, white);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.secureState {
+  display: inline-flex;
+  min-height: 2rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+  color: color-mix(in srgb, var(--customer-ink) 62%, white);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.secureState::before {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: #17a36b;
+  box-shadow: 0 0 0 4px rgba(23, 163, 107, 0.1);
+  content: "";
+}
+
+.appContent {
+  width: 100%;
+  padding: 1.25rem 1rem calc(2rem + env(safe-area-inset-bottom));
+}
+
+.appContent:has(.customerNav) {
+  padding-bottom: calc(7.75rem + env(safe-area-inset-bottom));
+}
+
+.customerNav {
+  position: fixed;
+  z-index: 60;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  width: 100%;
+  max-width: 42rem;
+  margin-inline: auto;
+  gap: 0.15rem;
+  overflow-x: auto;
+  padding: 0.5rem 0.55rem calc(0.5rem + env(safe-area-inset-bottom));
+  border-top: 1px solid color-mix(in srgb, var(--customer-primary) 12%, white);
+  background: color-mix(in srgb, #fff 94%, transparent);
+  box-shadow: 0 -12px 38px rgba(22, 37, 31, 0.08);
+  scrollbar-width: none;
+  backdrop-filter: blur(20px) saturate(1.35);
+}
+
+.customerNav::-webkit-scrollbar {
+  display: none;
+}
+
+.navButton {
+  display: grid;
+  min-width: 4.2rem;
+  min-height: 3.35rem;
+  flex: 1 0 4.2rem;
+  place-items: center;
+  gap: 0.15rem;
+  border-radius: 1rem;
+  color: color-mix(in srgb, var(--customer-ink) 52%, white);
+  font-size: 0.68rem;
+  font-weight: 600;
+  transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
+  touch-action: manipulation;
+}
+
+.navButton svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.navButton[aria-current="page"] {
+  color: var(--customer-primary);
+  background: color-mix(in srgb, var(--customer-primary) 9%, white);
+}
+
+.navButton:active {
+  transform: scale(0.96);
+}
+
+.home {
+  display: grid;
+  gap: 1rem;
+}
+
+.homeHero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.75rem 1.5rem 1.5rem;
+  border-radius: 1.75rem;
+  color: white;
+  background: var(--customer-primary);
+  box-shadow: 0 20px 50px color-mix(in srgb, var(--customer-primary) 22%, transparent);
+}
+
+.homeHero::after {
+  position: absolute;
+  top: 0;
+  right: 1.5rem;
+  width: 3.5rem;
+  height: 0.22rem;
+  border-radius: 0 0 999px 999px;
+  background: var(--customer-accent);
+  content: "";
+}
+
+.homeEyebrow {
+  margin-bottom: 0.75rem;
+  color: color-mix(in srgb, var(--customer-accent) 72%, white);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.homeTitle {
+  max-width: 16ch;
+  font-family: var(--font-display);
+  font-size: clamp(1.65rem, 7vw, 2.15rem);
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+}
+
+.homeLead {
+  max-width: 34rem;
+  margin-top: 0.75rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.heroAction {
+  display: flex;
+  min-height: 3.25rem;
+  width: 100%;
+  margin-top: 1.35rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-inline: 1.1rem;
+  border-radius: 1rem;
+  color: var(--customer-primary);
+  background: #fff;
+  font-size: 0.94rem;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.heroAction svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.menuLabel {
+  padding: 0.25rem 0.25rem 0;
+  color: color-mix(in srgb, var(--customer-ink) 62%, white);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.homeMenu {
+  overflow: hidden;
+  border: 1px solid var(--customer-line);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 14px 38px rgba(22, 37, 31, 0.055);
+}
+
+.homeMenuItem {
+  display: flex;
+  min-height: 4.8rem;
+  width: 100%;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.95rem 1rem;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.homeMenuItem + .homeMenuItem {
+  border-top: 1px solid var(--customer-line);
+}
+
+.menuIcon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 1rem;
+  color: var(--customer-primary);
+  background: color-mix(in srgb, var(--customer-primary) 9%, white);
+}
+
+.menuIcon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.menuCopy {
+  min-width: 0;
+  flex: 1;
+}
+
+.menuTitle {
+  display: block;
+  color: var(--customer-ink);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.menuDescription {
+  display: block;
+  margin-top: 0.18rem;
+  color: color-mix(in srgb, var(--customer-ink) 52%, white);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.menuArrow {
+  color: color-mix(in srgb, var(--customer-ink) 40%, white);
+  font-size: 1.25rem;
+}
+
+.privacyNote {
+  display: flex;
+  gap: 0.65rem;
+  padding: 0.6rem 0.35rem;
+  color: color-mix(in srgb, var(--customer-ink) 52%, white);
+  font-size: 0.74rem;
+  line-height: 1.6;
+}
+
+.privacyNote::before {
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-top: 0.35rem;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--customer-accent);
+  content: "";
+}
+
+.stateHero {
+  position: relative;
+  overflow: hidden;
+  padding: 1.75rem 1.5rem;
+  color: white;
+  text-align: center;
+  background: var(--customer-primary);
+}
+
+.stateHero h1,
+.brandProfileHeader h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.stateHero::after {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 0;
+  left: 1.5rem;
+  height: 0.2rem;
+  border-radius: 999px 999px 0 0;
+  background: var(--customer-accent);
+  content: "";
+}
+
+.stateHeroWarm {
+  background: #8a5a16;
+}
+
+.stateMark {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto 0.75rem;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.brandProfileHeader {
+  position: relative;
+  padding: 1.75rem 1.5rem;
+  color: white;
+  background: var(--customer-primary);
+}
+
+.brandProfileLogo {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  margin-bottom: 1.1rem;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 1.2rem;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.brandProfileLogo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: white;
+}
+
+.brandProfileBody {
+  display: grid;
+  gap: 0.7rem;
+  padding: 1.25rem;
+}
+
+.brandContact {
+  display: flex;
+  min-height: 3.2rem;
+  align-items: center;
+  gap: 0.65rem;
+  padding-inline: 0.25rem;
+  border-bottom: 1px solid var(--customer-line);
+  color: color-mix(in srgb, var(--customer-ink) 68%, white);
+}
+
+.shell :global(.card) {
+  border-color: var(--customer-line);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 38px rgba(22, 37, 31, 0.055);
+}
+
+.shell :global(.btn) {
+  min-height: 3.1rem;
+  border-radius: 1rem;
+  font-size: 0.9rem;
+  letter-spacing: 0.01em;
+}
+
+.shell :global(.btn.btn-primary) {
+  border-color: var(--customer-primary);
+  background: var(--customer-primary);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--customer-primary) 20%, transparent);
+}
+
+.shell :global(.btn.btn-primary:hover:not(:disabled)) {
+  background: color-mix(in srgb, var(--customer-primary) 91%, black);
+}
+
+.shell :global(.btn.btn-secondary) {
+  border-color: var(--customer-line);
+  color: var(--customer-ink);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.shell :global(.input) {
+  min-height: 3.15rem;
+  border-color: var(--customer-line);
+  border-radius: 0.95rem;
+  color: var(--customer-ink);
+  background: #fff;
+  box-shadow: 0 1px 0 rgba(22, 37, 31, 0.02);
+}
+
+.shell :global(.input:focus) {
+  border-color: var(--customer-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--customer-primary) 12%, transparent);
+}
+
+.shell :global(.label) {
+  margin-bottom: 0.45rem;
+  color: color-mix(in srgb, var(--customer-ink) 66%, white);
+  font-size: 0.78rem;
+}
+
+.shell :global(.eyebrow) {
+  color: var(--customer-primary);
+}
+
+.shell :global(.pill) {
+  min-height: 2.9rem;
+  border-color: var(--customer-line);
+  border-radius: 0.95rem;
+}
+
+.shell :global(.pill-active),
+.shell :global(.pill-active:hover) {
+  border-color: var(--customer-primary);
+  background: var(--customer-primary);
+}
+
+.shell :global(.bg-brand-50) {
+  background-color: color-mix(in srgb, var(--customer-primary) 8%, white);
+}
+
+.shell :global(.text-brand-600),
+.shell :global(.text-brand-700),
+.shell :global(.text-brand-800) {
+  color: var(--customer-primary);
+}
+
+.shell :global(.border-brand-100),
+.shell :global(.border-brand-200),
+.shell :global(.border-brand-300) {
+  border-color: var(--customer-line);
+}
+
+.shell :global(.bg-brand-600) {
+  background-color: var(--customer-primary);
+}
+
+.shell :global(.customer-progress-card) {
+  border: 0;
+  color: white;
+  background: var(--customer-primary);
+  box-shadow: 0 18px 40px color-mix(in srgb, var(--customer-primary) 20%, transparent);
+}
+
+.shell :global(.customer-state-panel) {
+  color: white;
+  background: var(--customer-primary);
+}
+
+.shell :global(.customer-chat-panel) {
+  min-height: 30rem;
+  height: calc(100dvh - 13.5rem);
+}
+
+.shell :global(.customer-chat-messages) {
+  border: 1px solid var(--customer-line);
+  border-radius: 1.5rem;
+  background: color-mix(in srgb, var(--customer-soft) 55%, white);
+}
+
+@media (min-width: 42rem) {
+  .viewport {
+    padding-block: 1.5rem;
+  }
+
+  .appFrame {
+    max-width: 42rem;
+    min-height: calc(100svh - 3rem);
+    border: 1px solid color-mix(in srgb, var(--customer-primary) 10%, white);
+    border-radius: 2rem;
+    box-shadow: 0 28px 80px rgba(22, 37, 31, 0.13);
+  }
+
+  .appHeader {
+    border-radius: 2rem 2rem 0 0;
+    padding-inline: 1.75rem;
+  }
+
+  .appContent {
+    padding: 1.75rem;
+  }
+
+  .appContent:has(.customerNav) {
+    padding-bottom: 8rem;
+  }
+
+  .customerNav {
+    bottom: 1.5rem;
+    border: 1px solid color-mix(in srgb, var(--customer-primary) 12%, white);
+    border-radius: 0 0 2rem 2rem;
+  }
+
+  .heroAction {
+    width: fit-content;
+    min-width: 14rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navButton,
+  .shell :global(.btn),
+  .shell :global(.pill) {
+    scroll-behavior: auto;
+    transition: none;
+  }
+}

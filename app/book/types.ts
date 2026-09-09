@@ -40,6 +40,11 @@ export interface EntryConfig {
   liff_id: string | null;
   booking_mode: "time" | "number";
   brand_page_enabled: boolean;
+  brand_logo_url: string | null;
+  brand_primary_color: string;
+  brand_accent_color: string;
+  brand_soft_color: string;
+  brand_ink_color: string;
   availability: CustomerEntryAvailability;
 }
 

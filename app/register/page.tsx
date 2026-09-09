@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Brand } from "@/components/Brand";
 import { formatAmount, formatEventDate, type PublicEvent } from "@/lib/registration";
 import { createQrSvg } from "@/lib/qr";
 import { trackFunnelEvent } from "@/lib/funnel-client";
 import { closeLiffWindow, useLiff } from "@/lib/useLiff";
+import { Shell as CustomerAppShell } from "@/app/book/BookingFlowUi";
 
 interface EventSummary {
   id: string;
@@ -272,11 +272,11 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken, liffRequested,
   else if (clinicId) myScope.set("clinic_id", clinicId);
   if (liffRequested) myScope.set("view", "tickets");
   const myHref = `${liffRequested ? "/book" : "/my"}${myScope.toString() ? `?${myScope.toString()}` : ""}`;
-  return <div className="card overflow-hidden"><div className="bg-gradient-to-br from-brand-600 to-brand-800 p-7 text-center text-white"><div className="text-3xl">✓</div><h1 className="mt-2 text-xl font-bold">報名資料已送出</h1><p className="mt-1 text-sm text-white/80">報名編號與報到憑證已建立，也可在「我的紀錄」查看。</p></div><div className="space-y-4 p-6 text-center"><div className="rounded-xl bg-slate-50 p-4"><div className="text-xs text-slate-500">報名編號</div><div className="mt-1 font-mono text-xl font-bold text-slate-900">{result.registration_no}</div></div>{result.registration_status !== "waitlisted" && result.payment_status !== "pending" && <div className="mx-auto w-52 rounded-xl border border-slate-200 bg-white p-3" dangerouslySetInnerHTML={{ __html: qrSvg }} />}{result.registration_status !== "waitlisted" && <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50 p-4 text-left"><div className="text-xs text-brand-700">報到憑證（請勿轉傳）</div><code className="mt-2 block break-all text-xs text-slate-700">{result.checkin_token}</code></div>}{result.payment_status === "pending" && <div className="space-y-2"><button type="button" onClick={() => void pay()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（${formatAmount(result.amount)}）`}</button>{error && <p className="rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}</div>}<p className="text-sm text-slate-500">目前狀態：{result.registration_status === "waitlisted" ? "候補中" : result.payment_status === "pending" ? "待付款" : "已確認"}</p>{isInClient && result.payment_status !== "pending" && <button type="button" className="btn btn-primary w-full" onClick={() => closeLiffWindow()}>完成並回到 LINE</button>}<Link href={myHref} className="btn btn-primary w-full">查看我的紀錄</Link><Link href={backHref} className="btn btn-secondary w-full">返回活動列表</Link></div></div>;
+  return <div className="card overflow-hidden"><div className="customer-state-panel p-7 text-center"><div className="text-3xl">✓</div><h1 className="mt-2 text-xl font-bold">報名資料已送出</h1><p className="mt-1 text-sm text-white/80">報名編號與報到憑證已建立，也可在「我的紀錄」查看。</p></div><div className="space-y-4 p-6 text-center"><div className="rounded-xl bg-slate-50 p-4"><div className="text-xs text-slate-500">報名編號</div><div className="mt-1 font-mono text-xl font-bold text-slate-900">{result.registration_no}</div></div>{result.registration_status !== "waitlisted" && result.payment_status !== "pending" && <div className="mx-auto w-52 rounded-xl border border-slate-200 bg-white p-3" dangerouslySetInnerHTML={{ __html: qrSvg }} />}{result.registration_status !== "waitlisted" && <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50 p-4 text-left"><div className="text-xs text-brand-700">報到憑證（請勿轉傳）</div><code className="mt-2 block break-all text-xs text-slate-700">{result.checkin_token}</code></div>}{result.payment_status === "pending" && <div className="space-y-2"><button type="button" onClick={() => void pay()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（${formatAmount(result.amount)}）`}</button>{error && <p className="rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}</div>}<p className="text-sm text-slate-500">目前狀態：{result.registration_status === "waitlisted" ? "候補中" : result.payment_status === "pending" ? "待付款" : "已確認"}</p>{isInClient && result.payment_status !== "pending" && <button type="button" className="btn btn-primary w-full" onClick={() => closeLiffWindow()}>完成並回到 LINE</button>}<Link href={myHref} className="btn btn-primary w-full">查看我的紀錄</Link><Link href={backHref} className="btn btn-secondary w-full">返回活動列表</Link></div></div>;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
-  return <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-6 sm:px-6 sm:py-10"><header className="mb-6"><Brand subtitle="課程與活動報名" /></header>{children}</main>;
+  return <CustomerAppShell>{children}</CustomerAppShell>;
 }
 
 function Centered({ children, tone }: { children: React.ReactNode; tone?: "error" }) {

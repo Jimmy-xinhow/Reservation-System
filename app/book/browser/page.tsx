@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Brand } from "@/components/Brand";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { trackFunnelEvent } from "@/lib/funnel-client";
 import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
+import { Shell as CustomerAppShell } from "../BookingFlowUi";
 
 interface BookingField { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox" | "consent"; required: boolean; options: string[]; }
 interface ServiceAddon { id: string; name: string; description: string | null; duration_minutes: number; price: number; }
@@ -261,7 +261,7 @@ export default function BrowserBookingPage() {
   );
 }
 
-function Shell({ children, clinicName }: { children: React.ReactNode; clinicName?: string | null }) { return <main className="mx-auto min-h-screen w-full max-w-2xl px-4 py-6 sm:px-6 sm:py-10"><header className="mb-6"><Brand name={clinicName} subtitle="瀏覽器預約備援" /></header>{children}</main>; }
+function Shell({ children, clinicName }: { children: React.ReactNode; clinicName?: string | null }) { return <CustomerAppShell clinicName={clinicName}>{children}</CustomerAppShell>; }
 
 function bookingFieldsReady(fields: BookingField[], answers: Record<string, unknown>): boolean {
   return fields.every((field) => {

@@ -93,8 +93,8 @@ export default function ChatTab({ idToken }: { idToken: string | null }) {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 200px)" }}>
-      <div className="flex-1 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
+    <div className="customer-chat-panel flex flex-col">
+      <div className="customer-chat-messages flex-1 space-y-3 overflow-y-auto p-3">
         {messages === null ? (
           <p className="pt-8 text-center text-sm text-slate-400">載入中…</p>
         ) : messages.length === 0 ? (

@@ -33,6 +33,7 @@ import type {
   Slot,
   WaitlistResult,
 } from "./types";
+import styles from "./CustomerApp.module.css";
 
 function todayStr(offset = 0): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(Date.now() + offset * 24 * 60 * 60 * 1000));
@@ -381,28 +382,46 @@ export default function BookPage() {
   if (!entryConfig) return <Centered>載入顧客入口中…</Centered>;
   if (liffError) return <Centered tone="error"><span className="space-y-3"><span className="block">{liffError}</span><Link href={browserFallbackUrl(view)} className="btn btn-secondary inline-flex">改用瀏覽器入口</Link></span></Centered>;
 
+  const shellBranding = {
+    clinicName: entryConfig.clinic_name,
+    logoUrl: entryConfig.brand_logo_url,
+    primary: entryConfig.brand_primary_color,
+    accent: entryConfig.brand_accent_color,
+    soft: entryConfig.brand_soft_color,
+    ink: entryConfig.brand_ink_color,
+  };
+  const customerBrand = {
+    clinicName: entryConfig.clinic_name,
+    clinicSlug: entryConfig.clinic_slug,
+    phone: entryConfig.phone,
+    address: entryConfig.address,
+    intro: entryConfig.intro,
+    lineBasicId: entryConfig.line_basic_id,
+    pageEnabled: entryConfig.brand_page_enabled,
+    logoUrl: entryConfig.brand_logo_url,
+  };
   const entryNav = taskMode ? null : <CustomerEntryNav view={view} availability={entryConfig.availability} onChange={changeView} />;
-  if (view === "home") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={{ clinicName: entryConfig.clinic_name, clinicSlug: entryConfig.clinic_slug, phone: entryConfig.phone, address: entryConfig.address, intro: entryConfig.intro, lineBasicId: entryConfig.line_basic_id, pageEnabled: entryConfig.brand_page_enabled }} onChange={changeView} /></Shell>;
-  if (view === "appointments") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} /></Shell>;
-  if (view === "events" && !entryConfig.availability.events) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前沒有開放中的活動報名。</div></Shell>;
-  if (view === "tickets" && !entryConfig.availability.tickets) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用活動票券。</div></Shell>;
-  if (view === "membership" && !entryConfig.availability.memberships) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用會員與套票。</div></Shell>;
-  if (view === "support" && !entryConfig.availability.line) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌的 LINE 客服尚未完成啟用。</div></Shell>;
-  if (view === "support") return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<ChatTab idToken={idToken} /></Shell>;
+  if (view === "home") return <Shell {...shellBranding}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={customerBrand} onChange={changeView} /></Shell>;
+  if (view === "appointments") return <Shell {...shellBranding}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} /></Shell>;
+  if (view === "events" && !entryConfig.availability.events) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前沒有開放中的活動報名。</div></Shell>;
+  if (view === "tickets" && !entryConfig.availability.tickets) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用活動票券。</div></Shell>;
+  if (view === "membership" && !entryConfig.availability.memberships) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用會員與套票。</div></Shell>;
+  if (view === "support" && !entryConfig.availability.line) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌的 LINE 客服尚未完成啟用。</div></Shell>;
+  if (view === "support") return <Shell {...shellBranding}>{entryNav}<ChatTab idToken={idToken} /></Shell>;
   if (["events", "tickets", "membership", "brand"].includes(view)) {
-    return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<CustomerLiffView view={view as "events" | "tickets" | "membership" | "brand"} idToken={idToken} brand={{ clinicName: entryConfig.clinic_name, clinicSlug: entryConfig.clinic_slug, phone: entryConfig.phone, address: entryConfig.address, intro: entryConfig.intro, lineBasicId: entryConfig.line_basic_id, pageEnabled: entryConfig.brand_page_enabled }} /></Shell>;
+    return <Shell {...shellBranding}>{entryNav}<CustomerLiffView view={view as "events" | "tickets" | "membership" | "brand"} idToken={idToken} brand={customerBrand} /></Shell>;
   }
-  if (!entryConfig.availability.booking) return <Shell clinicName={entryConfig.clinic_name}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前暫停線上預約，仍可使用上方其他服務。</div></Shell>;
+  if (!entryConfig.availability.booking) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前暫停線上預約，仍可使用其他服務。</div></Shell>;
   if (loadErr) return <Centered tone="error">{loadErr}</Centered>;
   if (!config) return <Centered>載入預約設定中…</Centered>;
 
   if (waitlistResult) {
     return (
-      <Shell clinicName={config.clinic_name}>
+      <Shell {...shellBranding}>
         {entryNav}
         <div className="card overflow-hidden">
-          <div className="bg-gradient-to-br from-amber-500 to-orange-500 p-6 text-center text-white">
-            <div className="text-4xl">✓</div>
+          <div className={`${styles.stateHero} ${styles.stateHeroWarm}`}>
+            <div className={styles.stateMark}>✓</div>
             <h1 className="mt-2 text-xl font-bold">候補登記完成</h1>
             <p className="mt-1 text-sm text-white/85">目前順位：第 {waitlistResult.position} 位</p>
           </div>
@@ -419,10 +438,10 @@ export default function BookPage() {
 
   if (result) {
     return (
-              <Shell clinicName={config.clinic_name}>
+      <Shell {...shellBranding}>
         <div className="card overflow-hidden">
-          <div className="bg-gradient-to-br from-brand-500 to-accent-600 p-6 text-center text-white">
-            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
+          <div className={styles.stateHero}>
+            <div className={styles.stateMark}>
               <svg viewBox="0 0 24 24" fill="none" className="h-8 w-8">
                 <path
                   d="M5 13l4 4L19 7"
@@ -486,7 +505,7 @@ export default function BookPage() {
   }
 
   return (
-    <Shell clinicName={config.clinic_name}>
+    <Shell {...shellBranding}>
       {entryNav}
       {bound === null ? (
         <div className="card p-6 text-center text-sm text-slate-400">確認身分中…</div>

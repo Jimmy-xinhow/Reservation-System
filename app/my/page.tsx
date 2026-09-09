@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Brand } from "@/components/Brand";
 import { formatEventDate } from "@/lib/registration";
 import { formatDateSession, formatTime } from "@/lib/slots";
 import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
+import { Shell as CustomerAppShell } from "@/app/book/BookingFlowUi";
 
 interface PortalData {
   patient: { name: string };
@@ -90,9 +90,9 @@ export default function MyCustomerPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-10">
-      <header className="mb-6 flex items-center justify-between gap-3">
-        <Brand subtitle="我的紀錄" />
+    <CustomerAppShell>
+      <div>
+      <header className="mb-6 flex items-center justify-end gap-3">
         <Link href={`/${scopeSuffix()}`} className="text-sm text-brand-700 hover:underline">返回品牌首頁</Link>
       </header>
       {loading && <p className="card p-6 text-center text-sm text-slate-500">載入我的紀錄…</p>}
@@ -105,7 +105,7 @@ export default function MyCustomerPage() {
       )}
       {!loading && data && (
         <div className="space-y-6">
-          <section className="rounded-2xl bg-gradient-to-br from-brand-600 to-accent-600 p-6 text-white"><p className="text-sm text-white/75">歡迎回來</p><h1 className="mt-1 text-2xl font-bold">{data.patient.name}</h1><p className="mt-2 text-sm text-white/80">預約、活動報名與套票都集中在這裡。</p></section>
+          <section className="customer-state-panel rounded-2xl p-6 text-white"><p className="text-sm text-white/75">歡迎回來</p><h1 className="mt-1 text-2xl font-bold">{data.patient.name}</h1><p className="mt-2 text-sm text-white/80">預約、活動報名與套票都集中在這裡。</p></section>
           <section className="grid gap-3 sm:grid-cols-3"><Summary label="未來預約" value={data.appointments.filter((item) => ["booked", "confirmed"].includes(item.status)).length} /><Summary label="活動報名" value={data.registrations.length} /><Summary label="使用中套票" value={data.memberships.filter((item) => item.status === "active").length} /></section>
           <section className="card space-y-3 p-5">
             <div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的預約</h2><Link href={`/book/browser${scopeSuffix()}`} className="text-sm text-brand-700">新增預約</Link></div>
@@ -116,7 +116,8 @@ export default function MyCustomerPage() {
         </div>
       )}
       {!loading && !data && !error && <p className="card p-6 text-center text-sm text-slate-500">完成一次預約、報名或會員查詢後，就能在這裡查看紀錄。</p>}
-    </main>
+      </div>
+    </CustomerAppShell>
   );
 }
 

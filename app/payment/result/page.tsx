@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createQrSvg } from "@/lib/qr";
+import { Shell as CustomerAppShell } from "@/app/book/BookingFlowUi";
 
 interface PaymentStatus {
   status: string;
@@ -60,7 +61,7 @@ export default function PaymentResultPage() {
   const backHref = clinicSlug ? `/?clinic_slug=${encodeURIComponent(clinicSlug)}` : "/";
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-lg items-center px-4 py-8">
+    <CustomerAppShell>
       <section className="card w-full space-y-5 p-6 text-center">
         <div className={`text-4xl ${succeeded ? "text-emerald-600" : "text-amber-600"}`}>{succeeded ? "✓" : "…"}</div>
         <h1 className="text-xl font-bold text-slate-900">{succeeded ? "付款完成" : data?.status === "failed" || data?.status === "expired" ? "付款未完成" : "付款處理中"}</h1>
@@ -69,6 +70,6 @@ export default function PaymentResultPage() {
         {qr && <p className="text-xs text-slate-500">報到 QR 已從本裝置的報名資料恢復，請勿轉傳。</p>}
         <Link href={backHref} className="btn btn-secondary w-full">返回品牌首頁</Link>
       </section>
-    </main>
+    </CustomerAppShell>
   );
 }

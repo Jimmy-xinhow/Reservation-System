@@ -190,7 +190,7 @@ export default function MyAppointments({
           {progress.map((item, index) => (
             <div
               key={`${item.doctorName}-${item.yourNumber}-${index}`}
-              className="card flex items-center justify-between bg-gradient-to-br from-brand-500 to-accent-600 p-4 text-white"
+              className="card customer-progress-card flex items-center justify-between p-4 text-white"
             >
               <div>
                 <div className="text-sm">{item.doctorName} · {item.label}</div>

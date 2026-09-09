@@ -1,10 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Brand } from "@/components/Brand";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { googleCalendarUrl, type CalEvent } from "@/lib/calendar";
 import type { CustomerEntryKey as CustomerView } from "@/lib/customer-entry";
 import { liffEntryParams } from "@/lib/liff-entry-state";
+import styles from "./CustomerApp.module.css";
 
 export interface ServiceAddon {
   id: string;
@@ -130,13 +130,93 @@ export function ServiceAddons({
   );
 }
 
-export function Shell({ children, clinicName }: { children: ReactNode; clinicName?: string | null }) {
+export interface CustomerAppBranding {
+  clinicName?: string | null;
+  logoUrl?: string | null;
+  primary?: string | null;
+  accent?: string | null;
+  soft?: string | null;
+  ink?: string | null;
+}
+
+function safeHex(value: string | null | undefined, fallback: string): string {
+  return value && /^#[0-9A-Fa-f]{6}$/.test(value) ? value : fallback;
+}
+
+export function Shell({ children, clinicName, logoUrl, primary, accent, soft, ink }: { children: ReactNode } & CustomerAppBranding) {
+  const [resolvedBranding, setResolvedBranding] = useState<CustomerAppBranding>({});
+  useEffect(() => {
+    if (logoUrl || primary) return;
+    const source = new URLSearchParams(window.location.search);
+    const scope = new URLSearchParams();
+    const clinicSlug = source.get("clinic_slug")?.trim();
+    const clinicId = source.get("clinic_id")?.trim();
+    if (clinicSlug) scope.set("clinic_slug", clinicSlug);
+    else if (clinicId) scope.set("clinic_id", clinicId);
+    if (!scope.toString()) return;
+    const controller = new AbortController();
+    void fetch(`/api/customer/entry-config?${scope.toString()}`, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json() as {
+          ok?: boolean;
+          data?: {
+            clinic_name: string | null;
+            brand_logo_url: string | null;
+            brand_primary_color: string;
+            brand_accent_color: string;
+            brand_soft_color: string;
+            brand_ink_color: string;
+          };
+        };
+        if (!response.ok || !body.ok || !body.data) return;
+        setResolvedBranding({
+          clinicName: body.data.clinic_name,
+          logoUrl: body.data.brand_logo_url,
+          primary: body.data.brand_primary_color,
+          accent: body.data.brand_accent_color,
+          soft: body.data.brand_soft_color,
+          ink: body.data.brand_ink_color,
+        });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [clinicName, logoUrl, primary]);
+  const displayedName = clinicName ?? resolvedBranding.clinicName;
+  const displayedLogo = logoUrl ?? resolvedBranding.logoUrl;
+  const appStyle = {
+    "--customer-primary": safeHex(primary ?? resolvedBranding.primary, "#31584D"),
+    "--customer-accent": safeHex(accent ?? resolvedBranding.accent, "#B89C68"),
+    "--customer-soft": safeHex(soft ?? resolvedBranding.soft, "#EEF4F1"),
+    "--customer-ink": safeHex(ink ?? resolvedBranding.ink, "#1D302A"),
+  } as CSSProperties;
   return (
-    <main className="mx-auto min-h-screen max-w-md px-4 pb-4">
-      <header className="flex items-center justify-between py-4">
-        <Brand name={clinicName} subtitle="線上服務" />
-      </header>
-      {children}
+    <main className={`${styles.viewport} ${styles.shell}`} style={appStyle}>
+      <div className={styles.appFrame}>
+        <header className={styles.appHeader}>
+          <div className={styles.brandLockup}>
+            <span className={styles.logoFrame}>
+              {displayedLogo ? (
+                <>
+                  {/* Tenant-owned logo URLs are validated when saved and intentionally bypass Next image hosts. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={displayedLogo} alt="" />
+                </>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 7.5A1.5 1.5 0 0 1 7.5 6h9A1.5 1.5 0 0 1 18 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 16.5z" stroke="currentColor" strokeWidth="1.7" />
+                  <path d="M8.5 12h7M12 8.5v7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              )}
+            </span>
+            <span className="min-w-0">
+              <span className={styles.brandName}>{displayedName?.trim() || "品牌線上服務"}</span>
+              <span className={styles.brandSubtitle}>專屬服務 App</span>
+            </span>
+          </div>
+          <span className={styles.secureState}>LINE 安全連線</span>
+        </header>
+        <div className={styles.appContent}>{children}</div>
+      </div>
     </main>
   );
 }
