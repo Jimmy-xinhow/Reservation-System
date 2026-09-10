@@ -208,25 +208,46 @@
 }
 
 .layoutImmersive .homeHero {
-  display: flex;
-  min-height: 27rem;
-  align-items: flex-end;
+  display: grid;
+  min-height: 25rem;
+  align-items: center;
+}
+
+.layoutImmersive .homeHeroCopy {
+  width: 100%;
+  transform: translateY(-1.65rem);
 }
 
 .layoutEditorial .homeHero {
-  min-height: 27rem;
-  padding-top: 15rem;
+  display: grid;
+  min-height: 25rem;
+  padding: 0;
+  align-items: stretch;
   background: color-mix(in srgb, var(--customer-primary) 92%, black);
 }
 
 .layoutEditorial .homeHeroImage {
-  height: 56%;
-  object-position: center;
+  height: 42%;
+  object-position: center 42%;
 }
 
 .layoutEditorial .homeHeroShade {
-  top: 56%;
+  top: 42%;
   background: var(--customer-primary);
+}
+
+.layoutEditorial .homeHeroCopy {
+  display: flex;
+  min-height: 25rem;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 9.5rem 1.5rem 1rem;
+}
+
+.layoutEditorial .heroAction {
+  min-height: 3rem;
+  margin-top: 0.75rem;
+  border-radius: 0.9rem;
 }
 
 .layoutMinimal .homeHero {

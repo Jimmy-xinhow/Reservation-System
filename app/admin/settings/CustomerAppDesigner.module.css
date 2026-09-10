@@ -382,9 +382,9 @@
 
 .previewHero > img { object-fit: cover; }
 .previewHeroShade { background: linear-gradient(180deg, rgba(14, 27, 22, 0.08), rgba(14, 27, 22, 0.82)); }
-.phone[data-layout="editorial"] .previewHero { display: grid; min-height: 19rem; align-items: end; background: #f2eee6; }
-.phone[data-layout="editorial"] .previewHero > img { height: 52%; object-position: center; }
-.phone[data-layout="editorial"] .previewHeroShade { top: 52%; background: var(--app-primary); }
+.phone[data-layout="editorial"] .previewHero { display: grid; min-height: 16.75rem; align-items: stretch; background: #f2eee6; }
+.phone[data-layout="editorial"] .previewHero > img { height: 42%; object-position: center 42%; }
+.phone[data-layout="editorial"] .previewHeroShade { top: 42%; background: var(--app-primary); }
 .phone[data-layout="minimal"] .previewHero { min-height: 15.5rem; background: var(--app-primary); }
 .phone[data-layout="minimal"] .previewHeroShade { background: radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--app-accent) 65%, transparent), transparent 30%); }
 
@@ -398,7 +398,19 @@
   padding: 1.25rem;
 }
 
-.phone[data-layout="editorial"] .previewHeroCopy { min-height: 9.25rem; }
+.phone:not([data-layout="editorial"]):not([data-layout="minimal"]) .previewHeroCopy {
+  justify-content: center;
+  transform: translateY(-1rem);
+}
+.phone[data-layout="editorial"] .previewHeroCopy {
+  min-height: 16.75rem;
+  justify-content: flex-start;
+  padding: 5.35rem 1.25rem 0.85rem;
+}
+.phone[data-layout="editorial"] .previewHeroCopy button {
+  min-height: 2.45rem;
+  margin-top: 0.65rem;
+}
 .previewHeroCopy > span { color: color-mix(in srgb, var(--app-accent) 75%, white); font-size: 0.55rem; font-weight: 800; letter-spacing: 0.14em; }
 .previewHeroCopy h4 { max-width: 13ch; margin-top: 0.4rem; font-family: var(--font-display); font-size: 1.65rem; line-height: 1.16; letter-spacing: -0.035em; }
 .previewHeroCopy p { max-width: 29ch; margin-top: 0.5rem; color: rgba(255,255,255,.76); font-size: 0.67rem; line-height: 1.6; }

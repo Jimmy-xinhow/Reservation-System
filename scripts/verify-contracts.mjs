@@ -1979,6 +1979,17 @@ invariant(
     read("app/admin/settings/CustomerAppDesigner.tsx").includes('aria-label="顧客 App 快速切換預覽"'),
 );
 invariant(
+  "customer App immersive and editorial hero layouts keep copy high and image proportions compact",
+  read("app/book/CustomerApp.module.css").includes(".layoutImmersive .homeHeroCopy") &&
+    read("app/book/CustomerApp.module.css").includes("transform: translateY(-1.65rem);") &&
+    read("app/book/CustomerApp.module.css").includes(".layoutEditorial .homeHeroImage") &&
+    read("app/book/CustomerApp.module.css").includes("height: 42%;") &&
+    read("app/book/CustomerApp.module.css").includes("padding: 9.5rem 1.5rem 1rem;") &&
+    read("app/admin/settings/CustomerAppDesigner.module.css").includes('data-layout="editorial"') &&
+    read("app/admin/settings/CustomerAppDesigner.module.css").includes("min-height: 16.75rem;") &&
+    read("app/admin/settings/CustomerAppDesigner.module.css").includes("transform: translateY(-1rem);"),
+);
+invariant(
   "LINE-first built-in menu actions stay native while custom URLs remain configurable",
   read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("booking")') &&
     read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("events")') &&
