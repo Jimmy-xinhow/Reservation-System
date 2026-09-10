@@ -150,8 +150,12 @@ export default function LineTemplateGallery({ clinicName, initialDesigns, initia
         onCategoryChange={setCategory}
         onSelect={selectTemplate}
       />
-      <FlexDesignEditor
+      <FlexLivePreview
         clinicName={clinicName}
+        template={selectedTemplate}
+        design={design}
+      />
+      <FlexDesignEditor
         template={selectedTemplate}
         design={design}
         publishedVersion={savedDesigns[selectedKey]?.version}
@@ -208,7 +212,6 @@ function TemplatePurposeBrowser({
 }
 
 function FlexDesignEditor({
-  clinicName,
   template,
   design,
   publishedVersion,
@@ -219,7 +222,6 @@ function FlexDesignEditor({
   uploading,
   uploadError,
 }: {
-  clinicName: string;
   template: LineUiTemplateDefinition;
   design: LineFlexDesignConfig;
   publishedVersion?: number;
@@ -230,19 +232,6 @@ function FlexDesignEditor({
   uploading: boolean;
   uploadError: string;
 }) {
-  const activeStyle = LINE_FLEX_STYLE_PRESETS.find((style) => style.key === design.styleKey) ?? LINE_FLEX_STYLE_PRESETS[0];
-  const previewTemplate: LineUiTemplateDefinition = {
-    ...template,
-    badge: design.badge || template.badge,
-    headline: design.title || template.headline,
-    body: design.body || template.body,
-    accent: design.accent,
-    primaryAction: design.primaryActionLabel || template.primaryAction,
-    secondaryAction: design.secondaryActionLabel || undefined,
-    details: design.showDetails
-      ? template.details.map(([label, value], index) => [design.detailLabels[index] || label, value])
-      : [],
-  };
   const kind = PREVIEW_KIND[template.key] ?? "appointment";
   return (
     <section id="line-flex-editor" className="line-panel line-flex-studio overflow-hidden p-0" aria-label="品牌 Flex 設計工作區">
@@ -339,17 +328,36 @@ function FlexDesignEditor({
             <button type="submit" formAction={publishLineFlexDesignAction} className="btn btn-primary min-h-11">發布到實際 LINE</button>
           </div>
         </form>
-
-        <aside className="line-flex-preview-column">
-          <div className="line-flex-preview-head"><div><span className="line-live-status">輸入即時更新</span><strong>{clinicName}</strong></div><small>LINE 實際閱讀比例預覽</small></div>
-          <div className="line-flex-phone-canvas" data-flex-style={design.styleKey}>
-            <TemplatePreview template={previewTemplate} kind={kind} imageUrl={design.showImage ? design.imageUrl : ""} />
-          </div>
-          <div className="line-flex-preview-caption"><strong>{activeStyle.name}</strong><span>{activeStyle.structure}</span></div>
-          <p className="line-flex-preview-note">動態日期、金額、服務與顧客資料會由系統帶入；此處編輯品牌外觀、文案與欄位名稱。</p>
-        </aside>
       </div>
     </section>
+  );
+}
+
+function FlexLivePreview({ clinicName, template, design }: { clinicName: string; template: LineUiTemplateDefinition; design: LineFlexDesignConfig }) {
+  const activeStyle = LINE_FLEX_STYLE_PRESETS.find((style) => style.key === design.styleKey) ?? LINE_FLEX_STYLE_PRESETS[0];
+  const kind = PREVIEW_KIND[template.key] ?? "appointment";
+  const previewTemplate: LineUiTemplateDefinition = {
+    ...template,
+    badge: design.badge || template.badge,
+    headline: design.title || template.headline,
+    body: design.body || template.body,
+    accent: design.accent,
+    primaryAction: design.primaryActionLabel || template.primaryAction,
+    secondaryAction: design.secondaryActionLabel || undefined,
+    details: design.showDetails
+      ? template.details.map(([label, value], index) => [design.detailLabels[index] || label, value])
+      : [],
+  };
+
+  return (
+    <aside className="line-flex-workspace-preview" aria-label="輸入即時更新預覽">
+      <div className="line-flex-preview-head"><div><span className="line-live-status">輸入即時更新</span><strong>{clinicName}</strong></div><small>LINE 實際閱讀比例預覽</small></div>
+      <div className="line-flex-phone-canvas" data-flex-style={design.styleKey}>
+        <TemplatePreview template={previewTemplate} kind={kind} imageUrl={design.showImage ? design.imageUrl : ""} />
+      </div>
+      <div className="line-flex-preview-caption"><strong>{activeStyle.name}</strong><span>{activeStyle.structure}</span></div>
+      <p className="line-flex-preview-note">動態日期、金額、服務與顧客資料會由系統帶入；此處編輯品牌外觀、文案與欄位名稱。</p>
+    </aside>
   );
 }
 
