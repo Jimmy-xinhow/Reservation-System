@@ -8,6 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { customerEntryUrl } from "@/lib/customer-entry";
+import { lineFlexDesignForDelivery } from "@/lib/line-flex-design";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -104,7 +105,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
       continue;
     }
     try {
-      await pushMessages(appointment.patients.line_user_id, [buildReminderFlex(appointment, settings.booking_mode, clinic?.name as string | null, manageUrl)], lineAccessToken);
+      await pushMessages(appointment.patients.line_user_id, [buildReminderFlex(appointment, settings.booking_mode, clinic?.name as string | null, manageUrl, settings.line_flex_designs)], lineAccessToken);
       await finishReminder(svc, claim, "sent");
       line += 1;
     } catch (error) {
@@ -174,7 +175,7 @@ function escapeHtml(value: string): string {
   });
 }
 
-function buildReminderFlex(a: ApptRow, mode: "time" | "number", clinicName: string | null, manageUrl: string): LineMessage {
+function buildReminderFlex(a: ApptRow, mode: "time" | "number", clinicName: string | null, manageUrl: string, lineFlexDesigns: unknown): LineMessage {
   const doctor = a.doctors?.name ?? "由品牌安排";
   const when =
     mode === "time"
@@ -189,6 +190,7 @@ function buildReminderFlex(a: ApptRow, mode: "time" | "number", clinicName: stri
     manageUrl,
     queueNumber: a.queue_number,
     cancelPostbackData: `action=cancel&id=${a.id}`,
+    design: lineFlexDesignForDelivery(lineFlexDesigns, "appointment_reminder", process.env.APP_URL?.trim() || "http://localhost:3000"),
   });
 }
 

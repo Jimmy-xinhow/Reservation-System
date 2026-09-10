@@ -47,8 +47,11 @@ create table if not exists clinic_settings (
 alter table clinic_settings add column if not exists email_enabled boolean not null default false;
 alter table clinic_settings add column if not exists beauty_operations_enabled boolean not null default false;
 alter table clinic_settings add column if not exists dashboard_focus text not null default 'mixed';
+alter table clinic_settings add column if not exists line_flex_designs jsonb not null default '{}'::jsonb;
 alter table clinic_settings drop constraint if exists clinic_settings_dashboard_focus_check;
 alter table clinic_settings add constraint clinic_settings_dashboard_focus_check check (dashboard_focus in ('booking','registration','mixed'));
+alter table clinic_settings drop constraint if exists clinic_settings_line_flex_designs_object_check;
+alter table clinic_settings add constraint clinic_settings_line_flex_designs_object_check check (jsonb_typeof(line_flex_designs) = 'object');
 do $$
 begin
   if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'clinic_settings' and column_name = 'resend_api_key') then

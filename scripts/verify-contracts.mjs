@@ -2064,6 +2064,19 @@ invariant(
     ),
 );
 invariant(
+  "LINE Flex templates are copyable brand drafts with live preview and explicit publication",
+  read("supabase/migrations/202609100001_line_flex_design_workbench.sql").includes("line_flex_designs jsonb") &&
+    schema.includes("clinic_settings_line_flex_designs_object_check") &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("LINE_FLEX_WELCOME_PRESETS") &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("套用並編輯") &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("儲存品牌草稿") &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("發布到實際 LINE") &&
+    read("app/admin/line-actions.ts").includes("saveLineFlexDesignAction") &&
+    read("app/admin/line-actions.ts").includes("publishLineFlexDesignAction") &&
+    read("lib/line-ui-templates.ts").includes("applyLineFlexDesign") &&
+    read("app/api/line/webhook/route.ts").includes("lineFlexDesigns: cs?.line_flex_designs"),
+);
+invariant(
   "official LINE account linking uses short-lived hashed nonces and tenant-scoped completion",
   migrationLineFirst.includes("create table if not exists public.line_account_link_nonces") &&
     migrationLineFirst.includes("nonce_hash text not null") &&

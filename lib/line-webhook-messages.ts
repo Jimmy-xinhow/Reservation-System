@@ -7,6 +7,7 @@ import { safeReply } from "@/lib/line-webhook-reply";
 import { getPatientQueueToday, getQueueForDate, taipeiToday } from "@/lib/queue";
 import { formatDateSession, formatTime } from "@/lib/slots";
 import { buildLineExperienceCard, lineBrandTheme, type LineFlexButton } from "@/lib/line-ui-templates";
+import { lineFlexDesignForDelivery } from "@/lib/line-flex-design";
 
 // ── 訊息樣板 ────────────────────────────────────────────────
 function liffUrl(liffId: string | null, clinicSlug?: string | null): string | null {
@@ -32,6 +33,7 @@ interface LineMessageBranding {
   brandTemplate: string | null;
   brandPrimaryColor: string | null;
   brandAccentColor: string | null;
+  lineFlexDesigns?: unknown;
 }
 
 // 主選單卡片(歡迎 / 預設回覆共用):標題 + 內文 + 可自訂按鈕(只顯示文字,不露網址)
@@ -67,6 +69,7 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
     highlight: ["快速入口", "預約・查詢・品牌服務"],
     details: [["使用方式", "直接點選下方需要辦理的事項"]],
     buttons: buttons.slice(0, 5),
+    design: lineFlexDesignForDelivery(branding?.lineFlexDesigns, "service_hub", baseUrl),
   });
 }
 
@@ -94,6 +97,7 @@ export function welcomeMessage(baseUrl: string, custom: string | null | undefine
     highlight: ["從 LINE 開始", "介紹・會員・預約"],
     details: [["會員綁定", "直接綁定目前 LINE 帳號"], ["預約方式", "先看日期現況，再選時段"]],
     buttons,
+    design: lineFlexDesignForDelivery(branding?.lineFlexDesigns, "welcome", baseUrl),
   });
 }
 

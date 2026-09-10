@@ -8,6 +8,7 @@ import { clearLineCustomerSession, getLineCustomerSession, saveLineCustomerSessi
 import { isClinicOpenNow } from "@/lib/queue";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { buildLineExperienceCard, lineBrandTheme, type LineBrandTheme, type LineFlexButton } from "@/lib/line-ui-templates";
+import { lineFlexDesignForDelivery, type LineFlexTemplateKey } from "@/lib/line-flex-design";
 
 export interface LineCustomerJourneyContext {
   service: SupabaseClient;
@@ -20,6 +21,7 @@ export interface LineCustomerJourneyContext {
   brandTemplate: string | null;
   brandPrimaryColor: string | null;
   brandAccentColor: string | null;
+  lineFlexDesigns?: unknown;
 }
 
 interface ClinicInfoRow {
@@ -257,10 +259,27 @@ function postback(label: string, action: string): Record<string, unknown> {
   return { type: "postback", label: short(label), data: action, displayText: short(label) };
 }
 
-type LineBranding = Pick<LineCustomerJourneyContext, "clinicName" | "brandTemplate" | "brandPrimaryColor" | "brandAccentColor">;
+type LineBranding = Pick<LineCustomerJourneyContext, "clinicName" | "baseUrl" | "brandTemplate" | "brandPrimaryColor" | "brandAccentColor" | "lineFlexDesigns">;
 
 function themeFor(context: LineBranding): LineBrandTheme {
   return lineBrandTheme(context.brandTemplate, context.brandPrimaryColor, context.brandAccentColor);
+}
+
+function lineFlexKeyForCard(input: { badge: string; title: string; body: string; highlight: [string, string] }): LineFlexTemplateKey {
+  const content = `${input.badge} ${input.title} ${input.body} ${input.highlight[0]}`;
+  if (/付款|訂金|待付/.test(content)) return "payment_pending";
+  if (/提醒|快到了/.test(content)) return "appointment_reminder";
+  if (/候補名額|需要你的確認/.test(content)) return "waitlist_offer";
+  if (/候補|順位/.test(content)) return "waitlist_joined";
+  if (/票券|QR/.test(content)) return "ticket_ready";
+  if (/報名|活動|課程/.test(content)) return "registration_confirmed";
+  if (/會員綁定|啟用 LINE 會員|連結會員/.test(content)) return "account_link";
+  if (/會員|套票|權益|餘額/.test(content)) return "membership_balance";
+  if (/客服|案件|對話/.test(content)) return "support_handoff";
+  if (/改期|取消|更新|失效/.test(content)) return "appointment_changed";
+  if (/再次預約|上次服務/.test(content)) return "quick_rebook";
+  if (/選擇.*服務|服務選單|想先辦理/.test(content)) return "booking_service_select";
+  return "booking_confirmed";
 }
 
 function brandedCard(context: LineBranding, input: {
@@ -280,6 +299,7 @@ function brandedCard(context: LineBranding, input: {
     softAccent: theme.soft,
     markerColor: theme.accent,
     buttons: input.buttons ?? [],
+    design: lineFlexDesignForDelivery(context.lineFlexDesigns, lineFlexKeyForCard(input), context.baseUrl),
   });
 }
 

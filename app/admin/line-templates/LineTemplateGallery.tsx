@@ -1,8 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { LINE_UI_CATEGORIES, LINE_UI_TEMPLATES, type LineUiCategory, type LineUiTemplateDefinition } from "@/lib/line-ui-templates";
+import {
+  LINE_FLEX_STYLE_PRESETS,
+  LINE_FLEX_WELCOME_PRESETS,
+  isLineFlexTemplateKey,
+  parseLineFlexDesignSettings,
+  type LineFlexDesignConfig,
+  type LineFlexStyleKey,
+  type LineFlexTemplateKey,
+} from "@/lib/line-flex-design";
+import { publishLineFlexDesignAction, saveLineFlexDesignAction } from "@/app/admin/line-actions";
 
 type PreviewKind =
   | "welcome" | "menu" | "story" | "selector" | "calendar" | "appointment" | "payment"
@@ -39,11 +49,111 @@ const PREVIEW_IMAGE: Partial<Record<PreviewKind, string>> = {
   campaign: "/showcase/elan-skincare-detail-v2.webp",
 };
 
-export default function LineTemplateGallery() {
+interface LineTemplateGalleryProps {
+  clinicName: string;
+  initialDesigns: unknown;
+  initialTemplateKey?: string;
+  brandPrimaryColor: string | null;
+  brandAccentColor: string | null;
+}
+
+const DEFAULT_STYLE: Partial<Record<LineFlexTemplateKey, LineFlexStyleKey>> = {
+  welcome: "signature", service_hub: "action_grid", brand_story: "editorial",
+  booking_service_select: "action_grid", booking_date_select: "minimal", booking_confirmed: "signature",
+  payment_pending: "timeline", appointment_reminder: "timeline", appointment_changed: "timeline",
+  waitlist_joined: "timeline", waitlist_offer: "timeline", quick_rebook: "soft_panel",
+  registration_confirmed: "ticket", event_feature: "poster", ticket_ready: "ticket",
+  membership_balance: "member_pass", account_link: "concierge", campaign: "editorial",
+  support_handoff: "timeline", support_active: "soft_panel", staff_today: "minimal",
+};
+
+function createDesign(template: LineUiTemplateDefinition, primary: string | null, marker: string | null): LineFlexDesignConfig {
+  return {
+    templateKey: template.key as LineFlexTemplateKey,
+    styleKey: DEFAULT_STYLE[template.key as LineFlexTemplateKey] ?? "signature",
+    name: `${template.title}－品牌版本`,
+    badge: template.badge,
+    title: template.headline,
+    body: template.body,
+    imageUrl: PREVIEW_IMAGE[PREVIEW_KIND[template.key]] ?? "",
+    accent: primary && /^#[0-9A-Fa-f]{6}$/.test(primary) ? primary : template.accent,
+    markerColor: marker && /^#[0-9A-Fa-f]{6}$/.test(marker) ? marker : "#D8B26A",
+    showImage: ["brand_story", "event_feature", "campaign"].includes(template.key),
+    showDetails: true,
+    detailLabels: template.details.map(([label]) => label),
+    primaryActionLabel: template.primaryAction,
+    secondaryActionLabel: template.secondaryAction ?? "",
+  };
+}
+
+export default function LineTemplateGallery({ clinicName, initialDesigns, initialTemplateKey, brandPrimaryColor, brandAccentColor }: LineTemplateGalleryProps) {
   const [category, setCategory] = useState<"all" | LineUiCategory>("all");
+  const savedDesigns = useMemo(() => parseLineFlexDesignSettings(initialDesigns), [initialDesigns]);
+  const firstTemplateKey = isLineFlexTemplateKey(initialTemplateKey) ? initialTemplateKey : "welcome";
+  const initialTemplate = LINE_UI_TEMPLATES.find((item) => item.key === firstTemplateKey) ?? LINE_UI_TEMPLATES[0];
+  const [selectedKey, setSelectedKey] = useState<LineFlexTemplateKey>(firstTemplateKey);
+  const [design, setDesign] = useState<LineFlexDesignConfig>(() => savedDesigns[firstTemplateKey]?.draft ?? createDesign(initialTemplate, brandPrimaryColor, brandAccentColor));
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const templates = category === "all" ? LINE_UI_TEMPLATES : LINE_UI_TEMPLATES.filter((template) => template.category === category);
+  const selectedTemplate = LINE_UI_TEMPLATES.find((item) => item.key === selectedKey) ?? initialTemplate;
+
+  function selectTemplate(template: LineUiTemplateDefinition) {
+    if (!isLineFlexTemplateKey(template.key)) return;
+    setSelectedKey(template.key);
+    setDesign(savedDesigns[template.key]?.draft ?? createDesign(template, brandPrimaryColor, brandAccentColor));
+    requestAnimationFrame(() => document.getElementById("line-flex-editor")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  function update<K extends keyof LineFlexDesignConfig>(key: K, value: LineFlexDesignConfig[K]) {
+    setDesign((current) => ({ ...current, [key]: value }));
+  }
+
+  function applyStyle(styleKey: LineFlexStyleKey) {
+    update("styleKey", styleKey);
+    if (["editorial", "poster"].includes(styleKey)) update("showImage", true);
+  }
+
+  function applyWelcomePreset(presetKey: string) {
+    const preset = LINE_FLEX_WELCOME_PRESETS.find((item) => item.key === presetKey);
+    if (!preset) return;
+    setDesign((current) => ({ ...current, ...preset.design, name: `${preset.name}－品牌版本` }));
+  }
+
+  async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploading(true);
+    setUploadError("");
+    try {
+      const formData = new FormData();
+      formData.set("file", file);
+      const response = await fetch("/api/admin/upload", { method: "POST", body: formData });
+      const result = await response.json() as { ok?: boolean; url?: string; error?: string };
+      if (!response.ok || !result.url) throw new Error(result.error || "圖片上傳失敗");
+      setDesign((current) => ({ ...current, imageUrl: result.url ?? "", showImage: true }));
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : "圖片上傳失敗");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <section className="line-template-workbench" aria-label="LINE 訊息範本清單">
+      <FlexDesignEditor
+        clinicName={clinicName}
+        template={selectedTemplate}
+        design={design}
+        publishedVersion={savedDesigns[selectedKey]?.version}
+        onUpdate={update}
+        onApplyStyle={applyStyle}
+        onApplyWelcomePreset={applyWelcomePreset}
+        onUploadImage={uploadImage}
+        uploading={uploading}
+        uploadError={uploadError}
+      />
       <div className="platform-command-tabs overflow-x-auto" role="tablist" aria-label="LINE UI 模板分類">
         {LINE_UI_CATEGORIES.map((item) => (
           <button key={item.key} type="button" role="tab" aria-selected={category === item.key} onClick={() => setCategory(item.key)} className="platform-command-tab shrink-0" data-selected={category === item.key}>
@@ -66,7 +176,11 @@ export default function LineTemplateGallery() {
                   <div><dt>版面邏輯</dt><dd>{layoutDescription(PREVIEW_KIND[template.key] ?? "appointment")}</dd></div>
                   <div><dt>資料來源</dt><dd>{template.systemManaged ? "系統依顧客與即時狀態帶入" : "品牌自行上傳圖片並編輯圖文"}</dd></div>
                 </dl>
-                {!template.systemManaged && <Link href="/admin/messages" className="btn btn-secondary mt-4 min-h-11">開啟圖文訊息編輯器</Link>}
+                <div className="mt-auto flex flex-wrap gap-2 pt-4">
+                  <button type="button" className="btn btn-primary min-h-11" onClick={() => selectTemplate(template)}>套用並編輯</button>
+                  {savedDesigns[template.key as LineFlexTemplateKey]?.published && <span className="line-flex-published-state">已發布 v{savedDesigns[template.key as LineFlexTemplateKey]?.version ?? 1}</span>}
+                  {!template.systemManaged && <Link href="/admin/messages" className="btn btn-secondary min-h-11">另存行銷素材</Link>}
+                </div>
               </div>
               <div className="line-message-demo" aria-label={`${template.title} 訊息預覽`}>
                 <p className="line-message-demo-label">功能專屬版型・依實際閱讀順序排列</p>
@@ -78,6 +192,145 @@ export default function LineTemplateGallery() {
       </div>
     </section>
   );
+}
+
+function FlexDesignEditor({
+  clinicName,
+  template,
+  design,
+  publishedVersion,
+  onUpdate,
+  onApplyStyle,
+  onApplyWelcomePreset,
+  onUploadImage,
+  uploading,
+  uploadError,
+}: {
+  clinicName: string;
+  template: LineUiTemplateDefinition;
+  design: LineFlexDesignConfig;
+  publishedVersion?: number;
+  onUpdate: <K extends keyof LineFlexDesignConfig>(key: K, value: LineFlexDesignConfig[K]) => void;
+  onApplyStyle: (styleKey: LineFlexStyleKey) => void;
+  onApplyWelcomePreset: (presetKey: string) => void;
+  onUploadImage: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  uploading: boolean;
+  uploadError: string;
+}) {
+  const previewTemplate: LineUiTemplateDefinition = {
+    ...template,
+    badge: design.badge || template.badge,
+    headline: design.title || template.headline,
+    body: design.body || template.body,
+    accent: design.accent,
+    primaryAction: design.primaryActionLabel || template.primaryAction,
+    secondaryAction: design.secondaryActionLabel || undefined,
+    details: design.showDetails
+      ? template.details.map(([label, value], index) => [design.detailLabels[index] || label, value])
+      : [],
+  };
+  const kind = PREVIEW_KIND[template.key] ?? "appointment";
+  return (
+    <section id="line-flex-editor" className="line-panel line-flex-studio overflow-hidden p-0" aria-label="品牌 Flex 設計工作區">
+      <div className="line-panel-header line-flex-studio-head">
+        <div>
+          <p className="eyebrow">品牌 Flex 工作區</p>
+          <h2 className="mt-1 text-lg font-bold text-slate-950">{template.title}</h2>
+          <p className="mt-1 text-xs leading-5 text-slate-500">範本只是起點；儲存是品牌草稿，發布後才會套用到實際 LINE 訊息。</p>
+        </div>
+        <div className="line-flex-status-stack">
+          <span className="badge bg-slate-100 text-slate-600">目前編輯：{design.name}</span>
+          <span className={`badge ${publishedVersion ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{publishedVersion ? `線上版本 v${publishedVersion}` : "尚未發布品牌版本"}</span>
+        </div>
+      </div>
+
+      {template.key === "welcome" && <div className="line-flex-welcome-presets" aria-label="加入好友歡迎版型">
+        <div className="line-flex-library-intro"><strong>加入好友不只一種長相</strong><span>選一個方向帶入後，仍可逐項修改。</span></div>
+        <div className="line-flex-welcome-grid">
+          {LINE_FLEX_WELCOME_PRESETS.map((preset) => <button key={preset.key} type="button" onClick={() => onApplyWelcomePreset(preset.key)} className="line-flex-preset-card" data-active={design.name.startsWith(preset.name)}>
+            <span data-style={preset.design.styleKey}><i /><i /></span>
+            <strong>{preset.name}</strong>
+            <small>{preset.description}</small>
+          </button>)}
+        </div>
+      </div>}
+
+      <div className="line-flex-studio-grid">
+        <form className="line-flex-controls" action={saveLineFlexDesignAction}>
+          <input type="hidden" name="template_key" value={design.templateKey} />
+          <input type="hidden" name="design" value={JSON.stringify(design)} />
+
+          <fieldset className="line-flex-control-section">
+            <legend>版面風格</legend>
+            <div className="line-flex-style-grid">
+              {LINE_FLEX_STYLE_PRESETS.map((style) => <button key={style.key} type="button" className="line-flex-style-card" data-active={design.styleKey === style.key} onClick={() => onApplyStyle(style.key)}>
+                <span style={{ background: `linear-gradient(135deg,${style.swatch[0]} 0 58%,${style.swatch[1]} 58%)` }} />
+                <b>{style.name}</b>
+                <small>{style.description}</small>
+              </button>)}
+            </div>
+          </fieldset>
+
+          <fieldset className="line-flex-control-section">
+            <legend>品牌文字</legend>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm"><span className="label">版本名稱</span><input className="input" value={design.name} maxLength={60} onChange={(event) => onUpdate("name", event.target.value)} /></label>
+              <label className="text-sm"><span className="label">小標籤</span><input className="input" value={design.badge} maxLength={30} onChange={(event) => onUpdate("badge", event.target.value)} /></label>
+            </div>
+            <label className="text-sm"><span className="label">主標題</span><input className="input" value={design.title} maxLength={100} onChange={(event) => onUpdate("title", event.target.value)} /></label>
+            <label className="text-sm"><span className="label">說明文字</span><textarea className="input" rows={3} value={design.body} maxLength={300} onChange={(event) => onUpdate("body", event.target.value)} /></label>
+          </fieldset>
+
+          <fieldset className="line-flex-control-section">
+            <legend>圖片與色彩</legend>
+            <label className="text-sm"><span className="label">圖片網址</span><input type="url" className="input" value={design.imageUrl} maxLength={1000} onChange={(event) => onUpdate("imageUrl", event.target.value)} placeholder="https://..." /></label>
+            <div className="line-flex-image-row">
+              <label className="btn btn-secondary min-h-11 cursor-pointer">{uploading ? "上傳中…" : "從電腦上傳圖片"}<input type="file" className="sr-only" accept="image/png,image/jpeg,image/webp" disabled={uploading} onChange={(event) => void onUploadImage(event)} /></label>
+              <span>建議 1200 × 780 像素（約 1.54:1），主體放中央；單張上限 5 MB。</span>
+            </div>
+            {uploadError && <p className="text-xs text-red-700" role="alert">{uploadError}</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm"><span className="label">主色</span><span className="line-flex-color-field"><input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(design.accent) ? design.accent : "#31584D"} onChange={(event) => onUpdate("accent", event.target.value.toUpperCase())} /><input className="input" value={design.accent} maxLength={7} onChange={(event) => onUpdate("accent", event.target.value)} /></span></label>
+              <label className="text-sm"><span className="label">細節強調色</span><span className="line-flex-color-field"><input type="color" value={/^#[0-9A-Fa-f]{6}$/.test(design.markerColor) ? design.markerColor : "#D8B26A"} onChange={(event) => onUpdate("markerColor", event.target.value.toUpperCase())} /><input className="input" value={design.markerColor} maxLength={7} onChange={(event) => onUpdate("markerColor", event.target.value)} /></span></label>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <ToggleButton checked={design.showImage} label="顯示主視覺圖片" onChange={(value) => onUpdate("showImage", value)} />
+              <ToggleButton checked={design.showDetails} label="顯示資訊列" onChange={(value) => onUpdate("showDetails", value)} />
+            </div>
+          </fieldset>
+
+          <fieldset className="line-flex-control-section">
+            <legend>資訊列與按鈕</legend>
+            {design.showDetails && <div className="line-flex-detail-labels">
+              {template.details.map(([label, value], index) => <label key={`${label}-${index}`} className="text-sm"><span className="label">資訊名稱 {index + 1}<small>範例：{value}</small></span><input className="input" value={design.detailLabels[index] ?? label} maxLength={30} onChange={(event) => onUpdate("detailLabels", design.detailLabels.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} /></label>)}
+            </div>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm"><span className="label">主要按鈕文字</span><input className="input" value={design.primaryActionLabel} maxLength={40} onChange={(event) => onUpdate("primaryActionLabel", event.target.value)} /></label>
+              <label className="text-sm"><span className="label">次要按鈕文字</span><input className="input" value={design.secondaryActionLabel} maxLength={40} onChange={(event) => onUpdate("secondaryActionLabel", event.target.value)} placeholder="留空不顯示" /></label>
+            </div>
+            <p className="text-xs leading-5 text-slate-500">按鈕文字可以改；系統通知的實際動作仍鎖定在正確流程，避免品牌誤設連結造成付款、票券或會員功能失效。</p>
+          </fieldset>
+
+          <div className="line-flex-savebar">
+            <button type="submit" className="btn btn-secondary min-h-11">儲存品牌草稿</button>
+            <button type="submit" formAction={publishLineFlexDesignAction} className="btn btn-primary min-h-11">發布到實際 LINE</button>
+          </div>
+        </form>
+
+        <aside className="line-flex-preview-column">
+          <div className="line-flex-preview-head"><div><span className="line-live-status">輸入即時更新</span><strong>{clinicName}</strong></div><small>LINE 實際閱讀比例預覽</small></div>
+          <div className="line-flex-phone-canvas" data-flex-style={design.styleKey}>
+            <TemplatePreview template={previewTemplate} kind={kind} imageUrl={design.showImage ? design.imageUrl : ""} />
+          </div>
+          <p className="line-flex-preview-note">動態日期、金額、服務與顧客資料會由系統帶入；此處編輯品牌外觀、文案與欄位名稱。</p>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function ToggleButton({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) {
+  return <label className="line-preview-toggle"><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />{label}</label>;
 }
 
 function layoutDescription(kind: PreviewKind): string {
@@ -107,11 +360,11 @@ function layoutDescription(kind: PreviewKind): string {
   return descriptions[kind];
 }
 
-function TemplatePreview({ template, kind }: { template: LineUiTemplateDefinition; kind: PreviewKind }) {
+function TemplatePreview({ template, kind, imageUrl }: { template: LineUiTemplateDefinition; kind: PreviewKind; imageUrl?: string }) {
   const action = <PreviewActions template={template} />;
-  const media = PREVIEW_IMAGE[kind];
+  const media = imageUrl || PREVIEW_IMAGE[kind];
   if (kind === "calendar") return <PreviewFrame kind={kind}><CompactHeader template={template} /><div className="line-message-card-body"><CalendarPreview accent={template.accent} /></div>{action}</PreviewFrame>;
-  if (kind === "welcome") return <PreviewFrame kind={kind}><div className="line-preview-welcome"><small>{template.badge}</small><h3>{template.headline}</h3><p>{template.body}</p></div><div className="line-preview-entry-grid"><span>品牌介紹</span><span>綁定會員</span><span className="primary">立即預約</span></div></PreviewFrame>;
+  if (kind === "welcome") return <PreviewFrame kind={kind}>{media && <PreviewMedia src={media} label={template.title}><span>{template.badge}</span><strong>{template.headline}</strong></PreviewMedia>}<div className="line-preview-welcome"><small>{template.badge}</small><h3>{template.headline}</h3><p>{template.body}</p></div><div className="line-preview-entry-grid"><span>品牌介紹</span><span>{template.secondaryAction || "綁定會員"}</span><span className="primary">{template.primaryAction}</span></div></PreviewFrame>;
   if (kind === "menu") return <PreviewFrame kind={kind}><CompactHeader template={template} /><div className="line-preview-menu-grid">{["立即預約", "我的預約", "活動／課程", "我的票券", "會員／套票", "LINE 客服"].map((item, index) => <span key={item}><b>0{index + 1}</b>{item}</span>)}</div></PreviewFrame>;
   if (kind === "story" || kind === "feature" || kind === "campaign") return <PreviewFrame kind={kind}><PreviewMedia src={media ?? ""} label={template.title}><span>{template.badge}</span><strong>{template.headline}</strong></PreviewMedia><div className="line-preview-editorial-copy"><p>{template.body}</p><small>圖片・標題・內文・按鈕皆可修改</small></div>{action}</PreviewFrame>;
   if (kind === "selector") return <PreviewFrame kind={kind}><CompactHeader template={template} /><div className="line-preview-option-list">{["初次體驗", "一對一服務", "小班／團體課"].map((item, index) => <span key={item}><b>{item}</b><small>{index === 2 ? "尚有 4 個時段" : "可選日期與時間"}</small><i>→</i></span>)}</div><div className="line-preview-quiet-link">查看全部服務</div></PreviewFrame>;

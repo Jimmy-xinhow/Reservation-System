@@ -8,6 +8,7 @@ import { decryptRegistrationToken } from "@/lib/registration-credentials";
 import { buildRegistrationStatusFlex } from "@/lib/line-ui-templates";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { customerEntryUrl } from "@/lib/customer-entry";
+import { lineFlexDesignForDelivery } from "@/lib/line-flex-design";
 
 export const REGISTRATION_NOTIFICATION_KINDS = ["pending", "confirmed", "waitlisted", "cancelled"] as const;
 export type RegistrationNotificationKind = (typeof REGISTRATION_NOTIFICATION_KINDS)[number];
@@ -58,7 +59,7 @@ export async function notifyRegistrationStatus(
     svc.from("clinics").select("name, slug, line_destination").eq("id", row.clinic_id).maybeSingle(),
     svc.from("events").select("title").eq("id", row.event_id).eq("clinic_id", row.clinic_id).maybeSingle(),
     svc.from("event_sessions").select("name, start_at, venue").eq("id", row.session_id).eq("clinic_id", row.clinic_id).maybeSingle(),
-    svc.from("clinic_settings").select("email_enabled").eq("clinic_id", row.clinic_id).maybeSingle(),
+    svc.from("clinic_settings").select("email_enabled, line_flex_designs").eq("clinic_id", row.clinic_id).maybeSingle(),
   ]);
   if (clinicError || eventError || sessionError || settingsError) {
     throw new Error(clinicError?.message ?? eventError?.message ?? sessionError?.message ?? settingsError?.message ?? "讀取報名通知資料失敗");
@@ -94,6 +95,11 @@ export async function notifyRegistrationStatus(
           venue: session?.venue ?? "",
           amount: formatAmount(Number(row.amount)),
           actionUrl: kind === "pending" ? paymentUrl ?? ticketsUrl : kind === "cancelled" ? eventsUrl : ticketsUrl,
+          design: lineFlexDesignForDelivery(
+            settings?.line_flex_designs,
+            kind === "pending" ? "payment_pending" : "registration_confirmed",
+            process.env.APP_URL?.trim() || "http://localhost:3000",
+          ),
         })], token);
         await finishNotification(svc, claim, "sent");
         result.sent += 1;

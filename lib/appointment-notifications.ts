@@ -6,6 +6,7 @@ import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
 import { customerEntryUrl } from "@/lib/customer-entry";
+import { lineFlexDesignForDelivery, type LineFlexTemplateKey } from "@/lib/line-flex-design";
 
 export const APPOINTMENT_NOTIFICATION_KINDS = ["pending", "confirmed", "cancelled", "rescheduled"] as const;
 export type AppointmentNotificationKind = (typeof APPOINTMENT_NOTIFICATION_KINDS)[number];
@@ -28,6 +29,7 @@ interface AppointmentRecord {
   doctor_name: string;
   service_name: string | null;
   email_enabled: boolean;
+  line_flex_designs: unknown;
 }
 
 interface NotificationResult {
@@ -77,6 +79,11 @@ export async function notifyAppointmentStatus(
           manageUrl,
           depositAmount: appointment.deposit_amount,
           queueNumber: appointment.queue_number,
+          design: lineFlexDesignForDelivery(
+            appointment.line_flex_designs,
+            ({ pending: "payment_pending", confirmed: "booking_confirmed", cancelled: "appointment_changed", rescheduled: "appointment_changed" } satisfies Record<AppointmentNotificationKind, LineFlexTemplateKey>)[kind],
+            process.env.APP_URL?.trim() || "http://localhost:3000",
+          ),
         })], token);
         await finishNotification(svc, claim, "sent");
         result.sent += 1;
@@ -223,7 +230,7 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
   const rowClinicId = String((data as { clinic_id: string }).clinic_id);
   const { data: settings, error: settingsError } = await svc
     .from("clinic_settings")
-    .select("email_enabled")
+    .select("email_enabled, line_flex_designs")
     .eq("clinic_id", rowClinicId)
     .maybeSingle();
   if (settingsError) throw new Error(settingsError.message);
@@ -266,6 +273,7 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
     doctor_name: doctor?.name ?? "由品牌安排",
     service_name: service?.name ?? null,
     email_enabled: settings?.email_enabled === true,
+    line_flex_designs: settings?.line_flex_designs ?? {},
   };
 }
 

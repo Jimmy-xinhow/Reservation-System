@@ -7,6 +7,7 @@ import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { buildWaitlistStatusFlex } from "@/lib/line-ui-templates";
 import { customerEntryUrl } from "@/lib/customer-entry";
 import { formatDateTime } from "@/lib/slots";
+import { lineFlexDesignForDelivery } from "@/lib/line-flex-design";
 
 interface ClaimedNotification {
   log_id: string;
@@ -45,6 +46,7 @@ export async function processAppointmentWaitlistNotificationQueue(
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as ClaimedNotification[];
   const summary: AppointmentWaitlistNotificationSummary = { claimed: rows.length, sent: 0, failed: 0, skipped: 0 };
+  const flexDesignsByClinic = new Map<string, unknown>();
 
   for (const row of rows) {
     try {
@@ -71,6 +73,11 @@ export async function processAppointmentWaitlistNotificationQueue(
         );
         const when = row.target_start_at ? formatDateTime(row.target_start_at) : row.requested_date;
         const target = [when, row.service_name, row.doctor_name].filter(Boolean).join("・");
+        if (!flexDesignsByClinic.has(row.clinic_id)) {
+          const { data: flexSettings, error: flexSettingsError } = await service.from("clinic_settings").select("line_flex_designs").eq("clinic_id", row.clinic_id).maybeSingle();
+          if (flexSettingsError) throw new Error(flexSettingsError.message);
+          flexDesignsByClinic.set(row.clinic_id, flexSettings?.line_flex_designs ?? {});
+        }
         await pushMessages(row.line_user_id, [buildWaitlistStatusFlex({
           kind: row.kind,
           clinicName: row.clinic_name,
@@ -78,6 +85,11 @@ export async function processAppointmentWaitlistNotificationQueue(
           position: row.position,
           offerDeadline: row.offer_expires_at ? formatDateTime(row.offer_expires_at) : null,
           manageUrl: entryUrl,
+          design: lineFlexDesignForDelivery(
+            flexDesignsByClinic.get(row.clinic_id),
+            row.kind === "offered" ? "waitlist_offer" : "waitlist_joined",
+            process.env.APP_URL?.trim() || "http://localhost:3000",
+          ),
         })], token);
       } else {
         if (!row.email) {

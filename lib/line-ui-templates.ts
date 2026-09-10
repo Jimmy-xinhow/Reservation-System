@@ -1,3 +1,5 @@
+import type { LineFlexDesignConfig, LineFlexStyleKey } from "@/lib/line-flex-design";
+
 export type LineUiCategory = "entry" | "booking" | "events" | "member" | "marketing" | "support" | "staff";
 
 export interface LineUiTemplateDefinition {
@@ -150,6 +152,94 @@ interface LineExperienceCardInput {
   buttons: LineFlexButton[];
   markerColor?: string;
   variant?: LineExperienceVariant;
+  design?: LineFlexDesignConfig;
+}
+
+function applyLineFlexDesign(input: LineExperienceCardInput): LineExperienceCardInput {
+  const design = input.design;
+  if (!design) return input;
+  const details = design.showDetails
+    ? input.details.map(([label, value], index) => [design.detailLabels[index] || label, value] as [string, string])
+    : [];
+  const buttons = input.buttons.map((button, index) => ({
+    ...button,
+    label: index === 0
+      ? design.primaryActionLabel || button.label
+      : index === 1
+        ? design.secondaryActionLabel || button.label
+        : button.label,
+  }));
+  return {
+    ...input,
+    badge: design.badge || input.badge,
+    title: design.title || input.title,
+    body: design.body || input.body,
+    accent: /^#[0-9A-Fa-f]{6}$/.test(design.accent) ? design.accent : input.accent,
+    markerColor: /^#[0-9A-Fa-f]{6}$/.test(design.markerColor) ? design.markerColor : input.markerColor,
+    details,
+    buttons,
+  };
+}
+
+function designedHeader(input: LineExperienceCardInput, style: LineFlexStyleKey, markerColor: string): Record<string, unknown> | null {
+  if (style === "minimal") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "18px", backgroundColor: "#FFFFFF",
+      contents: [
+        { type: "box", layout: "vertical", width: "42px", height: "3px", backgroundColor: input.accent, contents: [{ type: "filler" }] },
+        { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", margin: "lg", scaling: true },
+        { type: "text", text: input.title, size: "xl", color: "#1F2C26", weight: "bold", wrap: true, margin: "md", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#65716B", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (style === "concierge") {
+    return {
+      type: "box", layout: "horizontal", backgroundColor: "#F8F5EE",
+      contents: [
+        { type: "box", layout: "vertical", width: "6px", backgroundColor: markerColor, contents: [{ type: "filler" }] },
+        { type: "box", layout: "vertical", flex: 1, paddingAll: "18px", contents: [
+          { type: "text", text: `${input.context}・${input.badge}`, size: "xxs", color: input.accent, weight: "bold", wrap: true, scaling: true },
+          { type: "text", text: input.title, size: "xl", color: "#27332E", weight: "bold", wrap: true, margin: "lg", scaling: true },
+          { type: "text", text: input.body, size: "sm", color: "#6F746C", wrap: true, margin: "sm", scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (style === "action_grid") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "17px", backgroundColor: input.accent,
+      contents: [
+        { type: "box", layout: "horizontal", contents: [
+          { type: "text", text: input.context, size: "xs", color: "#FFFFFF", weight: "bold", flex: 1, wrap: true, scaling: true },
+          { type: "text", text: input.badge, size: "xxs", color: markerColor, weight: "bold", align: "end", flex: 0, scaling: true },
+        ] },
+        { type: "text", text: input.title, size: "xl", color: "#FFFFFF", weight: "bold", wrap: true, margin: "lg", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#E6F0EC", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (style === "soft_panel") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "18px", backgroundColor: input.softAccent,
+      contents: [
+        { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", scaling: true },
+        { type: "text", text: input.title, size: "xl", color: "#24322C", weight: "bold", wrap: true, margin: "lg", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#596760", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (style === "member_pass") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "18px", backgroundColor: input.accent,
+      contents: [
+        { type: "text", text: "MEMBER EXPERIENCE", size: "xxs", color: markerColor, weight: "bold", scaling: true },
+        { type: "text", text: input.title, size: "xl", color: "#FFFFFF", weight: "bold", wrap: true, margin: "lg", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#DCE6E1", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  return null;
 }
 
 function inferExperienceVariant(input: LineExperienceCardInput): LineExperienceVariant {
@@ -347,35 +437,43 @@ function experienceBody(input: LineExperienceCardInput, variant: LineExperienceV
 }
 
 export function buildLineExperienceCard(input: LineExperienceCardInput): Record<string, unknown> {
-  const markerColor = input.markerColor ?? input.softAccent;
-  const variant = input.variant ?? inferExperienceVariant(input);
-  const footer = input.buttons.length > 0 ? {
+  const configured = applyLineFlexDesign(input);
+  const markerColor = configured.markerColor ?? configured.softAccent;
+  const variant = configured.variant ?? inferExperienceVariant(configured);
+  const style = configured.design?.styleKey ?? "signature";
+  const customHeader = designedHeader(configured, style, markerColor);
+  const footer = configured.buttons.length > 0 ? {
     type: "box",
-    layout: "vertical",
+    layout: style === "action_grid" && configured.buttons.length <= 3 ? "horizontal" : "vertical",
     spacing: "sm",
     paddingTop: "12px",
     paddingBottom: "16px",
     paddingStart: "16px",
     paddingEnd: "16px",
     backgroundColor: "#FAFBFA",
-    contents: input.buttons.map((button) => ({
+    contents: configured.buttons.map((button) => ({
       type: "button",
+      flex: 1,
       height: "sm",
       style: button.primary ? "primary" : "secondary",
-      color: button.primary ? input.accent : "#53615B",
+      color: button.primary ? configured.accent : "#53615B",
       scaling: true,
       adjustMode: "shrink-to-fit",
       action: flexAction(button),
     })),
   } : undefined;
+  const heroUrl = configured.design?.showImage && configured.design.imageUrl.startsWith("https://")
+    ? configured.design.imageUrl
+    : null;
   return {
     type: "flex",
-    altText: input.altText.slice(0, 1500),
+    altText: configured.altText.slice(0, 1500),
     contents: {
       type: "bubble",
       size: "mega",
-      header: experienceHeader(input, variant, markerColor),
-      body: experienceBody(input, variant, markerColor),
+      ...(heroUrl ? { hero: { type: "image", url: heroUrl, size: "full", aspectRatio: "20:13", aspectMode: "cover" } } : {}),
+      header: customHeader ?? experienceHeader(configured, variant, markerColor),
+      body: experienceBody(configured, variant, markerColor),
       ...(footer ? { footer } : {}),
       styles: footer ? { footer: { separator: true, separatorColor: "#E5E9E7" } } : undefined,
     },
@@ -398,6 +496,7 @@ export function buildAppointmentStatusFlex(input: {
   depositAmount?: number;
   queueNumber?: number | null;
   cancelPostbackData?: string;
+  design?: LineFlexDesignConfig;
 }): Record<string, unknown> {
   const config = {
     pending: { badge: "待完成付款", title: "訂金尚未完成", body: "預約目前暫時保留，完成訂金付款後才會正式確認。", accent: "#8A5A16", softAccent: "#FBF5E9", action: "前往完成訂金付款" },
@@ -428,6 +527,7 @@ export function buildAppointmentStatusFlex(input: {
     highlight: ["預約時間", input.dateTime],
     details,
     buttons,
+    design: input.design,
   });
 }
 
@@ -438,6 +538,7 @@ export function buildWaitlistStatusFlex(input: {
   position: number;
   offerDeadline?: string | null;
   manageUrl: string;
+  design?: LineFlexDesignConfig;
 }): Record<string, unknown> {
   const config = {
     joined: { badge: "候補登記完成", title: "已排入候補名單", body: "名額釋出時會透過 LINE 通知，不需要重複登記。", accent: "#53615B", softAccent: "#F1F4F2", action: "查看目前候補進度" },
@@ -460,6 +561,7 @@ export function buildWaitlistStatusFlex(input: {
     highlight: ["候補服務", input.target],
     details,
     buttons: [{ label: selected.action, primary: true, action: { type: "uri", uri: input.manageUrl } }],
+    design: input.design,
   });
 }
 
@@ -473,6 +575,7 @@ export function buildRegistrationStatusFlex(input: {
   venue: string;
   amount: string;
   actionUrl: string;
+  design?: LineFlexDesignConfig;
 }): Record<string, unknown> {
   const config = {
     pending: { badge: "等待完成付款", title: "報名資料已保留", body: "完成付款後才會取得電子票券；逾期未付，系統會自動釋出名額。", accent: "#8A5A16", softAccent: "#FBF5E9", action: "前往完成這筆報名付款" },
@@ -499,5 +602,6 @@ export function buildRegistrationStatusFlex(input: {
     highlight: ["活動／課程", input.eventTitle],
     details,
     buttons: [{ label: selected.action, primary: true, action: { type: "uri", uri: input.actionUrl } }],
+    design: input.design,
   });
 }

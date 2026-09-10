@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     svc
       .from("clinic_settings")
       .select(
-        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url, legacy_progress_enabled, brand_page_template, brand_primary_color, brand_accent_color",
+        "line_welcome_text, line_fallback_text, line_menu_title, line_menu_btn_booking, line_menu_btn_query, line_menu_btn_progress, line_menu_btn_info, line_menu_link_label, line_menu_link_url, legacy_progress_enabled, brand_page_template, brand_primary_color, brand_accent_color, line_flex_designs",
       )
       .eq("clinic_id", clinicId)
       .maybeSingle(),
@@ -142,6 +142,7 @@ export async function POST(req: NextRequest) {
     brandTemplate: (cs?.brand_page_template as string | null) ?? null,
     brandPrimaryColor: (cs?.brand_primary_color as string | null) ?? null,
     brandAccentColor: (cs?.brand_accent_color as string | null) ?? null,
+    lineFlexDesigns: cs?.line_flex_designs ?? {},
   };
 
   for (const ev of events) {

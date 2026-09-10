@@ -39,6 +39,15 @@ import {
 } from "@/lib/richmenu";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { customerEntryUrl, type CustomerEntryKey } from "@/lib/customer-entry";
+import { LINE_UI_TEMPLATES } from "@/lib/line-ui-templates";
+import {
+  isLineFlexTemplateKey,
+  parseLineFlexDesignSettings,
+  sanitizeLineFlexDesign,
+  type LineFlexDesignConfig,
+  type LineFlexStyleKey,
+  type LineFlexTemplateKey,
+} from "@/lib/line-flex-design";
 
 function str(fd: FormData, key: string): string {
   return (fd.get(key) ?? "").toString().trim();
@@ -176,6 +185,102 @@ export async function updateLineTextsAction(fd: FormData) {
     .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
   revalidatePath("/admin/replies");
+}
+
+const DEFAULT_FLEX_STYLE: Partial<Record<LineFlexTemplateKey, LineFlexStyleKey>> = {
+  welcome: "signature",
+  service_hub: "action_grid",
+  brand_story: "editorial",
+  booking_service_select: "action_grid",
+  booking_date_select: "minimal",
+  booking_confirmed: "signature",
+  payment_pending: "timeline",
+  appointment_reminder: "timeline",
+  appointment_changed: "timeline",
+  waitlist_joined: "timeline",
+  waitlist_offer: "timeline",
+  quick_rebook: "soft_panel",
+  registration_confirmed: "ticket",
+  event_feature: "poster",
+  ticket_ready: "ticket",
+  membership_balance: "member_pass",
+  account_link: "concierge",
+  campaign: "editorial",
+  support_handoff: "timeline",
+  support_active: "soft_panel",
+  staff_today: "minimal",
+};
+
+function defaultLineFlexDesign(templateKey: LineFlexTemplateKey): LineFlexDesignConfig {
+  const template = LINE_UI_TEMPLATES.find((item) => item.key === templateKey);
+  if (!template) throw new Error("找不到此 LINE 訊息用途");
+  return {
+    templateKey,
+    styleKey: DEFAULT_FLEX_STYLE[templateKey] ?? "signature",
+    name: `${template.title}－品牌版本`,
+    badge: template.badge,
+    title: template.headline,
+    body: template.body,
+    imageUrl: "",
+    accent: template.accent,
+    markerColor: "#D8B26A",
+    showImage: false,
+    showDetails: true,
+    detailLabels: template.details.map(([label]) => label),
+    primaryActionLabel: template.primaryAction,
+    secondaryActionLabel: template.secondaryAction ?? "",
+  };
+}
+
+function lineFlexDesignFromForm(fd: FormData): LineFlexDesignConfig {
+  const templateKey = str(fd, "template_key");
+  if (!isLineFlexTemplateKey(templateKey)) throw new Error("LINE 訊息用途不正確");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(str(fd, "design") || "{}");
+  } catch {
+    throw new Error("LINE Flex 設計內容格式不正確");
+  }
+  const design = sanitizeLineFlexDesign(raw, defaultLineFlexDesign(templateKey));
+  if (design.templateKey !== templateKey) throw new Error("LINE 訊息用途與設計內容不一致");
+  if (!design.title || !design.body || !design.primaryActionLabel) throw new Error("標題、內文與主要按鈕文字不可空白");
+  return design;
+}
+
+async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<never> {
+  const { supabase, clinicId } = await requireAdmin();
+  const design = lineFlexDesignFromForm(fd);
+  const { data: current, error: readError } = await supabase
+    .from("clinic_settings")
+    .select("line_flex_designs")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (readError) throw new Error(readError.message);
+  const settings = parseLineFlexDesignSettings(current?.line_flex_designs);
+  const previous = settings[design.templateKey] ?? {};
+  const now = new Date().toISOString();
+  settings[design.templateKey] = {
+    ...previous,
+    draft: design,
+    updatedAt: now,
+    ...(publish ? { published: design, publishedAt: now, version: (previous.version ?? 0) + 1 } : {}),
+  };
+  const { error } = await supabase
+    .from("clinic_settings")
+    .update({ line_flex_designs: settings })
+    .eq("clinic_id", clinicId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/line-templates");
+  revalidatePath("/admin/replies");
+  redirect(`/admin/line-templates?${publish ? "published" : "saved"}=1&template=${encodeURIComponent(design.templateKey)}`);
+}
+
+export async function saveLineFlexDesignAction(fd: FormData): Promise<never> {
+  return updateLineFlexDesign(fd, false);
+}
+
+export async function publishLineFlexDesignAction(fd: FormData): Promise<never> {
+  return updateLineFlexDesign(fd, true);
 }
 
 // ── LINE 訊息素材 line_messages ───────────────────────────
