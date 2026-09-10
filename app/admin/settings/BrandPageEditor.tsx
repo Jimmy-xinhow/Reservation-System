@@ -255,10 +255,10 @@ export function BrandPageEditor({ enabled, initialTemplate, initialContent, init
             <h3 className="mt-1 text-lg font-bold text-slate-900">使用品牌自己的實景照片</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">可直接上傳，也可貼上網站內路徑或 HTTPS 圖片網址。上傳後仍要按最下方「儲存並套用形象頁」才會正式使用。</p>
             <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <div className="xl:col-span-2"><ImageUploadField label="形象頁品牌 Logo（選填）" name="brand_logo_url" value={logoUrl} onChange={setLogoUrl} hint="用於品牌形象頁，不會變更 LINE 官方帳號頭像；請到 LINE Official Account Manager 各自更換。建議使用透明背景橫式 Logo。" /></div>
+              <div className="xl:col-span-2"><ImageUploadField label="形象頁品牌 Logo（選填）" name="brand_logo_url" value={logoUrl} onChange={setLogoUrl} hint="建議尺寸 1200 × 600 像素（2:1 橫式透明 PNG）。用於品牌形象頁，不會變更 LINE 官方帳號頭像；請到 LINE Official Account Manager 各自更換。" /></div>
               <ImageUploadField label="主視覺圖片" name="hero_image_url" value={content.hero_image_url} onChange={(value) => updateContent("hero_image_url", value)} required hint="建議至少 1600×1200，主體避免靠近邊緣。" />
               <ImageUploadField label="服務／課程情境圖片" name="detail_image_url" value={content.detail_image_url} onChange={(value) => updateContent("detail_image_url", value)} required hint="建議至少 1200×900，用來呈現空間、服務或上課情境。" />
-              <div className="xl:col-span-2"><ImageUploadField label="補充情境圖片" name="gallery_image_url" value={content.gallery_image_url} onChange={(value) => updateContent("gallery_image_url", value)} required hint="用於品牌介紹與行動入口區塊，避免與主圖完全相同。" /></div>
+              <div className="xl:col-span-2"><ImageUploadField label="補充情境圖片" name="gallery_image_url" value={content.gallery_image_url} onChange={(value) => updateContent("gallery_image_url", value)} required hint="建議尺寸 1600 × 900 像素（16:9 橫式）。用於品牌介紹與行動入口區塊，避免與主圖完全相同。" /></div>
             </div>
           </div>
 

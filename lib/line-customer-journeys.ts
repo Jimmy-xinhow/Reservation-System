@@ -64,6 +64,171 @@ const TAIPEI_DATE = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 });
+const LINE_CALENDAR_DAYS = 14;
+const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
+
+interface BookingCalendarDay {
+  date: string;
+  remaining: number;
+}
+
+function addTaipeiDays(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00+08:00`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return TAIPEI_DATE.format(date);
+}
+
+function weekdayIndex(value: string): number {
+  const sundayFirst = new Date(`${value}T12:00:00+08:00`).getUTCDay();
+  return (sundayFirst + 6) % 7;
+}
+
+function calendarRangeLabel(start: string, end: string): string {
+  const [startYear, startMonth, startDay] = start.split("-").map(Number);
+  const [endYear, endMonth, endDay] = end.split("-").map(Number);
+  if (startYear === endYear && startMonth === endMonth) return `${startYear} 年 ${startMonth} 月 ${startDay}–${endDay} 日`;
+  if (startYear === endYear) return `${startYear} 年 ${startMonth}/${startDay}–${endMonth}/${endDay}`;
+  return `${startYear}/${startMonth}/${startDay}–${endYear}/${endMonth}/${endDay}`;
+}
+
+function bookingCalendarMessage(context: LineBranding, input: {
+  serviceId: string;
+  serviceName: string;
+  doctorId: string | null;
+  doctorName: string | null;
+  bookingMode: "time" | "number";
+  today: string;
+  maxDate: string;
+  days: BookingCalendarDay[];
+}): LineMessage {
+  const theme = themeFor(context);
+  const start = input.days[0]?.date ?? input.today;
+  const end = input.days.at(-1)?.date ?? start;
+  const blanksBefore = weekdayIndex(start);
+  const cells: Array<BookingCalendarDay | null> = [
+    ...Array.from({ length: blanksBefore }, () => null),
+    ...input.days,
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const rows = Array.from({ length: cells.length / 7 }, (_, rowIndex) => cells.slice(rowIndex * 7, rowIndex * 7 + 7));
+  const doctorParam = input.doctorId ? `&doctor_id=${encodeURIComponent(input.doctorId)}` : "";
+  const availableDates = input.days.filter((day) => day.remaining > 0).length;
+  const previousStart = addTaipeiDays(start, -LINE_CALENDAR_DAYS) < input.today ? input.today : addTaipeiDays(start, -LINE_CALENDAR_DAYS);
+  const nextStart = addTaipeiDays(end, 1);
+  const navigation: Array<Record<string, unknown>> = [];
+  if (start > input.today) {
+    navigation.push({
+      type: "button",
+      height: "sm",
+      style: "secondary",
+      action: {
+        type: "postback",
+        label: "查看前一段日期",
+        data: `action=booking_calendar&service_id=${encodeURIComponent(input.serviceId)}${doctorParam}&start=${previousStart}`,
+        displayText: "查看前一段可預約日期",
+      },
+    });
+  }
+  if (nextStart <= input.maxDate) {
+    navigation.push({
+      type: "button",
+      height: "sm",
+      style: "secondary",
+      action: {
+        type: "postback",
+        label: "查看下一段日期",
+        data: `action=booking_calendar&service_id=${encodeURIComponent(input.serviceId)}${doctorParam}&start=${nextStart}`,
+        displayText: "查看下一段可預約日期",
+      },
+    });
+  }
+  navigation.push({
+    type: "button",
+    height: "sm",
+    style: "secondary",
+    action: {
+      type: "datetimepicker",
+      label: "用日期選擇器查看其它日期",
+      data: `action=booking_date&service_id=${encodeURIComponent(input.serviceId)}${doctorParam}`,
+      mode: "date",
+      initial: start,
+      min: input.today,
+      max: input.maxDate,
+    },
+  });
+
+  const dateRows = rows.map((row) => ({
+    type: "box",
+    layout: "horizontal",
+    spacing: "xs",
+    contents: row.map((day) => {
+      if (!day) return { type: "box", layout: "vertical", flex: 1, height: "54px", contents: [{ type: "filler" }] };
+      const available = day.remaining > 0;
+      const limited = available && day.remaining <= 2;
+      const [, month, date] = day.date.split("-");
+      return {
+        type: "box",
+        layout: "vertical",
+        flex: 1,
+        height: "54px",
+        justifyContent: "center",
+        paddingAll: "4px",
+        cornerRadius: "8px",
+        backgroundColor: available ? (limited ? "#FFF4DC" : theme.soft) : "#F1F2F1",
+        ...(day.date === input.today ? { borderWidth: "2px", borderColor: theme.accent } : {}),
+        ...(available ? {
+          action: {
+            type: "postback",
+            label: `${month}/${date}`,
+            data: `action=booking_date&service_id=${encodeURIComponent(input.serviceId)}${doctorParam}&date=${day.date}`,
+            displayText: `選擇 ${month}/${date}`,
+          },
+        } : {}),
+        contents: [
+          { type: "text", text: `${Number(month)}/${Number(date)}`, size: "xs", weight: "bold", color: available ? theme.ink : "#98A09C", align: "center", scaling: true },
+          { type: "text", text: available ? (limited ? "少量" : "可約") : "暫無", size: "xxs", color: available ? theme.primary : "#A2AAA6", align: "center", margin: "xs", scaling: true },
+        ],
+      };
+    }),
+  }));
+
+  return {
+    type: "flex",
+    altText: `${context.clinicName}｜${input.serviceName}｜${calendarRangeLabel(start, end)}｜${availableDates} 天可預約`,
+    contents: {
+      type: "bubble",
+      size: "mega",
+      header: {
+        type: "box",
+        layout: "vertical",
+        backgroundColor: theme.primary,
+        paddingAll: "18px",
+        contents: [
+          { type: "box", layout: "horizontal", contents: [
+            { type: "text", text: context.clinicName, color: "#FFFFFF", size: "xs", weight: "bold", flex: 1, wrap: true, scaling: true },
+            { type: "text", text: "預約日期", color: "#FFFFFF", size: "xxs", weight: "bold", align: "end", flex: 0, scaling: true },
+          ] },
+          { type: "text", text: "選擇預約日期", color: "#FFFFFF", size: "xl", weight: "bold", margin: "lg", scaling: true },
+          { type: "text", text: `${input.serviceName}${input.doctorName ? `・${input.doctorName}` : ""}`, color: "#FFFFFF", size: "sm", wrap: true, margin: "sm", scaling: true },
+        ],
+      },
+      body: {
+        type: "box",
+        layout: "vertical",
+        paddingAll: "16px",
+        contents: [
+          { type: "text", text: calendarRangeLabel(start, end), color: theme.ink, size: "md", weight: "bold", align: "center", scaling: true },
+          { type: "text", text: `${availableDates} 天可選・品牌色可預約・黃色名額較少`, color: "#68736E", size: "xxs", align: "center", margin: "sm", wrap: true, scaling: true },
+          { type: "box", layout: "horizontal", margin: "lg", spacing: "xs", contents: WEEKDAY_LABELS.map((label) => ({ type: "text", text: label, size: "xxs", color: "#7B8580", align: "center", flex: 1, weight: "bold", scaling: true })) },
+          { type: "box", layout: "vertical", margin: "sm", spacing: "xs", contents: dateRows },
+          { type: "text", text: input.bookingMode === "number" ? "狀態依目前剩餘名額即時更新" : "狀態依目前可選時段即時更新", color: "#7B8580", size: "xxs", align: "center", margin: "lg", scaling: true },
+        ],
+      },
+      footer: { type: "box", layout: "vertical", spacing: "sm", paddingAll: "14px", backgroundColor: "#FAFBFA", contents: navigation },
+      styles: { footer: { separator: true, separatorColor: "#E5E9E7" } },
+    },
+  };
+}
 
 function one<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
@@ -208,45 +373,128 @@ export async function replyBookingDatePrompt(
   lineUserId: string | undefined,
   serviceId: string | null,
   context: LineCustomerJourneyContext,
+  requestedDoctorId?: string | null,
+  requestedStart?: string | null,
 ): Promise<void> {
   if (!serviceId) throw new Error("缺少服務");
   const [{ data: service, error: serviceError }, { data: settings, error: settingsError }] = await Promise.all([
-    context.service.from("services").select("id, name").eq("clinic_id", context.clinicId).eq("id", serviceId).eq("active", true).maybeSingle(),
-    context.service.from("clinic_settings").select("max_advance_days").eq("clinic_id", context.clinicId).maybeSingle(),
+    context.service.from("services").select("id, name, booking_target").eq("clinic_id", context.clinicId).eq("id", serviceId).eq("active", true).maybeSingle(),
+    context.service.from("clinic_settings").select("max_advance_days, booking_mode, public_booking_enabled").eq("clinic_id", context.clinicId).maybeSingle(),
   ]);
   if (serviceError || settingsError) throw new Error(serviceError?.message ?? settingsError?.message ?? "服務讀取失敗");
   if (!service) {
     await replyMessages(replyToken, [{ type: "text", text: "這項服務目前未開放，請重新選擇。" }], context.lineAccessToken);
     return;
   }
+  if (settings?.public_booking_enabled === false) {
+    await replyMessages(replyToken, [brandedCard(context, {
+      altText: `${context.clinicName}｜目前暫停線上預約`,
+      badge: "預約服務",
+      title: "目前暫停線上預約",
+      body: "品牌暫時沒有開放線上日期，需要協助時可直接聯絡客服。",
+      highlight: ["目前狀態", "尚未開放日期"],
+      details: [["服務項目", String(service.name)]],
+      buttons: [{ label: "聯絡 LINE 客服", primary: true, action: { type: "postback", data: "action=support", displayText: "聯絡 LINE 客服" } }],
+    })], context.lineAccessToken);
+    return;
+  }
+
+  let doctorId = requestedDoctorId?.trim() || null;
+  let doctorName: string | null = null;
+  if (service.booking_target === "provider_required") {
+    const { data: doctors, error: doctorsError } = await context.service
+      .from("doctors")
+      .select("id, name")
+      .eq("clinic_id", context.clinicId)
+      .eq("active", true)
+      .order("name")
+      .limit(50);
+    if (doctorsError) throw new Error(doctorsError.message);
+    const availableDoctors = doctors ?? [];
+    const selectedDoctor = doctorId ? availableDoctors.find((doctor) => String(doctor.id) === doctorId) : null;
+    if (doctorId && !selectedDoctor) throw new Error("服務人員不存在或已停用");
+    if (!doctorId && availableDoctors.length === 1) doctorId = String(availableDoctors[0].id);
+    if (!doctorId && availableDoctors.length > 1) {
+      const actions = availableDoctors.slice(0, 10).map((doctor) => postback(
+        String(doctor.name),
+        `action=booking_provider&service_id=${encodeURIComponent(String(service.id))}&doctor_id=${encodeURIComponent(String(doctor.id))}`,
+      ));
+      if (availableDoctors.length > 10) actions.push({ type: "uri", label: "查看全部人員", uri: serviceUrl(context, "booking", { service_id: String(service.id), task: "1" }) });
+      await replyMessages(replyToken, [withQuickReplies(brandedCard(context, {
+        altText: `${context.clinicName}｜選擇${service.name}服務人員`,
+        badge: "預約 2／3",
+        title: "想由哪位服務人員安排？",
+        body: "先選擇服務人員，下一則訊息會顯示他的可預約日期。",
+        highlight: ["已選服務", String(service.name)],
+        details: [["服務人員", `${availableDoctors.length} 位可選`], ["下一步", "查看兩週預約月曆"]],
+        buttons: availableDoctors.length > 10 ? [{ label: "瀏覽全部人員", action: { type: "uri", uri: serviceUrl(context, "booking", { service_id: String(service.id), task: "1" }) } }] : [],
+      }), actions)], context.lineAccessToken);
+      return;
+    }
+    if (!doctorId) {
+      await replyMessages(replyToken, [brandedCard(context, {
+        altText: `${context.clinicName}｜目前沒有可安排的服務人員`,
+        badge: "預約服務",
+        title: "目前沒有可安排的人員",
+        body: "這項服務需要指定服務人員，但品牌目前尚未開放人員排程。",
+        highlight: ["已選服務", String(service.name)],
+        details: [["下一步", "聯絡客服協助安排"]],
+        buttons: [{ label: "聯絡 LINE 客服", primary: true, action: { type: "postback", data: "action=support", displayText: "聯絡 LINE 客服" } }],
+      })], context.lineAccessToken);
+      return;
+    }
+    doctorName = String((selectedDoctor ?? availableDoctors.find((doctor) => String(doctor.id) === doctorId))?.name ?? "服務人員");
+  } else {
+    doctorId = null;
+  }
+
+  const today = TAIPEI_DATE.format(new Date());
+  const maxDate = addTaipeiDays(today, Math.max(1, Number(settings?.max_advance_days ?? 30)));
+  const start = requestedStart && /^\d{4}-\d{2}-\d{2}$/.test(requestedStart) && requestedStart >= today && requestedStart <= maxDate
+    ? requestedStart
+    : today;
+  const dates: string[] = [];
+  for (let index = 0; index < LINE_CALENDAR_DAYS; index += 1) {
+    const date = addTaipeiDays(start, index);
+    if (date > maxDate) break;
+    dates.push(date);
+  }
+  const bookingMode = settings?.booking_mode === "number" ? "number" : "time";
+  const days = await Promise.all(dates.map(async (date): Promise<BookingCalendarDay> => {
+    const rpcName = bookingMode === "number"
+      ? doctorId ? "get_available_sessions_for_service" : "get_available_service_sessions"
+      : doctorId ? "get_available_slots_for_service" : "get_available_service_slots";
+    const args = bookingMode === "number"
+      ? doctorId
+        ? { p_clinic_id: context.clinicId, p_doctor_id: doctorId, p_date: date, p_service_id: String(service.id) }
+        : { p_clinic_id: context.clinicId, p_service_id: String(service.id), p_date: date }
+      : doctorId
+        ? { p_clinic_id: context.clinicId, p_doctor_id: doctorId, p_date: date, p_visit_type: "return", p_service_id: String(service.id) }
+        : { p_clinic_id: context.clinicId, p_service_id: String(service.id), p_date: date, p_visit_type: "return", p_doctor_id: null };
+    const { data, error } = await context.service.rpc(rpcName, args);
+    if (error) throw new Error(error.message);
+    const remaining = ((data ?? []) as Array<{ remaining?: number | string | null }>).reduce(
+      (sum, row) => sum + Math.max(0, Number(row.remaining ?? 0)),
+      0,
+    );
+    return { date, remaining };
+  }));
   if (lineUserId) {
     await saveLineCustomerSession(context.service, context.clinicId, lineUserId, {
       intent: "booking",
       step: "choose_date",
-      context: { service_id: String(service.id) },
+      context: { service_id: String(service.id), ...(doctorId ? { doctor_id: doctorId } : {}) },
     });
   }
-  const today = TAIPEI_DATE.format(new Date());
-  const maxDate = TAIPEI_DATE.format(new Date(Date.now() + Math.max(1, Number(settings?.max_advance_days ?? 30)) * 86_400_000));
-  await replyMessages(replyToken, [brandedCard(context, {
-    altText: `${context.clinicName}｜選擇${service.name}預約日期`,
-    badge: "預約 2／2",
-    title: "哪一天方便前來？",
-    body: "選定日期後，只會顯示這項服務當天真正可預約的時段。",
-    highlight: ["已選服務", String(service.name)],
-    details: [["可選期間", `${today} 至 ${maxDate}`], ["下一步", "查看當日可用時段"]],
-    buttons: [{
-      label: "選擇預約日期",
-      primary: true,
-      action: {
-        type: "datetimepicker",
-        data: `action=booking_date&service_id=${encodeURIComponent(String(service.id))}`,
-        mode: "date",
-        initial: today,
-        min: today,
-        max: maxDate,
-      },
-    }],
+  await replyMessages(replyToken, [bookingCalendarMessage(context, {
+    serviceId: String(service.id),
+    serviceName: String(service.name),
+    doctorId,
+    doctorName,
+    bookingMode,
+    today,
+    maxDate,
+    days,
   })], context.lineAccessToken);
 }
 
@@ -256,6 +504,7 @@ export async function replyBookingContinue(
   serviceId: string | null,
   selectedDate: string | undefined,
   context: LineCustomerJourneyContext,
+  doctorId?: string | null,
 ): Promise<void> {
   if (!serviceId || !selectedDate || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) throw new Error("預約日期不正確");
   const { data: service, error } = await context.service
@@ -271,10 +520,10 @@ export async function replyBookingContinue(
     await saveLineCustomerSession(context.service, context.clinicId, lineUserId, {
       intent: "booking",
       step: "open_slots",
-      context: { service_id: String(service.id), date: selectedDate },
+      context: { service_id: String(service.id), date: selectedDate, ...(doctorId ? { doctor_id: doctorId } : {}) },
     });
   }
-  const uri = serviceUrl(context, "booking", { service_id: String(service.id), date: selectedDate, task: "1" });
+  const uri = serviceUrl(context, "booking", { service_id: String(service.id), date: selectedDate, ...(doctorId ? { doctor_id: doctorId } : {}), task: "1" });
   await replyMessages(replyToken, [brandedCard(context, {
     altText: `${context.clinicName}｜查看${selectedDate}可約時段`,
     badge: "時段已準備",

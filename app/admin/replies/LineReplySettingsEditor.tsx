@@ -29,11 +29,12 @@ export default function LineReplySettingsEditor({ action, clinicName, initial }:
   const [info, setInfo] = useState(initial.info);
   const [linkLabel, setLinkLabel] = useState(initial.linkLabel);
   const [linkUrl, setLinkUrl] = useState(initial.linkUrl);
-  const buttons = [booking ? "立即預約" : "", query ? "查詢我的預約" : "", progress ? "服務進度" : "", info ? "品牌資訊" : "", linkLabel.trim() && linkUrl.trim() ? linkLabel : ""].filter(Boolean);
+  const menuButtons = [booking ? "立即預約" : "", query ? "查詢我的預約" : "", progress ? "服務進度" : "", info ? "品牌資訊" : "", linkLabel.trim() && linkUrl.trim() ? linkLabel : ""].filter(Boolean);
+  const buttons = previewMode === "welcome" ? ["品牌介紹", "綁定會員", ...(booking ? ["立即預約"] : [])] : menuButtons;
   const body = previewMode === "welcome"
-    ? welcomeText || "您可以在這裡線上預約、查詢或取消預約。請點下方按鈕開始。"
+    ? welcomeText || "先認識品牌，也可以直接連結會員身分或查看可預約日期。"
     : fallbackText || "請問需要什麼服務?請點下方按鈕。";
-  const title = menuTitle || (previewMode === "welcome" ? `歡迎加入${clinicName} 🌿` : clinicName);
+  const title = menuTitle || (previewMode === "welcome" ? `歡迎加入 ${clinicName}` : clinicName);
 
   return (
     <form action={action} className="admin-section">
@@ -61,6 +62,7 @@ export default function LineReplySettingsEditor({ action, clinicName, initial }:
               </div>
             </div>
           </details>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900"><strong className="block">加好友時只由系統送出這一張歡迎卡</strong>若 LINE Official Account Manager 另外開啟「加入好友歡迎訊息」，LINE 仍會再送一則；請在官方帳號後台關閉該內建歡迎訊息，避免重複。</div>
           <SubmitButton className="btn btn-primary">儲存歡迎與預設回覆</SubmitButton>
         </div>
 
@@ -69,7 +71,7 @@ export default function LineReplySettingsEditor({ action, clinicName, initial }:
             <button type="button" role="tab" aria-selected={previewMode === "welcome"} onClick={() => setPreviewMode("welcome")}>加好友歡迎</button>
             <button type="button" role="tab" aria-selected={previewMode === "fallback"} onClick={() => setPreviewMode("fallback")}>找不到指令</button>
           </div>
-          <ChannelMessagePreview botName={clinicName} customerText={previewMode === "fallback" ? "我想找其他服務" : undefined} title={title} body={body} buttons={buttons} label={previewMode === "welcome" ? "加好友後的顧客畫面" : "找不到指令時的顧客畫面"} note="預覽使用目前輸入的標題、內文與按鈕順序；不會實際傳送 LINE 訊息。" />
+          <ChannelMessagePreview botName={clinicName} customerText={previewMode === "fallback" ? "我想找其他服務" : undefined} title={title} body={body} buttons={buttons} label={previewMode === "welcome" ? "加好友後的單一歡迎卡" : "找不到指令時的顧客畫面"} note="預覽使用目前輸入的標題、內文與按鈕順序；不會實際傳送 LINE 訊息。" />
         </div>
       </div>
     </form>

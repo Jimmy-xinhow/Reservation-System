@@ -134,8 +134,10 @@ export default function BookPage() {
     if (!config || typeof window === "undefined") return;
     const params = liffEntryParams(window.location.search);
     const requestedService = params.get("service_id")?.trim() ?? "";
+    const requestedDoctor = params.get("doctor_id")?.trim() ?? "";
     const requestedDate = params.get("date")?.trim() ?? "";
     if (requestedService && config.services.some((service) => service.id === requestedService)) setServiceId(requestedService);
+    if (requestedDoctor && config.doctors.some((doctor) => doctor.id === requestedDoctor)) setDoctorId(requestedDoctor);
     if (/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && requestedDate >= todayStr() && requestedDate <= todayStr(config.max_advance_days)) setDate(requestedDate);
   }, [config]);
 

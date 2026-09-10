@@ -838,6 +838,17 @@ body {
 .line-message-card-actions { display: grid; gap: 6px; padding: 9px 11px 11px; border-top: 1px solid #e7ebe9; }
 .line-message-card-actions span { display: grid; min-height: 33px; place-items: center; border: 1px solid #173f35; border-radius: 4px; background: #173f35; color: #fff; font-size: 10px; font-variation-settings: "wght" 700; }
 .line-message-card-actions .secondary { border-color: #cbd4d0; background: #fff; color: #214e42; }
+.line-calendar-preview { display: grid; gap: 7px; }
+.line-calendar-preview > strong { color: #17231e; font-size: 12px; text-align: center; }
+.line-calendar-preview > small { color: #74807a; font-size: 8px; text-align: center; }
+.line-calendar-weekdays, .line-calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.line-calendar-weekdays span { color: #7b8580; font-size: 8px; font-variation-settings: "wght" 700; text-align: center; }
+.line-calendar-days span { display: grid; min-height: 34px; place-content: center; border: 1px solid #dce3df; border-radius: 5px; background: #edf5f1; text-align: center; }
+.line-calendar-days span[data-state="少量"] { border-color: #e7c37b; background: #fff4dc; }
+.line-calendar-days span[data-state="暫無"] { border-color: #e3e6e4; background: #f1f2f1; color: #98a09c; }
+.line-calendar-days span[data-state="空白"] { border-color: transparent; background: transparent; }
+.line-calendar-days b { font-size: 9px; line-height: 1; }
+.line-calendar-days em { margin-top: 3px; font-size: 6px; font-style: normal; line-height: 1; }
 
 .message-composer-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(300px, .88fr); }
 .message-composer-editor { display: grid; gap: 16px; min-width: 0; padding: 18px; }

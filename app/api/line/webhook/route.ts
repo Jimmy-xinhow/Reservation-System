@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
       claimed = await claimLineWebhookEvent(svc, clinicId, ev.webhookEventId, ev.type);
       if (!claimed) continue;
       if (ev.type === "follow") {
-        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName, journeyContext), lineHomeMessage(journeyContext)], lineAccessToken);
+        await replyMessages(ev.replyToken, [welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName, journeyContext)], lineAccessToken);
       } else if (ev.type === "accountLink") {
         if (ev.link?.result !== "ok" || !ev.link.nonce || !ev.source?.userId) {
           await safeReply(ev.replyToken, "會員綁定未完成，請回到選單重新操作。", lineAccessToken);
@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
         } else if (rule?.action === "text" && rule.reply_text) {
           await replyMessages(ev.replyToken, [{ type: "text", text: rule.reply_text }], lineAccessToken);
         } else {
-          await replyMessages(ev.replyToken, [menuMessage(baseUrl, fallbackText, menuCfg, liffId, clinicSlug, clinicName, journeyContext), lineHomeMessage(journeyContext)], lineAccessToken);
+          await replyMessages(ev.replyToken, [lineHomeMessage(journeyContext)], lineAccessToken);
         }
         })();
       } else if (ev.type === "postback" && ev.postback?.data) {
@@ -262,8 +262,24 @@ export async function POST(req: NextRequest) {
           await replyBookingServices(ev.replyToken, ev.source?.userId, journeyContext);
         } else if (action === "booking_service") {
           await replyBookingDatePrompt(ev.replyToken, ev.source?.userId, params.get("service_id"), journeyContext);
+        } else if (action === "booking_provider" || action === "booking_calendar") {
+          await replyBookingDatePrompt(
+            ev.replyToken,
+            ev.source?.userId,
+            params.get("service_id"),
+            journeyContext,
+            params.get("doctor_id"),
+            params.get("start"),
+          );
         } else if (action === "booking_date") {
-          await replyBookingContinue(ev.replyToken, ev.source?.userId, params.get("service_id"), ev.postback.params?.date, journeyContext);
+          await replyBookingContinue(
+            ev.replyToken,
+            ev.source?.userId,
+            params.get("service_id"),
+            params.get("date") ?? ev.postback.params?.date,
+            journeyContext,
+            params.get("doctor_id"),
+          );
         } else if (action === "events") {
           await replyEvents(ev.replyToken, journeyContext);
         } else if (action === "tickets") {

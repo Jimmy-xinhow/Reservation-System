@@ -202,6 +202,7 @@ function CardEditor({ card, onChange }: { card: MsgCard; onChange: (c: MsgCard) 
           onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])}
           className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-600 file:px-3 file:py-1.5 file:text-white"
         />
+        <p className="mt-1 text-xs leading-5 text-slate-500">建議尺寸 1200 × 780 像素（20:13）；重要文字與人物請放中央，LINE 卡片會等比例裁切。</p>
         {uploading && <p className="mt-1 text-xs text-slate-400">上傳中…</p>}
         {err && <p className="mt-1 text-xs text-red-600">{err}</p>}
       </div>

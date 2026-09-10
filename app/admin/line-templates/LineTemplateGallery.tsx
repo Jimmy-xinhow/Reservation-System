@@ -42,8 +42,10 @@ export default function LineTemplateGallery() {
                     <p>{template.body}</p>
                   </div>
                   <div className="line-message-card-body">
-                    {template.details[0] && <div className="line-message-card-highlight" style={{ backgroundColor: `${template.accent}12`, borderLeftColor: template.accent }}><span>{template.details[0][0]}</span><strong>{template.details[0][1]}</strong></div>}
-                    <dl>{template.details.slice(1).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+                    {template.key === "booking_date_select" ? <CalendarPreview accent={template.accent} /> : <>
+                      {template.details[0] && <div className="line-message-card-highlight" style={{ backgroundColor: `${template.accent}12`, borderLeftColor: template.accent }}><span>{template.details[0][0]}</span><strong>{template.details[0][1]}</strong></div>}
+                      <dl>{template.details.slice(1).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+                    </>}
                   </div>
                   <div className="line-message-card-actions">
                     <span>{template.primaryAction}</span>
@@ -57,4 +59,20 @@ export default function LineTemplateGallery() {
       </div>
     </section>
   );
+}
+
+function CalendarPreview({ accent }: { accent: string }) {
+  const days = [
+    { date: "", state: "空白" }, { date: "", state: "空白" }, { date: "", state: "空白" },
+    { date: "10", state: "可約" }, { date: "11", state: "可約" }, { date: "12", state: "少量" }, { date: "13", state: "暫無" },
+    { date: "14", state: "可約" }, { date: "15", state: "可約" }, { date: "16", state: "暫無" }, { date: "17", state: "可約" },
+    { date: "18", state: "少量" }, { date: "19", state: "可約" }, { date: "20", state: "暫無" }, { date: "21", state: "可約" },
+    { date: "22", state: "可約" }, { date: "23", state: "暫無" },
+  ];
+  return <div className="line-calendar-preview">
+    <strong>2026 年 9 月 10–23 日</strong>
+    <small>8 天可選・狀態依即時名額更新</small>
+    <div className="line-calendar-weekdays">{["一", "二", "三", "四", "五", "六", "日"].map((day) => <span key={day}>{day}</span>)}</div>
+    <div className="line-calendar-days">{days.map((day, index) => <span key={`${day.date}-${index}`} data-state={day.state} style={day.state === "可約" ? { borderColor: accent } : undefined}><b>{day.date}</b>{day.state !== "空白" && <em>{day.state}</em>}</span>)}</div>
+  </div>;
 }

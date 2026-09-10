@@ -2017,6 +2017,32 @@ invariant(
     read("app/api/line/webhook/route.ts").includes('action === "support"'),
 );
 invariant(
+  "LINE follow sends one welcome card with introduction, member binding, and booking",
+  read("app/api/line/webhook/route.ts").includes("[welcomeMessage(baseUrl, welcomeText") &&
+    !read("app/api/line/webhook/route.ts").includes("welcomeMessage(baseUrl, welcomeText, menuCfg, liffId, clinicSlug, clinicName, journeyContext), lineHomeMessage") &&
+    read("lib/line-webhook-messages.ts").includes('data: "action=brand"') &&
+    read("lib/line-webhook-messages.ts").includes('data: "action=bind_member"') &&
+    read("lib/line-webhook-messages.ts").includes('data: "action=booking"'),
+);
+invariant(
+  "LINE booking uses tenant-scoped live calendar status and preserves provider selection",
+  read("lib/line-customer-journeys.ts").includes("LINE_CALENDAR_DAYS = 14") &&
+    read("lib/line-customer-journeys.ts").includes('"get_available_slots_for_service"') &&
+    read("lib/line-customer-journeys.ts").includes('"get_available_service_sessions"') &&
+    read("lib/line-customer-journeys.ts").includes("bookingCalendarMessage(context") &&
+    read("app/api/line/webhook/route.ts").includes('action === "booking_provider" || action === "booking_calendar"') &&
+    read("app/book/page.tsx").includes('params.get("doctor_id")'),
+);
+invariant(
+  "every image upload field shows an explicit recommended size",
+  read("app/admin/richmenu/PublishForm.tsx").includes("{width} × {height} 像素") &&
+    read("app/admin/messages/MessageComposer.tsx").includes("1200 × 780 像素") &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes("1600 × 1200 像素") &&
+    read("app/admin/settings/BrandPageEditor.tsx").includes("1200 × 600 像素") &&
+    read("app/admin/settings/BrandPageEditor.tsx").includes("1600 × 900 像素") &&
+    read("app/admin/beauty/TreatmentRecordForm.tsx").includes("1200 × 1200 像素"),
+);
+invariant(
   "official LINE account linking uses short-lived hashed nonces and tenant-scoped completion",
   migrationLineFirst.includes("create table if not exists public.line_account_link_nonces") &&
     migrationLineFirst.includes("nonce_hash text not null") &&

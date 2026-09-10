@@ -71,15 +71,30 @@ function menuBubble(title: string, body: string, baseUrl: string, cfg?: MenuConf
 }
 
 export function welcomeMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台", branding?: LineMessageBranding): LineMessage {
+  const theme = lineBrandTheme(branding?.brandTemplate, branding?.brandPrimaryColor, branding?.brandAccentColor);
   void liffId;
   void clinicSlug;
-  return menuBubble(
-    cfg?.title || `歡迎加入 ${clinicName}`,
-    custom || "您可以在這裡線上預約、查詢或取消預約。請點下方按鈕開始。",
-    baseUrl,
-    cfg,
-    branding,
-  );
+  void baseUrl;
+  const buttons: LineFlexButton[] = [
+    { label: "品牌介紹", action: { type: "postback", data: "action=brand", displayText: "品牌介紹" } },
+    { label: "綁定會員", action: { type: "postback", data: "action=bind_member", displayText: "綁定會員" } },
+  ];
+  if (cfg?.booking !== false) {
+    buttons.push({ label: "立即預約", primary: true, action: { type: "postback", data: "action=booking", displayText: "立即預約" } });
+  }
+  return buildLineExperienceCard({
+    altText: `${clinicName}｜歡迎加入｜品牌介紹・綁定會員・立即預約`,
+    context: branding?.clinicName ?? clinicName,
+    badge: "歡迎加入",
+    title: cfg?.title || `歡迎加入 ${clinicName}`,
+    body: custom || "先認識品牌，也可以直接連結會員身分或查看可預約日期。",
+    accent: theme.primary,
+    softAccent: theme.soft,
+    markerColor: theme.accent,
+    highlight: ["從 LINE 開始", "介紹・會員・預約"],
+    details: [["會員綁定", "直接綁定目前 LINE 帳號"], ["預約方式", "先看日期現況，再選時段"]],
+    buttons,
+  });
 }
 
 export function menuMessage(baseUrl: string, custom: string | null | undefined, cfg: MenuConfig | undefined, liffId: string | null, clinicSlug?: string | null, clinicName = "預約與報名平台", branding?: LineMessageBranding): LineMessage {
