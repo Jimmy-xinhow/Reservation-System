@@ -123,37 +123,38 @@
   right: 0;
   bottom: 0;
   left: 0;
-  display: flex;
+  display: grid;
   width: 100%;
   max-width: 42rem;
   margin-inline: auto;
-  gap: 0.15rem;
-  overflow-x: auto;
+  gap: 0.1rem;
   padding: 0.5rem 0.55rem calc(0.5rem + env(safe-area-inset-bottom));
   border-top: 1px solid color-mix(in srgb, var(--customer-primary) 12%, white);
   background: color-mix(in srgb, #fff 94%, transparent);
   box-shadow: 0 -12px 38px rgba(22, 37, 31, 0.08);
-  scrollbar-width: none;
   backdrop-filter: blur(20px) saturate(1.35);
-}
-
-.customerNav::-webkit-scrollbar {
-  display: none;
 }
 
 .navButton {
   display: grid;
-  min-width: 4.2rem;
+  min-width: 0;
   min-height: 3.35rem;
-  flex: 1 0 4.2rem;
   place-items: center;
   gap: 0.15rem;
-  border-radius: 1rem;
+  padding-inline: 0.15rem;
+  border-radius: 0.85rem;
   color: color-mix(in srgb, var(--customer-ink) 52%, white);
-  font-size: 0.68rem;
+  font-size: 0.65rem;
   font-weight: 600;
   transition: color 160ms ease, background-color 160ms ease, transform 160ms ease;
   touch-action: manipulation;
+}
+
+.navButton span {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .navButton svg {

@@ -419,7 +419,7 @@ export default function BookPage() {
     pageEnabled: entryConfig.brand_page_enabled,
     logoUrl: entryConfig.brand_logo_url,
   };
-  const entryNav = taskMode ? null : <CustomerEntryNav view={view} availability={entryConfig.availability} app={entryConfig.customer_app} onChange={changeView} />;
+  const entryNav = taskMode || view === "home" ? null : <CustomerEntryNav view={view} availability={entryConfig.availability} app={entryConfig.customer_app} onChange={changeView} />;
   if (view === "home") return <Shell {...shellBranding}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={customerBrand} app={entryConfig.customer_app} onChange={changeView} shortcut={{ available: canCreateHomeShortcut, busy: shortcutState.busy, message: shortcutState.message, onCreate: () => void addCustomerAppToHomeScreen() }} /></Shell>;
   if (view === "appointments") return <Shell {...shellBranding}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} title={entryConfig.customer_app.entries.appointments.label} description={entryConfig.customer_app.entries.appointments.description} /></Shell>;
   if (view === "events" && !entryConfig.availability.events) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前沒有開放中的活動報名。</div></Shell>;

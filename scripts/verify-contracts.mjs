@@ -1969,6 +1969,15 @@ invariant(
     read("app/admin/settings/CustomerAppDesigner.tsx").includes('name="app_shortcut_button_label"'),
 );
 invariant(
+  "customer App home avoids duplicate navigation and detail navigation fits without horizontal scrolling",
+  read("app/book/page.tsx").includes('taskMode || view === "home" ? null') &&
+    read("app/book/CustomerEntry.tsx").includes(".slice(0, 5)") &&
+    read("app/book/CustomerEntry.tsx").includes("gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))`") &&
+    read("app/book/CustomerApp.module.css").includes("display: grid;") &&
+    read("app/book/CustomerApp.module.css").includes("text-overflow: ellipsis;") &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes('previewView !== "home"'),
+);
+invariant(
   "LINE-first built-in menu actions stay native while custom URLs remain configurable",
   read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("booking")') &&
     read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("events")') &&
@@ -2052,7 +2061,7 @@ invariant(
 invariant(
   "task-focused LIFF closes back to LINE and admin support replies are actually pushed",
   read("lib/useLiff.ts").includes("closeLiffWindow") &&
-    read("app/book/page.tsx").includes("taskMode ? null") &&
+    read("app/book/page.tsx").includes('taskMode || view === "home" ? null') &&
     read("app/book/page.tsx").includes("完成並回到 LINE") &&
     read("app/register/page.tsx").includes("完成並回到 LINE") &&
     read("app/api/admin/chat/route.ts").includes("pushMessages(payload.lineUserId") &&

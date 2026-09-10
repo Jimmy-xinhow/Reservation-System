@@ -62,9 +62,22 @@ function EntryIcon({ entry }: { entry: CustomerView }) {
 }
 
 export function CustomerEntryNav({ view, availability, app = DEFAULT_CUSTOMER_APP_CONFIG, onChange }: { view: CustomerView; availability: CustomerEntryAvailability; app?: CustomerAppConfig; onChange: (view: CustomerView) => void }) {
-  const entries = enabledCustomerEntries(availability);
+  const enabled = enabledCustomerEntries(availability);
+  const priority: CustomerView[] = ["home", "booking", "events", "appointments", "tickets", "membership", "support", "brand"];
+  const entries = priority
+    .map((key) => enabled.find((entry) => entry.key === key))
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+    .slice(0, 5);
+  const current = enabled.find((entry) => entry.key === view);
+  if (current && !entries.some((entry) => entry.key === current.key)) {
+    entries[entries.length - 1] = current;
+  }
   return (
-    <nav aria-label="顧客服務" className={styles.customerNav}>
+    <nav
+      aria-label="顧客服務快速切換"
+      className={styles.customerNav}
+      style={{ gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))` }}
+    >
       {entries.map((entry) => (
         <button
           key={entry.key}

@@ -359,6 +359,10 @@
   padding: 0.9rem;
 }
 
+.previewContentHome {
+  height: calc(100% - 5.65rem);
+}
+
 .previewHero {
   position: relative;
   min-height: 18rem;
