@@ -248,9 +248,10 @@ function lineFlexDesignFromForm(fd: FormData): LineFlexDesignConfig {
 }
 
 async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<never> {
-  const { supabase, clinicId } = await requireAdmin();
+  const { clinicId } = await requireAdmin();
   const design = lineFlexDesignFromForm(fd);
-  const { data: current, error: readError } = await supabase
+  const service = createServiceClient();
+  const { data: current, error: readError } = await service
     .from("clinic_settings")
     .select("line_flex_designs")
     .eq("clinic_id", clinicId)
@@ -265,11 +266,14 @@ async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<nev
     updatedAt: now,
     ...(publish ? { published: design, publishedAt: now, version: (previous.version ?? 0) + 1 } : {}),
   };
-  const { error } = await supabase
+  const { data: updated, error } = await service
     .from("clinic_settings")
     .update({ line_flex_designs: settings })
-    .eq("clinic_id", clinicId);
+    .eq("clinic_id", clinicId)
+    .select("clinic_id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!updated) throw new Error("找不到目前品牌的設定資料");
   revalidatePath("/admin/line-templates");
   revalidatePath("/admin/replies");
   redirect(`/admin/line-templates?${publish ? "published" : "saved"}=1&template=${encodeURIComponent(design.templateKey)}`);
