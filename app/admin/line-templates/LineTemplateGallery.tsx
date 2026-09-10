@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { useMemo, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
 import { LINE_UI_CATEGORIES, LINE_UI_TEMPLATES, type LineUiCategory, type LineUiTemplateDefinition } from "@/lib/line-ui-templates";
 import {
   LINE_FLEX_STYLE_PRESETS,
+  LINE_FLEX_STYLE_GROUPS,
   LINE_FLEX_WELCOME_PRESETS,
   isLineFlexTemplateKey,
   parseLineFlexDesignSettings,
@@ -111,13 +111,13 @@ export default function LineTemplateGallery({ clinicName, initialDesigns, initia
 
   function applyStyle(styleKey: LineFlexStyleKey) {
     update("styleKey", styleKey);
-    if (["editorial", "poster"].includes(styleKey)) update("showImage", true);
+    if (["editorial", "poster", "seasonal_card"].includes(styleKey)) update("showImage", true);
   }
 
   function applyWelcomePreset(presetKey: string) {
     const preset = LINE_FLEX_WELCOME_PRESETS.find((item) => item.key === presetKey);
     if (!preset) return;
-    setDesign((current) => ({ ...current, ...preset.design, name: `${preset.name}－品牌版本` }));
+    setDesign((current) => ({ ...current, ...preset.design, name: `${preset.name}－歡迎文案` }));
   }
 
   async function uploadImage(event: ChangeEvent<HTMLInputElement>) {
@@ -142,6 +142,14 @@ export default function LineTemplateGallery({ clinicName, initialDesigns, initia
 
   return (
     <section className="line-template-workbench" aria-label="LINE 訊息範本清單">
+      <TemplatePurposeBrowser
+        category={category}
+        selectedKey={selectedKey}
+        templates={templates}
+        savedDesigns={savedDesigns}
+        onCategoryChange={setCategory}
+        onSelect={selectTemplate}
+      />
       <FlexDesignEditor
         clinicName={clinicName}
         template={selectedTemplate}
@@ -154,44 +162,49 @@ export default function LineTemplateGallery({ clinicName, initialDesigns, initia
         uploading={uploading}
         uploadError={uploadError}
       />
-      <div className="platform-command-tabs overflow-x-auto" role="tablist" aria-label="LINE UI 模板分類">
-        {LINE_UI_CATEGORIES.map((item) => (
-          <button key={item.key} type="button" role="tab" aria-selected={category === item.key} onClick={() => setCategory(item.key)} className="platform-command-tab shrink-0" data-selected={category === item.key}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-      <div className="line-template-list">
-        {templates.map((template) => (
-          <article key={template.key} className="line-panel overflow-hidden p-0">
-            <div className="line-template-row">
-              <div className="line-template-meta">
-                <div className="flex flex-wrap items-center gap-2"><span className="badge bg-slate-100 text-slate-600">{template.trigger}</span><span className={`badge ${template.systemManaged ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{template.systemManaged ? "系統依狀態傳送" : "圖片與文字皆可編輯"}</span></div>
-                <h2 className="mt-3 text-lg font-bold text-slate-950">{template.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">{template.body}</p>
-                <dl className="line-template-details">
-                  <div><dt>顧客會看到</dt><dd>{template.badge} · {template.headline}</dd></div>
-                  <div><dt>主要動作</dt><dd>{template.primaryAction}</dd></div>
-                  {template.secondaryAction && <div><dt>次要動作</dt><dd>{template.secondaryAction}</dd></div>}
-                  <div><dt>版面邏輯</dt><dd>{layoutDescription(PREVIEW_KIND[template.key] ?? "appointment")}</dd></div>
-                  <div><dt>資料來源</dt><dd>{template.systemManaged ? "系統依顧客與即時狀態帶入" : "品牌自行上傳圖片並編輯圖文"}</dd></div>
-                </dl>
-                <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                  <button type="button" className="btn btn-primary min-h-11" onClick={() => selectTemplate(template)}>套用並編輯</button>
-                  {savedDesigns[template.key as LineFlexTemplateKey]?.published && <span className="line-flex-published-state">已發布 v{savedDesigns[template.key as LineFlexTemplateKey]?.version ?? 1}</span>}
-                  {!template.systemManaged && <Link href="/admin/messages" className="btn btn-secondary min-h-11">另存行銷素材</Link>}
-                </div>
-              </div>
-              <div className="line-message-demo" aria-label={`${template.title} 訊息預覽`}>
-                <p className="line-message-demo-label">功能專屬版型・依實際閱讀順序排列</p>
-                <TemplatePreview template={template} kind={PREVIEW_KIND[template.key] ?? "appointment"} />
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
     </section>
   );
+}
+
+function TemplatePurposeBrowser({
+  category,
+  selectedKey,
+  templates,
+  savedDesigns,
+  onCategoryChange,
+  onSelect,
+}: {
+  category: "all" | LineUiCategory;
+  selectedKey: LineFlexTemplateKey;
+  templates: LineUiTemplateDefinition[];
+  savedDesigns: ReturnType<typeof parseLineFlexDesignSettings>;
+  onCategoryChange: (category: "all" | LineUiCategory) => void;
+  onSelect: (template: LineUiTemplateDefinition) => void;
+}) {
+  return <section className="line-panel line-flex-purpose-browser overflow-hidden p-0" aria-label="選擇 LINE 訊息用途">
+    <div className="line-flex-purpose-head">
+      <div><span>STEP 01</span><h2>先選要設計的訊息</h2></div>
+      <p>用途只選一次；下方預覽與編輯都會同步切換，不再重複顯示另一套範本卡。</p>
+    </div>
+    <div className="platform-command-tabs overflow-x-auto" role="tablist" aria-label="LINE UI 模板分類">
+      {LINE_UI_CATEGORIES.map((item) => (
+        <button key={item.key} type="button" role="tab" aria-selected={category === item.key} onClick={() => onCategoryChange(item.key)} className="platform-command-tab shrink-0" data-selected={category === item.key}>
+          {item.label}
+        </button>
+      ))}
+    </div>
+    <div className="line-flex-purpose-grid">
+      {templates.map((template) => {
+        const templateKey = template.key as LineFlexTemplateKey;
+        const state = savedDesigns[templateKey];
+        return <button key={template.key} type="button" className="line-flex-purpose-card" data-selected={selectedKey === templateKey} onClick={() => onSelect(template)}>
+          <span>{state?.published ? `已發布 v${state.version ?? 1}` : state?.draft ? "已有草稿" : template.systemManaged ? "系統訊息" : "圖片與文字皆可編輯"}</span>
+          <strong>{template.title}</strong>
+          <small>{template.trigger}</small>
+        </button>;
+      })}
+    </div>
+  </section>;
 }
 
 function FlexDesignEditor({
@@ -217,6 +230,7 @@ function FlexDesignEditor({
   uploading: boolean;
   uploadError: string;
 }) {
+  const activeStyle = LINE_FLEX_STYLE_PRESETS.find((style) => style.key === design.styleKey) ?? LINE_FLEX_STYLE_PRESETS[0];
   const previewTemplate: LineUiTemplateDefinition = {
     ...template,
     badge: design.badge || template.badge,
@@ -234,9 +248,10 @@ function FlexDesignEditor({
     <section id="line-flex-editor" className="line-panel line-flex-studio overflow-hidden p-0" aria-label="品牌 Flex 設計工作區">
       <div className="line-panel-header line-flex-studio-head">
         <div>
-          <p className="eyebrow">品牌 Flex 工作區</p>
+          <p className="eyebrow">STEP 02・品牌 Flex 編輯</p>
           <h2 className="mt-1 text-lg font-bold text-slate-950">{template.title}</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-500">範本只是起點；儲存是品牌草稿，發布後才會套用到實際 LINE 訊息。</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">選一款真正不同的版型，再調整品牌文字、圖片與色彩；發布後才會套用到實際 LINE。</p>
+          <div className="line-flex-current-context"><span>{template.trigger}</span><span>{template.systemManaged ? "動態資料由系統帶入" : "品牌圖文可自行編輯"}</span><span>{layoutDescription(kind)}</span></div>
         </div>
         <div className="line-flex-status-stack">
           <span className="badge bg-slate-100 text-slate-600">目前編輯：{design.name}</span>
@@ -244,32 +259,40 @@ function FlexDesignEditor({
         </div>
       </div>
 
-      {template.key === "welcome" && <div className="line-flex-welcome-presets" aria-label="加入好友歡迎版型">
-        <div className="line-flex-library-intro"><strong>加入好友不只一種長相</strong><span>選一個方向帶入後，仍可逐項修改。</span></div>
-        <div className="line-flex-welcome-grid">
-          {LINE_FLEX_WELCOME_PRESETS.map((preset) => <button key={preset.key} type="button" onClick={() => onApplyWelcomePreset(preset.key)} className="line-flex-preset-card" data-active={design.name.startsWith(preset.name)}>
-            <span data-style={preset.design.styleKey}><i /><i /></span>
-            <strong>{preset.name}</strong>
-            <small>{preset.description}</small>
-          </button>)}
-        </div>
-      </div>}
-
       <div className="line-flex-studio-grid">
         <form className="line-flex-controls" action={saveLineFlexDesignAction}>
           <input type="hidden" name="template_key" value={design.templateKey} />
           <input type="hidden" name="design" value={JSON.stringify(design)} />
 
           <fieldset className="line-flex-control-section">
-            <legend>版面風格</legend>
-            <div className="line-flex-style-grid">
-              {LINE_FLEX_STYLE_PRESETS.map((style) => <button key={style.key} type="button" className="line-flex-style-card" data-active={design.styleKey === style.key} onClick={() => onApplyStyle(style.key)}>
-                <span style={{ background: `linear-gradient(135deg,${style.swatch[0]} 0 58%,${style.swatch[1]} 58%)` }} />
-                <b>{style.name}</b>
-                <small>{style.description}</small>
-              </button>)}
+            <legend>版型庫・{LINE_FLEX_STYLE_PRESETS.length} 款</legend>
+            <div className="line-flex-style-library">
+              {LINE_FLEX_STYLE_GROUPS.map((group) => {
+                const styles = LINE_FLEX_STYLE_PRESETS.filter((style) => style.group === group.key);
+                return <section key={group.key} className="line-flex-style-group" aria-label={group.label}>
+                  <header><div><strong>{group.label}</strong><span>{group.description}</span></div><b>{String(styles.length).padStart(2, "0")}</b></header>
+                  <div className="line-flex-style-grid">
+                    {styles.map((style) => <button key={style.key} type="button" className="line-flex-style-card" data-active={design.styleKey === style.key} onClick={() => onApplyStyle(style.key)}>
+                      <StyleThumbnail style={style} />
+                      <b>{style.name}</b>
+                      <small>{style.structure}</small>
+                      <em>{style.description}</em>
+                    </button>)}
+                  </div>
+                </section>;
+              })}
             </div>
           </fieldset>
+
+          {template.key === "welcome" && <fieldset className="line-flex-control-section">
+            <legend>歡迎文案起點・不改變版型</legend>
+            <p className="line-flex-field-hint">文案提案與視覺版型已拆開；套入後仍可逐字修改。</p>
+            <div className="line-flex-copy-grid">
+              {LINE_FLEX_WELCOME_PRESETS.map((preset) => <button key={preset.key} type="button" onClick={() => onApplyWelcomePreset(preset.key)} className="line-flex-copy-card" data-active={design.name.startsWith(preset.name)}>
+                <strong>{preset.name}</strong><span>{preset.description}</span>
+              </button>)}
+            </div>
+          </fieldset>}
 
           <fieldset className="line-flex-control-section">
             <legend>品牌文字</legend>
@@ -322,11 +345,21 @@ function FlexDesignEditor({
           <div className="line-flex-phone-canvas" data-flex-style={design.styleKey}>
             <TemplatePreview template={previewTemplate} kind={kind} imageUrl={design.showImage ? design.imageUrl : ""} />
           </div>
+          <div className="line-flex-preview-caption"><strong>{activeStyle.name}</strong><span>{activeStyle.structure}</span></div>
           <p className="line-flex-preview-note">動態日期、金額、服務與顧客資料會由系統帶入；此處編輯品牌外觀、文案與欄位名稱。</p>
         </aside>
       </div>
     </section>
   );
+}
+
+function StyleThumbnail({ style }: { style: (typeof LINE_FLEX_STYLE_PRESETS)[number] }) {
+  return <span className="line-flex-style-thumb" data-style={style.key} style={{ "--style-main": style.swatch[0], "--style-mark": style.swatch[1] } as CSSProperties} aria-hidden="true">
+    <i className="line-flex-style-thumb-media" />
+    <i className="line-flex-style-thumb-title" />
+    <i className="line-flex-style-thumb-copy" />
+    <i className="line-flex-style-thumb-action" />
+  </span>;
 }
 
 function ToggleButton({ checked, label, onChange }: { checked: boolean; label: string; onChange: (value: boolean) => void }) {

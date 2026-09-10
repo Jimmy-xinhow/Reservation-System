@@ -239,6 +239,162 @@ function designedHeader(input: LineExperienceCardInput, style: LineFlexStyleKey,
       ],
     };
   }
+  if (style === "editorial") {
+    return {
+      type: "box", layout: "vertical", paddingTop: "22px", paddingBottom: "20px", paddingStart: "20px", paddingEnd: "20px", backgroundColor: "#2B2622",
+      contents: [
+        { type: "text", text: input.badge.toUpperCase(), size: "xxs", color: markerColor, weight: "bold", letterSpacing: "1px", scaling: true },
+        { type: "text", text: input.title, size: "xxl", color: "#FFFDF8", weight: "bold", wrap: true, margin: "xl", scaling: true },
+        { type: "box", layout: "horizontal", margin: "xl", alignItems: "center", contents: [
+          { type: "box", layout: "vertical", width: "38px", height: "2px", backgroundColor: markerColor, contents: [{ type: "filler" }] },
+          { type: "text", text: input.context, size: "xxs", color: "#CFC3B8", margin: "md", wrap: true, scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (style === "poster") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "18px", backgroundColor: input.accent,
+      contents: [
+        { type: "text", text: input.badge, size: "xxs", color: markerColor, weight: "bold", scaling: true },
+        { type: "text", text: input.title, size: "xxl", color: "#FFFFFF", weight: "bold", wrap: true, margin: "xl", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#E8EFEC", wrap: true, margin: "md", scaling: true },
+      ],
+    };
+  }
+  if (style === "split_panel") {
+    return {
+      type: "box", layout: "horizontal", backgroundColor: "#EEE6D8",
+      contents: [
+        { type: "box", layout: "vertical", width: "34%", paddingAll: "14px", justifyContent: "space-between", backgroundColor: input.accent, contents: [
+          { type: "text", text: input.context, size: "xxs", color: "#FFFFFF", weight: "bold", wrap: true, scaling: true },
+          { type: "text", text: input.badge, size: "xxs", color: markerColor, weight: "bold", wrap: true, scaling: true },
+        ] },
+        { type: "box", layout: "vertical", flex: 1, paddingAll: "17px", justifyContent: "center", contents: [
+          { type: "text", text: input.title, size: "xl", color: "#25352F", weight: "bold", wrap: true, scaling: true },
+          { type: "text", text: input.body, size: "sm", color: "#657169", wrap: true, margin: "md", scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (style === "magazine_strip") {
+    return {
+      type: "box", layout: "horizontal", backgroundColor: "#F1E7D4",
+      contents: [
+        { type: "box", layout: "vertical", width: "18px", backgroundColor: input.accent, contents: [{ type: "filler" }] },
+        { type: "box", layout: "vertical", flex: 1, paddingAll: "18px", contents: [
+          { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", scaling: true },
+          { type: "text", text: input.title, size: "xxl", color: "#2E302D", weight: "bold", wrap: true, margin: "lg", scaling: true },
+          { type: "text", text: input.context, size: "xxs", color: "#756C61", wrap: true, margin: "lg", scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (style === "seasonal_card") {
+    return {
+      type: "box", layout: "vertical", margin: "8px", paddingAll: "17px", cornerRadius: "16px", backgroundColor: input.softAccent,
+      contents: [
+        { type: "box", layout: "horizontal", alignItems: "center", contents: [
+          { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", flex: 1, scaling: true },
+          { type: "text", text: "SEASON EDIT", size: "xxs", color: "#7D877F", align: "end", flex: 0, scaling: true },
+        ] },
+        { type: "text", text: input.title, size: "xl", color: "#293730", weight: "bold", wrap: true, margin: "lg", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#5F6D66", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (style === "compact_list") {
+    return {
+      type: "box", layout: "vertical", paddingTop: "11px", paddingBottom: "11px", paddingStart: "15px", paddingEnd: "15px", backgroundColor: "#FFFFFF",
+      contents: [
+        { type: "box", layout: "horizontal", alignItems: "center", contents: [
+          { type: "text", text: input.title, size: "md", color: "#24342D", weight: "bold", wrap: true, flex: 7, scaling: true },
+          { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", align: "end", flex: 3, wrap: true, scaling: true },
+        ] },
+        { type: "text", text: input.context, size: "xxs", color: "#7A8580", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (style === "framed_note") {
+    return {
+      type: "box", layout: "vertical", margin: "8px", paddingAll: "18px", borderWidth: "2px", borderColor: markerColor, backgroundColor: "#FBF9F3", alignItems: "center",
+      contents: [
+        { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", align: "center", scaling: true },
+        { type: "text", text: input.title, size: "xl", color: "#2B3832", weight: "bold", wrap: true, align: "center", margin: "xl", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#6C746F", wrap: true, align: "center", margin: "md", scaling: true },
+      ],
+    };
+  }
+  if (style === "spotlight") {
+    return {
+      type: "box", layout: "vertical", paddingTop: "26px", paddingBottom: "24px", paddingStart: "20px", paddingEnd: "20px", backgroundColor: "#FFFFFF", alignItems: "center",
+      contents: [
+        { type: "box", layout: "vertical", width: "38px", height: "38px", cornerRadius: "19px", backgroundColor: input.softAccent, justifyContent: "center", contents: [
+          { type: "text", text: "●", size: "sm", color: input.accent, align: "center", scaling: true },
+        ] },
+        { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", align: "center", margin: "lg", scaling: true },
+        { type: "text", text: input.title, size: "xl", color: "#294138", weight: "bold", wrap: true, align: "center", margin: "md", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#6A756F", wrap: true, align: "center", margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (style === "dark_luxe") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "20px", backgroundColor: "#181B1A",
+      contents: [
+        { type: "box", layout: "vertical", width: "42px", height: "2px", backgroundColor: markerColor, contents: [{ type: "filler" }] },
+        { type: "text", text: input.badge.toUpperCase(), size: "xxs", color: markerColor, weight: "bold", margin: "lg", scaling: true },
+        { type: "text", text: input.title, size: "xxl", color: "#F7F1E4", weight: "bold", wrap: true, margin: "lg", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#AAB1AD", wrap: true, margin: "md", scaling: true },
+      ],
+    };
+  }
+  if (style === "ticket") {
+    return {
+      type: "box", layout: "horizontal", backgroundColor: "#F7F5FB",
+      contents: [
+        { type: "box", layout: "vertical", width: "68px", paddingAll: "12px", justifyContent: "center", backgroundColor: input.accent, contents: [
+          { type: "text", text: input.badge, size: "xxs", color: "#FFFFFF", weight: "bold", align: "center", wrap: true, scaling: true },
+        ] },
+        { type: "box", layout: "vertical", flex: 1, paddingAll: "17px", contents: [
+          { type: "text", text: input.context, size: "xxs", color: "#7A7487", scaling: true },
+          { type: "text", text: input.title, size: "xl", color: "#302A45", weight: "bold", wrap: true, margin: "md", scaling: true },
+          { type: "text", text: input.body, size: "xs", color: "#6B6578", wrap: true, margin: "sm", scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (style === "timeline") {
+    return {
+      type: "box", layout: "horizontal", paddingAll: "17px", spacing: "md", backgroundColor: "#EEF6F7",
+      contents: [
+        { type: "box", layout: "vertical", width: "14px", alignItems: "center", contents: [
+          { type: "box", layout: "vertical", width: "10px", height: "10px", cornerRadius: "5px", backgroundColor: input.accent, contents: [{ type: "filler" }] },
+          { type: "box", layout: "vertical", width: "2px", flex: 1, margin: "sm", backgroundColor: "#BED1D4", contents: [{ type: "filler" }] },
+        ] },
+        { type: "box", layout: "vertical", flex: 1, contents: [
+          { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", scaling: true },
+          { type: "text", text: input.title, size: "xl", color: "#24363A", weight: "bold", wrap: true, margin: "md", scaling: true },
+          { type: "text", text: input.body, size: "sm", color: "#607175", wrap: true, margin: "sm", scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (style === "bold_notice") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "20px", backgroundColor: "#1D2723",
+      contents: [
+        { type: "box", layout: "horizontal", alignItems: "center", contents: [
+          { type: "box", layout: "vertical", flex: 0, paddingTop: "4px", paddingBottom: "4px", paddingStart: "7px", paddingEnd: "7px", backgroundColor: markerColor, contents: [
+            { type: "text", text: input.badge, size: "xxs", color: "#1D2723", weight: "bold", align: "center", scaling: true },
+          ] },
+          { type: "text", text: input.context, size: "xxs", color: "#B9C5BF", align: "end", flex: 1, wrap: true, scaling: true },
+        ] },
+        { type: "text", text: input.title, size: "xxl", color: "#FFFFFF", weight: "bold", wrap: true, margin: "xl", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#C5CEC9", wrap: true, margin: "md", scaling: true },
+      ],
+    };
+  }
   return null;
 }
 
@@ -442,21 +598,25 @@ export function buildLineExperienceCard(input: LineExperienceCardInput): Record<
   const variant = configured.variant ?? inferExperienceVariant(configured);
   const style = configured.design?.styleKey ?? "signature";
   const customHeader = designedHeader(configured, style, markerColor);
+  const compactFooter = ["action_grid", "compact_list", "ticket"].includes(style) && configured.buttons.length <= 3;
+  const quietFooter = ["minimal", "framed_note", "spotlight"].includes(style);
+  const darkFooter = style === "dark_luxe";
+  const noticeFooter = style === "bold_notice";
   const footer = configured.buttons.length > 0 ? {
     type: "box",
-    layout: style === "action_grid" && configured.buttons.length <= 3 ? "horizontal" : "vertical",
+    layout: compactFooter ? "horizontal" : "vertical",
     spacing: "sm",
     paddingTop: "12px",
     paddingBottom: "16px",
     paddingStart: "16px",
     paddingEnd: "16px",
-    backgroundColor: "#FAFBFA",
+    backgroundColor: darkFooter ? "#181B1A" : noticeFooter ? markerColor : quietFooter ? "#FFFFFF" : "#FAFBFA",
     contents: configured.buttons.map((button) => ({
       type: "button",
       flex: 1,
       height: "sm",
-      style: button.primary ? "primary" : "secondary",
-      color: button.primary ? configured.accent : "#53615B",
+      style: quietFooter ? "link" : button.primary ? "primary" : "secondary",
+      color: noticeFooter ? "#1D2723" : button.primary ? (darkFooter ? markerColor : configured.accent) : darkFooter ? "#D2C19B" : "#53615B",
       scaling: true,
       adjustMode: "shrink-to-fit",
       action: flexAction(button),
@@ -465,17 +625,18 @@ export function buildLineExperienceCard(input: LineExperienceCardInput): Record<
   const heroUrl = configured.design?.showImage && configured.design.imageUrl.startsWith("https://")
     ? configured.design.imageUrl
     : null;
+  const heroAspectRatio = style === "poster" ? "1:1" : style === "editorial" ? "4:3" : style === "seasonal_card" ? "16:9" : "20:13";
   return {
     type: "flex",
     altText: configured.altText.slice(0, 1500),
     contents: {
       type: "bubble",
       size: "mega",
-      ...(heroUrl ? { hero: { type: "image", url: heroUrl, size: "full", aspectRatio: "20:13", aspectMode: "cover" } } : {}),
+      ...(heroUrl ? { hero: { type: "image", url: heroUrl, size: "full", aspectRatio: heroAspectRatio, aspectMode: "cover" } } : {}),
       header: customHeader ?? experienceHeader(configured, variant, markerColor),
       body: experienceBody(configured, variant, markerColor),
       ...(footer ? { footer } : {}),
-      styles: footer ? { footer: { separator: true, separatorColor: "#E5E9E7" } } : undefined,
+      styles: footer ? { footer: { separator: !quietFooter && !darkFooter && !noticeFooter, separatorColor: "#E5E9E7" } } : undefined,
     },
   };
 }

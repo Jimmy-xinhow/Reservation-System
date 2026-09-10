@@ -2064,11 +2064,16 @@ invariant(
     ),
 );
 invariant(
-  "LINE Flex templates are copyable brand drafts with live preview and explicit publication",
+  "LINE Flex templates use one non-duplicated purpose browser and visibly distinct editable layouts",
   read("supabase/migrations/202609100001_line_flex_design_workbench.sql").includes("line_flex_designs jsonb") &&
     schema.includes("clinic_settings_line_flex_designs_object_check") &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("先選要設計的訊息") &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("文案提案與視覺版型已拆開") &&
     read("app/admin/line-templates/LineTemplateGallery.tsx").includes("LINE_FLEX_WELCOME_PRESETS") &&
-    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("套用並編輯") &&
+    !read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-flex-welcome-presets") &&
+    ["split_panel", "magazine_strip", "framed_note", "spotlight", "dark_luxe", "bold_notice"].every((style) =>
+      read("lib/line-flex-design.ts").includes(`"${style}"`) && read("lib/line-ui-templates.ts").includes(`style === "${style}"`),
+    ) &&
     read("app/admin/line-templates/LineTemplateGallery.tsx").includes("儲存品牌草稿") &&
     read("app/admin/line-templates/LineTemplateGallery.tsx").includes("發布到實際 LINE") &&
     read("app/admin/line-actions.ts").includes("saveLineFlexDesignAction") &&
