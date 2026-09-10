@@ -1928,7 +1928,7 @@ invariant(
     read("lib/appointment-notifications.ts").includes('doctor?.name ?? "由品牌安排"') &&
     read("lib/appointment-notifications.ts").includes('kind === "cancelled" ? "booking" : "appointments"') &&
     read("lib/registration-notifications.ts").includes('kind === "cancelled" ? eventsUrl : ticketsUrl') &&
-    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-message-card-highlight"),
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-functional-preview"),
 );
 invariant(
   "all editable LINE content surfaces provide a live customer preview",
@@ -2026,7 +2026,8 @@ invariant(
 );
 invariant(
   "LINE booking uses tenant-scoped live calendar status and preserves provider selection",
-  read("lib/line-customer-journeys.ts").includes("LINE_CALENDAR_DAYS = 14") &&
+  read("lib/line-customer-journeys.ts").includes("LINE_CALENDAR_DAYS = 30") &&
+    ["尚可預約", "即將額滿", "額滿"].every((label) => read("lib/line-customer-journeys.ts").includes(label)) &&
     read("lib/line-customer-journeys.ts").includes('"get_available_slots_for_service"') &&
     read("lib/line-customer-journeys.ts").includes('"get_available_service_sessions"') &&
     read("lib/line-customer-journeys.ts").includes("bookingCalendarMessage(context") &&
@@ -2041,6 +2042,26 @@ invariant(
     read("app/admin/settings/BrandPageEditor.tsx").includes("1200 × 600 像素") &&
     read("app/admin/settings/BrandPageEditor.tsx").includes("1600 × 900 像素") &&
     read("app/admin/beauty/TreatmentRecordForm.tsx").includes("1200 × 1200 像素"),
+);
+
+invariant(
+  "LINE template gallery uses function-specific layouts and editable image-text presets",
+  ["payment", "reminder", "queue", "ticket", "membership", "support", "staff"].every((layout) =>
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes(`kind === \"${layout}\"`),
+  ) &&
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("圖片與文字皆可編輯") &&
+    read("app/admin/messages/MessageComposer.tsx").includes("CARD_PRESETS") &&
+    read("app/admin/messages/MessageComposer.tsx").includes("可編輯圖片與文字的圖文範本"),
+);
+
+invariant(
+  "actual LINE Flex cards choose distinct structures by task",
+  read("lib/line-ui-templates.ts").includes("inferExperienceVariant") &&
+    read("lib/line-ui-templates.ts").includes("experienceHeader") &&
+    read("lib/line-ui-templates.ts").includes("experienceBody") &&
+    ["payment", "reminder", "queue", "event", "membership", "support", "staff"].every((variant) =>
+      read("lib/line-ui-templates.ts").includes(`variant === \"${variant}\"`),
+    ),
 );
 invariant(
   "official LINE account linking uses short-lived hashed nonces and tenant-scoped completion",
@@ -2089,7 +2110,7 @@ invariant(
     read("lib/line-customer-journeys.ts").includes("lineAccountLinkedMessage") &&
     read("app/api/line/webhook/route.ts").includes("brand_page_template, brand_primary_color, brand_accent_color") &&
     read("app/api/line/webhook/route.ts").includes("lineAccountLinkedMessage(journeyContext") &&
-    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-message-card-mark"),
+    read("app/admin/line-templates/LineTemplateGallery.tsx").includes("line-functional-preview"),
 );
 invariant(
   "LINE staff journeys share the branded hierarchy and actionable postbacks",

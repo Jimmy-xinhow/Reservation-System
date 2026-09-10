@@ -29,8 +29,9 @@ export const LINE_UI_CATEGORIES: Array<{ key: "all" | LineUiCategory; label: str
 export const LINE_UI_TEMPLATES: LineUiTemplateDefinition[] = [
   { key: "welcome", category: "entry", title: "加入好友歡迎", trigger: "首次加入好友", headline: "歡迎加入，從 LINE 開始", body: "加好友只送出一張卡，直接提供品牌介紹、會員綁定與立即預約。", details: [["三個入口", "介紹・綁定・預約"], ["會員綁定", "直接連結目前 LINE"]], primaryAction: "立即預約", secondaryAction: "綁定會員", badge: "歡迎加入", accent: "#31584D", systemManaged: true },
   { key: "service_hub", category: "entry", title: "LINE 原生服務選單", trigger: "點選圖文選單／輸入關鍵字", headline: "想先辦理哪一件事？", body: "直接在 LINE 選擇預約、活動、票券、會員或客服，不先跳到網站首頁。", details: [["主要入口", "預約・活動・票券"], ["帳戶服務", "會員・客服・品牌資訊"]], primaryAction: "立即預約", secondaryAction: "瀏覽活動", badge: "LINE 服務選單", accent: "#173F48", systemManaged: true },
+  { key: "brand_story", category: "entry", title: "品牌圖文介紹", trigger: "圖文選單／品牌介紹", headline: "把品牌第一印象說清楚", body: "使用品牌圖片、短標題與一個明確入口；圖片、標題、內文與按鈕都能自行修改。", details: [["圖片建議", "1200 × 780"], ["適合內容", "品牌故事・空間・服務特色"]], primaryAction: "認識品牌", badge: "品牌故事", accent: "#7A503C", systemManaged: false },
   { key: "booking_service_select", category: "booking", title: "選擇預約服務", trigger: "點選立即預約", headline: "先選擇要預約的服務", body: "以 LINE 快速選項顯示品牌目前開放的服務，顧客不必先進入完整網站。", details: [["選擇方式", "LINE 快速選項"], ["資料來源", "即時開放服務"]], primaryAction: "選擇一項服務", secondaryAction: "查看全部服務", badge: "步驟 1／2", accent: "#126248", systemManaged: true },
-  { key: "booking_date_select", category: "booking", title: "即時預約月曆", trigger: "選定服務與服務人員", headline: "直接看見哪一天可以預約", body: "LINE 內顯示兩週月曆，以顏色標示可約、少量與暫無，並可翻到下一段日期。", details: [["日期範圍", "09/10–09/23"], ["即時狀態", "8 天可預約"]], primaryAction: "點選可預約日期", secondaryAction: "查看下一段日期", badge: "預約月曆", accent: "#126248", systemManaged: true },
+  { key: "booking_date_select", category: "booking", title: "近 30 天預約月曆", trigger: "選定服務與服務人員", headline: "一次掌握未來 30 天名額", body: "LINE 內顯示近 30 天月曆，明確區分尚可預約、即將額滿與額滿。", details: [["日期範圍", "09/10–10/09"], ["即時狀態", "尚可預約 17・即將額滿 6・額滿 7"]], primaryAction: "點選尚可預約日期", secondaryAction: "查看後 30 天", badge: "預約月曆", accent: "#126248", systemManaged: true },
   { key: "booking_confirmed", category: "booking", title: "預約成立", trigger: "預約確認／付款完成", headline: "時間已為你保留", body: "先突出最新預約時間，再列出服務與服務人員，避免顧客回頭翻找。", details: [["預約時間", "08/18（二）14:30"], ["服務", "體驗諮詢"], ["服務人員", "王老師"]], primaryAction: "查看／管理這筆預約", badge: "預約已確認", accent: "#126248", systemManaged: true },
   { key: "payment_pending", category: "booking", title: "訂金待付款", trigger: "建立需訂金的預約", headline: "訂金尚未完成", body: "先說明目前只是暫時保留，再讓顧客直接進入這筆預約完成付款。", details: [["預約時間", "08/18（二）14:30"], ["待付訂金", "NT$ 500"], ["付款狀態", "尚未完成"]], primaryAction: "前往完成訂金付款", badge: "待完成付款", accent: "#8A5A16", systemManaged: true },
   { key: "appointment_reminder", category: "booking", title: "行前提醒", trigger: "預約前 N 小時", headline: "你的預約快到了", body: "使用與預約成立相同的資訊順序，並提供管理預約與取消兩個明確動作。", details: [["預約時間", "08/18（二）14:30"], ["服務", "體驗諮詢"], ["服務人員", "王老師"]], primaryAction: "查看／管理這筆預約", secondaryAction: "取消這筆預約", badge: "預約行前提醒", accent: "#286675", systemManaged: true },
@@ -39,6 +40,7 @@ export const LINE_UI_TEMPLATES: LineUiTemplateDefinition[] = [
   { key: "waitlist_offer", category: "booking", title: "候補名額釋出", trigger: "名額遞補成功", headline: "候補名額已釋出", body: "把候補服務、保留期限與接受動作放在第一視線。", details: [["候補服務", "08/22（六）體驗諮詢"], ["保留期限", "今天 18:30"], ["狀態", "等待接受"]], primaryAction: "接受這次候補名額", badge: "需要你的確認", accent: "#8A5A16", systemManaged: true },
   { key: "quick_rebook", category: "booking", title: "快速再次預約", trigger: "服務完成／顧客主動開啟", headline: "要預約同一項服務嗎？", body: "帶入上次服務與偏好，縮短回訪預約步驟。", details: [["上次服務", "體驗諮詢"], ["偏好人員", "王老師"], ["步驟", "只需選日期時間"]], primaryAction: "快速再次預約", secondaryAction: "選其他服務", badge: "再次預約", accent: "#147A5B", systemManaged: true },
   { key: "registration_confirmed", category: "events", title: "活動報名成功", trigger: "報名／付款確認", headline: "報名完成", body: "先顯示活動名稱，再依序列出時間、場次、地點與報名編號。", details: [["活動／課程", "夏日體驗課"], ["日期時間", "08/29（六）10:00"], ["報名編號", "REG-20260829-001"]], primaryAction: "開啟這筆報名的電子票券", badge: "報名已確認", accent: "#594B99", systemManaged: true },
+  { key: "event_feature", category: "events", title: "活動／課程圖文招募", trigger: "人工發送／關鍵字回覆", headline: "用一張圖說明這次活動", body: "適合課程招生、講座與限定活動，圖片、活動文案與行動按鈕皆可自行編輯。", details: [["圖片建議", "1200 × 780"], ["內容結構", "主視覺・重點・報名入口"]], primaryAction: "查看活動與場次", secondaryAction: "立即報名", badge: "活動精選", accent: "#C7633F", systemManaged: false },
   { key: "ticket_ready", category: "events", title: "票券與 QR 報到", trigger: "報名完成／活動前提醒", headline: "電子票券可以使用了", body: "QR 留在已驗證的票券頁，不放進可轉傳的長文字。", details: [["票券", "一般票 × 2"], ["報到", "出示動態 QR"], ["狀態", "可使用"]], primaryAction: "開啟票券 QR", secondaryAction: "查看活動", badge: "電子票券", accent: "#6656B8", systemManaged: true },
   { key: "membership_balance", category: "member", title: "會員／套票餘額", trigger: "購買完成／餘額查詢", headline: "你的會員權益", body: "顯示方案、剩餘堂數與期限，並直接銜接可使用的預約入口。", details: [["方案", "安心體驗套票"], ["剩餘", "4 堂"], ["有效至", "2026/12/31"]], primaryAction: "使用套票預約", secondaryAction: "查看使用紀錄", badge: "會員權益", accent: "#9A7125", systemManaged: true },
   { key: "account_link", category: "member", title: "LINE 會員綁定", trigger: "首次查詢個人資料", headline: "啟用 LINE 會員", body: "直接使用目前 LINE 帳號完成綁定，不離開聊天室；需要預約或付款時再補個人資料。", details: [["綁定方式", "LINE 內一鍵完成"], ["既有會員", "需要時再安全找回"]], primaryAction: "直接綁定目前 LINE", secondaryAction: "找回品牌既有會員", badge: "會員服務", accent: "#315C50", systemManaged: true },
@@ -133,7 +135,9 @@ function flexAction(button: LineFlexButton): Record<string, unknown> {
   return { type: "postback", label, data: button.action.data, ...(button.action.displayText ? { displayText: button.action.displayText } : {}) };
 }
 
-export function buildLineExperienceCard(input: {
+export type LineExperienceVariant = "menu" | "appointment" | "payment" | "reminder" | "change" | "queue" | "event" | "membership" | "support" | "staff";
+
+interface LineExperienceCardInput {
   altText: string;
   context: string;
   badge: string;
@@ -145,8 +149,206 @@ export function buildLineExperienceCard(input: {
   details: Array<[string, string]>;
   buttons: LineFlexButton[];
   markerColor?: string;
-}): Record<string, unknown> {
+  variant?: LineExperienceVariant;
+}
+
+function inferExperienceVariant(input: LineExperienceCardInput): LineExperienceVariant {
+  const content = `${input.badge} ${input.title} ${input.highlight[0]}`;
+  if (/付款|訂金|待付/.test(content)) return "payment";
+  if (/提醒|快到了/.test(content)) return "reminder";
+  if (/候補|順位|名額釋出/.test(content)) return "queue";
+  if (/活動|報名|票券|場次/.test(content)) return "event";
+  if (/會員|套票|權益|綁定/.test(content)) return "membership";
+  if (/客服|案件|對話/.test(content)) return "support";
+  if (/員工|今日工作|交班|出勤/.test(content)) return "staff";
+  if (/改期|取消|更新|失效|逾期/.test(content)) return "change";
+  if (/選單|歡迎|選擇|服務台/.test(content)) return "menu";
+  return "appointment";
+}
+
+function experienceHeader(input: LineExperienceCardInput, variant: LineExperienceVariant, markerColor: string): Record<string, unknown> {
+  if (variant === "payment") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "16px", backgroundColor: "#FFFAF0",
+      contents: [
+        { type: "box", layout: "vertical", width: "100%", height: "5px", backgroundColor: input.accent, contents: [{ type: "filler" }] },
+        { type: "box", layout: "horizontal", margin: "md", contents: [
+          { type: "text", text: input.context, size: "xs", color: "#655B4C", weight: "bold", flex: 1, scaling: true },
+          { type: "text", text: input.badge, size: "xxs", color: input.accent, weight: "bold", align: "end", flex: 0, scaling: true },
+        ] },
+        { type: "text", text: input.title, size: "xl", weight: "bold", color: "#2D261D", wrap: true, margin: "md", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#6F6454", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (variant === "reminder") {
+    return {
+      type: "box", layout: "horizontal", paddingAll: "16px", backgroundColor: input.softAccent, spacing: "md",
+      contents: [
+        { type: "box", layout: "vertical", width: "54px", height: "54px", justifyContent: "center", cornerRadius: "10px", backgroundColor: input.accent, contents: [
+          { type: "text", text: "行前", color: "#FFFFFF", size: "xxs", weight: "bold", align: "center", scaling: true },
+          { type: "text", text: "提醒", color: "#FFFFFF", size: "sm", weight: "bold", align: "center", margin: "xs", scaling: true },
+        ] },
+        { type: "box", layout: "vertical", flex: 1, justifyContent: "center", contents: [
+          { type: "text", text: input.context, size: "xxs", color: input.accent, weight: "bold", scaling: true },
+          { type: "text", text: input.title, size: "lg", weight: "bold", color: "#17231E", wrap: true, margin: "sm", scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (variant === "event") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "18px", backgroundColor: input.accent,
+      contents: [
+        { type: "text", text: input.badge, size: "xxs", color: markerColor, weight: "bold", scaling: true },
+        { type: "text", text: input.highlight[1], size: "xl", color: "#FFFFFF", weight: "bold", wrap: true, margin: "md", scaling: true },
+        { type: "text", text: input.title, size: "sm", color: "#FFFFFF", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  if (variant === "membership") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "18px", backgroundColor: input.accent,
+      contents: [
+        { type: "text", text: "MEMBER PASS", size: "xxs", color: markerColor, weight: "bold", scaling: true },
+        { type: "text", text: input.highlight[1], size: "xl", color: "#FFFFFF", weight: "bold", wrap: true, margin: "md", scaling: true },
+        { type: "box", layout: "horizontal", margin: "md", contents: [
+          { type: "text", text: input.context, size: "xs", color: "#DCE6E1", flex: 1, scaling: true },
+          { type: "text", text: input.badge, size: "xxs", color: "#FFFFFF", weight: "bold", align: "end", flex: 0, scaling: true },
+        ] },
+      ],
+    };
+  }
+  if (variant === "queue") {
+    return {
+      type: "box", layout: "horizontal", paddingAll: "17px", backgroundColor: input.accent, alignItems: "center", spacing: "md",
+      contents: [
+        { type: "box", layout: "vertical", flex: 1, contents: [
+          { type: "text", text: input.badge, size: "xxs", color: markerColor, weight: "bold", scaling: true },
+          { type: "text", text: input.title, size: "lg", color: "#FFFFFF", weight: "bold", wrap: true, margin: "sm", scaling: true },
+        ] },
+        { type: "text", text: input.details.find(([label]) => label.includes("順位"))?.[1] ?? "候補", size: "xl", color: "#FFFFFF", weight: "bold", align: "end", flex: 0, scaling: true },
+      ],
+    };
+  }
+  if (variant === "support") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "16px", backgroundColor: input.softAccent,
+      contents: [
+        { type: "text", text: `● ${input.badge}`, size: "xxs", color: input.accent, weight: "bold", scaling: true },
+        { type: "text", text: input.title, size: "lg", color: "#17231E", weight: "bold", wrap: true, margin: "md", scaling: true },
+        { type: "text", text: input.body, size: "sm", color: "#53615B", wrap: true, margin: "sm", scaling: true },
+      ],
+    };
+  }
+  return {
+    type: "box", layout: "vertical", paddingTop: "15px", paddingBottom: "16px", paddingStart: "18px", paddingEnd: "18px", backgroundColor: variant === "change" ? "#F3F5F8" : input.accent,
+    contents: [
+      { type: "box", layout: "vertical", width: "38px", height: "3px", backgroundColor: markerColor, cornerRadius: "2px", contents: [{ type: "filler" }] },
+      { type: "box", layout: "horizontal", spacing: "md", margin: "md", contents: [
+        { type: "text", text: input.context, size: "xs", color: variant === "change" ? "#46546B" : "#FFFFFF", weight: "bold", wrap: true, flex: 7, scaling: true },
+        { type: "text", text: input.badge, size: "xxs", color: variant === "change" ? input.accent : "#FFFFFF", weight: "bold", align: "end", flex: 3, wrap: true, scaling: true },
+      ] },
+      { type: "text", text: input.title, size: "xl", weight: "bold", color: variant === "change" ? "#28354C" : "#FFFFFF", wrap: true, margin: "md", scaling: true },
+      { type: "text", text: input.body, size: "sm", color: variant === "change" ? "#606B7D" : "#FFFFFF", wrap: true, margin: "sm", scaling: true },
+    ],
+  };
+}
+
+function experienceBody(input: LineExperienceCardInput, variant: LineExperienceVariant, markerColor: string): Record<string, unknown> {
+  const amount = input.details.find(([label]) => /金額|訂金|待付/.test(label));
+  const remainingDetails = amount ? input.details.filter((detail) => detail !== amount) : input.details;
+  if (variant === "payment") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "16px",
+      contents: [
+        { type: "text", text: amount?.[0] ?? input.highlight[0], size: "xs", color: "#7C6B55", weight: "bold", scaling: true },
+        { type: "text", text: amount?.[1] ?? input.highlight[1], size: "xxl", color: input.accent, weight: "bold", wrap: true, margin: "sm", scaling: true },
+        { type: "separator", margin: "lg", color: "#EEE5D8" },
+        { type: "box", layout: "vertical", margin: "lg", spacing: "md", contents: detailRows([[input.highlight[0], input.highlight[1]], ...remainingDetails]) },
+      ],
+    };
+  }
+  if (variant === "staff") {
+    return {
+      type: "box", layout: "horizontal", spacing: "xs", paddingAll: "14px", backgroundColor: "#F5F7F6",
+      contents: input.details.slice(0, 3).map(([label, value]) => ({
+        type: "box", layout: "vertical", flex: 1, paddingAll: "9px", backgroundColor: "#FFFFFF", borderWidth: "1px", borderColor: "#E1E6E3", contents: [
+          { type: "text", text: label, size: "xxs", color: "#728079", align: "center", scaling: true },
+          { type: "text", text: value, size: "lg", color: input.accent, weight: "bold", align: "center", margin: "sm", scaling: true },
+        ],
+      })),
+    };
+  }
+  if (variant === "reminder") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "16px", contents: [
+        { type: "box", layout: "horizontal", alignItems: "center", paddingAll: "12px", backgroundColor: input.softAccent, cornerRadius: "8px", contents: [
+          { type: "text", text: input.highlight[0], size: "xs", color: "#68736E", flex: 3, scaling: true },
+          { type: "text", text: input.highlight[1], size: "lg", color: input.accent, weight: "bold", align: "end", wrap: true, flex: 7, scaling: true },
+        ] },
+        { type: "box", layout: "vertical", margin: "lg", spacing: "md", contents: detailRows(input.details) },
+      ],
+    };
+  }
+  if (variant === "event") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "16px", contents: [
+        { type: "text", text: input.body, size: "sm", color: "#53615B", wrap: true, scaling: true },
+        { type: "separator", margin: "lg", color: "#DDD7EE" },
+        { type: "box", layout: "vertical", margin: "lg", spacing: "md", contents: detailRows(input.details) },
+      ],
+    };
+  }
+  if (variant === "membership") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "16px", backgroundColor: "#F7F9F8", contents: [
+        { type: "box", layout: "horizontal", spacing: "xs", contents: input.details.slice(0, 3).map(([label, value]) => ({
+          type: "box", layout: "vertical", flex: 1, paddingAll: "8px", contents: [
+            { type: "text", text: label, size: "xxs", color: "#77827C", align: "center", scaling: true },
+            { type: "text", text: value, size: "sm", color: input.accent, weight: "bold", align: "center", margin: "sm", wrap: true, scaling: true },
+          ],
+        })) },
+      ],
+    };
+  }
+  if (variant === "queue" || variant === "support") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "15px", contents: [
+        { type: "box", layout: "vertical", paddingAll: "12px", backgroundColor: input.softAccent, cornerRadius: "8px", contents: [
+          { type: "text", text: input.highlight[0], size: "xxs", color: "#68736E", weight: "bold", scaling: true },
+          { type: "text", text: input.highlight[1], size: "md", color: input.accent, weight: "bold", wrap: true, margin: "sm", scaling: true },
+        ] },
+        ...(input.details.length ? [{ type: "box", layout: "vertical", margin: "lg", spacing: "md", contents: detailRows(input.details) }] : []),
+      ],
+    };
+  }
+  if (variant === "change") {
+    return {
+      type: "box", layout: "vertical", paddingAll: "16px", contents: [
+        { type: "text", text: "最新有效資訊", size: "xxs", color: input.accent, weight: "bold", scaling: true },
+        { type: "text", text: input.highlight[1], size: "xl", color: "#28354C", weight: "bold", wrap: true, margin: "sm", scaling: true },
+        { type: "box", layout: "vertical", margin: "lg", spacing: "md", contents: detailRows(input.details) },
+      ],
+    };
+  }
+  return {
+    type: "box", layout: "vertical", paddingTop: "15px", paddingBottom: "17px", paddingStart: "18px", paddingEnd: "18px", contents: [
+      { type: "box", layout: "horizontal", backgroundColor: input.softAccent, cornerRadius: "8px", contents: [
+        { type: "box", layout: "vertical", width: "4px", backgroundColor: markerColor, contents: [{ type: "filler" }] },
+        { type: "box", layout: "vertical", paddingAll: "12px", contents: [
+          { type: "text", text: input.highlight[0], size: "xs", color: "#68736E", weight: "bold", scaling: true },
+          { type: "text", text: input.highlight[1], size: "lg", color: "#17231E", weight: "bold", wrap: true, margin: "sm", scaling: true },
+        ] },
+      ] },
+      ...(input.details.length ? [{ type: "box", layout: "vertical", margin: "lg", spacing: "md", contents: detailRows(input.details) }] : []),
+    ],
+  };
+}
+
+export function buildLineExperienceCard(input: LineExperienceCardInput): Record<string, unknown> {
   const markerColor = input.markerColor ?? input.softAccent;
+  const variant = input.variant ?? inferExperienceVariant(input);
   const footer = input.buttons.length > 0 ? {
     type: "box",
     layout: "vertical",
@@ -172,72 +374,8 @@ export function buildLineExperienceCard(input: {
     contents: {
       type: "bubble",
       size: "mega",
-      header: {
-        type: "box",
-        layout: "vertical",
-        paddingTop: "16px",
-        paddingBottom: "18px",
-        paddingStart: "20px",
-        paddingEnd: "20px",
-        backgroundColor: input.accent,
-        contents: [
-          { type: "box", layout: "vertical", width: "42px", height: "3px", backgroundColor: markerColor, cornerRadius: "2px", contents: [{ type: "filler" }] },
-          {
-            type: "box",
-            layout: "horizontal",
-            spacing: "md",
-            margin: "lg",
-            contents: [
-              { type: "text", text: input.context, size: "xs", color: "#FFFFFF", weight: "bold", wrap: true, flex: 7, scaling: true },
-              {
-                type: "box",
-                layout: "vertical",
-                flex: 0,
-                borderWidth: "1px",
-                borderColor: "#FFFFFF",
-                cornerRadius: "999px",
-                paddingStart: "10px",
-                paddingEnd: "10px",
-                paddingTop: "4px",
-                paddingBottom: "4px",
-                contents: [{ type: "text", text: input.badge, size: "xxs", color: "#FFFFFF", weight: "bold", align: "center", scaling: true }],
-              },
-            ],
-          },
-          { type: "text", text: input.title, size: "xl", weight: "bold", color: "#FFFFFF", wrap: true, margin: "lg", scaling: true },
-          { type: "text", text: input.body, size: "sm", color: "#FFFFFF", wrap: true, margin: "sm", scaling: true },
-        ],
-      },
-      body: {
-        type: "box",
-        layout: "vertical",
-        paddingTop: "18px",
-        paddingBottom: "20px",
-        paddingStart: "20px",
-        paddingEnd: "20px",
-        contents: [
-          {
-            type: "box",
-            layout: "horizontal",
-            backgroundColor: input.softAccent,
-            cornerRadius: "8px",
-            paddingAll: "0px",
-            contents: [
-              { type: "box", layout: "vertical", width: "5px", backgroundColor: markerColor, contents: [{ type: "filler" }] },
-              {
-                type: "box",
-                layout: "vertical",
-                paddingAll: "14px",
-                contents: [
-                  { type: "text", text: input.highlight[0], size: "xs", color: "#68736E", weight: "bold", scaling: true },
-                  { type: "text", text: input.highlight[1], size: "lg", color: "#17231E", weight: "bold", wrap: true, margin: "sm", scaling: true },
-                ],
-              },
-            ],
-          },
-          { type: "box", layout: "vertical", margin: "xl", spacing: "md", contents: detailRows(input.details) },
-        ],
-      },
+      header: experienceHeader(input, variant, markerColor),
+      body: experienceBody(input, variant, markerColor),
       ...(footer ? { footer } : {}),
       styles: footer ? { footer: { separator: true, separatorColor: "#E5E9E7" } } : undefined,
     },

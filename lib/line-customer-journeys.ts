@@ -64,7 +64,7 @@ const TAIPEI_DATE = new Intl.DateTimeFormat("en-CA", {
   month: "2-digit",
   day: "2-digit",
 });
-const LINE_CALENDAR_DAYS = 14;
+const LINE_CALENDAR_DAYS = 30;
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 interface BookingCalendarDay {
@@ -113,6 +113,9 @@ function bookingCalendarMessage(context: LineBranding, input: {
   const rows = Array.from({ length: cells.length / 7 }, (_, rowIndex) => cells.slice(rowIndex * 7, rowIndex * 7 + 7));
   const doctorParam = input.doctorId ? `&doctor_id=${encodeURIComponent(input.doctorId)}` : "";
   const availableDates = input.days.filter((day) => day.remaining > 0).length;
+  const nearlyFullDates = input.days.filter((day) => day.remaining > 0 && day.remaining <= 2).length;
+  const openDates = availableDates - nearlyFullDates;
+  const fullDates = input.days.length - availableDates;
   const previousStart = addTaipeiDays(start, -LINE_CALENDAR_DAYS) < input.today ? input.today : addTaipeiDays(start, -LINE_CALENDAR_DAYS);
   const nextStart = addTaipeiDays(end, 1);
   const navigation: Array<Record<string, unknown>> = [];
@@ -123,9 +126,9 @@ function bookingCalendarMessage(context: LineBranding, input: {
       style: "secondary",
       action: {
         type: "postback",
-        label: "查看前一段日期",
+        label: "查看前 30 天",
         data: `action=booking_calendar&service_id=${encodeURIComponent(input.serviceId)}${doctorParam}&start=${previousStart}`,
-        displayText: "查看前一段可預約日期",
+        displayText: "查看前 30 天預約狀況",
       },
     });
   }
@@ -136,9 +139,9 @@ function bookingCalendarMessage(context: LineBranding, input: {
       style: "secondary",
       action: {
         type: "postback",
-        label: "查看下一段日期",
+        label: "查看後 30 天",
         data: `action=booking_calendar&service_id=${encodeURIComponent(input.serviceId)}${doctorParam}&start=${nextStart}`,
-        displayText: "查看下一段可預約日期",
+        displayText: "查看後 30 天預約狀況",
       },
     });
   }
@@ -165,12 +168,13 @@ function bookingCalendarMessage(context: LineBranding, input: {
       if (!day) return { type: "box", layout: "vertical", flex: 1, height: "54px", contents: [{ type: "filler" }] };
       const available = day.remaining > 0;
       const limited = available && day.remaining <= 2;
+      const stateLabel = !available ? "額滿" : limited ? "即將額滿" : "尚可預約";
       const [, month, date] = day.date.split("-");
       return {
         type: "box",
         layout: "vertical",
         flex: 1,
-        height: "54px",
+        height: "46px",
         justifyContent: "center",
         paddingAll: "4px",
         cornerRadius: "8px",
@@ -186,7 +190,7 @@ function bookingCalendarMessage(context: LineBranding, input: {
         } : {}),
         contents: [
           { type: "text", text: `${Number(month)}/${Number(date)}`, size: "xs", weight: "bold", color: available ? theme.ink : "#98A09C", align: "center", scaling: true },
-          { type: "text", text: available ? (limited ? "少量" : "可約") : "暫無", size: "xxs", color: available ? theme.primary : "#A2AAA6", align: "center", margin: "xs", scaling: true },
+          { type: "text", text: stateLabel, size: "xxs", color: available ? theme.primary : "#7C8581", align: "center", margin: "xs", scaling: true, adjustMode: "shrink-to-fit" },
         ],
       };
     }),
@@ -194,7 +198,7 @@ function bookingCalendarMessage(context: LineBranding, input: {
 
   return {
     type: "flex",
-    altText: `${context.clinicName}｜${input.serviceName}｜${calendarRangeLabel(start, end)}｜${availableDates} 天可預約`,
+    altText: `${context.clinicName}｜${input.serviceName}｜近 30 天預約月曆｜尚可預約 ${openDates} 天・即將額滿 ${nearlyFullDates} 天・額滿 ${fullDates} 天`,
     contents: {
       type: "bubble",
       size: "mega",
@@ -217,8 +221,18 @@ function bookingCalendarMessage(context: LineBranding, input: {
         layout: "vertical",
         paddingAll: "16px",
         contents: [
-          { type: "text", text: calendarRangeLabel(start, end), color: theme.ink, size: "md", weight: "bold", align: "center", scaling: true },
-          { type: "text", text: `${availableDates} 天可選・品牌色可預約・黃色名額較少`, color: "#68736E", size: "xxs", align: "center", margin: "sm", wrap: true, scaling: true },
+          { type: "text", text: `近 30 天・${calendarRangeLabel(start, end)}`, color: theme.ink, size: "md", weight: "bold", align: "center", scaling: true },
+          {
+            type: "box",
+            layout: "horizontal",
+            margin: "md",
+            spacing: "sm",
+            contents: [
+              { type: "text", text: `尚可預約 ${openDates}`, color: theme.primary, size: "xxs", weight: "bold", align: "center", flex: 1, scaling: true },
+              { type: "text", text: `即將額滿 ${nearlyFullDates}`, color: "#9A6415", size: "xxs", weight: "bold", align: "center", flex: 1, scaling: true },
+              { type: "text", text: `額滿 ${fullDates}`, color: "#7C8581", size: "xxs", weight: "bold", align: "center", flex: 1, scaling: true },
+            ],
+          },
           { type: "box", layout: "horizontal", margin: "lg", spacing: "xs", contents: WEEKDAY_LABELS.map((label) => ({ type: "text", text: label, size: "xxs", color: "#7B8580", align: "center", flex: 1, weight: "bold", scaling: true })) },
           { type: "box", layout: "vertical", margin: "sm", spacing: "xs", contents: dateRows },
           { type: "text", text: input.bookingMode === "number" ? "狀態依目前剩餘名額即時更新" : "狀態依目前可選時段即時更新", color: "#7B8580", size: "xxs", align: "center", margin: "lg", scaling: true },

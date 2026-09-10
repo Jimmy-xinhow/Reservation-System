@@ -13,6 +13,12 @@ const TEXT_PRESETS = [
   { name: "活動最後提醒", text: "您報名的活動即將開始，請備妥報到資訊並提早抵達，期待與您見面。" },
   { name: "回訪關懷", text: "感謝您上次的到訪。如需安排下一次服務，可直接從品牌預約入口快速選擇時間。" },
 ] as const;
+const CARD_PRESETS: Array<{ name: string; title: string; text: string; buttons: MsgButton[] }> = [
+  { name: "品牌圖文介紹", title: "認識我們的品牌", text: "用一段精簡文字說明品牌特色、服務方式與希望帶給顧客的感受。", buttons: [{ label: "立即預約", action: "booking" }] },
+  { name: "活動／課程圖文招募", title: "本期活動開放報名", text: "說明適合對象、日期與最重要的參加理由；完整場次與名額由活動頁即時顯示。", buttons: [{ label: "查看活動／課程", action: "text", value: "活動" }] },
+  { name: "新服務圖文介紹", title: "本月新服務", text: "聚焦一項服務特色與顧客能獲得的結果，不在同一張卡堆疊過多資訊。", buttons: [{ label: "查看可預約日期", action: "booking" }] },
+  { name: "回訪優惠圖文", title: "為你保留的回訪安排", text: "清楚寫出優惠內容、適用條件與期限，讓顧客能直接採取下一步。", buttons: [{ label: "立即安排", action: "booking" }] },
+];
 
 export default function MessageComposer({
   initial,
@@ -53,6 +59,23 @@ export default function MessageComposer({
                 type="button"
                 className="btn btn-secondary min-h-10 px-3 py-2 text-xs"
                 onClick={() => { setName(preset.name); setKind("text"); setText(preset.text); }}
+              >
+                {preset.name}
+              </button>
+            ))}
+          </div>
+          <p className="mb-2 mt-4 text-xs font-semibold tracking-wide text-brand-900">可編輯圖片與文字的圖文範本</p>
+          <div className="flex flex-wrap gap-2">
+            {CARD_PRESETS.map((preset) => (
+              <button
+                key={preset.name}
+                type="button"
+                className="btn btn-secondary min-h-11 px-3 py-2 text-xs"
+                onClick={() => {
+                  setName(preset.name);
+                  setKind("card");
+                  setCard({ imageUrl: "", title: preset.title, text: preset.text, buttons: preset.buttons });
+                }}
               >
                 {preset.name}
               </button>

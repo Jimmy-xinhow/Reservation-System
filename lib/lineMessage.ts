@@ -91,7 +91,7 @@ function cardBubble(c: MsgCard, ctx: BuildCtx): Flex {
   const btns = (c.buttons ?? [])
     .map((b) => actionObj(b, ctx))
     .filter(Boolean)
-    .map((action) => ({ type: "button", style: "primary", color: "#2563eb", height: "sm", action }));
+    .map((action, index) => ({ type: "button", style: index === 0 ? "primary" : "secondary", color: index === 0 ? "#245B4D" : "#53615B", height: "sm", action }));
   if (btns.length) {
     bubble.footer = { type: "box", layout: "vertical", spacing: "sm", contents: btns };
   }
