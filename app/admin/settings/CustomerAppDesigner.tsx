@@ -156,7 +156,7 @@ export function CustomerAppDesigner({ content, clinicName, logoUrl, primaryColor
         <div className={styles.phoneBar}><span /><i /><span /></div>
         <header className={styles.previewHeader}><div>{logoUrl ? <>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={logoUrl} alt="" /></> : <span>{clinicName.slice(0, 1)}</span>}<p><strong>{clinicName}</strong><small>{content.app_header_subtitle}</small></p></div><b>安全連線</b></header>
         <main className={`${styles.previewContent} ${previewView === "home" ? styles.previewContentHome : ""}`}><PreviewScreen view={previewView} content={content} clinicName={clinicName} logoUrl={logoUrl} /></main>
-        {previewView !== "home" && <nav className={styles.previewNav}>{(["home", "booking", "appointments", "membership"] as PreviewView[]).map((view) => { const item = ENTRY_FIELDS.find((candidate) => candidate.view === view)!; return <button key={view} type="button" aria-current={previewView === view ? "page" : undefined} onClick={() => setPreviewView(view)}><AppGlyph view={view} /><span>{String(content[item.labelKey])}</span></button>; })}</nav>}
+        {previewView !== "home" && <nav aria-label="顧客 App 快速切換預覽" className={styles.previewNav}>{(["home", "booking", "appointments", "membership"] as PreviewView[]).map((view) => { const item = ENTRY_FIELDS.find((candidate) => candidate.view === view)!; return <button key={view} type="button" aria-current={previewView === view ? "page" : undefined} onClick={() => setPreviewView(view)}><AppGlyph view={view} /><span>{String(content[item.labelKey])}</span></button>; })}</nav>}
       </div>
       <p className={styles.previewNote}>實際 LIFF 高度會依手機與 LINE 版本略有差異；文字、圖片、色彩與主要操作層級會與此設定一致。</p>
     </aside>

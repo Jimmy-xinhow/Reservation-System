@@ -1975,7 +1975,8 @@ invariant(
     read("app/book/CustomerEntry.tsx").includes("gridTemplateColumns: `repeat(${entries.length}, minmax(0, 1fr))`") &&
     read("app/book/CustomerApp.module.css").includes("display: grid;") &&
     read("app/book/CustomerApp.module.css").includes("text-overflow: ellipsis;") &&
-    read("app/admin/settings/CustomerAppDesigner.tsx").includes('previewView !== "home"'),
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes('previewView !== "home"') &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes('aria-label="顧客 App 快速切換預覽"'),
 );
 invariant(
   "LINE-first built-in menu actions stay native while custom URLs remain configurable",
