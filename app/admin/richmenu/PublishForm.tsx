@@ -22,6 +22,8 @@ interface PublishFormProps {
 
 function customerEntryKey(action: Slot["action"]): CustomerEntryKey | null {
   switch (action) {
+    case "home":
+      return "home";
     case "booking":
       return "booking";
     case "appointments":
