@@ -9,6 +9,7 @@ type AppContentKey = keyof Pick<BrandPageContent,
   | "app_layout" | "app_card_style" | "app_header_subtitle" | "app_hero_eyebrow"
   | "app_hero_title" | "app_hero_description" | "app_primary_cta_label" | "app_menu_title"
   | "app_privacy_note" | "app_hero_image_url" | "app_home_label" | "app_home_description"
+  | "app_shortcut_title" | "app_shortcut_description" | "app_shortcut_button_label"
   | "app_booking_label" | "app_booking_description" | "app_appointments_label" | "app_appointments_description"
   | "app_events_label" | "app_events_description" | "app_tickets_label" | "app_tickets_description"
   | "app_membership_label" | "app_membership_description" | "app_support_label" | "app_support_description"
@@ -66,6 +67,7 @@ function PreviewScreen({ view, content, clinicName, logoUrl }: { view: PreviewVi
       </section>
       <p className={styles.previewSectionLabel}>{content.app_menu_title}</p>
       <div className={styles.previewMenu}>{ENTRY_FIELDS.filter((item) => item.view !== "home").slice(0, 4).map((item) => <div key={item.view} className={styles.previewMenuRow}><span className={styles.previewIcon}><AppGlyph view={item.view} /></span><span><strong>{String(content[item.labelKey])}</strong><small>{String(content[item.descriptionKey])}</small></span><b>›</b></div>)}</div>
+      <div className={styles.previewShortcut}><span aria-hidden>↗</span><p><strong>{content.app_shortcut_title}</strong><small>{content.app_shortcut_description}</small></p><button type="button">{content.app_shortcut_button_label}</button></div>
       <p className={styles.previewPrivacy}>{content.app_privacy_note}</p>
     </>;
   }
@@ -118,7 +120,7 @@ export function CustomerAppDesigner({ content, clinicName, logoUrl, primaryColor
 
   return <section className={styles.designer}>
     <div className={styles.controls}>
-      <div className={styles.intro}><span>CUSTOMER APP STUDIO</span><h3>把顧客入口做成品牌自己的 App</h3><p>所有預覽都使用示例資料。修改會即時呈現在右側，按下頁面最下方儲存後才會套用到顧客入口。</p></div>
+      <div className={styles.intro}><span>CUSTOMER APP STUDIO</span><h3>把顧客入口做成品牌自己的 App</h3><p>所有預覽都使用示例資料。修改會即時呈現在右側，按下頁面最下方儲存後才會套用到顧客入口；桌面捷徑會在品牌通過 LINE MINI App 驗證後自動出現。</p></div>
 
       <fieldset className={styles.controlGroup}><legend>首頁構圖</legend><div className={styles.choiceGrid}>{LAYOUTS.map((item) => <label key={item.value} data-active={content.app_layout === item.value}><input type="radio" name="app_layout" value={item.value} checked={content.app_layout === item.value} onChange={() => onContentChange("app_layout", item.value)} /><strong>{item.label}</strong><small>{item.note}</small></label>)}</div></fieldset>
 
@@ -137,6 +139,12 @@ export function CustomerAppDesigner({ content, clinicName, logoUrl, primaryColor
       </div></fieldset>
 
       <fieldset className={styles.controlGroup}><legend>App 首頁主視覺</legend><input type="url" name="app_hero_image_url" className="input min-h-12" value={content.app_hero_image_url} maxLength={1000} onChange={(event) => onContentChange("app_hero_image_url", event.target.value)} placeholder="HTTPS 圖片網址或上傳圖片" /><div className={styles.uploadRow}>{content.app_hero_image_url && <>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={content.app_hero_image_url} alt="目前 App 主視覺" /></>}<label className="btn btn-secondary min-h-11 cursor-pointer">{uploading ? "上傳中…" : "從電腦選擇圖片"}<input type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled={uploading} className="sr-only" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadHero(file); event.currentTarget.value = ""; }} /></label></div>{uploadError && <p role="alert" className={styles.error}>{uploadError}</p>}<p className={styles.help}>建議使用直式或接近正方形的品牌實景照片；純粹留白版型會保留圖片設定但不顯示。</p></fieldset>
+
+      <fieldset className={styles.controlGroup}><legend>手機桌面捷徑文字</legend><div className={styles.fieldGrid}>
+        <TextField label="捷徑區標題" name="app_shortcut_title" value={content.app_shortcut_title} maxLength={50} onChange={(value) => onContentChange("app_shortcut_title", value)} />
+        <TextField label="按鈕文字" name="app_shortcut_button_label" value={content.app_shortcut_button_label} maxLength={24} onChange={(value) => onContentChange("app_shortcut_button_label", value)} />
+        <TextArea label="捷徑區說明" name="app_shortcut_description" value={content.app_shortcut_description} maxLength={120} onChange={(value) => onContentChange("app_shortcut_description", value)} />
+      </div><p className={styles.help}>實際顧客頁只會在 LINE 確認裝置與已驗證 MINI App 都支援時顯示，不會讓顧客點到無效功能。</p></fieldset>
 
       <details className={styles.entryEditor} open><summary>修改 8 個功能入口的名稱與說明</summary><div>{ENTRY_FIELDS.map((item) => <fieldset key={item.view}><legend><AppGlyph view={item.view} />{item.fallback}</legend><TextField label="顯示名稱" name={item.labelKey} value={String(content[item.labelKey])} maxLength={24} onChange={(value) => onContentChange(item.labelKey, value)} /><TextField label="簡短說明" name={item.descriptionKey} value={String(content[item.descriptionKey])} maxLength={80} onChange={(value) => onContentChange(item.descriptionKey, value)} /></fieldset>)}</div></details>
     </div>

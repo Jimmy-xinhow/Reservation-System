@@ -400,6 +400,74 @@
   line-height: 1.6;
 }
 
+.shortcutCard {
+  display: grid;
+  grid-template-columns: 2.85rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--customer-line);
+  border-radius: 1.35rem;
+  background: color-mix(in srgb, var(--customer-primary) 6%, white);
+}
+
+.shortcutMark {
+  display: grid;
+  width: 2.85rem;
+  height: 2.85rem;
+  place-items: center;
+  border-radius: 1rem;
+  color: white;
+  background: var(--customer-primary);
+  font-size: 1rem;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--customer-primary) 18%, transparent);
+}
+
+.shortcutCopy {
+  min-width: 0;
+}
+
+.shortcutCopy strong,
+.shortcutCopy small {
+  display: block;
+}
+
+.shortcutCopy strong {
+  color: var(--customer-ink);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.shortcutCopy small {
+  margin-top: 0.2rem;
+  color: color-mix(in srgb, var(--customer-ink) 55%, white);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.shortcutCard > button {
+  min-height: 2.8rem;
+  grid-column: 1 / -1;
+  border: 1px solid var(--customer-primary);
+  border-radius: 0.9rem;
+  color: white;
+  background: var(--customer-primary);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.shortcutCard > button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.shortcutMessage {
+  grid-column: 1 / -1;
+  color: color-mix(in srgb, var(--customer-ink) 65%, white);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
 .privacyNote::before {
   width: 0.42rem;
   height: 0.42rem;
@@ -637,6 +705,20 @@
   .heroAction {
     width: fit-content;
     min-width: 14rem;
+  }
+
+  .shortcutCard {
+    grid-template-columns: 2.85rem minmax(0, 1fr) auto;
+  }
+
+  .shortcutCard > button {
+    min-width: 8.5rem;
+    grid-column: auto;
+    padding-inline: 1rem;
+  }
+
+  .shortcutMessage {
+    grid-column: 2 / -1;
   }
 }
 

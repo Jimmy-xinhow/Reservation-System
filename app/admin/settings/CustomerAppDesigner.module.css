@@ -415,6 +415,36 @@
 .previewNav svg { width: 1rem; height: 1rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .previewPrivacy { margin: 0.75rem 0.25rem; color: #7c8783; font-size: 0.56rem; line-height: 1.55; }
 
+.previewShortcut {
+  display: grid;
+  grid-template-columns: 1.9rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+  padding: 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 15%, white);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--app-primary) 6%, white);
+}
+
+.previewShortcut > span {
+  display: grid;
+  width: 1.9rem;
+  height: 1.9rem;
+  place-items: center;
+  border-radius: 0.65rem;
+  color: white;
+  background: var(--app-primary);
+  font-size: 0.72rem;
+}
+
+.previewShortcut p { min-width: 0; }
+.previewShortcut strong,
+.previewShortcut small { display: block; }
+.previewShortcut strong { font-size: 0.62rem; }
+.previewShortcut small { margin-top: 0.12rem; color: #78847f; font-size: 0.52rem; line-height: 1.4; }
+.previewShortcut button { min-height: 1.9rem; padding-inline: 0.55rem; border-radius: 0.6rem; color: white; background: var(--app-primary); font-size: 0.54rem; font-weight: 800; }
+
 .phone[data-card-style="outlined"] .previewMenu,
 .phone[data-card-style="outlined"] .previewPageBody > * { box-shadow: none; background: transparent; }
 .phone[data-card-style="flat"] .previewMenu { border-width: 0; border-radius: 0; background: transparent; }

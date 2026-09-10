@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { closeLiffWindow, useLiff } from "@/lib/useLiff";
+import { closeLiffWindow, createLiffHomeShortcut, useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import ChatTab from "./ChatTab";
 import { CustomerEntryNav, CustomerHomeView, CustomerLiffView, type CustomerView } from "./CustomerEntry";
@@ -11,6 +11,7 @@ import MyAppointments, { type MyAppt } from "./MyAppointments";
 import { bookingApi as api } from "./client-api";
 import { getBookingFlowState } from "./booking-flow-state";
 import { liffEntryParams } from "@/lib/liff-entry-state";
+import { customerEntryUrl } from "@/lib/customer-entry";
 import {
   CalendarButtons,
   Centered,
@@ -43,8 +44,9 @@ export default function BookPage() {
   const [entryConfig, setEntryConfig] = useState<EntryConfig | null>(null);
   const [entryError, setEntryError] = useState<string | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
-  const { ready, idToken, error: liffError, isInClient } = useLiff(entryConfig === null ? undefined : entryConfig.liff_id);
+  const { ready, idToken, error: liffError, isInClient, canCreateHomeShortcut } = useLiff(entryConfig === null ? undefined : entryConfig.liff_id);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [shortcutState, setShortcutState] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null });
 
   const [doctorId, setDoctorId] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -367,6 +369,22 @@ export default function BookPage() {
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }
 
+  async function addCustomerAppToHomeScreen() {
+    if (!entryConfig?.liff_id || shortcutState.busy) return;
+    setShortcutState({ busy: true, message: null });
+    try {
+      const url = customerEntryUrl("home", {
+        baseUrl: window.location.origin,
+        clinicSlug: entryConfig.clinic_slug,
+        liffId: entryConfig.liff_id,
+      });
+      await createLiffHomeShortcut(url);
+      setShortcutState({ busy: false, message: "已開啟加入手機桌面的步驟，請依手機提示完成。" });
+    } catch (error) {
+      setShortcutState({ busy: false, message: error instanceof Error ? error.message : "目前無法建立手機桌面捷徑。" });
+    }
+  }
+
   function rebook(appointment: MyAppt) {
     setServiceId(appointment.service_id ?? "");
     setDoctorId(appointment.doctor_id ?? "");
@@ -402,7 +420,7 @@ export default function BookPage() {
     logoUrl: entryConfig.brand_logo_url,
   };
   const entryNav = taskMode ? null : <CustomerEntryNav view={view} availability={entryConfig.availability} app={entryConfig.customer_app} onChange={changeView} />;
-  if (view === "home") return <Shell {...shellBranding}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={customerBrand} app={entryConfig.customer_app} onChange={changeView} /></Shell>;
+  if (view === "home") return <Shell {...shellBranding}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={customerBrand} app={entryConfig.customer_app} onChange={changeView} shortcut={{ available: canCreateHomeShortcut, busy: shortcutState.busy, message: shortcutState.message, onCreate: () => void addCustomerAppToHomeScreen() }} /></Shell>;
   if (view === "appointments") return <Shell {...shellBranding}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} title={entryConfig.customer_app.entries.appointments.label} description={entryConfig.customer_app.entries.appointments.description} /></Shell>;
   if (view === "events" && !entryConfig.availability.events) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前沒有開放中的活動報名。</div></Shell>;
   if (view === "tickets" && !entryConfig.availability.tickets) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用活動票券。</div></Shell>;

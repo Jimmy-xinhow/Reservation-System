@@ -1956,6 +1956,17 @@ invariant(
     read("app/book/CustomerEntry.tsx").includes("app.heroTitle"),
 );
 invariant(
+  "customer App has a persistent Rich Menu entry and capability-gated home-screen shortcut",
+  read("lib/richmenu.ts").includes('{ label: "顧客 App", accessibilityLabel: "開啟顧客服務首頁"') &&
+    read("lib/richmenu.ts").includes('case "home":') &&
+    read("lib/richmenu.ts").includes('type: "uri", uri: trackedUri(urls.home)') &&
+    read("app/admin/line-actions.ts").includes("selected: true") &&
+    read("lib/useLiff.ts").includes('isApiAvailable?.("createShortcutOnHomeScreen") === true') &&
+    read("lib/useLiff.ts").includes("createShortcutOnHomeScreen({ url })") &&
+    read("app/book/CustomerEntry.tsx").includes("shortcut?.available") &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes('name="app_shortcut_button_label"'),
+);
+invariant(
   "LINE-first built-in menu actions stay native while custom URLs remain configurable",
   read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("booking")') &&
     read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("events")') &&

@@ -27,6 +27,13 @@ export interface CustomerEntryBrand {
   logoUrl?: string | null;
 }
 
+export interface CustomerHomeShortcut {
+  available: boolean;
+  busy: boolean;
+  message: string | null;
+  onCreate: () => void;
+}
+
 const SHORT_LABELS: Record<CustomerView, string> = {
   home: "首頁",
   booking: "預約",
@@ -90,12 +97,14 @@ export function CustomerHomeView({
   brand,
   app = DEFAULT_CUSTOMER_APP_CONFIG,
   onChange,
+  shortcut,
 }: {
   availability: CustomerEntryAvailability;
   bookingMode: "time" | "number";
   brand: CustomerEntryBrand;
   app?: CustomerAppConfig;
   onChange: (view: CustomerView) => void;
+  shortcut?: CustomerHomeShortcut;
 }) {
   const enabled = enabledCustomerEntries(availability).filter((entry) => entry.key !== "home");
   const primary = enabled.find((entry) => entry.key === "booking") ?? enabled.find((entry) => entry.key === "appointments") ?? enabled[0];
@@ -153,6 +162,20 @@ export function CustomerHomeView({
             ))}
           </div>
         </div>
+      )}
+
+      {shortcut?.available && (
+        <section className={styles.shortcutCard} aria-label="加入手機桌面">
+          <span className={styles.shortcutMark} aria-hidden>↗</span>
+          <span className={styles.shortcutCopy}>
+            <strong>{app.shortcut.title}</strong>
+            <small>{app.shortcut.description}</small>
+          </span>
+          <button type="button" onClick={shortcut.onCreate} disabled={shortcut.busy}>
+            {shortcut.busy ? "開啟中…" : app.shortcut.buttonLabel}
+          </button>
+          {shortcut.message && <span className={styles.shortcutMessage} role="status">{shortcut.message}</span>}
+        </section>
       )}
 
       <p className={styles.privacyNote}>

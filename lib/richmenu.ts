@@ -26,7 +26,7 @@ export interface Slot {
   showIcon?: boolean;
   /** 視覺圖稿是否顯示文字；舊資料未設定時視為顯示。 */
   showLabel?: boolean;
-  action: "booking" | "appointments" | "query" | "events" | "tickets" | "membership" | "support" | "brand" | "progress" | "info" | "uri" | "message" | "richmenuswitch" | "none";
+  action: "home" | "booking" | "appointments" | "query" | "events" | "tickets" | "membership" | "support" | "brand" | "progress" | "info" | "uri" | "message" | "richmenuswitch" | "none";
   value?: string; // uri=網址;message=訊息素材 id;richmenuswitch=alias id
 }
 
@@ -56,6 +56,7 @@ export function isRichMenuIconKey(value: string): value is RichMenuIconKey {
 
 export function richMenuIconForAction(action: Slot["action"]): RichMenuIconKey {
   switch (action) {
+    case "home": return "sparkles";
     case "booking": return "calendar";
     case "appointments":
     case "query": return "clock";
@@ -80,6 +81,7 @@ export type BuiltInRichMenuTemplateKey = typeof RICH_MENU_TEMPLATE_KEYS[number];
 export type RichMenuTemplateKey = BuiltInRichMenuTemplateKey | "custom";
 export interface RichMenuModuleAvailability { booking: boolean; events: boolean; tickets: boolean; memberships: boolean; line: boolean; legacyProgress: boolean; }
 export interface RichMenuEntryUrls {
+  home: string;
   booking: string;
   appointments: string;
   events: string;
@@ -102,7 +104,7 @@ interface RichMenuTemplateDefinition {
 }
 
 const bookingSlots: Slot[] = [
-  { label: "立即預約", accessibilityLabel: "開啟線上預約", icon: "sparkles", action: "booking" },
+  { label: "顧客 App", accessibilityLabel: "開啟顧客服務首頁", icon: "sparkles", action: "home" },
   { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", icon: "clock", action: "appointments" },
   { label: "服務方案", accessibilityLabel: "查看品牌服務與方案", icon: "profile", action: "brand" },
   { label: "活動課程", accessibilityLabel: "瀏覽活動與課程報名", icon: "calendar", action: "events" },
@@ -110,7 +112,7 @@ const bookingSlots: Slot[] = [
   { label: "聯絡我們", accessibilityLabel: "開啟品牌客服", icon: "chat", action: "support" },
 ];
 const eventSlots: Slot[] = [
-  { label: "最新課程", accessibilityLabel: "瀏覽活動與課程報名", icon: "book", action: "events" },
+  { label: "顧客 App", accessibilityLabel: "開啟顧客服務首頁", icon: "sparkles", action: "home" },
   { label: "我的票券", accessibilityLabel: "查看報名與票券", icon: "ticket", action: "tickets" },
   { label: "預約諮詢", accessibilityLabel: "開啟預約諮詢", icon: "calendar", action: "booking" },
   { label: "學習紀錄", accessibilityLabel: "查看會員與學習權益", icon: "clock", action: "membership" },
@@ -118,7 +120,7 @@ const eventSlots: Slot[] = [
   { label: "課程客服", accessibilityLabel: "開啟品牌客服", icon: "chat", action: "support" },
 ];
 const mixedSlots: Slot[] = [
-  { label: "立即預約", accessibilityLabel: "開啟線上預約", icon: "calendar", action: "booking" },
+  { label: "顧客 App", accessibilityLabel: "開啟顧客服務首頁", icon: "sparkles", action: "home" },
   { label: "我的預約", accessibilityLabel: "查詢取消或改期預約", icon: "clock", action: "appointments" },
   { label: "課程報名", accessibilityLabel: "瀏覽活動與課程報名", icon: "book", action: "events" },
   { label: "我的票券", accessibilityLabel: "查看報名與票券", icon: "ticket", action: "tickets" },
@@ -253,6 +255,8 @@ export function slotAction(
   };
   // 內建動作改用 postback:點了由 webhook 直接回覆,不需另設關鍵字規則
   switch (slot.action) {
+    case "home":
+      return withLabel({ type: "uri", uri: trackedUri(urls.home) });
     case "booking":
       return withLabel({ type: "postback", data: trackedPostback("booking"), displayText: slot.label || "立即預約" });
     case "appointments":
@@ -288,6 +292,7 @@ export function slotAction(
 }
 
 export const ACTION_OPTIONS: { value: Slot["action"]; label: string }[] = [
+  { value: "home", label: "顧客 App 首頁" },
   { value: "booking", label: "立即預約" },
   { value: "appointments", label: "我的預約" },
   { value: "events", label: "活動／課程" },

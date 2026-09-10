@@ -300,7 +300,7 @@ async function richMenuAvailability(supabase: SupabaseClient, clinicId: string):
 }
 
 function buildRichMenuEntryUrls(baseUrl: string, clinicSlug: string | null, liffId: string): RichMenuEntryUrls {
-  const keys: CustomerEntryKey[] = ["booking", "appointments", "events", "tickets", "membership", "support", "brand"];
+  const keys: CustomerEntryKey[] = ["home", "booking", "appointments", "events", "tickets", "membership", "support", "brand"];
   return Object.fromEntries(keys.map((key) => [key, customerEntryUrl(key, { baseUrl, clinicSlug, liffId })])) as unknown as RichMenuEntryUrls;
 }
 

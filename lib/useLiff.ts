@@ -8,6 +8,8 @@ interface LiffSdk {
   login: () => void;
   getIDToken: () => string | null;
   isInClient?: () => boolean;
+  isApiAvailable?: (apiName: "createShortcutOnHomeScreen") => boolean;
+  createShortcutOnHomeScreen?: (params: { url: string }) => Promise<void>;
   closeWindow?: () => void;
   openWindow?: (config: { url: string; external?: boolean }) => void;
 }
@@ -36,6 +38,7 @@ export interface LiffState {
   idToken: string | null;
   error: string | null;
   isInClient: boolean;
+  canCreateHomeShortcut: boolean;
 }
 
 /**
@@ -43,12 +46,12 @@ export interface LiffState {
  * 代表該品牌沒有可用的 LIFF，避免先用全域 ID 初始化到錯誤渠道。
  */
 export function useLiff(liffId: string | null | undefined): LiffState {
-  const [state, setState] = useState<LiffState>({ ready: false, idToken: null, error: null, isInClient: false });
+  const [state, setState] = useState<LiffState>({ ready: false, idToken: null, error: null, isInClient: false, canCreateHomeShortcut: false });
 
   useEffect(() => {
     if (liffId === undefined) return;
     if (!liffId) {
-      setState({ ready: false, idToken: null, error: "此品牌尚未完成 LIFF 設定", isInClient: false });
+      setState({ ready: false, idToken: null, error: "此品牌尚未完成 LIFF 設定", isInClient: false, canCreateHomeShortcut: false });
       return;
     }
     let cancelled = false;
@@ -63,13 +66,19 @@ export function useLiff(liffId: string | null | undefined): LiffState {
         const token = liff.getIDToken();
         if (cancelled) return;
         if (!token) {
-          setState({ ready: false, idToken: null, error: "無法取得 LINE 身分,請重新開啟", isInClient: liff.isInClient?.() === true });
+          setState({ ready: false, idToken: null, error: "無法取得 LINE 身分,請重新開啟", isInClient: liff.isInClient?.() === true, canCreateHomeShortcut: false });
           return;
         }
-        setState({ ready: true, idToken: token, error: null, isInClient: liff.isInClient?.() === true });
+        setState({
+          ready: true,
+          idToken: token,
+          error: null,
+          isInClient: liff.isInClient?.() === true,
+          canCreateHomeShortcut: liff.isApiAvailable?.("createShortcutOnHomeScreen") === true && typeof liff.createShortcutOnHomeScreen === "function",
+        });
       } catch (e) {
         if (!cancelled) {
-          setState({ ready: false, idToken: null, error: e instanceof Error ? e.message : "LIFF 初始化失敗", isInClient: false });
+          setState({ ready: false, idToken: null, error: e instanceof Error ? e.message : "LIFF 初始化失敗", isInClient: false, canCreateHomeShortcut: false });
         }
       }
     })();
@@ -79,6 +88,18 @@ export function useLiff(liffId: string | null | undefined): LiffState {
   }, [liffId]);
 
   return state;
+}
+
+/**
+ * 開啟 LINE MINI App 的「加入手機主畫面」流程。功能僅在 LINE 判定目前
+ * 已驗證 MINI App 與裝置版本都支援時才可呼叫。
+ */
+export async function createLiffHomeShortcut(url: string): Promise<void> {
+  const liff = typeof window === "undefined" ? undefined : window.liff;
+  if (!liff?.createShortcutOnHomeScreen || liff.isApiAvailable?.("createShortcutOnHomeScreen") !== true) {
+    throw new Error("此入口尚未通過 LINE MINI App 驗證，暫時無法加入手機桌面。");
+  }
+  await liff.createShortcutOnHomeScreen({ url });
 }
 
 /** 完成單一 LIFF 任務後回到 LINE；瀏覽器備援入口則回傳 false。 */

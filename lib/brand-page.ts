@@ -35,6 +35,11 @@ export interface CustomerAppConfig {
   menuTitle: string;
   privacyNote: string;
   heroImageUrl: string;
+  shortcut: {
+    title: string;
+    description: string;
+    buttonLabel: string;
+  };
   entries: {
     home: CustomerAppEntryCopy;
     booking: CustomerAppEntryCopy;
@@ -79,6 +84,9 @@ export interface BrandPageContent {
   app_menu_title: string;
   app_privacy_note: string;
   app_hero_image_url: string;
+  app_shortcut_title: string;
+  app_shortcut_description: string;
+  app_shortcut_button_label: string;
   app_home_label: string;
   app_home_description: string;
   app_booking_label: string;
@@ -152,6 +160,9 @@ const CUSTOMER_APP_CONTENT_DEFAULTS = {
   app_menu_title: "更多服務",
   app_privacy_note: "個人預約、票券與會員資料會先透過 LINE 驗證，再安全顯示。",
   app_hero_image_url: "/showcase/elan-skincare-hero-v2.webp",
+  app_shortcut_title: "下次從手機桌面直接開啟",
+  app_shortcut_description: "加入品牌 App 捷徑，不必每次重新尋找聊天室。",
+  app_shortcut_button_label: "加入手機桌面",
   app_home_label: "首頁",
   app_home_description: "回到品牌服務首頁",
   app_booking_label: "立即預約",
@@ -172,6 +183,7 @@ const CUSTOMER_APP_CONTENT_DEFAULTS = {
   | "app_layout" | "app_card_style" | "app_header_subtitle" | "app_hero_eyebrow"
   | "app_hero_title" | "app_hero_description" | "app_primary_cta_label" | "app_menu_title"
   | "app_privacy_note" | "app_hero_image_url" | "app_home_label" | "app_home_description"
+  | "app_shortcut_title" | "app_shortcut_description" | "app_shortcut_button_label"
   | "app_booking_label" | "app_booking_description" | "app_appointments_label" | "app_appointments_description"
   | "app_events_label" | "app_events_description" | "app_tickets_label" | "app_tickets_description"
   | "app_membership_label" | "app_membership_description" | "app_support_label" | "app_support_description"
@@ -438,6 +450,11 @@ export function customerAppConfigFromContent(content: BrandPageContent): Custome
     menuTitle: content.app_menu_title,
     privacyNote: content.app_privacy_note,
     heroImageUrl: content.app_hero_image_url,
+    shortcut: {
+      title: content.app_shortcut_title,
+      description: content.app_shortcut_description,
+      buttonLabel: content.app_shortcut_button_label,
+    },
     entries: {
       home: { label: content.app_home_label, description: content.app_home_description },
       booking: { label: content.app_booking_label, description: content.app_booking_description },
