@@ -13,6 +13,40 @@ export const BRAND_PAGE_TEMPLATE_KEYS = [
 
 export type BrandPageTemplate = (typeof BRAND_PAGE_TEMPLATE_KEYS)[number];
 
+export const CUSTOMER_APP_LAYOUT_KEYS = ["immersive", "editorial", "minimal"] as const;
+export const CUSTOMER_APP_CARD_STYLE_KEYS = ["floating", "outlined", "flat"] as const;
+
+export type CustomerAppLayout = (typeof CUSTOMER_APP_LAYOUT_KEYS)[number];
+export type CustomerAppCardStyle = (typeof CUSTOMER_APP_CARD_STYLE_KEYS)[number];
+
+export interface CustomerAppEntryCopy {
+  label: string;
+  description: string;
+}
+
+export interface CustomerAppConfig {
+  layout: CustomerAppLayout;
+  cardStyle: CustomerAppCardStyle;
+  headerSubtitle: string;
+  heroEyebrow: string;
+  heroTitle: string;
+  heroDescription: string;
+  primaryCtaLabel: string;
+  menuTitle: string;
+  privacyNote: string;
+  heroImageUrl: string;
+  entries: {
+    home: CustomerAppEntryCopy;
+    booking: CustomerAppEntryCopy;
+    appointments: CustomerAppEntryCopy;
+    events: CustomerAppEntryCopy;
+    tickets: CustomerAppEntryCopy;
+    membership: CustomerAppEntryCopy;
+    support: CustomerAppEntryCopy;
+    brand: CustomerAppEntryCopy;
+  };
+}
+
 export interface BrandPageContent {
   primary_entry: "auto" | "booking" | "registration";
   hero_eyebrow: string;
@@ -35,6 +69,32 @@ export interface BrandPageContent {
   hero_image_url: string;
   detail_image_url: string;
   gallery_image_url: string;
+  app_layout: CustomerAppLayout;
+  app_card_style: CustomerAppCardStyle;
+  app_header_subtitle: string;
+  app_hero_eyebrow: string;
+  app_hero_title: string;
+  app_hero_description: string;
+  app_primary_cta_label: string;
+  app_menu_title: string;
+  app_privacy_note: string;
+  app_hero_image_url: string;
+  app_home_label: string;
+  app_home_description: string;
+  app_booking_label: string;
+  app_booking_description: string;
+  app_appointments_label: string;
+  app_appointments_description: string;
+  app_events_label: string;
+  app_events_description: string;
+  app_tickets_label: string;
+  app_tickets_description: string;
+  app_membership_label: string;
+  app_membership_description: string;
+  app_support_label: string;
+  app_support_description: string;
+  app_brand_label: string;
+  app_brand_description: string;
 }
 
 export interface BrandPageService {
@@ -81,8 +141,48 @@ export interface PublicBrandPageData {
   links: BrandPageLinks;
 }
 
+const CUSTOMER_APP_CONTENT_DEFAULTS = {
+  app_layout: "immersive",
+  app_card_style: "floating",
+  app_header_subtitle: "專屬服務 App",
+  app_hero_eyebrow: "WELCOME",
+  app_hero_title: "今天，想先完成什麼？",
+  app_hero_description: "從現在需要的服務開始，我們會帶你完成每一個步驟。",
+  app_primary_cta_label: "開始使用",
+  app_menu_title: "更多服務",
+  app_privacy_note: "個人預約、票券與會員資料會先透過 LINE 驗證，再安全顯示。",
+  app_hero_image_url: "/showcase/elan-skincare-hero-v2.webp",
+  app_home_label: "首頁",
+  app_home_description: "回到品牌服務首頁",
+  app_booking_label: "立即預約",
+  app_booking_description: "選擇服務與可預約時間",
+  app_appointments_label: "我的預約",
+  app_appointments_description: "查詢、取消、改期與候補",
+  app_events_label: "活動／課程",
+  app_events_description: "瀏覽活動、課程與開放場次",
+  app_tickets_label: "我的票券",
+  app_tickets_description: "查看報名狀態與報到憑證",
+  app_membership_label: "會員／套票",
+  app_membership_description: "查看套票、剩餘堂數與期限",
+  app_support_label: "LINE 客服",
+  app_support_description: "直接聯絡品牌服務人員",
+  app_brand_label: "品牌資訊",
+  app_brand_description: "查看電話、地址與品牌介紹",
+} as const satisfies Pick<BrandPageContent,
+  | "app_layout" | "app_card_style" | "app_header_subtitle" | "app_hero_eyebrow"
+  | "app_hero_title" | "app_hero_description" | "app_primary_cta_label" | "app_menu_title"
+  | "app_privacy_note" | "app_hero_image_url" | "app_home_label" | "app_home_description"
+  | "app_booking_label" | "app_booking_description" | "app_appointments_label" | "app_appointments_description"
+  | "app_events_label" | "app_events_description" | "app_tickets_label" | "app_tickets_description"
+  | "app_membership_label" | "app_membership_description" | "app_support_label" | "app_support_description"
+  | "app_brand_label" | "app_brand_description"
+>;
+
 export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageContent> = {
   beauty: {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_title: "今天，想先為自己做什麼？",
+    app_primary_cta_label: "查看服務",
     primary_entry: "booking",
     hero_eyebrow: "專業照護 · 採預約制",
     hero_title: "為你的日常，",
@@ -106,6 +206,10 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
     gallery_image_url: "/showcase/elan-skincare-detail-v2.webp",
   },
   wellness: {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_title: "今天，身體想告訴你什麼？",
+    app_primary_cta_label: "開始初次評估",
+    app_hero_image_url: "/showcase/wellness-hero.jpg",
     primary_entry: "booking",
     hero_eyebrow: "INTEGRATED CARE · TAIPEI",
     hero_title: "把身體的訊號，",
@@ -129,6 +233,12 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
     gallery_image_url: "/showcase/wellness-hero.jpg",
   },
   fitness: {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_eyebrow: "MOVE WITH INTENTION",
+    app_hero_title: "今天，想怎麼開始？",
+    app_hero_description: "私人課、團體課與套票都在同一個入口，照自己的節奏安排。",
+    app_primary_cta_label: "預約第一堂課",
+    app_hero_image_url: "/showcase/forme-pilates-hero-v2.webp",
     primary_entry: "auto",
     hero_eyebrow: "教練帶領 · 依你的節奏前進",
     hero_title: "MOVE PAST",
@@ -152,6 +262,12 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
     gallery_image_url: "/showcase/forme-pilates-detail-v2.webp",
   },
   education: {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_eyebrow: "KEEP LEARNING",
+    app_hero_title: "下一堂課，從這裡開始。",
+    app_hero_description: "瀏覽課程、查看場次與學習紀錄，讓每一步都保持清楚。",
+    app_primary_cta_label: "探索近期課程",
+    app_hero_image_url: "/showcase/openroom-course-hero-v2.webp",
     primary_entry: "registration",
     hero_eyebrow: "線上學習 · 將知識轉化為成果",
     hero_title: "好奇心沒有",
@@ -175,6 +291,11 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
     gallery_image_url: "/showcase/openroom-course-detail-v2.webp",
   },
   consulting: {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_eyebrow: "MAKE IT CLEAR",
+    app_hero_title: "把複雜問題，整理成下一步。",
+    app_primary_cta_label: "預約初次諮詢",
+    app_hero_image_url: "/showcase/consulting-hero.jpg",
     primary_entry: "booking",
     hero_eyebrow: "STRATEGY · PRACTICE · GROWTH",
     hero_title: "Make the complex",
@@ -198,6 +319,10 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
     gallery_image_url: "/showcase/consulting-hero.jpg",
   },
   "pet-care": {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_title: "今天，要為牠安排什麼？",
+    app_primary_cta_label: "查看最近時段",
+    app_hero_image_url: "/showcase/pet-hero.jpg",
     primary_entry: "booking",
     hero_eyebrow: "CARE THAT FEELS CLOSER",
     hero_title: "好好照顧，",
@@ -221,6 +346,11 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
     gallery_image_url: "/showcase/pet-hero.jpg",
   },
   venue: {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_eyebrow: "SPACE, READY WHEN YOU ARE",
+    app_hero_title: "找到適合這一次的空間。",
+    app_primary_cta_label: "查看可用時段",
+    app_hero_image_url: "/showcase/space-detail.jpg",
     primary_entry: "booking",
     hero_eyebrow: "PRIVATE CREATIVE SPACE · TAIPEI",
     hero_title: "A space built",
@@ -244,6 +374,11 @@ export const DEFAULT_BRAND_PAGE_CONTENT: Record<BrandPageTemplate, BrandPageCont
     gallery_image_url: "/showcase/space-detail.jpg",
   },
   event: {
+    ...CUSTOMER_APP_CONTENT_DEFAULTS,
+    app_hero_eyebrow: "WHAT'S ON",
+    app_hero_title: "下一場值得到場的體驗。",
+    app_primary_cta_label: "查看活動與票種",
+    app_hero_image_url: "/showcase/event-detail.jpg",
     primary_entry: "registration",
     hero_eyebrow: "LIVE · TAIPEI",
     hero_title: "WHEN THE LIGHTS GO DOWN",
@@ -280,10 +415,43 @@ export function normalizeBrandPageContent(value: unknown, template: BrandPageTem
   return Object.fromEntries(
     Object.entries(defaults).map(([key, fallback]) => {
       const candidate = input[key];
+      if (key === "app_layout") {
+        return [key, typeof candidate === "string" && CUSTOMER_APP_LAYOUT_KEYS.includes(candidate as CustomerAppLayout) ? candidate : fallback];
+      }
+      if (key === "app_card_style") {
+        return [key, typeof candidate === "string" && CUSTOMER_APP_CARD_STYLE_KEYS.includes(candidate as CustomerAppCardStyle) ? candidate : fallback];
+      }
       return [key, typeof candidate === "string" && candidate.trim() ? candidate.trim() : fallback];
     }),
   ) as unknown as BrandPageContent;
 }
+
+export function customerAppConfigFromContent(content: BrandPageContent): CustomerAppConfig {
+  return {
+    layout: content.app_layout,
+    cardStyle: content.app_card_style,
+    headerSubtitle: content.app_header_subtitle,
+    heroEyebrow: content.app_hero_eyebrow,
+    heroTitle: content.app_hero_title,
+    heroDescription: content.app_hero_description,
+    primaryCtaLabel: content.app_primary_cta_label,
+    menuTitle: content.app_menu_title,
+    privacyNote: content.app_privacy_note,
+    heroImageUrl: content.app_hero_image_url,
+    entries: {
+      home: { label: content.app_home_label, description: content.app_home_description },
+      booking: { label: content.app_booking_label, description: content.app_booking_description },
+      appointments: { label: content.app_appointments_label, description: content.app_appointments_description },
+      events: { label: content.app_events_label, description: content.app_events_description },
+      tickets: { label: content.app_tickets_label, description: content.app_tickets_description },
+      membership: { label: content.app_membership_label, description: content.app_membership_description },
+      support: { label: content.app_support_label, description: content.app_support_description },
+      brand: { label: content.app_brand_label, description: content.app_brand_description },
+    },
+  };
+}
+
+export const DEFAULT_CUSTOMER_APP_CONFIG = customerAppConfigFromContent(DEFAULT_BRAND_PAGE_CONTENT.beauty);
 
 export function brandPagePreferredEntry(content: BrandPageContent, template: BrandPageTemplate): "booking" | "registration" {
   if (content.primary_entry === "booking" || content.primary_entry === "registration") return content.primary_entry;

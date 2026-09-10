@@ -1,5 +1,6 @@
 import type { BookingField, ServiceAddon } from "./BookingFlowUi";
 import type { CustomerEntryAvailability } from "@/lib/customer-entry";
+import type { CustomerAppConfig } from "@/lib/brand-page";
 
 export interface Doctor {
   id: string;
@@ -45,6 +46,7 @@ export interface EntryConfig {
   brand_accent_color: string;
   brand_soft_color: string;
   brand_ink_color: string;
+  customer_app: CustomerAppConfig;
   availability: CustomerEntryAvailability;
 }
 

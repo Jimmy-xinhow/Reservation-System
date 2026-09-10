@@ -5,7 +5,7 @@ import { resolveTxt } from "node:dns/promises";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireBrandAdmin } from "@/lib/admin";
-import { isBrandPageTemplate, type BrandPageContent } from "@/lib/brand-page";
+import { CUSTOMER_APP_CARD_STYLE_KEYS, CUSTOMER_APP_LAYOUT_KEYS, isBrandPageTemplate, type BrandPageContent, type CustomerAppCardStyle, type CustomerAppLayout } from "@/lib/brand-page";
 import { createServiceClient } from "@/lib/supabase";
 
 function str(fd: FormData, key: string): string {
@@ -190,12 +190,22 @@ function brandPageImageUrl(fd: FormData, key: "hero_image_url" | "detail_image_u
   return safeBrandImageUrl(brandPageText(fd, key, 1000), labels[key]);
 }
 
+function brandColor(fd: FormData, key: "brand_primary_color" | "brand_accent_color", label: string): string {
+  const value = str(fd, key);
+  if (!/^#[0-9A-Fa-f]{6}$/.test(value)) throw new Error(`${label}必須是六碼色彩，例如 #3F6255`);
+  return value.toUpperCase();
+}
+
 export async function updateBrandPageAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
   const rawTemplate = str(fd, "brand_page_template");
   if (!isBrandPageTemplate(rawTemplate)) throw new Error("品牌形象頁模板不存在");
   const rawPrimaryEntry = str(fd, "primary_entry");
   if (!["auto", "booking", "registration"].includes(rawPrimaryEntry)) throw new Error("主要入口設定不正確");
+  const appLayout = str(fd, "app_layout");
+  if (!CUSTOMER_APP_LAYOUT_KEYS.includes(appLayout as CustomerAppLayout)) throw new Error("顧客 App 首頁構圖不存在");
+  const appCardStyle = str(fd, "app_card_style");
+  if (!CUSTOMER_APP_CARD_STYLE_KEYS.includes(appCardStyle as CustomerAppCardStyle)) throw new Error("顧客 App 卡片風格不存在");
 
   const content: BrandPageContent = {
     primary_entry: rawPrimaryEntry as BrandPageContent["primary_entry"],
@@ -219,6 +229,32 @@ export async function updateBrandPageAction(fd: FormData): Promise<void> {
     hero_image_url: brandPageImageUrl(fd, "hero_image_url"),
     detail_image_url: brandPageImageUrl(fd, "detail_image_url"),
     gallery_image_url: brandPageImageUrl(fd, "gallery_image_url"),
+    app_layout: appLayout as CustomerAppLayout,
+    app_card_style: appCardStyle as CustomerAppCardStyle,
+    app_header_subtitle: brandPageText(fd, "app_header_subtitle", 40),
+    app_hero_eyebrow: brandPageText(fd, "app_hero_eyebrow", 50),
+    app_hero_title: brandPageText(fd, "app_hero_title", 80),
+    app_hero_description: brandPageText(fd, "app_hero_description", 180),
+    app_primary_cta_label: brandPageText(fd, "app_primary_cta_label", 30),
+    app_menu_title: brandPageText(fd, "app_menu_title", 30),
+    app_privacy_note: brandPageText(fd, "app_privacy_note", 180),
+    app_hero_image_url: safeBrandImageUrl(brandPageText(fd, "app_hero_image_url", 1000), "App 主視覺圖片"),
+    app_home_label: brandPageText(fd, "app_home_label", 24),
+    app_home_description: brandPageText(fd, "app_home_description", 80),
+    app_booking_label: brandPageText(fd, "app_booking_label", 24),
+    app_booking_description: brandPageText(fd, "app_booking_description", 80),
+    app_appointments_label: brandPageText(fd, "app_appointments_label", 24),
+    app_appointments_description: brandPageText(fd, "app_appointments_description", 80),
+    app_events_label: brandPageText(fd, "app_events_label", 24),
+    app_events_description: brandPageText(fd, "app_events_description", 80),
+    app_tickets_label: brandPageText(fd, "app_tickets_label", 24),
+    app_tickets_description: brandPageText(fd, "app_tickets_description", 80),
+    app_membership_label: brandPageText(fd, "app_membership_label", 24),
+    app_membership_description: brandPageText(fd, "app_membership_description", 80),
+    app_support_label: brandPageText(fd, "app_support_label", 24),
+    app_support_description: brandPageText(fd, "app_support_description", 80),
+    app_brand_label: brandPageText(fd, "app_brand_label", 24),
+    app_brand_description: brandPageText(fd, "app_brand_description", 80),
   };
   const rawLogoUrl = str(fd, "brand_logo_url");
   if (rawLogoUrl.length > 1000) throw new Error("品牌 Logo 網址過長");
@@ -231,12 +267,15 @@ export async function updateBrandPageAction(fd: FormData): Promise<void> {
       brand_page_template: rawTemplate,
       brand_page_content: content,
       brand_logo_url: logoUrl,
+      brand_primary_color: brandColor(fd, "brand_primary_color", "品牌主色"),
+      brand_accent_color: brandColor(fd, "brand_accent_color", "強調色"),
     })
     .eq("clinic_id", clinicId);
   if (error) throw new Error(error.message);
 
   revalidatePath("/admin/settings");
   revalidatePath("/");
+  revalidatePath("/book");
   redirect("/admin/settings?section=page&brand_page_saved=1");
 }
 

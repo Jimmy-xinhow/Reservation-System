@@ -12,6 +12,7 @@ import {
   type CustomerEntryKey,
 } from "@/lib/customer-entry";
 import styles from "./CustomerApp.module.css";
+import { DEFAULT_CUSTOMER_APP_CONFIG, type CustomerAppConfig } from "@/lib/brand-page";
 
 export type CustomerView = CustomerEntryKey;
 
@@ -53,7 +54,7 @@ function EntryIcon({ entry }: { entry: CustomerView }) {
   );
 }
 
-export function CustomerEntryNav({ view, availability, onChange }: { view: CustomerView; availability: CustomerEntryAvailability; onChange: (view: CustomerView) => void }) {
+export function CustomerEntryNav({ view, availability, app = DEFAULT_CUSTOMER_APP_CONFIG, onChange }: { view: CustomerView; availability: CustomerEntryAvailability; app?: CustomerAppConfig; onChange: (view: CustomerView) => void }) {
   const entries = enabledCustomerEntries(availability);
   return (
     <nav aria-label="顧客服務" className={styles.customerNav}>
@@ -66,7 +67,7 @@ export function CustomerEntryNav({ view, availability, onChange }: { view: Custo
           className={styles.navButton}
         >
           <EntryIcon entry={entry.key} />
-          <span>{SHORT_LABELS[entry.key]}</span>
+          <span>{app.entries[entry.key]?.label || SHORT_LABELS[entry.key]}</span>
         </button>
       ))}
     </nav>
@@ -87,11 +88,13 @@ export function CustomerHomeView({
   availability,
   bookingMode,
   brand,
+  app = DEFAULT_CUSTOMER_APP_CONFIG,
   onChange,
 }: {
   availability: CustomerEntryAvailability;
   bookingMode: "time" | "number";
   brand: CustomerEntryBrand;
+  app?: CustomerAppConfig;
   onChange: (view: CustomerView) => void;
 }) {
   const enabled = enabledCustomerEntries(availability).filter((entry) => entry.key !== "home");
@@ -102,24 +105,32 @@ export function CustomerHomeView({
   return (
     <section className={styles.home}>
       <div className={styles.homeHero}>
-        <p className={styles.homeEyebrow}>WELCOME</p>
+        {app.layout !== "minimal" && app.heroImageUrl && <>
+          {/* Brand-managed image URL is validated when saved. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={app.heroImageUrl} alt="" className={styles.homeHeroImage} />
+          <span className={styles.homeHeroShade} />
+        </>}
+        <div className={styles.homeHeroCopy}>
+        <p className={styles.homeEyebrow}>{app.heroEyebrow}</p>
         <h1 className={styles.homeTitle}>
-          {brand.clinicName ?? "歡迎使用線上服務"}
+          {app.heroTitle || brand.clinicName || "歡迎使用線上服務"}
         </h1>
         <p className={styles.homeLead}>
-          從今天想完成的事開始，我們會帶你走完需要的步驟。
+          {app.heroDescription}
         </p>
         {primary && (
           <button type="button" onClick={() => onChange(primary.key)} className={styles.heroAction}>
-            <span className="flex items-center gap-2"><EntryIcon entry={primary.key} />{primary.label}</span>
+            <span className="flex items-center gap-2"><EntryIcon entry={primary.key} />{app.primaryCtaLabel || app.entries[primary.key]?.label || primary.label}</span>
             <span aria-hidden>→</span>
           </button>
         )}
+        </div>
       </div>
 
       {secondary.length > 0 && (
         <div>
-          <h2 className={styles.menuLabel}>其他服務</h2>
+          <h2 className={styles.menuLabel}>{app.menuTitle}</h2>
           <div className={`${styles.homeMenu} mt-3`}>
             {secondary.map((entry) => (
               <button
@@ -132,9 +143,9 @@ export function CustomerHomeView({
                   <EntryIcon entry={entry.key} />
                 </span>
                 <span className={styles.menuCopy}>
-                  <span className={styles.menuTitle}>{entry.label}</span>
+                  <span className={styles.menuTitle}>{app.entries[entry.key]?.label || entry.label}</span>
                   <span className={styles.menuDescription}>
-                    {entry.key === "booking" ? bookingDescription : entry.key === "home" ? "" : HOME_DESCRIPTIONS[entry.key]}
+                    {entry.key === "booking" && app.entries.booking.description === DEFAULT_CUSTOMER_APP_CONFIG.entries.booking.description ? bookingDescription : app.entries[entry.key]?.description || (entry.key === "home" ? "" : HOME_DESCRIPTIONS[entry.key])}
                   </span>
                 </span>
                 <span className={styles.menuArrow} aria-hidden>›</span>
@@ -145,7 +156,7 @@ export function CustomerHomeView({
       )}
 
       <p className={styles.privacyNote}>
-        個人預約、票券與會員資料會先透過 LINE 驗證，再安全顯示。
+        {app.privacyNote}
       </p>
     </section>
   );
@@ -205,13 +216,13 @@ function statusLabel(value: string): string {
   return ({ pending: "待付款", confirmed: "已確認", waitlisted: "候補中", attended: "已報到", no_show: "未到", cancelled: "已取消", active: "使用中", expired: "已到期", paid: "已付款", failed: "付款失敗", not_required: "免付款" } as Record<string, string>)[value] ?? value;
 }
 
-export function CustomerLiffView({ view, idToken, brand }: { view: "events" | "tickets" | "membership" | "brand"; idToken: string | null; brand: CustomerEntryBrand }) {
-  if (view === "events") return <EventsView />;
+export function CustomerLiffView({ view, idToken, brand, app = DEFAULT_CUSTOMER_APP_CONFIG }: { view: "events" | "tickets" | "membership" | "brand"; idToken: string | null; brand: CustomerEntryBrand; app?: CustomerAppConfig }) {
+  if (view === "events") return <EventsView app={app} />;
   if (view === "brand") return <BrandView brand={brand} />;
-  return <PrivatePortalView view={view} idToken={idToken} />;
+  return <PrivatePortalView view={view} idToken={idToken} app={app} />;
 }
 
-function EventsView() {
+function EventsView({ app }: { app: CustomerAppConfig }) {
   const [events, setEvents] = useState<EventSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -226,10 +237,10 @@ function EventsView() {
   if (error) return <Message tone="error">{error}</Message>;
   if (!events) return <Message>載入活動中…</Message>;
   if (events.length === 0) return <Message>目前沒有開放報名的活動。</Message>;
-  return <section className="space-y-3"><header><h1 className="text-xl font-bold text-slate-900">活動與課程</h1><p className="mt-1 text-sm text-slate-500">LINE 身分會在報名時自動驗證，不必重複綁定。</p></header>{events.map((event) => <Link key={event.id} href={scopedPath("/register", { event: event.id, liff: "1" })} className="card block p-5 transition hover:border-brand-300 hover:bg-brand-50"><h2 className="font-semibold text-slate-900">{event.title}</h2>{event.description && <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{event.description}</p>}<p className="mt-3 text-xs text-slate-400">{event.registration_close_at ? `報名至 ${formatEventDate(event.registration_close_at)}` : "報名時間依活動公告"}</p></Link>)}</section>;
+  return <section className="space-y-3"><header><h1 className="text-xl font-bold text-slate-900">{app.entries.events.label}</h1><p className="mt-1 text-sm text-slate-500">{app.entries.events.description}</p></header>{events.map((event) => <Link key={event.id} href={scopedPath("/register", { event: event.id, liff: "1" })} className="card block p-5 transition hover:border-brand-300 hover:bg-brand-50"><h2 className="font-semibold text-slate-900">{event.title}</h2>{event.description && <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">{event.description}</p>}<p className="mt-3 text-xs text-slate-400">{event.registration_close_at ? `報名至 ${formatEventDate(event.registration_close_at)}` : "報名時間依活動公告"}</p></Link>)}</section>;
 }
 
-function PrivatePortalView({ view, idToken }: { view: "tickets" | "membership"; idToken: string | null }) {
+function PrivatePortalView({ view, idToken, app }: { view: "tickets" | "membership"; idToken: string | null; app: CustomerAppConfig }) {
   const [data, setData] = useState<PortalData | null>(null);
   const [selectedPatientId, setSelectedPatientId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -311,7 +322,7 @@ function PrivatePortalView({ view, idToken }: { view: "tickets" | "membership"; 
   return (
     <section className="space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div><p className="eyebrow">LINE 顧客專區</p><h1 className="text-xl font-bold text-slate-900">{view === "tickets" ? "我的票券" : "會員與套票"}</h1></div>
+        <div><p className="eyebrow">LINE 顧客專區</p><h1 className="text-xl font-bold text-slate-900">{app.entries[view].label}</h1><p className="mt-1 text-sm text-slate-500">{app.entries[view].description}</p></div>
         {data.patients.length > 1 && <label className="text-sm"><span className="label">查看顧客</span><select className="input min-w-44" value={selectedPatientId} onChange={(event) => void load(event.target.value)}>{data.patients.map((patient) => <option key={patient.id} value={patient.id}>{patient.name}</option>)}</select></label>}
       </div>
       {view === "tickets" ? <TicketList data={data} /> : <MembershipList data={data} />}

@@ -185,6 +185,56 @@
   box-shadow: 0 20px 50px color-mix(in srgb, var(--customer-primary) 22%, transparent);
 }
 
+.homeHeroImage,
+.homeHeroShade {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.homeHeroImage {
+  object-fit: cover;
+}
+
+.homeHeroShade {
+  background: linear-gradient(180deg, rgba(12, 24, 20, 0.08) 5%, rgba(12, 24, 20, 0.86) 92%);
+}
+
+.homeHeroCopy {
+  position: relative;
+  z-index: 1;
+}
+
+.layoutImmersive .homeHero {
+  display: flex;
+  min-height: 27rem;
+  align-items: flex-end;
+}
+
+.layoutEditorial .homeHero {
+  min-height: 27rem;
+  padding-top: 15rem;
+  background: color-mix(in srgb, var(--customer-primary) 92%, black);
+}
+
+.layoutEditorial .homeHeroImage {
+  height: 56%;
+  object-position: center;
+}
+
+.layoutEditorial .homeHeroShade {
+  top: 56%;
+  background: var(--customer-primary);
+}
+
+.layoutMinimal .homeHero {
+  min-height: 21rem;
+  background:
+    radial-gradient(circle at 90% 6%, color-mix(in srgb, var(--customer-accent) 60%, transparent), transparent 28%),
+    var(--customer-primary);
+}
+
 .homeHero::after {
   position: absolute;
   top: 0;
@@ -257,6 +307,32 @@
   border-radius: 1.5rem;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 14px 38px rgba(22, 37, 31, 0.055);
+}
+
+.cardsOutlined .homeMenu,
+.cardsOutlined :global(.card) {
+  box-shadow: none;
+  background: transparent;
+}
+
+.cardsFlat .homeMenu {
+  overflow: visible;
+  border-width: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.cardsFlat .homeMenuItem {
+  padding-inline: 0.25rem;
+}
+
+.cardsFlat :global(.card) {
+  border-width: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--customer-line);
+  background: transparent;
+  box-shadow: none;
 }
 
 .homeMenuItem {

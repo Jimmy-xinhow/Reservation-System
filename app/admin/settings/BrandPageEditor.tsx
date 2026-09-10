@@ -10,12 +10,16 @@ import {
   type BrandPageTemplate,
 } from "@/lib/brand-page";
 import { SHOWCASE_TEMPLATES } from "@/lib/showcase-templates";
+import { CustomerAppDesigner } from "./CustomerAppDesigner";
 
 interface BrandPageEditorProps {
   enabled: boolean;
   initialTemplate: BrandPageTemplate;
   initialContent: BrandPageContent;
   initialLogoUrl: string;
+  initialPrimaryColor: string;
+  initialAccentColor: string;
+  clinicName: string;
   publicUrl: string | null;
   action: (formData: FormData) => void | Promise<void>;
 }
@@ -90,10 +94,12 @@ function CopyPublicUrlButton({ publicUrl }: { publicUrl: string }) {
   return <button type="button" onClick={() => void copy()} className="btn btn-secondary min-h-11">{copied ? "已複製網址" : "複製公開網址"}</button>;
 }
 
-export function BrandPageEditor({ enabled, initialTemplate, initialContent, initialLogoUrl, publicUrl, action }: BrandPageEditorProps) {
+export function BrandPageEditor({ enabled, initialTemplate, initialContent, initialLogoUrl, initialPrimaryColor, initialAccentColor, clinicName, publicUrl, action }: BrandPageEditorProps) {
   const [template, setTemplate] = useState<BrandPageTemplate>(initialTemplate);
   const [content, setContent] = useState<BrandPageContent>(initialContent);
   const [logoUrl, setLogoUrl] = useState(initialLogoUrl);
+  const [primaryColor, setPrimaryColor] = useState(initialPrimaryColor);
+  const [accentColor, setAccentColor] = useState(initialAccentColor);
 
   function updateContent(key: keyof BrandPageContent, value: string) {
     setContent((current) => ({ ...current, [key]: value }));
@@ -108,9 +114,9 @@ export function BrandPageEditor({ enabled, initialTemplate, initialContent, init
       <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-col gap-5 border-b border-slate-200 bg-[#172f35] px-5 py-6 text-white sm:flex-row sm:items-center sm:justify-between sm:px-7">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.18em] text-white/55">Brand landing page</p>
-            <h2 className="mt-2 text-xl font-bold">品牌形象頁</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">選擇已確認的產業框架，再填入品牌自己的文字與圖片。服務、活動與按鈕會讀取現有系統資料，不需要重複維護。</p>
+            <p className="text-xs font-bold uppercase tracking-[.18em] text-white/55">Brand experience studio</p>
+            <h2 className="mt-2 text-xl font-bold">品牌前台與顧客 App</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">在同一處管理顧客從 LINE 打開後看到的 App，以及對外品牌形象頁。功能資料仍讀取現有服務、活動與會員設定，不需要重複維護。</p>
           </div>
           <label className="flex min-h-12 shrink-0 items-center gap-3 rounded-full border border-white/20 bg-white/10 px-5 text-sm font-semibold">
             <input type="checkbox" name="brand_page_enabled" defaultChecked={enabled} className="h-5 w-5 accent-[#d7ff58]" />
@@ -120,9 +126,26 @@ export function BrandPageEditor({ enabled, initialTemplate, initialContent, init
 
         <div className="space-y-8 p-5 sm:p-7">
           <div>
+            <p className="eyebrow">01 / 顧客 App 設計器</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-900">即時編輯 LINE 開啟後的品牌體驗</h3>
+            <div className="mt-5">
+              <CustomerAppDesigner
+                content={content}
+                clinicName={clinicName || "品牌名稱"}
+                logoUrl={logoUrl}
+                primaryColor={primaryColor}
+                accentColor={accentColor}
+                onContentChange={updateContent}
+                onPrimaryColorChange={setPrimaryColor}
+                onAccentColorChange={setAccentColor}
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 pt-8">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="eyebrow">01 / 選擇框架</p>
+                <p className="eyebrow">02 / 形象網站框架</p>
                 <h3 className="mt-1 text-lg font-bold text-slate-900">八套模板保留各自的字體與版型</h3>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -163,7 +186,7 @@ export function BrandPageEditor({ enabled, initialTemplate, initialContent, init
           <div className="border-t border-slate-200 pt-8">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="eyebrow">02 / 品牌內容</p>
+                <p className="eyebrow">03 / 形象網站內容</p>
                 <h3 className="mt-1 text-lg font-bold text-slate-900">填入要公開給顧客看的內容</h3>
               </div>
               <button type="button" onClick={applyDefaults} className="btn btn-ghost min-h-11 shrink-0">套用此模板預設文案</button>
@@ -207,7 +230,7 @@ export function BrandPageEditor({ enabled, initialTemplate, initialContent, init
           </div>
 
           <div className="border-t border-slate-200 pt-8">
-            <p className="eyebrow">03 / 品牌介紹與信任資訊</p>
+            <p className="eyebrow">04 / 品牌介紹與信任資訊</p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">把顧客做決定前需要知道的事情說清楚</h3>
             <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
               <label className="block text-sm lg:col-span-2"><span className="label">品牌介紹標題</span><input name="about_title" value={content.about_title} onChange={(event) => updateContent("about_title", event.target.value)} maxLength={160} required className="input min-h-12" /></label>
@@ -217,7 +240,7 @@ export function BrandPageEditor({ enabled, initialTemplate, initialContent, init
           </div>
 
           <div className="border-t border-slate-200 pt-8">
-            <p className="eyebrow">04 / 常見問題</p>
+            <p className="eyebrow">05 / 常見問題</p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">預先回答顧客最常卡住的問題</h3>
             <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
               <label className="block text-sm"><span className="label">問題 1</span><input name="faq_1_question" value={content.faq_1_question} onChange={(event) => updateContent("faq_1_question", event.target.value)} maxLength={160} required className="input min-h-12" /></label>
@@ -228,7 +251,7 @@ export function BrandPageEditor({ enabled, initialTemplate, initialContent, init
           </div>
 
           <div className="border-t border-slate-200 pt-8">
-            <p className="eyebrow">05 / 圖片</p>
+            <p className="eyebrow">06 / 形象網站圖片</p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">使用品牌自己的實景照片</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">可直接上傳，也可貼上網站內路徑或 HTTPS 圖片網址。上傳後仍要按最下方「儲存並套用形象頁」才會正式使用。</p>
             <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">

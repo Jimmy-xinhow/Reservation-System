@@ -51,6 +51,8 @@ interface Settings {
   brand_page_template: BrandPageTemplate;
   brand_page_content: unknown;
   brand_logo_url: string | null;
+  brand_primary_color: string | null;
+  brand_accent_color: string | null;
 }
 
 interface PaymentSettings {
@@ -64,7 +66,7 @@ type SettingsSectionId = "brand" | "page" | "booking" | "channels" | "domain" | 
 
 const SETTINGS_SECTIONS: Array<{ id: SettingsSectionId; label: string; description: string }> = [
   { id: "brand", label: "品牌資料", description: "顧客看得到的名稱與聯絡資訊" },
-  { id: "page", label: "品牌形象頁", description: "選擇模板並編輯公開內容" },
+  { id: "page", label: "顧客 App 與形象頁", description: "預覽並編輯 LINE 顧客入口與公開內容" },
   { id: "booking", label: "預約與入口規則", description: "模式、名額、訂金與公開入口" },
   { id: "channels", label: "付款與通知", description: "金流、LINE 與 Email 狀態" },
   { id: "domain", label: "網址與網域", description: "品牌短網址與自訂網域" },
@@ -91,7 +93,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   ] = await Promise.all([
     supabase
       .from("clinic_settings")
-      .select("booking_mode, dashboard_focus, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url")
+      .select("booking_mode, dashboard_focus, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url, brand_primary_color, brand_accent_color")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
     supabase
@@ -249,6 +251,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             initialTemplate={isBrandPageTemplate(s.brand_page_template) ? s.brand_page_template : "beauty"}
             initialContent={normalizeBrandPageContent(s.brand_page_content, isBrandPageTemplate(s.brand_page_template) ? s.brand_page_template : "beauty")}
             initialLogoUrl={s.brand_logo_url ?? ""}
+            initialPrimaryColor={s.brand_primary_color ?? "#3F6255"}
+            initialAccentColor={s.brand_accent_color ?? "#B47B62"}
+            clinicName={clinic?.name ?? "品牌名稱"}
             publicUrl={clinic?.slug ? `/?clinic_slug=${encodeURIComponent(clinic.slug)}` : null}
             action={updateBrandPageAction}
           />

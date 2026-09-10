@@ -1943,6 +1943,19 @@ invariant(
     read("app/admin/line/page.tsx").includes("測試推播實際內容"),
 );
 invariant(
+  "customer App branding is editable, previewed live, and shared with the LIFF runtime",
+  exists("app/admin/settings/CustomerAppDesigner.tsx") &&
+    exists("app/admin/settings/CustomerAppDesigner.module.css") &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes("顧客看到的 App") &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes('name="app_hero_image_url"') &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes('name="brand_primary_color"') &&
+    read("app/admin/settings/CustomerAppDesigner.tsx").includes("修改 8 個功能入口的名稱與說明") &&
+    read("app/admin/settings/actions.ts").includes("CUSTOMER_APP_LAYOUT_KEYS") &&
+    read("app/api/customer/entry-config/route.ts").includes("customer_app: customerApp") &&
+    read("app/book/page.tsx").includes("entryConfig.customer_app") &&
+    read("app/book/CustomerEntry.tsx").includes("app.heroTitle"),
+);
+invariant(
   "LINE-first built-in menu actions stay native while custom URLs remain configurable",
   read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("booking")') &&
     read("lib/richmenu.ts").includes('type: "postback", data: trackedPostback("events")') &&

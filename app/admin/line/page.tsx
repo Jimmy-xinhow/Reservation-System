@@ -82,6 +82,7 @@ export default async function LinePage({
           <p className="admin-page-description">先確認連線，再管理顧客會看到的入口與訊息。技術識別碼與密鑰收在下方設定區。</p>
         </div>
         <nav className="admin-toolbar" aria-label="LINE 快速操作">
+          <Link href="/admin/settings?section=page" className="admin-inline-action"><LineIcon name="template" />顧客 App 預覽</Link>
           <Link href="/admin/richmenu" className="admin-inline-action"><LineIcon name="grid" />圖文選單</Link>
           <Link href="/admin/line-templates" className="admin-inline-action"><LineIcon name="template" />訊息內容</Link>
           <Link href="/admin/messages" className="admin-inline-action"><LineIcon name="send" />發送紀錄</Link>
@@ -114,9 +115,9 @@ export default async function LinePage({
               ) : "未設定"}
             </div>
             <div className="min-w-0">
-              <strong className="block text-sm text-slate-900">形象頁品牌 Logo</strong>
-              <p className="mt-1 text-xs leading-5 text-slate-600">顯示在品牌公開網站，不會改動 LINE 官方帳號。</p>
-              <Link href="/admin/settings?section=brand-page" className="mt-2 inline-flex text-sm font-semibold text-emerald-800 underline underline-offset-4">管理形象頁 Logo</Link>
+              <strong className="block text-sm text-slate-900">顧客 App 與形象頁 Logo</strong>
+              <p className="mt-1 text-xs leading-5 text-slate-600">顯示在 LINE 開啟後的顧客 App 與品牌公開網站，不會改動 LINE 官方帳號。</p>
+              <Link href="/admin/settings?section=page" className="mt-2 inline-flex text-sm font-semibold text-emerald-800 underline underline-offset-4">開啟顧客 App 設計器</Link>
             </div>
           </div>
           <div className="flex min-w-0 items-center gap-4 bg-white p-4">

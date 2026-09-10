@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { googleCalendarUrl, type CalEvent } from "@/lib/calendar";
 import type { CustomerEntryKey as CustomerView } from "@/lib/customer-entry";
 import { liffEntryParams } from "@/lib/liff-entry-state";
+import { DEFAULT_CUSTOMER_APP_CONFIG, type CustomerAppConfig } from "@/lib/brand-page";
 import styles from "./CustomerApp.module.css";
 
 export interface ServiceAddon {
@@ -137,16 +138,17 @@ export interface CustomerAppBranding {
   accent?: string | null;
   soft?: string | null;
   ink?: string | null;
+  app?: CustomerAppConfig | null;
 }
 
 function safeHex(value: string | null | undefined, fallback: string): string {
   return value && /^#[0-9A-Fa-f]{6}$/.test(value) ? value : fallback;
 }
 
-export function Shell({ children, clinicName, logoUrl, primary, accent, soft, ink }: { children: ReactNode } & CustomerAppBranding) {
+export function Shell({ children, clinicName, logoUrl, primary, accent, soft, ink, app }: { children: ReactNode } & CustomerAppBranding) {
   const [resolvedBranding, setResolvedBranding] = useState<CustomerAppBranding>({});
   useEffect(() => {
-    if (logoUrl || primary) return;
+    if ((logoUrl || primary) && app) return;
     const source = new URLSearchParams(window.location.search);
     const scope = new URLSearchParams();
     const clinicSlug = source.get("clinic_slug")?.trim();
@@ -166,6 +168,7 @@ export function Shell({ children, clinicName, logoUrl, primary, accent, soft, in
             brand_accent_color: string;
             brand_soft_color: string;
             brand_ink_color: string;
+            customer_app: CustomerAppConfig;
           };
         };
         if (!response.ok || !body.ok || !body.data) return;
@@ -176,13 +179,17 @@ export function Shell({ children, clinicName, logoUrl, primary, accent, soft, in
           accent: body.data.brand_accent_color,
           soft: body.data.brand_soft_color,
           ink: body.data.brand_ink_color,
+          app: body.data.customer_app,
         });
       })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [clinicName, logoUrl, primary]);
+  }, [clinicName, logoUrl, primary, app]);
   const displayedName = clinicName ?? resolvedBranding.clinicName;
   const displayedLogo = logoUrl ?? resolvedBranding.logoUrl;
+  const displayedApp = app ?? resolvedBranding.app ?? DEFAULT_CUSTOMER_APP_CONFIG;
+  const layoutClass = displayedApp.layout === "editorial" ? styles.layoutEditorial : displayedApp.layout === "minimal" ? styles.layoutMinimal : styles.layoutImmersive;
+  const cardClass = displayedApp.cardStyle === "outlined" ? styles.cardsOutlined : displayedApp.cardStyle === "flat" ? styles.cardsFlat : styles.cardsFloating;
   const appStyle = {
     "--customer-primary": safeHex(primary ?? resolvedBranding.primary, "#31584D"),
     "--customer-accent": safeHex(accent ?? resolvedBranding.accent, "#B89C68"),
@@ -191,7 +198,7 @@ export function Shell({ children, clinicName, logoUrl, primary, accent, soft, in
   } as CSSProperties;
   return (
     <main className={`${styles.viewport} ${styles.shell}`} style={appStyle}>
-      <div className={styles.appFrame}>
+      <div className={`${styles.appFrame} ${layoutClass} ${cardClass}`}>
         <header className={styles.appHeader}>
           <div className={styles.brandLockup}>
             <span className={styles.logoFrame}>
@@ -210,7 +217,7 @@ export function Shell({ children, clinicName, logoUrl, primary, accent, soft, in
             </span>
             <span className="min-w-0">
               <span className={styles.brandName}>{displayedName?.trim() || "品牌線上服務"}</span>
-              <span className={styles.brandSubtitle}>專屬服務 App</span>
+              <span className={styles.brandSubtitle}>{displayedApp.headerSubtitle}</span>
             </span>
           </div>
           <span className={styles.secureState}>LINE 安全連線</span>

@@ -49,10 +49,14 @@ export default function MyAppointments({
   idToken,
   mode,
   onRebook,
+  title = "我的預約",
+  description,
 }: {
   idToken: string | null;
   mode: "time" | "number";
   onRebook: (appointment: MyAppt) => void;
+  title?: string;
+  description?: string;
 }) {
   const [list, setList] = useState<MyAppt[] | null>(null);
   const [waitlists, setWaitlists] = useState<MyWaitlist[]>([]);
@@ -170,9 +174,7 @@ export default function MyAppointments({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between px-1">
-        <p className="text-sm font-medium text-slate-600">
-          {progress.length > 0 ? "今日服務進度" : "我的預約"}
-        </p>
+        <div><p className="text-sm font-medium text-slate-700">{progress.length > 0 ? "今日服務進度" : title}</p>{description && progress.length === 0 && <p className="mt-1 text-xs text-slate-500">{description}</p>}</div>
         <button
           type="button"
           onClick={() => void load()}

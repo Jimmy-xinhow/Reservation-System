@@ -389,6 +389,7 @@ export default function BookPage() {
     accent: entryConfig.brand_accent_color,
     soft: entryConfig.brand_soft_color,
     ink: entryConfig.brand_ink_color,
+    app: entryConfig.customer_app,
   };
   const customerBrand = {
     clinicName: entryConfig.clinic_name,
@@ -400,16 +401,16 @@ export default function BookPage() {
     pageEnabled: entryConfig.brand_page_enabled,
     logoUrl: entryConfig.brand_logo_url,
   };
-  const entryNav = taskMode ? null : <CustomerEntryNav view={view} availability={entryConfig.availability} onChange={changeView} />;
-  if (view === "home") return <Shell {...shellBranding}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={customerBrand} onChange={changeView} /></Shell>;
-  if (view === "appointments") return <Shell {...shellBranding}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} /></Shell>;
+  const entryNav = taskMode ? null : <CustomerEntryNav view={view} availability={entryConfig.availability} app={entryConfig.customer_app} onChange={changeView} />;
+  if (view === "home") return <Shell {...shellBranding}>{entryNav}<CustomerHomeView availability={entryConfig.availability} bookingMode={entryConfig.booking_mode} brand={customerBrand} app={entryConfig.customer_app} onChange={changeView} /></Shell>;
+  if (view === "appointments") return <Shell {...shellBranding}>{entryNav}<MyAppointments idToken={idToken} mode={entryConfig.booking_mode} onRebook={rebook} title={entryConfig.customer_app.entries.appointments.label} description={entryConfig.customer_app.entries.appointments.description} /></Shell>;
   if (view === "events" && !entryConfig.availability.events) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前沒有開放中的活動報名。</div></Shell>;
   if (view === "tickets" && !entryConfig.availability.tickets) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用活動票券。</div></Shell>;
   if (view === "membership" && !entryConfig.availability.memberships) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前未啟用會員與套票。</div></Shell>;
   if (view === "support" && !entryConfig.availability.line) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌的 LINE 客服尚未完成啟用。</div></Shell>;
   if (view === "support") return <Shell {...shellBranding}>{entryNav}<ChatTab idToken={idToken} /></Shell>;
   if (["events", "tickets", "membership", "brand"].includes(view)) {
-    return <Shell {...shellBranding}>{entryNav}<CustomerLiffView view={view as "events" | "tickets" | "membership" | "brand"} idToken={idToken} brand={customerBrand} /></Shell>;
+    return <Shell {...shellBranding}>{entryNav}<CustomerLiffView view={view as "events" | "tickets" | "membership" | "brand"} idToken={idToken} brand={customerBrand} app={entryConfig.customer_app} /></Shell>;
   }
   if (!entryConfig.availability.booking) return <Shell {...shellBranding}>{entryNav}<div className="card p-6 text-center text-sm text-slate-500">此品牌目前暫停線上預約，仍可使用其他服務。</div></Shell>;
   if (loadErr) return <Centered tone="error">{loadErr}</Centered>;
