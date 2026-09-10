@@ -1979,15 +1979,17 @@ invariant(
     read("app/admin/settings/CustomerAppDesigner.tsx").includes('aria-label="顧客 App 快速切換預覽"'),
 );
 invariant(
-  "customer App immersive and editorial hero layouts are compact in both preview and customer view",
+  "customer App immersive and editorial hero layouts are compact and visually distinct",
   read("app/book/CustomerApp.module.css").includes("aspect-ratio: 4 / 3;") &&
   read("app/book/CustomerApp.module.css").includes(".layoutImmersive .homeHeroCopy") &&
     read("app/book/CustomerApp.module.css").includes("transform: translateY(-0.25rem);") &&
     read("app/book/CustomerApp.module.css").includes(".layoutEditorial .homeHeroImage") &&
-    read("app/book/CustomerApp.module.css").includes("--editorial-hero-media-height: 6.25rem;") &&
-    read("app/book/CustomerApp.module.css").includes("padding: calc(var(--editorial-hero-media-height) - 2.25rem) 1.25rem 0.8rem;") &&
+    read("app/book/CustomerApp.module.css").includes("--editorial-hero-media-height: 6.75rem;") &&
+    read("app/book/CustomerApp.module.css").includes("grid-template-columns: minmax(0, 1fr) minmax(7rem, 39%);") &&
+    read("app/book/CustomerApp.module.css").includes("background: transparent;") &&
     read("app/admin/settings/CustomerAppDesigner.module.css").includes('data-layout="editorial"') &&
-    read("app/admin/settings/CustomerAppDesigner.module.css").includes("--preview-editorial-media-height: 5.25rem;") &&
+    read("app/admin/settings/CustomerAppDesigner.module.css").includes("--preview-editorial-media-height: 6.1rem;") &&
+    read("app/admin/settings/CustomerAppDesigner.module.css").includes("grid-template-columns: minmax(0, 1fr) minmax(6.25rem, 38%);") &&
     read("app/admin/settings/CustomerAppDesigner.module.css").includes("transform: translateY(-0.25rem);"),
 );
 invariant(

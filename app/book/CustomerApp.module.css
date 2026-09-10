@@ -221,35 +221,85 @@
 }
 
 .layoutEditorial .homeHero {
-  --editorial-hero-media-height: 6.25rem;
+  --editorial-hero-media-height: 6.75rem;
 
   display: block;
   min-height: 0;
   padding: 0;
-  background: color-mix(in srgb, var(--customer-primary) 92%, black);
+  border: 1px solid color-mix(in srgb, var(--customer-primary) 14%, white);
+  color: var(--customer-ink);
+  background: color-mix(in srgb, var(--customer-primary) 4%, #f7f2e9);
+  box-shadow: 0 16px 42px rgba(24, 42, 35, 0.08);
 }
 
 .layoutEditorial .homeHeroImage {
+  inset: 1rem 1rem auto auto;
+  width: 39%;
   height: var(--editorial-hero-media-height);
+  border-radius: 1rem;
   object-position: center 42%;
 }
 
 .layoutEditorial .homeHeroShade {
-  top: var(--editorial-hero-media-height);
-  background: var(--customer-primary);
+  display: none;
 }
 
 .layoutEditorial .homeHeroCopy {
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  padding: calc(var(--editorial-hero-media-height) - 2.25rem) 1.25rem 0.8rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, 39%);
+  column-gap: 1rem;
+  padding: 1.1rem;
+}
+
+.layoutEditorial .homeHeroCopy::before {
+  min-height: var(--editorial-hero-media-height);
+  grid-column: 2;
+  grid-row: 1 / 3;
+  content: "";
+}
+
+.layoutEditorial .homeEyebrow {
+  grid-column: 1;
+  grid-row: 1;
+  margin-bottom: 0.55rem;
+  color: color-mix(in srgb, var(--customer-accent) 64%, var(--customer-primary));
+  font-size: 0.68rem;
+}
+
+.layoutEditorial .homeTitle {
+  max-width: 10ch;
+  grid-column: 1;
+  grid-row: 2;
+  color: var(--customer-ink);
+  font-size: clamp(1.55rem, 5.7vw, 1.9rem);
+}
+
+.layoutEditorial .homeLead {
+  max-width: none;
+  grid-column: 1 / -1;
+  grid-row: 3;
+  margin-top: 0.85rem;
+  color: color-mix(in srgb, var(--customer-ink) 66%, white);
+  font-size: 0.84rem;
+  line-height: 1.6;
 }
 
 .layoutEditorial .heroAction {
+  grid-column: 1 / -1;
+  grid-row: 4;
   min-height: 3rem;
-  margin-top: 0.65rem;
-  border-radius: 0.9rem;
+  margin-top: 0.75rem;
+  padding-inline: 0;
+  border-top: 1px solid color-mix(in srgb, var(--customer-primary) 24%, white);
+  border-bottom: 1px solid color-mix(in srgb, var(--customer-primary) 24%, white);
+  border-radius: 0;
+  color: var(--customer-primary);
+  background: transparent;
+  box-shadow: none;
+}
+
+.layoutEditorial .homeHero::after {
+  display: none;
 }
 
 .layoutMinimal .homeHero {
@@ -717,7 +767,7 @@
   }
 
   .layoutEditorial .homeHero {
-    --editorial-hero-media-height: 8rem;
+    --editorial-hero-media-height: 7.75rem;
   }
 
   .appContent:has(.customerNav) {
