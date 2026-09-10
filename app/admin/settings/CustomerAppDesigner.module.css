@@ -365,7 +365,7 @@
 
 .previewHero {
   position: relative;
-  min-height: 18rem;
+  min-height: 16rem;
   overflow: hidden;
   border-radius: 1.35rem;
   color: white;
@@ -382,9 +382,15 @@
 
 .previewHero > img { object-fit: cover; }
 .previewHeroShade { background: linear-gradient(180deg, rgba(14, 27, 22, 0.08), rgba(14, 27, 22, 0.82)); }
-.phone[data-layout="editorial"] .previewHero { display: grid; min-height: 16.75rem; align-items: stretch; background: #f2eee6; }
-.phone[data-layout="editorial"] .previewHero > img { height: 42%; object-position: center 42%; }
-.phone[data-layout="editorial"] .previewHeroShade { top: 42%; background: var(--app-primary); }
+.phone[data-layout="editorial"] .previewHero {
+  --preview-editorial-media-height: 5.25rem;
+
+  display: block;
+  min-height: 0;
+  background: #f2eee6;
+}
+.phone[data-layout="editorial"] .previewHero > img { height: var(--preview-editorial-media-height); object-position: center 42%; }
+.phone[data-layout="editorial"] .previewHeroShade { top: var(--preview-editorial-media-height); background: var(--app-primary); }
 .phone[data-layout="minimal"] .previewHero { min-height: 15.5rem; background: var(--app-primary); }
 .phone[data-layout="minimal"] .previewHeroShade { background: radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--app-accent) 65%, transparent), transparent 30%); }
 
@@ -400,23 +406,23 @@
 
 .phone:not([data-layout="editorial"]):not([data-layout="minimal"]) .previewHeroCopy {
   justify-content: center;
-  transform: translateY(-1rem);
+  transform: translateY(-0.25rem);
 }
 .phone[data-layout="editorial"] .previewHeroCopy {
-  min-height: 16.75rem;
+  min-height: 0;
   justify-content: flex-start;
-  padding: 5.35rem 1.25rem 0.85rem;
+  padding: calc(var(--preview-editorial-media-height) - 1.85rem) 1rem 0.65rem;
 }
 .phone[data-layout="editorial"] .previewHeroCopy button {
-  min-height: 2.45rem;
-  margin-top: 0.65rem;
+  min-height: 2.4rem;
+  margin-top: 0.55rem;
 }
 .previewHeroCopy > span { color: color-mix(in srgb, var(--app-accent) 75%, white); font-size: 0.55rem; font-weight: 800; letter-spacing: 0.14em; }
 .previewHeroCopy h4 { max-width: 13ch; margin-top: 0.4rem; font-family: var(--font-display); font-size: 1.65rem; line-height: 1.16; letter-spacing: -0.035em; }
 .previewHeroCopy p { max-width: 29ch; margin-top: 0.5rem; color: rgba(255,255,255,.76); font-size: 0.67rem; line-height: 1.6; }
 .previewHeroCopy button { display: flex; min-height: 2.6rem; margin-top: 0.9rem; align-items: center; justify-content: space-between; padding-inline: 0.9rem; border-radius: 0.8rem; color: var(--app-primary); background: white; font-size: 0.7rem; font-weight: 800; }
 
-.previewSectionLabel { margin: 1rem 0 0.5rem 0.15rem; color: #60706b; font-size: 0.62rem; font-weight: 800; }
+.previewSectionLabel { margin: 0.65rem 0 0.4rem 0.15rem; color: #60706b; font-size: 0.62rem; font-weight: 800; }
 .previewMenu { overflow: hidden; border: 1px solid color-mix(in srgb, var(--app-primary) 15%, white); border-radius: 1.1rem; background: rgba(255,255,255,.9); }
 .previewMenuRow { display: flex; min-height: 3.7rem; align-items: center; gap: 0.65rem; padding: 0.65rem 0.75rem; }
 .previewMenuRow + .previewMenuRow { border-top: 1px solid color-mix(in srgb, var(--app-primary) 12%, white); }

@@ -173,7 +173,7 @@
 
 .home {
   display: grid;
-  gap: 1rem;
+  gap: 0.625rem;
 }
 
 .homeHero {
@@ -209,44 +209,46 @@
 
 .layoutImmersive .homeHero {
   display: grid;
-  min-height: 25rem;
+  min-height: 16rem;
+  aspect-ratio: 4 / 3;
   align-items: center;
+  padding: 1.25rem 1.25rem 1.1rem;
 }
 
 .layoutImmersive .homeHeroCopy {
   width: 100%;
-  transform: translateY(-1.65rem);
+  transform: translateY(-0.25rem);
 }
 
 .layoutEditorial .homeHero {
-  display: grid;
-  min-height: 25rem;
+  --editorial-hero-media-height: 6.25rem;
+
+  display: block;
+  min-height: 0;
   padding: 0;
-  align-items: stretch;
   background: color-mix(in srgb, var(--customer-primary) 92%, black);
 }
 
 .layoutEditorial .homeHeroImage {
-  height: 42%;
+  height: var(--editorial-hero-media-height);
   object-position: center 42%;
 }
 
 .layoutEditorial .homeHeroShade {
-  top: 42%;
+  top: var(--editorial-hero-media-height);
   background: var(--customer-primary);
 }
 
 .layoutEditorial .homeHeroCopy {
   display: flex;
-  min-height: 25rem;
   flex-direction: column;
   justify-content: flex-start;
-  padding: 9.5rem 1.5rem 1rem;
+  padding: calc(var(--editorial-hero-media-height) - 2.25rem) 1.25rem 0.8rem;
 }
 
 .layoutEditorial .heroAction {
   min-height: 3rem;
-  margin-top: 0.75rem;
+  margin-top: 0.65rem;
   border-radius: 0.9rem;
 }
 
@@ -316,7 +318,7 @@
 }
 
 .menuLabel {
-  padding: 0.25rem 0.25rem 0;
+  padding: 0 0.25rem;
   color: color-mix(in srgb, var(--customer-ink) 62%, white);
   font-size: 0.78rem;
   font-weight: 700;
@@ -712,6 +714,10 @@
 
   .appContent {
     padding: 1.75rem;
+  }
+
+  .layoutEditorial .homeHero {
+    --editorial-hero-media-height: 8rem;
   }
 
   .appContent:has(.customerNav) {
