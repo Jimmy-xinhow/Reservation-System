@@ -1984,12 +1984,13 @@ invariant(
   read("app/book/CustomerApp.module.css").includes(".layoutImmersive .homeHeroCopy") &&
     read("app/book/CustomerApp.module.css").includes("transform: translateY(-0.25rem);") &&
     read("app/book/CustomerApp.module.css").includes(".layoutEditorial .homeHeroImage") &&
-    read("app/book/CustomerApp.module.css").includes("--editorial-hero-media-height: 6.75rem;") &&
-    read("app/book/CustomerApp.module.css").includes("grid-template-columns: minmax(0, 1fr) minmax(7rem, 39%);") &&
+    read("app/book/CustomerApp.module.css").includes("--editorial-hero-media-height: 8rem;") &&
+    read("app/book/CustomerApp.module.css").includes("grid-template-rows: auto auto;") &&
+    read("app/book/CustomerApp.module.css").includes("width: calc(100% - 2.2rem);") &&
     read("app/book/CustomerApp.module.css").includes("background: transparent;") &&
     read("app/admin/settings/CustomerAppDesigner.module.css").includes('data-layout="editorial"') &&
-    read("app/admin/settings/CustomerAppDesigner.module.css").includes("--preview-editorial-media-height: 6.1rem;") &&
-    read("app/admin/settings/CustomerAppDesigner.module.css").includes("grid-template-columns: minmax(0, 1fr) minmax(6.25rem, 38%);") &&
+    read("app/admin/settings/CustomerAppDesigner.module.css").includes("--preview-editorial-media-height: 6.4rem;") &&
+    read("app/admin/settings/CustomerAppDesigner.module.css").includes("width: calc(100% - 1.8rem);") &&
     read("app/admin/settings/CustomerAppDesigner.module.css").includes("transform: translateY(-0.25rem);"),
 );
 invariant(
