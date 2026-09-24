@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "npm run verify:contracts",
+    "test": "npm run verify:contracts && node --test scripts/test-prod-ingress-hotfix.mjs",
     "test:contracts": "node scripts/verify-contracts.mjs",
     "verify:contracts": "node scripts/verify-contracts.mjs",
     "smoke:public": "node scripts/smoke-public.mjs",

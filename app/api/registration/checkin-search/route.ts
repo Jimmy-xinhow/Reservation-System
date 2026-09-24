@@ -8,8 +8,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const member = await requireOperator();
   try {
-    const member = await requireOperator();
     if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) return fail("此品牌未啟用活動與報名", 403);
     const rawQuery = request.nextUrl.searchParams.get("q")?.trim() ?? "";
     const queryText = rawQuery.replace(/[,%()*]/g, "").slice(0, 80);
@@ -44,8 +44,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const member = await requireOperator();
   try {
-    const member = await requireOperator();
     if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) return fail("此品牌未啟用活動與報名", 403);
     const body = (await request.json().catch(() => null)) as { registration_id?: string } | null;
     const registrationId = body?.registration_id?.trim() ?? "";
