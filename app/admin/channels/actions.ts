@@ -55,6 +55,7 @@ export async function runChannelTestsAction(): Promise<void> {
     runs.push({ channel: "line", status: summarize(lineChecks), checks: lineChecks });
 
     const liffChecks: Check[] = [
+      { label: "LINE 模組", status: lineContext.enabled ? "passed" : "warning", detail: lineContext.enabled ? "品牌已啟用 LINE／LIFF" : "品牌已停用 LINE／LIFF；既有設定暫不生效" },
       { label: "LIFF ID", status: lineContext.liffId ? "passed" : "failed", detail: lineContext.liffId ? "已設定（不顯示完整識別碼）" : "尚未設定" },
       { label: "Login Channel", status: lineContext.loginChannelId ? "passed" : "failed", detail: lineContext.loginChannelId ? "已設定" : "尚未設定" },
       { label: "Endpoint", status: lineContext.liffEndpointPath.startsWith("/") ? "passed" : "failed", detail: lineContext.liffEndpointPath },
