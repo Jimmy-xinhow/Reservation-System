@@ -9,7 +9,7 @@ const q=new Proxy({}, {get:(_,key)=>key==='then'?(resolve,reject)=>Promise.resol
 const svc={from:()=>q,storage:{from:()=>({upload:async()=>outcome()})}};
 const member={clinicId:'brand',role:'admin',user:{id:'user'},supabase:svc};const auth=async()=>{if(authError)throw authError;return member;};const factory=()=>{if(mode==='factory'){hit++;throw Error(canary);}return svc;};
 const deps={'next/server':{NextResponse:{json:Response.json}},'node:crypto':crypto,'next/navigation':{redirect:url=>{const error=Error('NEXT_REDIRECT');error.destination=url;throw error;}},'@/lib/admin':{requireMember:auth,requireBrandAdmin:auth,requireOperator:auth,getAssignedDoctorIds:async()=>[],canViewSensitiveCustomerData:()=>true},'@/lib/supabase':{createServiceClient:factory},'@/lib/supabase-server':{createSupabaseServer:async()=>factory()}};
-const category=load('lib/error-category.ts',deps,logs);deps['@/lib/error-category']=category;deps['./error-category']=category;deps['@/lib/admin-query']=load('lib/admin-query.ts',deps,logs);deps['@/lib/http']=load('lib/http.ts',deps,logs);
+const category=load('lib/error-category.ts',deps,logs);deps['@/lib/error-category']=category;deps['./error-category']=category;deps['@/lib/admin-query']=load('lib/admin-query.ts',deps,logs);deps['@/lib/supabase-pagination']=load('lib/supabase-pagination.ts',deps,logs);deps['@/lib/http']=load('lib/http.ts',deps,logs);
 const api=load(process.env.ERROR_EXIT_BEFORE?'tmp/g3-exits-before/'+index+'.txt':file,deps,logs);
 const fd=new FormData();fd.set('token','synthetic-token');fd.set('signer_name','Fixture');fd.set('accepted','yes');
 return {logs,filters,hit:()=>hit,run:()=>{
