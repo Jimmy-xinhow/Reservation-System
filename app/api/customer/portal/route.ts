@@ -1,9 +1,9 @@
+import { applyMembershipRedemptionSnapshot } from "@/lib/membership-redemption";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { fail, getClinicSettings, ok } from "@/lib/http";
+import { fail, getClinicSettings, ok, rateLimitResponse } from "@/lib/http";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { createBrowserBookingToken, verifyBrowserBookingToken } from "@/lib/browser-booking";
-import { checkRateLimit } from "@/lib/rate-limit";
 import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { decryptRegistrationToken } from "@/lib/registration-credentials";
 
@@ -11,8 +11,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  const rate = await checkRateLimit(request, "customer:portal", 20);
-  if (!rate.allowed) return fail("查詢次數過多，請稍後再試", 429);
+  const limited = await rateLimitResponse(request, "customer:portal", 20);
+  if (limited) return limited;
 
   try {
     const body = await request.json().catch(() => null) as { browser_token?: string; idToken?: string; patient_id?: string } | null;
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
         ? service.from("registrations").select("id, registration_no, status, payment_status, amount, created_at, checkin_token_encrypted, events(title), event_sessions(name, start_at, end_at)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }).limit(50)
         : Promise.resolve({ data: [], error: null }),
       settings.memberships_enabled === true
-        ? service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, membership_plans(name, description, usage_scope)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }).limit(30)
+        ? service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, redemption_snapshot, membership_plans(name, description, usage_scope)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }).limit(30)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       },
       appointments: appointments ?? [],
       registrations: safeRegistrations,
-      memberships: memberships ?? [],
+      memberships: (memberships ?? []).map(applyMembershipRedemptionSnapshot),
     });
   } catch (error) {
     return fail(error instanceof Error ? error.message : "顧客資料載入失敗", 500);

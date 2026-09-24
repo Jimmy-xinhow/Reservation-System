@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canViewSensitiveCustomerData, getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { fail } from "@/lib/http";
 
 interface AppointmentRow {
   id: string;
@@ -27,8 +28,8 @@ function one<T>(value: T | T[] | null): T | null { return Array.isArray(value) ?
 function maskPhone(value: string | undefined): string { return value && value.length > 4 ? `${"•".repeat(value.length - 4)}${value.slice(-4)}` : "未提供"; }
 
 export async function GET(request: NextRequest) {
+  const member = await requireMember();
   try {
-    const member = await requireMember();
     const start = new Date(request.nextUrl.searchParams.get("start") ?? "");
     const end = new Date(request.nextUrl.searchParams.get("end") ?? "");
     const doctorId = request.nextUrl.searchParams.get("doctor")?.trim() ?? "";
@@ -75,6 +76,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ events }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "日曆資料載入失敗";
-    return NextResponse.json({ error: message }, { status: message.includes("登入") ? 401 : 500 });
+    return fail(message, 500);
   }
 }

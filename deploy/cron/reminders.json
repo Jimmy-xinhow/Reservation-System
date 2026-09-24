@@ -1,0 +1,11 @@
+{
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "node --check scripts/trigger-reminders.mjs"
+  },
+  "deploy": {
+    "startCommand": "node scripts/trigger-reminders.mjs --jobs=reminders",
+    "cronSchedule": "0 * * * *",
+    "restartPolicyType": "NEVER"
+  }
+}

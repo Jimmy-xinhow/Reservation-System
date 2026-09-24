@@ -1,4 +1,7 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { adminQuery } from "@/lib/admin-query";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { deliveryError } from "@/lib/delivery-error";
 import { createServiceClient } from "@/lib/supabase";
 import { ACTION_OPTIONS, LAYOUTS, richMenuTemplate, richMenuTemplateLabel, slotBounds, type Layout, type RichMenuModuleAvailability, type RichMenuTemplateKey, type Slot } from "@/lib/richmenu";
 import {
@@ -120,16 +123,16 @@ export default async function RichMenuPage({
   if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="Rich Menu" />;
   const service = createServiceClient();
 
-  const [compatibilityResult, versionResult, messageResult, settingsResult, aliasResult, scheduleResult] = await Promise.all([
+  const [compatibilityResult, versions, messages, settingsResult, aliases, schedules] = await adminQuery(Promise.all([
     supabase.from("line_richmenu").select("layout, chat_bar_text, slots, published_id, draft_version_id, published_version_id").eq("clinic_id", clinicId).maybeSingle(),
-    supabase.from("line_richmenu_versions").select("id, version_no, name, template_key, layout, chat_bar_text, slots, status, line_rich_menu_id, validation_errors, published_at, created_at, source_version_id").eq("clinic_id", clinicId).order("version_no", { ascending: false }),
-    supabase.from("line_messages").select("id, name").eq("clinic_id", clinicId).order("created_at"),
+    fetchAllSupabasePages<VersionRow>((from, to) => supabase.from("line_richmenu_versions").select("id, version_no, name, template_key, layout, chat_bar_text, slots, status, line_rich_menu_id, validation_errors, published_at, created_at, source_version_id").eq("clinic_id", clinicId).order("version_no", { ascending: false }).order("id", { ascending: false }).range(from, to)),
+    fetchAllSupabasePages<{ id: string; name: string }>((from, to) => supabase.from("line_messages").select("id, name").eq("clinic_id", clinicId).order("created_at").order("id").range(from, to)),
     supabase.from("clinic_settings").select("public_booking_enabled, events_enabled, public_registration_enabled, memberships_enabled, line_channel_enabled, legacy_progress_enabled").eq("clinic_id", clinicId).maybeSingle(),
-    service.from("line_richmenu_aliases").select("id, alias_id, label, version_id, status, last_error, last_synced_at").eq("clinic_id", clinicId).order("updated_at", { ascending: false }),
-    service.from("line_richmenu_schedules").select("id, version_id, starts_at, ends_at, status, attempt_count, last_error").eq("clinic_id", clinicId).order("starts_at", { ascending: false }).limit(30),
-  ]);
-  const queryError = compatibilityResult.error ?? versionResult.error ?? messageResult.error ?? settingsResult.error ?? aliasResult.error ?? scheduleResult.error;
-  if (queryError) throw new Error(queryError.message);
+    fetchAllSupabasePages<AliasRow>((from, to) => service.from("line_richmenu_aliases").select("id, alias_id, label, version_id, status, last_error, last_synced_at").eq("clinic_id", clinicId).order("updated_at", { ascending: false }).order("id", { ascending: false }).range(from, to)),
+    fetchAllSupabasePages<ScheduleRow>((from, to) => service.from("line_richmenu_schedules").select("id, version_id, starts_at, ends_at, status, attempt_count, last_error").eq("clinic_id", clinicId).order("starts_at", { ascending: false }).order("id", { ascending: false }).range(from, to)),
+  ]));
+  const queryError = compatibilityResult.error ?? settingsResult.error;
+  if (queryError) throw new Error("選單資料載入失敗，請稍後再試");
   const compatibility = compatibilityResult.data;
   const settings = settingsResult.data;
   if (!settings) throw new Error("品牌設定不存在");
@@ -142,10 +145,7 @@ export default async function RichMenuPage({
     line: settings.line_channel_enabled === true,
     legacyProgress: settings.legacy_progress_enabled === true,
   };
-  const versions = (versionResult.data ?? []) as VersionRow[];
-  const aliases = (aliasResult.data ?? []) as AliasRow[];
   const activeAliases = aliases.filter((alias) => alias.status === "ready");
-  const schedules = (scheduleResult.data ?? []) as ScheduleRow[];
   const requestedDraftId = oneParam("draft")?.trim() || (compatibility?.draft_version_id as string | null) || null;
   const draft = versions.find((version) => version.id === requestedDraftId)
     ?? versions.find((version) => version.status === "draft" || version.status === "failed")
@@ -157,7 +157,6 @@ export default async function RichMenuPage({
   const publishedVersionId = (compatibility?.published_version_id as string | null) ?? null;
   const publishedId = (compatibility?.published_id as string | null) ?? null;
   const spec = LAYOUTS[layout] ?? LAYOUTS["full-6"];
-  const messages = (messageResult.data ?? []) as { id: string; name: string }[];
   const lineBackedVersions = versions.filter((version) => Boolean(version.line_rich_menu_id));
 
   let lineReady = false;
@@ -197,18 +196,17 @@ export default async function RichMenuPage({
       insight = await getRichMenuInsightSummary(insightVersion.line_rich_menu_id as string, insightFrom.replaceAll("-", ""), insightTo.replaceAll("-", ""), accessToken);
       const fromIso = new Date(`${insightFrom}T00:00:00+08:00`).toISOString();
       const toExclusive = new Date(new Date(`${insightTo}T00:00:00+08:00`).getTime() + 86400000).toISOString();
-      const { data, error } = await service.from("funnel_events")
+      funnelRows = await fetchAllSupabasePages<FunnelRow>((from, to) => service.from("funnel_events")
         .select("event_name, metadata")
         .eq("clinic_id", clinicId)
         .eq("source", "richmenu")
         .eq("metadata->>rm_version", insightVersion.id)
         .gte("created_at", fromIso)
-        .lt("created_at", toExclusive);
-      if (error) throw new Error(error.message);
-      funnelRows = (data ?? []) as FunnelRow[];
+        .lt("created_at", toExclusive)
+        .order("created_at").order("id").range(from, to));
     } catch (caught) {
       const errorId = crypto.randomUUID().slice(0, 8).toUpperCase();
-      console.error(`[richmenu-insight:${errorId}]`, caught instanceof Error ? caught.message.slice(0, 500) : caught);
+      console.error(`[richmenu-insight:${errorId}]`, { category: deliveryError(caught) });
       insightError = `目前無法讀取成效資料，請稍後再試。錯誤識別碼：${errorId}`;
     }
   }
@@ -291,7 +289,7 @@ export default async function RichMenuPage({
                     </div>
                     <span className="badge bg-slate-100 text-slate-600">{STATUS_LABEL[version.status]}</span>
                   </div>
-                  {version.validation_errors?.length > 0 && <p className="mt-2 text-xs text-red-600">{version.validation_errors.join("；")}</p>}
+                  {version.validation_errors?.length > 0 && <p className="mt-2 text-xs text-red-600">{"選單驗證或發布失敗，請重新檢查設定與連線後再試。"}</p>}
                   <div className="mt-3 flex flex-wrap gap-2">
                     <a href={`/admin/richmenu?draft=${encodeURIComponent(version.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">檢視／另存</a>
                     {draft && version.id !== draft.id && <a href={`/admin/richmenu?draft=${encodeURIComponent(draft.id)}&compare=${encodeURIComponent(version.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">與草稿比較</a>}
@@ -337,7 +335,7 @@ export default async function RichMenuPage({
                 <div>
                   <p className="text-sm font-medium text-slate-800">{alias.label} <span className="font-mono text-xs text-slate-600">{alias.alias_id}</span></p>
                   <p className="mt-1 text-xs text-slate-600">{alias.status === "ready" ? `對應 v${versions.find((version) => version.id === alias.version_id)?.version_no ?? "?"}` : alias.status === "removed" ? "已移除" : "尚未就緒"}</p>
-                  {alias.last_error && <TechnicalDetails summary="查看同步失敗原因" items={[{ label: "失敗原因", value: alias.last_error }]} />}
+                  {alias.last_error && <TechnicalDetails summary="查看同步失敗原因" items={[{ label: "失敗原因", value: deliveryError(alias.last_error) }]} />}
                 </div>
                 {alias.status !== "removed" && <form action={removeRichMenuAliasAction}><input type="hidden" name="alias_id" value={alias.alias_id} /><ConfirmSubmitButton confirmMessage={`確定要移除「${alias.label}」頁籤捷徑嗎？`} className="btn btn-secondary px-3 py-1.5 text-xs">移除頁籤捷徑</ConfirmSubmitButton></form>}
               </div>
@@ -360,7 +358,7 @@ export default async function RichMenuPage({
                   <div>
                     <p className="text-sm font-medium text-slate-800">v{versions.find((version) => version.id === schedule.version_id)?.version_no ?? "?"} · {SCHEDULE_STATUS[schedule.status]}</p>
                     <p className="mt-1 text-xs text-slate-500">{formatTaipei(schedule.starts_at)} ～ {formatTaipei(schedule.ends_at)} · 已嘗試 {schedule.attempt_count} 次</p>
-                    {schedule.last_error && <TechnicalDetails summary="查看排程失敗原因" items={[{ label: "失敗原因", value: schedule.last_error }]} />}
+                    {schedule.last_error && <TechnicalDetails summary="查看排程失敗原因" items={[{ label: "失敗原因", value: deliveryError(schedule.last_error) }]} />}
                   </div>
                   {schedule.status === "scheduled" && <form action={cancelRichMenuScheduleAction}><input type="hidden" name="schedule_id" value={schedule.id} /><ConfirmSubmitButton confirmMessage="確定要取消這段尚未開始的顯示排程嗎？" className="btn btn-secondary px-3 py-1.5 text-xs">取消此顯示排程</ConfirmSubmitButton></form>}
                 </div>

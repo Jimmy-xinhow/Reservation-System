@@ -1,5 +1,8 @@
+
+import { adminErrorMessage } from "@/lib/admin-query";
 import { hasSystemPermission, requireSystemPermission } from "@/lib/platform";
 import { createServiceClient } from "@/lib/supabase";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { TrialObservationPanel } from "./TrialObservationPanel";
 
 export const dynamic = "force-dynamic";
@@ -7,23 +10,37 @@ export const dynamic = "force-dynamic";
 interface BrandRow { id: string; name: string; slug: string | null; active: boolean; created_at: string; }
 interface PlatformReportRow extends BrandRow { members: number; services: number; appointments: number; registrations: number; patients: number; }
 
+function reportCount(value: unknown): number {
+  const count = typeof value === "number" ? value : typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isSafeInteger(count) || count < 0) throw new Error(adminErrorMessage("跨品牌報表資料不完整"));
+  return count;
+}
+
 export default async function PlatformReportsPage() {
   const platform = await requireSystemPermission("reports.view");
   const service = createServiceClient();
-  const { data, error } = await service.rpc("get_platform_usage_summary");
-  if (error) throw new Error(`讀取品牌使用量失敗：${error.message}`);
-  const reportRows: PlatformReportRow[] = ((data ?? []) as Array<PlatformReportRow & Record<string, unknown>>).map((row) => ({
-    id: row.id,
-    name: row.name,
-    slug: row.slug,
-    active: row.active,
-    created_at: row.created_at,
-    members: Number(row.members),
-    services: Number(row.services),
-    appointments: Number(row.appointments),
-    registrations: Number(row.registrations),
-    patients: Number(row.patients),
-  }));
+  const rawRows = await fetchAllSupabasePages((from, to) => service.rpc("get_platform_usage_summary")
+    .order("created_at", { ascending: false }).order("id").range(from, to));
+  const reportRows: PlatformReportRow[] = rawRows.map((raw) => {
+    const row = raw as Record<string, unknown>;
+    if (!row || typeof row.id !== "string" || typeof row.name !== "string" ||
+        (row.slug !== null && typeof row.slug !== "string") || typeof row.active !== "boolean" ||
+        typeof row.created_at !== "string") {
+      throw new Error(adminErrorMessage("跨品牌報表資料不完整"));
+    }
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      active: row.active,
+      created_at: row.created_at,
+      members: reportCount(row.members),
+      services: reportCount(row.services),
+      appointments: reportCount(row.appointments),
+      registrations: reportCount(row.registrations),
+      patients: reportCount(row.patients),
+    };
+  });
   const brandRows: BrandRow[] = reportRows.map(({ id, name, slug, active, created_at }) => ({ id, name, slug, active, created_at }));
   const totals = reportRows.reduce((sum, row) => ({ members: sum.members + row.members, services: sum.services + row.services, appointments: sum.appointments + row.appointments, registrations: sum.registrations + row.registrations, patients: sum.patients + row.patients }), { members: 0, services: 0, appointments: 0, registrations: 0, patients: 0 });
   const activeCount = reportRows.filter((row) => row.active).length;

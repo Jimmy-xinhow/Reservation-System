@@ -1,4 +1,5 @@
 import "server-only";
+import { providerFetch, providerOperation, providerJson } from "@/lib/provider-boundary";
 
 import crypto from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -50,10 +51,10 @@ export async function lineCredentialsForDestination(
   service: SupabaseClient = createServiceClient(),
 ): Promise<LineCredentials> {
   if (destination) {
-    const { data, error } = await service.rpc("get_clinic_line_secrets_by_destination", {
+    const { data, error } = await providerOperation(() => service.rpc("get_clinic_line_secrets_by_destination", {
       p_destination: destination,
-    });
-    if (error) throw new Error(`LINE 憑證讀取失敗: ${error.message}`);
+    }), "品牌憑證讀取失敗");
+    if (error) throw new Error(`LINE 憑證讀取失敗`);
     const row = (Array.isArray(data) ? data[0] : null) as
       | { access_token?: unknown; channel_secret?: unknown }
       | null;
@@ -98,12 +99,12 @@ export async function getLineCredentialStatus(
   clinicId: string,
   destination?: string,
 ): Promise<LineCredentialStatus> {
-  const { data, error } = await service
+  const { data, error } = await providerOperation(() => service
     .from("clinic_line_secret_refs")
     .select("access_token_secret_id, channel_secret_secret_id")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(`LINE 設定狀態讀取失敗: ${error.message}`);
+    .maybeSingle(), "品牌設定狀態讀取失敗");
+  if (error) throw new Error(`LINE 設定狀態讀取失敗`);
   if (data?.access_token_secret_id && data?.channel_secret_secret_id) {
     return { configured: true, source: "vault" };
   }
@@ -136,22 +137,20 @@ export async function verifyLiffIdToken(idToken: string, clientIdOverride?: stri
   if (!clientId) throw new Error("缺少 LINE_LOGIN_CHANNEL_ID");
   if (!idToken) throw new Error("缺少 id_token");
 
-  const res = await fetch(LINE_VERIFY, {
+  const res = await providerFetch(LINE_VERIFY, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ id_token: idToken, client_id: clientId }),
   });
   if (!res.ok) {
-    // 帶出 LINE 的實際錯誤(如 aud 不符、id token 過期)以利診斷
-    const detail = await res.text().catch(() => "");
-    throw new Error(`LINE ID token 驗證失敗 (${res.status}): ${detail}`);
+    throw new Error(`LINE ID token 驗證失敗 (${res.status})`);
   }
-  const data = (await res.json()) as {
+  const data = (await providerJson(res)) as {
     sub?: string;
     name?: string;
     picture?: string;
   };
-  if (!data.sub) throw new Error("LINE ID token 無 sub");
+  if (!data || typeof data.sub !== "string" || !data.sub) throw new Error("LINE ID token 無 sub");
   return { sub: data.sub, name: data.name, picture: data.picture };
 }
 
@@ -179,11 +178,11 @@ export interface LineBotInfo {
 
 /** 取得官方帳號資訊(可用來驗證 access token 是否有效)。 */
 export async function getBotInfo(accessTokenOverride?: string): Promise<LineBotInfo> {
-  const res = await fetch(`${LINE_API}/info`, {
+  const res = await providerFetch(`${LINE_API}/info`, {
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) throw new Error(`LINE 連線失敗 (${res.status})`);
-  return (await res.json()) as LineBotInfo;
+  return (await providerJson(res)) as LineBotInfo;
 }
 
 export interface LineWebhookEndpointInfo {
@@ -193,12 +192,12 @@ export interface LineWebhookEndpointInfo {
 
 /** 讀取 Messaging API channel 目前的 webhook URL 與啟用狀態。 */
 export async function getWebhookEndpointInfo(accessTokenOverride?: string): Promise<LineWebhookEndpointInfo> {
-  const res = await fetch(`${LINE_API}/channel/webhook/endpoint`, {
+  const res = await providerFetch(`${LINE_API}/channel/webhook/endpoint`, {
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) throw new Error(`LINE Webhook 設定取得失敗 (${res.status})`);
-  const data = (await res.json()) as Partial<LineWebhookEndpointInfo>;
-  if (typeof data.endpoint !== "string" || typeof data.active !== "boolean") {
+  const data = (await providerJson(res)) as Partial<LineWebhookEndpointInfo>;
+  if (!data || typeof data.endpoint !== "string" || typeof data.active !== "boolean") {
     throw new Error("LINE Webhook 回應格式不正確");
   }
   return { endpoint: data.endpoint, active: data.active };
@@ -206,11 +205,11 @@ export async function getWebhookEndpointInfo(accessTokenOverride?: string): Prom
 
 /** 取得推播額度。 */
 export async function getQuota(accessTokenOverride?: string): Promise<{ type: string; value?: number }> {
-  const res = await fetch(`${LINE_API}/message/quota`, {
+  const res = await providerFetch(`${LINE_API}/message/quota`, {
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) throw new Error(`LINE 額度查詢失敗 (${res.status})`);
-  return (await res.json()) as { type: string; value?: number };
+  return (await providerJson(res)) as { type: string; value?: number };
 }
 
 // ── Rich Menu(圖文選單)──────────────────────────────────
@@ -229,13 +228,14 @@ export async function createRichMenu(body: {
   chatBarText: string;
   areas: RichMenuArea[];
 }, accessTokenOverride?: string): Promise<string> {
-  const res = await fetch(`${LINE_API}/richmenu`, {
+  const res = await providerFetch(`${LINE_API}/richmenu`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`建立圖文選單失敗 (${res.status}): ${await res.text().catch(() => "")}`);
-  const data = (await res.json()) as { richMenuId: string };
+  if (!res.ok) throw new Error(`建立圖文選單失敗 (${res.status})`);
+  const data = (await providerJson(res)) as { richMenuId: string };
+  if (!data || typeof data.richMenuId !== "string" || !data.richMenuId) throw new Error("LINE 未回傳圖文選單 ID");
   return data.richMenuId;
 }
 
@@ -246,12 +246,12 @@ export async function uploadRichMenuImage(
   contentType: string,
   accessTokenOverride?: string,
 ): Promise<void> {
-  const res = await fetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
+  const res = await providerFetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
     method: "POST",
     headers: { "Content-Type": contentType, Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     body: bytes,
   });
-  if (!res.ok) throw new Error(`上傳圖片失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok) throw new Error(`上傳圖片失敗 (${res.status})`);
 }
 
 /** 取得已上傳的 rich menu 圖片內容(供後台預覽)。 */
@@ -259,39 +259,39 @@ export async function getRichMenuImage(
   richMenuId: string,
   accessTokenOverride?: string,
 ): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
-  const res = await fetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
+  const res = await providerFetch(`${LINE_DATA_API}/richmenu/${richMenuId}/content`, {
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) return null;
   const contentType = res.headers.get("content-type") || "image/jpeg";
-  return { bytes: await res.arrayBuffer(), contentType };
+  return { bytes: await providerOperation(() => res.arrayBuffer(), "LINE 圖片讀取失敗"), contentType };
 }
 
 /** 設為所有使用者的預設 rich menu。 */
 export async function setDefaultRichMenu(richMenuId: string, accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/user/all/richmenu/${richMenuId}`, {
+  const res = await providerFetch(`${LINE_API}/user/all/richmenu/${richMenuId}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
-  if (!res.ok) throw new Error(`設定預設選單失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok) throw new Error(`設定預設選單失敗 (${res.status})`);
 }
 
 /** 刪除 rich menu。 */
 export async function deleteRichMenu(richMenuId: string, accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/richmenu/${richMenuId}`, {
+  const res = await providerFetch(`${LINE_API}/richmenu/${richMenuId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
-  if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu 失敗 (${res.status})`);
 }
 
 /** 取消所有使用者的預設 rich menu。 */
 export async function clearDefaultRichMenu(accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/user/all/richmenu`, {
+  const res = await providerFetch(`${LINE_API}/user/all/richmenu`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
-  if (!res.ok && res.status !== 404) throw new Error(`取消預設 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok && res.status !== 404) throw new Error(`取消預設 Rich Menu 失敗 (${res.status})`);
 }
 
 export interface RichMenuAliasInfo {
@@ -300,39 +300,52 @@ export interface RichMenuAliasInfo {
 }
 
 export async function getRichMenuAlias(aliasId: string, accessTokenOverride?: string): Promise<RichMenuAliasInfo | null> {
-  const res = await fetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
+  const res = await providerFetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     cache: "no-store",
   });
   if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`讀取 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
-  return (await res.json()) as RichMenuAliasInfo;
+  if (!res.ok) throw new Error(`讀取 Rich Menu Alias 失敗 (${res.status})`);
+  return (await providerJson(res)) as RichMenuAliasInfo;
 }
 
 export async function createRichMenuAlias(aliasId: string, richMenuId: string, accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/richmenu/alias`, {
+  const res = await providerFetch(`${LINE_API}/richmenu/alias`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     body: JSON.stringify({ richMenuAliasId: aliasId, richMenuId }),
   });
-  if (!res.ok) throw new Error(`建立 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok) throw new Error(`建立 Rich Menu Alias 失敗 (${res.status})`);
 }
 
 export async function updateRichMenuAlias(aliasId: string, richMenuId: string, accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
+  const res = await providerFetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     body: JSON.stringify({ richMenuId }),
   });
-  if (!res.ok) throw new Error(`更新 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok) throw new Error(`更新 Rich Menu Alias 失敗 (${res.status})`);
 }
 
 export async function deleteRichMenuAlias(aliasId: string, accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
+  const res = await providerFetch(`${LINE_API}/richmenu/alias/${encodeURIComponent(aliasId)}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
-  if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu Alias 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok && res.status !== 404) throw new Error(`刪除 Rich Menu Alias 失敗 (${res.status})`);
+}
+
+/** 取得 LINE 官方帳號本月已使用訊息數；LINE 表示此數值為近似值。 */
+export async function getQuotaConsumption(accessTokenOverride?: string): Promise<number> {
+  const res = await providerFetch(`${LINE_API}/message/quota/consumption`, {
+    headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
+  });
+  if (!res.ok) throw new Error(`LINE 已用訊息查詢失敗 (${res.status})`);
+  const data = (await providerJson(res)) as { totalUsage?: unknown };
+  if (!Number.isSafeInteger(data?.totalUsage) || Number(data.totalUsage) < 0) {
+    throw new Error("LINE 已用訊息回應格式不正確");
+  }
+  return Number(data.totalUsage);
 }
 
 export interface LineUserProfile {
@@ -345,12 +358,12 @@ export interface LineUserProfile {
 
 /** 以品牌 Messaging API token 取得已加好友使用者的 LINE 公開個人資料。 */
 export async function getLineUserProfile(userId: string, accessTokenOverride?: string): Promise<LineUserProfile> {
-  const res = await fetch(`${LINE_API}/profile/${encodeURIComponent(userId)}`, {
+  const res = await providerFetch(`${LINE_API}/profile/${encodeURIComponent(userId)}`, {
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok) throw new Error(`LINE 使用者資料讀取失敗 (${res.status})`);
-  const data = (await res.json()) as Partial<LineUserProfile>;
-  if (typeof data.userId !== "string" || typeof data.displayName !== "string") {
+  const data = (await providerJson(res)) as Partial<LineUserProfile>;
+  if (!data || typeof data.userId !== "string" || typeof data.displayName !== "string") {
     throw new Error("LINE 使用者資料格式不正確");
   }
   return data as LineUserProfile;
@@ -362,33 +375,33 @@ export async function linkRichMenuToUser(
   richMenuId: string,
   accessTokenOverride?: string,
 ): Promise<void> {
-  const res = await fetch(`${LINE_API}/user/${encodeURIComponent(userId)}/richmenu/${encodeURIComponent(richMenuId)}`, {
+  const res = await providerFetch(`${LINE_API}/user/${encodeURIComponent(userId)}/richmenu/${encodeURIComponent(richMenuId)}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
-  if (!res.ok) throw new Error(`套用個人 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok) throw new Error(`套用個人 Rich Menu 失敗 (${res.status})`);
 }
 
 /** 移除使用者個人 Rich Menu，讓 LINE 自動回到品牌預設選單。 */
 export async function unlinkRichMenuFromUser(userId: string, accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/user/${encodeURIComponent(userId)}/richmenu`, {
+  const res = await providerFetch(`${LINE_API}/user/${encodeURIComponent(userId)}/richmenu`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
   if (!res.ok && res.status !== 404) {
-    throw new Error(`移除個人 Rich Menu 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
+    throw new Error(`移除個人 Rich Menu 失敗 (${res.status})`);
   }
 }
 
 /** 取得官方 Account Linking 一次性 link token（LINE 有效期 10 分鐘）。 */
 export async function issueLineAccountLinkToken(userId: string, accessTokenOverride?: string): Promise<string> {
-  const res = await fetch(`${LINE_API}/user/${encodeURIComponent(userId)}/linkToken`, {
+  const res = await providerFetch(`${LINE_API}/user/${encodeURIComponent(userId)}/linkToken`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
   });
-  if (!res.ok) throw new Error(`取得 LINE 綁定憑證失敗 (${res.status}): ${await res.text().catch(() => "")}`);
-  const data = (await res.json()) as { linkToken?: unknown };
-  if (typeof data.linkToken !== "string" || !data.linkToken) throw new Error("LINE 未回傳綁定憑證");
+  if (!res.ok) throw new Error(`取得 LINE 綁定憑證失敗 (${res.status})`);
+  const data = (await providerJson(res)) as { linkToken?: unknown };
+  if (!data || typeof data.linkToken !== "string" || !data.linkToken) throw new Error("LINE 未回傳綁定憑證");
   return data.linkToken;
 }
 
@@ -411,17 +424,17 @@ export async function getRichMenuInsightSummary(
 ): Promise<RichMenuInsightSummary> {
   if (!/^\d{8}$/.test(from) || !/^\d{8}$/.test(to) || from > to) throw new Error("Rich Menu Insights 日期格式錯誤");
   const query = new URLSearchParams({ from, to });
-  const res = await fetch(`${LINE_API}/insight/richmenu/${encodeURIComponent(richMenuId)}/summary?${query.toString()}`, {
+  const res = await providerFetch(`${LINE_API}/insight/richmenu/${encodeURIComponent(richMenuId)}/summary?${query.toString()}`, {
     headers: { Authorization: `Bearer ${accessToken(accessTokenOverride)}` },
     cache: "no-store",
   });
-  if (!res.ok) throw new Error(`讀取 Rich Menu Insights 失敗 (${res.status}): ${await res.text().catch(() => "")}`);
-  return (await res.json()) as RichMenuInsightSummary;
+  if (!res.ok) throw new Error(`讀取 Rich Menu Insights 失敗 (${res.status})`);
+  return (await providerJson(res)) as RichMenuInsightSummary;
 }
 
 /** 主動推播一則或多則訊息給某 line_user_id。 */
 export async function pushMessages(to: string, messages: LineMessage[], accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/message/push`, {
+  const res = await providerFetch(`${LINE_API}/message/push`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -430,14 +443,13 @@ export async function pushMessages(to: string, messages: LineMessage[], accessTo
     body: JSON.stringify({ to, messages }),
   });
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`LINE push 失敗 (${res.status}): ${detail}`);
+    throw new Error(`LINE push 失敗 (${res.status})`);
   }
 }
 
 /** 以 replyToken 回覆訊息(webhook 用)。 */
 export async function replyMessages(replyToken: string, messages: LineMessage[], accessTokenOverride?: string): Promise<void> {
-  const res = await fetch(`${LINE_API}/message/reply`, {
+  const res = await providerFetch(`${LINE_API}/message/reply`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -446,7 +458,6 @@ export async function replyMessages(replyToken: string, messages: LineMessage[],
     body: JSON.stringify({ replyToken, messages }),
   });
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`LINE reply 失敗 (${res.status}): ${detail}`);
+    throw new Error(`LINE reply 失敗 (${res.status})`);
   }
 }

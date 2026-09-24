@@ -6,6 +6,7 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME ?? process.env.NODE_ENV ?? "";
 if (!supabaseUrl || !serviceKey) throw new Error("Missing Supabase staging environment variables");
 if (environmentName.toLowerCase() !== "staging") throw new Error(`Refusing to run outside staging: ${environmentName || "unknown"}`);
+if (new URL(supabaseUrl).hostname !== "ongjsegewpnbkqugrpom.supabase.co") throw new Error("Refusing to run against an unpinned Supabase project");
 
 const service = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -67,9 +68,11 @@ async function cleanupClinic(targetClinicId) {
   await remove("membership plans", service.from("membership_plans").delete().eq("clinic_id", targetClinicId));
   await remove("patients", service.from("patients").delete().eq("clinic_id", targetClinicId));
   await remove("members", service.from("clinic_members").delete().eq("clinic_id", targetClinicId));
+  await remove("attendance settings", service.from("attendance_settings").delete().eq("clinic_id", targetClinicId));
   await remove("LINE channels", service.from("clinic_line_channels").delete().eq("clinic_id", targetClinicId));
   await remove("entitlements", service.from("brand_entitlements").delete().eq("clinic_id", targetClinicId));
   await remove("settings", service.from("clinic_settings").delete().eq("clinic_id", targetClinicId));
+  await remove("activation metrics", service.from("clinic_activation_metrics").delete().eq("clinic_id", targetClinicId));
   await remove("clinic", service.from("clinics").delete().eq("id", targetClinicId));
   if (errors.length) throw new Error(errors.join("; "));
 }
@@ -111,10 +114,6 @@ function registrationParams({ eventId, sessionId, ticketId, patient, name, answe
 }
 
 try {
-  const staleClinics = await must("find stale QA clinics", service.from("clinics").select("id").like("slug", "qa-commerce-%"));
-  for (const staleClinic of staleClinics ?? []) await cleanupClinic(staleClinic.id);
-  if ((staleClinics ?? []).length) pass(`Removed ${staleClinics.length} stale commerce QA clinic(s)`);
-
   const createdUser = await service.auth.admin.createUser({ email: qaEmail, password: qaPassword, email_confirm: true });
   if (createdUser.error || !createdUser.data.user) throw new Error(`create admin auth: ${createdUser.error?.message ?? "missing user"}`);
   adminUserId = createdUser.data.user.id;
@@ -353,8 +352,8 @@ try {
   await must("force registration payment expiry", service.from("registrations").update({
     expires_at: new Date(Date.now() - 60_000).toISOString(),
   }).eq("id", couponRegistration.registration_id));
-  const expiredRegistrationCount = await must("expire pending registration payments", service.rpc("expire_registration_payments"));
-  const releasedBenefitCount = await must("release expired registration benefits", service.rpc("release_expired_registration_benefits"));
+  const expiredRegistrationCount = await must("expire pending registration payments", service.rpc("expire_registration_payments_for_clinic", { p_clinic_id: clinicId }));
+  const releasedBenefitCount = await must("release expired registration benefits", service.rpc("release_registration_benefits", { p_clinic_id: clinicId, p_registration_id: couponRegistration.registration_id }));
   const expiredRegistration = await must("read expired registration", service.from("registrations")
     .select("status,payment_status,expires_at").eq("id", couponRegistration.registration_id).single());
   const expiredRegistrationOrder = await must("read expired registration order", service.from("payment_orders")

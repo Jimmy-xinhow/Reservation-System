@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Brand } from "@/components/Brand";
+import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
+import { registrationStoredToken, registrationRecordWithToken } from "@/lib/registration-storage";
 
 interface PaymentFormResponse {
   form: { action: string; fields: Record<string, string> };
@@ -11,7 +13,7 @@ interface PaymentFormResponse {
 async function readApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const body = (await response.json().catch(() => null)) as { ok?: boolean; data?: T; error?: string } | null;
-  if (!body?.ok) throw new Error(body?.error ?? "伺服器回應異常");
+  if (!response.ok || !body?.ok) throw new Error(body?.error ?? "伺服器回應異常");
   return body.data as T;
 }
 
@@ -27,6 +29,7 @@ export default function RegistrationPaymentPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [ready, setReady] = useState(false);
+  const paymentLock = useRef(false);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -43,38 +46,29 @@ export default function RegistrationPaymentPage() {
       setReady(true);
       return;
     }
-    try {
-      const saved = window.localStorage.getItem(`registration:${id}`);
-      if (saved) {
-        const parsed = JSON.parse(saved) as { checkin_token?: unknown };
-        if (typeof parsed.checkin_token === "string") setToken(parsed.checkin_token);
-      }
-      const scopeKey = clinicSlug || clinicId || "default";
-      setBrowserToken(window.localStorage.getItem(`customer_browser_token:${scopeKey}`) || window.localStorage.getItem(`booking_browser_token:${scopeKey}`) || "");
-    } catch {
-      // 私密瀏覽或瀏覽器禁用儲存時，改由使用者貼上憑證。
-    }
+    setToken(registrationStoredToken(safeLocalStorageGet(`registration:${id}`)));
+    const scopeKey = clinicSlug || clinicId || "default";
+    setBrowserToken(safeLocalStorageGet(`customer_browser_token:${scopeKey}`, `booking_browser_token:${scopeKey}`) ?? "");
     setReady(true);
   }, []);
 
   async function pay() {
+    if (paymentLock.current) return;
     if (!validRegistrationId(registrationId) || (!token.trim() && !browserToken.trim())) {
       setError("找不到此筆報名的付款身分，請重新從報名完成頁或我的紀錄操作。");
       return;
     }
+    paymentLock.current = true;
     setSubmitting(true);
     setError(null);
     try {
-      try {
-        window.localStorage.setItem(`registration:${registrationId}`, JSON.stringify({ checkin_token: token.trim() }));
-      } catch {
-        // 不影響付款請求。
-      }
       const data = await readApi<PaymentFormResponse>(`/api/payment/create${clinicScope}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ registration_id: registrationId, checkin_token: token.trim() || undefined, browser_token: browserToken.trim() || undefined, return_path: `/register/pay?registration_id=${encodeURIComponent(registrationId)}${clinicScope.replace("?", "&")}` }),
       });
+      const stored = registrationRecordWithToken(safeLocalStorageGet(`registration:${registrationId}`), token);
+      if (stored) safeLocalStorageSet([[`registration:${registrationId}`, stored]]);
       const form = document.createElement("form");
       form.method = "POST";
       form.action = data.form.action;
@@ -89,6 +83,7 @@ export default function RegistrationPaymentPage() {
       document.body.appendChild(form);
       form.submit();
     } catch (caught) {
+      paymentLock.current = false;
       setError(caught instanceof Error ? caught.message : "付款頁開啟失敗");
       setSubmitting(false);
     }
@@ -104,6 +99,7 @@ export default function RegistrationPaymentPage() {
           <label className="block text-sm"><span className="label">報到憑證</span><input className="input font-mono" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="off" placeholder="請貼上報名完成頁的憑證" /></label>
           {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
           <div className="flex flex-col gap-2 sm:flex-row"><button type="button" onClick={() => void pay()} disabled={submitting || !validRegistrationId(registrationId) || (!token.trim() && !browserToken.trim())} className="btn btn-primary flex-1">{submitting ? "正在前往付款…" : "前往付款"}</button><Link href={backHref} className="btn btn-secondary flex-1">返回活動列表</Link></div>
+          <Link href={`/my${clinicScope}`} className="btn btn-secondary w-full">查看我的紀錄與付款狀態</Link>
         </>}
       </section>
     </main>

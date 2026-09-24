@@ -1,5 +1,8 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import Link from "next/link";
-import { requireNonProvider } from "@/lib/admin";
+import { canViewSensitiveCustomerData, requireNonProvider } from "@/lib/admin";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { SubmitButton } from "@/components/SubmitButton";
 import { freezeSubscriptionAction } from "./actions";
@@ -12,25 +15,34 @@ const FREEZE_STATUS: Record<string, string> = { scheduled: "已排定", active: 
 
 export default async function FitnessOperationsPage() {
   const member = await requireNonProvider();
+  if (!canViewSensitiveCustomerData(member.role)) return <p className="admin-section p-5 text-sm text-slate-500">目前角色不能查看顧客會籍。</p>;
   const supabase = await createSupabaseServer();
   const now = new Date();
   const horizon = new Date(now.getTime() + 30 * 86_400_000);
-  const [sessionsResult, registrationsResult, subscriptionsResult, freezesResult] = await Promise.all([
-    supabase.from("event_sessions").select("id,name,start_at,end_at,venue,capacity,events(title)").eq("clinic_id", member.clinicId).eq("active", true).gte("start_at", now.toISOString()).lte("start_at", horizon.toISOString()).order("start_at").limit(100),
-    supabase.from("registrations").select("id,session_id,status").eq("clinic_id", member.clinicId).in("status", ["pending", "confirmed", "attended", "waitlisted"]),
-    supabase.from("patient_subscriptions").select("id,status,current_period_end,next_billing_at,patients(name,phone),subscription_plans(name,billing_interval)").eq("clinic_id", member.clinicId).in("status", ["active", "paused", "past_due"]).order("created_at", { ascending: false }).limit(300),
-    supabase.from("subscription_freezes").select("id,starts_on,ends_on,freeze_days,status,reason,patients(name),patient_subscriptions(subscription_plans(name))").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).limit(100),
+  const [sessions, subscriptions, freezesResult] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("event_sessions").select("id,name,start_at,end_at,venue,capacity,events(title)").eq("clinic_id", member.clinicId).eq("active", true).gte("start_at", now.toISOString()).lte("start_at", horizon.toISOString()).order("start_at").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("patient_subscriptions").select("id,status,current_period_end,next_billing_at,patients(name,phone),subscription_plans(name,billing_interval)").eq("clinic_id", member.clinicId).in("status", ["active", "paused", "past_due"]).order("created_at", { ascending: false }).order("id").range(from, to)),
+    adminQuery(
+    supabase.from("subscription_freezes").select("id,starts_on,ends_on,freeze_days,status,reason,patients(name),patient_subscriptions(subscription_plans(name))").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).order("id").limit(100),
+    ),
   ]);
-  const error = sessionsResult.error ?? registrationsResult.error ?? subscriptionsResult.error ?? freezesResult.error;
-  if (error) throw new Error(error.message);
-  const registrations = registrationsResult.data ?? [];
-  const sessionRows = (sessionsResult.data ?? []).map((session) => {
-    const related = registrations.filter((registration) => registration.session_id === session.id);
-    const occupied = related.filter((registration) => ["pending", "confirmed", "attended"].includes(registration.status)).length;
-    const waitlisted = related.filter((registration) => registration.status === "waitlisted").length;
+  if (freezesResult.error) throw new Error(adminErrorMessage(freezesResult.error));
+  const registrations = [] as { session_id: string; status: string }[];
+  for (let index = 0; index < sessions.length; index += 100) {
+    const sessionIds = sessions.slice(index, index + 100).map((session) => session.id);
+    registrations.push(...await fetchAllSupabasePages((from, to) => supabase.from("registrations").select("session_id,status").eq("clinic_id", member.clinicId).in("session_id", sessionIds).in("status", ["pending", "confirmed", "attended", "waitlisted"]).order("id").range(from, to)));
+  }
+  const registrationCounts = new Map<string, { occupied: number; waitlisted: number }>();
+  for (const registration of registrations) {
+    const counts = registrationCounts.get(registration.session_id) ?? { occupied: 0, waitlisted: 0 };
+    if (registration.status === "waitlisted") counts.waitlisted += 1;
+    else counts.occupied += 1;
+    registrationCounts.set(registration.session_id, counts);
+  }
+  const sessionRows = sessions.map((session) => {
+    const { occupied, waitlisted } = registrationCounts.get(session.id) ?? { occupied: 0, waitlisted: 0 };
     return { ...session, occupied, waitlisted, remaining: Math.max(0, session.capacity - occupied) };
   });
-  const subscriptions = subscriptionsResult.data ?? [];
   const attendanceTotal = sessionRows.reduce((sum, session) => sum + session.occupied, 0);
   const capacityTotal = sessionRows.reduce((sum, session) => sum + session.capacity, 0);
 

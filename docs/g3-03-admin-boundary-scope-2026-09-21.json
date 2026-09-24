@@ -1,0 +1,145 @@
+{
+  "excluded": [
+    {
+      "path": "app/admin/crm/actions.ts",
+      "reason": "Three raw throws already caught, categorized and safely translated; unchanged."
+    }
+  ],
+  "changes": [
+    {
+      "path": "app/admin/actions.ts",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 2
+    },
+    {
+      "path": "app/admin/beauty/actions.ts",
+      "rawErrorExpressionsSanitized": 6,
+      "rejectedQueriesProtected": 9
+    },
+    {
+      "path": "app/admin/beauty/supply/actions.ts",
+      "rawErrorExpressionsSanitized": 7,
+      "rejectedQueriesProtected": 9
+    },
+    {
+      "path": "app/admin/beauty/supply/page.tsx",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/calendar/page.tsx",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/checkout/actions.ts",
+      "rawErrorExpressionsSanitized": 9,
+      "rejectedQueriesProtected": 8
+    },
+    {
+      "path": "app/admin/checkout/new/SalesOrderEditor.tsx",
+      "rawErrorExpressionsSanitized": 3,
+      "rejectedQueriesProtected": 3
+    },
+    {
+      "path": "app/admin/course-content/actions.ts",
+      "rawErrorExpressionsSanitized": 9,
+      "rejectedQueriesProtected": 12
+    },
+    {
+      "path": "app/admin/course-content/page.tsx",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/customer-value/actions.ts",
+      "rawErrorExpressionsSanitized": 6,
+      "rejectedQueriesProtected": 6
+    },
+    {
+      "path": "app/admin/customer-value/page.tsx",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/documents/actions.ts",
+      "rawErrorExpressionsSanitized": 3,
+      "rejectedQueriesProtected": 4
+    },
+    {
+      "path": "app/admin/documents/page.tsx",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/events/actions.ts",
+      "rawErrorExpressionsSanitized": 9,
+      "rejectedQueriesProtected": 17
+    },
+    {
+      "path": "app/admin/fitness/actions.ts",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/fitness/page.tsx",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/memberships/actions.ts",
+      "rawErrorExpressionsSanitized": 10,
+      "rejectedQueriesProtected": 14
+    },
+    {
+      "path": "app/admin/memberships/page.tsx",
+      "rawErrorExpressionsSanitized": 1,
+      "rejectedQueriesProtected": 1
+    },
+    {
+      "path": "app/admin/patient-actions.ts",
+      "rawErrorExpressionsSanitized": 9,
+      "rejectedQueriesProtected": 12
+    },
+    {
+      "path": "app/admin/platform/reports/actions.ts",
+      "rawErrorExpressionsSanitized": 3,
+      "rejectedQueriesProtected": 3
+    },
+    {
+      "path": "app/admin/products/actions.ts",
+      "rawErrorExpressionsSanitized": 2,
+      "rejectedQueriesProtected": 4
+    },
+    {
+      "path": "app/admin/registrations/page.tsx",
+      "rawErrorExpressionsSanitized": 2,
+      "rejectedQueriesProtected": 2
+    },
+    {
+      "path": "app/admin/resources/actions.ts",
+      "rawErrorExpressionsSanitized": 4,
+      "rejectedQueriesProtected": 5
+    },
+    {
+      "path": "app/admin/schedule-actions.ts",
+      "rawErrorExpressionsSanitized": 15,
+      "rejectedQueriesProtected": 16
+    },
+    {
+      "path": "app/admin/service-actions.ts",
+      "rawErrorExpressionsSanitized": 3,
+      "rejectedQueriesProtected": 4
+    },
+    {
+      "path": "app/admin/settings/actions.ts",
+      "rawErrorExpressionsSanitized": 8,
+      "rejectedQueriesProtected": 9
+    },
+    {
+      "path": "app/admin/users/actions.ts",
+      "rawErrorExpressionsSanitized": 10,
+      "rejectedQueriesProtected": 18
+    }
+  ]
+}

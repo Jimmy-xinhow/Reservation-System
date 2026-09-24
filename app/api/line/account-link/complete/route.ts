@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { publicRequestOrigin } from "@/lib/public-origin";
+import { fail } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,18 +19,34 @@ function retryUrl(request: NextRequest, clinicSlug: string, linkToken: string, e
 }
 
 export async function POST(request: NextRequest) {
+  try {
+    return await completeAccountLink(request);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "LINE account link unavailable", 503);
+  }
+}
+
+async function completeAccountLink(request: NextRequest) {
   const rate = await checkRateLimit(request, "line:account-link", 6, 10 * 60_000);
   const form = await request.formData().catch(() => null);
   const clinicSlug = String(form?.get("clinic_slug") ?? "").trim();
   const linkToken = String(form?.get("link_token") ?? "").trim();
   const mode = String(form?.get("mode") ?? "").trim();
-  if (!rate.allowed) return Response.redirect(retryUrl(request, clinicSlug, linkToken), 303);
 
   const name = String(form?.get("name") ?? "").trim();
   const phone = String(form?.get("phone") ?? "").trim();
   const birthday = String(form?.get("birthday") ?? "").trim();
   if (mode !== "existing" || !clinicSlug || clinicSlug.length > 100 || !linkToken || linkToken.length > 2048 || /\s/.test(linkToken)) {
     return new Response("invalid account link request", { status: 400 });
+  }
+  if (!rate.allowed) {
+    const response = rate.unavailable
+      ? fail("LINE account link rate limit unavailable", 503)
+      : Response.redirect(retryUrl(request, clinicSlug, linkToken, "rate"), 303);
+    // Response.redirect headers are immutable; copy before adding Retry-After.
+    const headers = new Headers(response.headers);
+    headers.set("Retry-After", String(rate.retryAfterSeconds));
+    return new Response(response.body, { status: response.status, headers });
   }
   if (!name || name.length > 100 || !phone || phone.length > 40 || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
     return Response.redirect(retryUrl(request, clinicSlug, linkToken), 303);
@@ -49,7 +66,7 @@ export async function POST(request: NextRequest) {
     .eq("active", true)
     .limit(1)
     .maybeSingle();
-  if (patientError) return new Response("account link unavailable", { status: 503 });
+  if (patientError) return fail(patientError.message, 503);
   if (!patient?.id) return Response.redirect(retryUrl(request, clinicSlug, linkToken, "not_found"), 303);
 
   const nonce = randomBytes(32).toString("base64url");
@@ -61,7 +78,7 @@ export async function POST(request: NextRequest) {
     nonce_hash: nonceHash,
     expires_at: expiresAt,
   });
-  if (nonceError) return new Response("account link unavailable", { status: 503 });
+  if (nonceError) return fail(nonceError.message, 503);
 
   const accountLink = new URL("https://access.line.me/dialog/bot/accountLink");
   accountLink.searchParams.set("linkToken", linkToken);

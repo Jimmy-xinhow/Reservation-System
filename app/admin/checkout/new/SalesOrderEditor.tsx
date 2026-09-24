@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
 import { requireNonProvider } from "@/lib/admin";
 import { AdminModal } from "@/components/AdminModal";
@@ -13,24 +15,24 @@ function dateTime(value: string): string { return new Intl.DateTimeFormat("zh-TW
 export default async function SalesOrderEditor({ appointmentId, registrationId, variant = "page" }: { appointmentId?: string; registrationId?: string; variant?: "page" | "modal" }) {
   const member = await requireNonProvider();
   const supabase = member.supabase;
-  const [appointmentsResult, registrationsResult, patientsResult] = await Promise.all([
+  const [appointmentsResult, registrationsResult, patientsResult] = await adminQuery(Promise.all([
     supabase.from("appointments").select("id, start_at, patients(name), services(name, price)").eq("clinic_id", member.clinicId).in("status", ["booked", "confirmed", "done"]).order("start_at", { ascending: false }).limit(250),
     supabase.from("registrations").select("id, registration_no, name, amount, events(title)").eq("clinic_id", member.clinicId).in("status", ["pending", "confirmed", "attended"]).order("created_at", { ascending: false }).limit(250),
     supabase.from("patients").select("id, name, phone").eq("clinic_id", member.clinicId).eq("active", true).order("name").limit(500),
-  ]);
+  ]));
   const firstError = [appointmentsResult.error, registrationsResult.error, patientsResult.error].find(Boolean);
-  if (firstError) throw new Error(firstError.message);
+  if (firstError) throw new Error(adminErrorMessage(firstError));
   const appointments = [...((appointmentsResult.data ?? []) as unknown as AppointmentOption[])];
   const registrations = [...((registrationsResult.data ?? []) as unknown as RegistrationOption[])];
   const patients = (patientsResult.data ?? []) as PatientOption[];
   if (appointmentId && !appointments.some((row) => row.id === appointmentId)) {
-    const { data, error } = await supabase.from("appointments").select("id, start_at, patients(name), services(name, price)").eq("clinic_id", member.clinicId).eq("id", appointmentId).in("status", ["booked", "confirmed", "done"]).maybeSingle();
-    if (error) throw new Error(error.message);
+    const { data, error } = await adminQuery(supabase.from("appointments").select("id, start_at, patients(name), services(name, price)").eq("clinic_id", member.clinicId).eq("id", appointmentId).in("status", ["booked", "confirmed", "done"]).maybeSingle());
+    if (error) throw new Error(adminErrorMessage(error));
     if (data) appointments.unshift(data as unknown as AppointmentOption);
   }
   if (registrationId && !registrations.some((row) => row.id === registrationId)) {
-    const { data, error } = await supabase.from("registrations").select("id, registration_no, name, amount, events(title)").eq("clinic_id", member.clinicId).eq("id", registrationId).in("status", ["pending", "confirmed", "attended"]).maybeSingle();
-    if (error) throw new Error(error.message);
+    const { data, error } = await adminQuery(supabase.from("registrations").select("id, registration_no, name, amount, events(title)").eq("clinic_id", member.clinicId).eq("id", registrationId).in("status", ["pending", "confirmed", "attended"]).maybeSingle());
+    if (error) throw new Error(adminErrorMessage(error));
     if (data) registrations.unshift(data as unknown as RegistrationOption);
   }
   const options: CheckoutSourceOption[] = [

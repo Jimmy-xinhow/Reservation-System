@@ -1,3 +1,4 @@
+import { deliveryError } from "@/lib/delivery-error";
 import { NextResponse } from "next/server";
 import { getOptionalMember } from "@/lib/admin";
 import { getOptionalPlatformAdmin } from "@/lib/platform";
@@ -16,7 +17,7 @@ export async function GET(request: Request) {
       : Boolean(await getOptionalPlatformAdmin());
     return NextResponse.json({ allowed }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    console.error("admin access verification failed", error);
+    console.error("admin access verification failed", { category: deliveryError(error) });
     return NextResponse.json({ error: "無法確認後台權限" }, { status: 500 });
   }
 }

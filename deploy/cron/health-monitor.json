@@ -1,0 +1,11 @@
+{
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "node --check scripts/monitor-cron-health.mjs"
+  },
+  "deploy": {
+    "startCommand": "node scripts/monitor-cron-health.mjs",
+    "cronSchedule": "*/5 * * * *",
+    "restartPolicyType": "NEVER"
+  }
+}

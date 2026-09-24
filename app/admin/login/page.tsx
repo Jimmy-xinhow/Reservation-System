@@ -11,6 +11,7 @@ export default function AdminLoginPage() {
   const [entry, setEntry] = useState<"brand" | "platform">("brand");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   useEffect(() => {
     const reason = new URLSearchParams(window.location.search).get("reason");
@@ -24,10 +25,16 @@ export default function AdminLoginPage() {
         : reason === "brand-access-required"
           ? "此帳號沒有品牌營運後台權限。"
           : "此帳號目前沒有可用的後台權限。";
-    const supabase = createSupabaseBrowser();
-    void supabase.auth.signOut().finally(() => {
-      window.history.replaceState({}, "", "/admin/login");
-    });
+    if (inviteAccepted) {
+      const supabase = createSupabaseBrowser();
+      void supabase.auth.signOut().finally(() => {
+        window.history.replaceState({}, "", "/admin/login");
+      });
+    } else {
+      // 拒絕工作區存取不應撤銷同帳號在其他工作區的有效登入。
+      // 保留 reason，讓 middleware 顯示原因而不自動轉址。
+      setAccessDenied(true);
+    }
     setError(message);
   }, []);
 
@@ -106,6 +113,7 @@ export default function AdminLoginPage() {
             <label htmlFor="admin-password"><span className="label">密碼</span><input id="admin-password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" className="input" placeholder="輸入登入密碼" /></label>
           </div>
           {error && <p role="alert" className="admin-login-error">{error}</p>}
+          {accessDenied && <a href="/admin" className="mt-3 block text-sm text-emerald-800 underline">返回已授權工作區</a>}
           <button type="submit" disabled={loading} className="btn btn-primary mt-5 w-full">
             {loading ? "正在確認帳號…" : `進入${entry === "platform" ? "系統管理" : "品牌營運"}`}
           </button>

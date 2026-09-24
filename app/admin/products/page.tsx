@@ -1,3 +1,6 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -26,21 +29,26 @@ interface Movement {
   created_at: string;
 }
 
-const MOVEMENT_LABEL: Record<string, string> = { stock_in: "進貨", use: "服務使用", sale: "售出", waste: "報廢" };
+const MOVEMENT_LABEL: Record<string, string> = { stock_in: "進貨", use: "服務使用", sale: "售出", waste: "報廢", stocktake: "盤點調整" };
 const money = (value: number) => `NT$${Number(value).toLocaleString("zh-TW")}`;
 const number = (value: number) => Number(value).toLocaleString("zh-TW", { maximumFractionDigits: 2 });
 
-export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ edit?: string }> }) {
+const PAGE_SIZE = 50;
+
+export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ edit?: string; page?: string }> }) {
   const member = await requireAdmin();
   const params = await searchParams;
-  const [{ data: productData, error: productError }, { data: movementData, error: movementError }] = await Promise.all([
-    member.supabase.from("inventory_items").select("id, sku, name, unit, stock_on_hand, reorder_level, retail_price, active").eq("clinic_id", member.clinicId).order("active", { ascending: false }).order("name"),
-    member.supabase.from("inventory_movements").select("id, item_id, kind, quantity, stock_after, note, created_at").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).limit(30),
-  ]);
-  if (productError || movementError) throw new Error(productError?.message ?? movementError?.message ?? "讀取商品資料失敗");
-  const products = (productData ?? []) as Product[];
+  const [products, { data: movementData, error: movementError }] = await adminQuery(Promise.all([
+    fetchAllSupabasePages((from, to) => member.supabase.from("inventory_items").select("id, sku, name, unit, stock_on_hand, reorder_level, retail_price, active").eq("clinic_id", member.clinicId).order("active", { ascending: false }).order("name").order("id").range(from, to)) as Promise<Product[]>,
+    member.supabase.from("inventory_movements").select("id, item_id, kind, quantity, stock_after, note, created_at").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(30),
+  ]));
+  if (movementError) throw new Error(adminErrorMessage(movementError.message));
   const movements = (movementData ?? []) as Movement[];
   const selected = products.find((product) => product.id === params.edit) ?? null;
+  const requestedPage = Number(params.page);
+  const pageCount = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, pageCount) : 1;
+  const visibleProducts = products.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const activeProducts = products.filter((product) => product.active);
   const lowStock = activeProducts.filter((product) => Number(product.stock_on_hand) <= Number(product.reorder_level));
   const retailValue = activeProducts.reduce((sum, product) => sum + Number(product.stock_on_hand) * Number(product.retail_price), 0);
@@ -61,15 +69,16 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
     <div className="admin-workbench-grid-wide">
       <section className="admin-table-shell">
         <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">商品清單</h2><p className="mt-0.5 text-xs text-slate-500">停用後不會出現在新結帳，既有銷售與庫存紀錄仍保留。</p></div><span className="text-xs tabular-nums text-slate-500">{products.length} 項</span></div>
-        <div className="overflow-x-auto"><table className="tbl"><thead><tr><th>商品／編號</th><th>售價</th><th>庫存</th><th>狀態</th><th>操作</th></tr></thead><tbody>{products.length === 0 ? <tr><td colSpan={5} className="py-12 text-center text-slate-400">尚未建立商品，請使用右側表單新增</td></tr> : products.map((product) => {
+        <div className="overflow-x-auto"><table className="tbl"><thead><tr><th>商品／編號</th><th>售價</th><th>庫存</th><th>狀態</th><th>操作</th></tr></thead><tbody>{products.length === 0 ? <tr><td colSpan={5} className="py-12 text-center text-slate-400">尚未建立商品，請使用右側表單新增</td></tr> : visibleProducts.map((product) => {
           const needsStock = product.active && Number(product.stock_on_hand) <= Number(product.reorder_level);
-          return <tr key={product.id} className={selected?.id === product.id ? "bg-brand-50/50" : ""}><td><strong className="text-slate-800">{product.name}</strong><div className="text-xs text-slate-500">{product.sku || "未設定商品編號"}</div></td><td>{money(product.retail_price)}</td><td><strong>{number(product.stock_on_hand)} {product.unit}</strong>{needsStock && <div className="text-xs text-amber-700">低於提醒量 {number(product.reorder_level)}</div>}</td><td><span className={`badge ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{product.active ? "啟用" : "停用"}</span></td><td><Link href={`/admin/products?edit=${product.id}`} className="btn btn-secondary px-3 py-1.5">管理</Link></td></tr>;
+          return <tr key={product.id} className={selected?.id === product.id ? "bg-brand-50/50" : ""}><td><strong className="text-slate-800">{product.name}</strong><div className="text-xs text-slate-500">{product.sku || "未設定商品編號"}</div></td><td>{money(product.retail_price)}</td><td><strong>{number(product.stock_on_hand)} {product.unit}</strong>{needsStock && <div className="text-xs text-amber-700">低於提醒量 {number(product.reorder_level)}</div>}</td><td><span className={`badge ${product.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{product.active ? "啟用" : "停用"}</span></td><td><Link href={`/admin/products?edit=${product.id}&page=${page}`} className="btn btn-secondary px-3 py-1.5">管理</Link></td></tr>;
         })}</tbody></table></div>
+        {pageCount > 1 && <nav aria-label="商品分頁" className="flex items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 text-sm"><span>第 {page}／{pageCount} 頁</span><div className="flex gap-2">{page > 1 && <Link href={`/admin/products?page=${page - 1}`} className="btn btn-secondary">上一頁</Link>}{page < pageCount && <Link href={`/admin/products?page=${page + 1}`} className="btn btn-secondary">下一頁</Link>}</div></nav>}
       </section>
 
       <aside className="space-y-5 self-start">
         <section className="admin-section">
-          <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">{selected ? "編輯商品" : "新增商品"}</h2><p className="mt-0.5 text-xs text-slate-500">{selected ? "修改名稱、售價與補貨條件；庫存請用下方異動。" : "建立後會立即出現在結帳的「商品」頁籤。"}</p></div>{selected && <Link href="/admin/products" className="text-xs font-semibold text-brand-700">取消編輯</Link>}</div>
+          <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">{selected ? "編輯商品" : "新增商品"}</h2><p className="mt-0.5 text-xs text-slate-500">{selected ? "修改名稱、售價與補貨條件；庫存請用下方異動。" : "建立後會立即出現在結帳的「商品」頁籤。"}</p></div>{selected && <Link href={`/admin/products?page=${page}`} className="text-xs font-semibold text-brand-700">取消編輯</Link>}</div>
           <form action={selected ? updateProductAction : createProductAction} className="grid gap-3 p-4 sm:grid-cols-2">
             {selected && <input type="hidden" name="id" value={selected.id} />}
             <label className="text-sm sm:col-span-2"><span className="label">商品名稱</span><input name="name" className="input" defaultValue={selected?.name ?? ""} maxLength={160} required placeholder="例如：修護精華 30ml" /></label>

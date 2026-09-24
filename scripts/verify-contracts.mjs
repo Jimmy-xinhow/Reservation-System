@@ -131,7 +131,7 @@ const checks = [
   ["checkout creation uses a modal and sale prices are editable", ["app/admin/checkout/new/page.tsx|<SalesOrderEditor", "app/admin/checkout/page.tsx|variant=\"modal\"", "app/admin/checkout/new/CreateSalesOrderForm.tsx|不會預設成現場顧客", "app/admin/checkout/new/CreateSalesOrderForm.tsx|本次服務／報名金額", "app/admin/checkout/AddSalesItemPanel.tsx|前往服務方案新增", "app/admin/checkout/AddSalesItemPanel.tsx|前往商品管理新增", "app/admin/checkout/AddSalesItemPanel.tsx|前往套票管理新增", "app/admin/checkout/page.tsx|成交單價", "app/admin/checkout/actions.ts|updateSalesOrderItemAction", "app/admin/checkout/actions.ts|調整後金額不可低於已收款金額"]],
   ["staff attendance is tenant scoped and preserves every punch", ["supabase/migrations/202609070002_staff_attendance.sql|create table if not exists public.attendance_events", "supabase/migrations/202609070002_staff_attendance.sql|attendance_events_line_event_unique_idx", "supabase/migrations/202609070002_staff_attendance.sql|enable row level security", "app/admin/attendance/page.tsx|出勤打卡", "app/admin/handoff/attendance-actions.ts|recordButtonAttendanceAction", "app/admin/handoff/attendance-actions.ts|recordQrAttendanceAction", "app/admin/handoff/AttendancePanels.tsx|<LiveTaipeiClock", "app/admin/handoff/AttendancePanels.tsx|上班打卡", "app/admin/handoff/AttendancePanels.tsx|下班打卡", "app/api/line/webhook/route.ts|text === \"上班打卡\"", "lib/attendance.ts|本次紀錄已新增，不會覆蓋先前紀錄"]],
   ["product catalog is reachable from checkout and shares inventory", ["app/admin/products/page.tsx|商品管理", "app/admin/products/actions.ts|inventory_items", "app/admin/checkout/page.tsx|/admin/products", "app/admin/checkout/AddSalesItemPanel.tsx|前往商品管理新增"]],
-  ["admin workspaces group staff, service scheduling, settings, and memberships", ["components/AdminNav.tsx|label: \"員工管理\"", "components/AdminNav.tsx|label: \"服務方案與排程設定\"", "components/AdminNav.tsx|label: \"會員、套票、儲值訂閱管理\"", "components/admin/ManagementTabs.tsx|ServiceSetupTabs", "components/admin/ManagementTabs.tsx|MembershipManagementTabs", "components/AdminNav.tsx|href: \"/admin/products\", label: \"商品管理\"", "components/AdminNav.tsx|href: \"/admin/documents\", label: \"同意書與簽署\""]],
+  ["admin workspaces group staff, service scheduling, settings, and memberships", ["components/AdminNav.tsx|label: \"員工管理\"", "components/AdminNav.tsx|label: \"服務與排程\"", "components/AdminNav.tsx|label: \"會員與資產\"", "components/admin/ManagementTabs.tsx|ServiceSetupTabs", "components/admin/ManagementTabs.tsx|MembershipManagementTabs", "components/AdminNav.tsx|href: \"/admin/products\", label: \"商品管理\"", "components/AdminNav.tsx|href: \"/admin/documents\", label: \"同意書與簽署\""]],
   ["operations dashboard, finance drill-down, and generic service records are connected", ["app/admin/actions.ts|redirect(\"/admin/dashboard\")", "components/AdminNav.tsx|營運中心", "components/AdminNav.tsx|耗材與商品庫存", "components/AdminNav.tsx|服務獎金試算", "components/AdminNav.tsx|服務過程紀錄", "app/admin/dashboard/page.tsx|本月營運與庫存", "app/admin/dashboard/page.tsx|客服對話", "app/admin/dashboard/page.tsx|上班打卡", "app/admin/operations/inventory/page.tsx|服務／課程使用", "app/admin/operations/finance/page.tsx|財務摘要", "app/admin/operations/service-records/page.tsx|同時支援預約服務、課程與活動報名", "app/admin/patients/page.tsx|assignPatientMembershipLevelAction"]],
   ["industry-aware workbench and service records stay configuration driven", ["supabase/migrations/202609070004_industry_dashboard_and_service_records.sql|dashboard_focus in ('booking', 'registration', 'mixed')", "supabase/migrations/202609070004_industry_dashboard_and_service_records.sql|registration_id uuid references public.registrations", "app/admin/settings/page.tsx|品牌主要工作流程", "app/admin/dashboard/page.tsx|dashboardFocus === \"registration\"", "app/admin/beauty/TreatmentRecordForm.tsx|對應課程／活動報名"]],
   ["email credentials are tenant owned and global fallback is explicitly allowlisted", ["lib/email.ts|RESEND_LEGACY_CLINIC_IDS", "lib/email.ts|if (!isLegacyEmailClinic(clinicId)) return null", "app/admin/settings/page.tsx|每個品牌使用自己的 Resend 寄信服務", ".env.example|只有列在 RESEND_LEGACY_CLINIC_IDS"]],
@@ -151,7 +151,7 @@ const checks = [
   ["brand configuration pages and RLS require brand management permission", ["app/admin/services/page.tsx|requireAdmin()", "app/admin/resources/page.tsx|requireAdmin()", "app/admin/schedules/page.tsx|requireAdmin()", "app/admin/exceptions/page.tsx|requireAdmin()", "app/admin/audit/page.tsx|requireAdmin()", "supabase/migrations/202608130004_brand_configuration_permission_boundaries.sql|'brand.manage' = any(member.permissions)", "supabase/migrations/202608130004_brand_configuration_permission_boundaries.sql|schedule_templates_brand_manage", "supabase/migrations/202608130004_brand_configuration_permission_boundaries.sql|schedule_exceptions_brand_manage"]],
   ["adoption metrics and first-stage tools are tenant isolated", ["supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.clinic_activation_metrics", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.admin_product_events", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.data_import_jobs", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.channel_test_runs", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|create table if not exists public.handoff_tasks", "supabase/migrations/202608130005_adoption_and_operations_tooling.sql|revoke all on table public.admin_product_events from public, anon, authenticated", "app/admin/import/page.tsx", "app/admin/channels/page.tsx", "app/admin/handoff/page.tsx"]],
   ["three-brand observation limit is atomic", ["supabase/migrations/202608130006_trial_observation_guard.sql|pg_advisory_xact_lock", "supabase/migrations/202608130006_trial_observation_guard.sql|>= 3", "app/admin/platform/reports/TrialObservationPanel.tsx|未發生的行為顯示為「尚無資料」"]],
-  ["booking growth options stay atomic and configuration driven", ["supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.service_addons", "supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.appointment_series", "supabase/migrations/202608130007_booking_growth_features.sql|book_recurring_appointments", "supabase/migrations/202608130007_booking_growth_features.sql|recurring_booking_enabled", "supabase/migrations/202608130008_addon_availability.sql|get_available_service_slots_with_options", "app/api/booking/reserve/route.ts|book_time_slot_with_options", "app/book/MyAppointments.tsx|再次預約", "app/book/browser/page.tsx|每週重複預約"]],
+  ["booking growth options stay atomic and configuration driven", ["supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.service_addons", "supabase/migrations/202608130007_booking_growth_features.sql|create table if not exists public.appointment_series", "supabase/migrations/202608130007_booking_growth_features.sql|book_recurring_appointments", "supabase/migrations/202608130007_booking_growth_features.sql|recurring_booking_enabled", "supabase/migrations/202608130008_addon_availability.sql|get_available_service_slots_with_options", "app/api/booking/reserve/route.ts|submit_booking_once", "app/book/MyAppointments.tsx|再次預約", "app/book/browser/page.tsx|每週重複預約"]],
   ["core SaaS gap migration and customer surfaces exist", ["supabase/migration_saas_core_gaps.sql|membership_notification_logs", "supabase/migration_saas_core_gaps.sql|service_resources_available", "supabase/migration_saas_core_gaps.sql|get_available_sessions_for_service", "app/api/cron/membership/route.ts|MEMBERSHIP_EXPIRY_NOTICE_DAYS", "app/api/membership/portal/route.ts", "app/api/registration/my/route.ts", "app/api/registration/checkin-live/route.ts", "app/admin/audit/page.tsx"]],
   ["unified customer portal migration and funnel tracking exist", ["app/api/customer/portal/route.ts", "app/my/page.tsx", "components/FunnelTracker.tsx", "lib/funnel-client.ts", "app/api/analytics/funnel/route.ts"]],
   ["cross-industry service targets and customer actions exist", ["supabase/migrations/202608060004_cross_industry_booking_foundation.sql|booking_target", "supabase/migrations/202608060004_cross_industry_booking_foundation.sql|book_service_slot", "app/admin/_components/ExceptionForm.tsx|service_id", "app/api/customer/registration-action/route.ts|cancel_registration_for_customer"]],
@@ -221,6 +221,16 @@ function invariant(label, condition) {
   else failures.push(label);
 }
 
+// These exact replays previously lost dollar quotes and regex terminators during consolidation.
+for (const file of ["202609150001_checkin_session_expiry.sql", "202609150002_registration_session_expiry.sql", "202609200002_late_tenant_history_foreign_keys.sql", "202609200003_scoped_followup_claim.sql", "202609210001_scoped_operational_cron.sql", "202609210002_booking_uuid_array_type.sql", "202609210003_scoped_registration_cron.sql", "202609210004_notification_uncertainty_claims.sql"]) {
+  invariant(`fresh schema preserves the complete ${file} replay`, schema.includes(read(`supabase/migrations/${file}`).replace(/\r\n/g, "\n").trim()));
+}
+invariant(
+  "fresh schema creates policy dependencies before first use",
+  schema.indexOf("add column if not exists booking_target") < schema.indexOf("create policy appointments_nonprovider_manage") &&
+    schema.indexOf("alter table public.schedule_templates add column if not exists service_id") < schema.indexOf("create policy appointments_nonprovider_manage"),
+);
+
 invariant(
   "database lint hardening removes unused queue variables and is synchronized",
   !migrationDbLintHardening.includes("new_queue_number") &&
@@ -239,12 +249,13 @@ invariant(
     schema.includes("updated_at timestamptz not null default now()") &&
     schema.includes("select menu.published_version_id\n    into current_version_id") &&
     !schema.includes("  current_line_id text;\n  restore_line_id text;") &&
-    !schema.includes("declare target record;") &&
+    // The follow-up migration above checks the old unused variable. Other
+    // functions may legitimately use a record named target as a loop variable.
     !schema.includes("  v_queue_number integer;")
 );
 
 invariant(
-  "consolidated schema ends with the latest booking-growth replay",
+  "consolidated schema preserves booking replay and ends with payment payload privileges",
   !migrationWaitlistCapacityFix.includes("憿遛") &&
     migrationWaitlistCapacityFix.includes("v_error like '%額滿%'") &&
     migrationTwoLevelAdminPermissions.includes("system_admin") &&
@@ -254,7 +265,13 @@ invariant(
     schema.lastIndexOf("get_available_service_slots_with_options") > schema.lastIndexOf("-- Final replay of migration 202608120001") &&
     schema.lastIndexOf("-- Final replay of migration 202608130009") > schema.lastIndexOf("-- Final replay of migration 202608130008") &&
     !migrationRecurringLintFix.includes("v_index integer;") &&
-    schema.trimEnd().endsWith("commit;"),
+    schema.includes(read("supabase/migrations/202609220001_atomic_manual_checkin.sql")
+      .replace(/\r\n/g, "\n").split("notify pgrst,")[0].trim()) &&
+    schema.lastIndexOf("grant select (id, clinic_id, merchant_order_no, created_at, status, amount)") >
+      schema.lastIndexOf("-- Final replay of migration 202608130009") &&
+    read("supabase/migrations/202609240001_payment_payload_column_privileges.sql")
+      .includes("from public, anon, authenticated;") &&
+    schema.trimEnd().endsWith("notify pgrst, 'reload schema';\ncommit;"),
 );
 
 invariant(
@@ -535,7 +552,9 @@ invariant(
   "manual check-in is operator-only and tenant-scoped",
   checkinSearchApi.includes("requireOperator()") &&
     checkinSearchApi.includes('.eq("clinic_id", member.clinicId)') &&
-    checkinSearchApi.includes('from("checkins")') &&
+    checkinSearchApi.includes('rpc("checkin_registration_by_id"') &&
+    checkinSearchApi.includes('p_clinic_id: member.clinicId') &&
+    checkinSearchApi.includes('p_user_id: member.user.id') &&
     adminNav.includes('href: "/admin/calendar"'),
 );
 invariant(
@@ -574,9 +593,11 @@ invariant(
     read("app/admin/actions.ts").split("\n").length < 150,
 );
 invariant(
-  "admin onboarding is secondary to today's work and uses plain language",
-  adminDashboard.indexOf("今日待處理") < adminDashboard.indexOf("<BrandSetupGuide") &&
-    adminDashboard.includes("<details className=\"admin-section group") &&
+  "new-brand onboarding leads the workbench; configured-brand guidance stays secondary",
+  adminDashboard.indexOf("{showFirstScreenSetup && <BrandSetupGuide") < adminDashboard.indexOf("今日待處理") &&
+    adminDashboard.indexOf("今日待處理") < adminDashboard.indexOf("{!showFirstScreenSetup &&") &&
+    adminDashboard.includes("<details className=\"group") &&
+    adminDashboard.includes("從這一步繼續") &&
     !adminDashboard.includes("smoke test"),
 );
 invariant(
@@ -664,6 +685,13 @@ const lineWebhook = [
 const bookingPageSource = read("app/book/page.tsx");
 const bookingClientApi = read("app/book/client-api.ts");
 const liffEntryState = read("lib/liff-entry-state.ts");
+const liffHook = read("lib/useLiff.ts");
+invariant(
+  "external LINE login preserves the current brand and task after SDK initialization",
+  liffHook.includes("liff.login({ redirectUri: window.location.href })") &&
+    liffHook.indexOf("await liff.init({ liffId })") < liffHook.indexOf("liff.login({ redirectUri: window.location.href })") &&
+    liffHook.includes("if (cancelled) return;"),
+);
 const customerBindLineApi = read("app/api/customer/bind-line/route.ts");
 const bookingFlowUi = read("app/book/BookingFlowUi.tsx");
 const publicBrand = read("lib/public-brand.ts");
@@ -868,7 +896,7 @@ invariant(
   "LINE activity registration preserves verified LIFF identity",
   registrationPage.includes('useLiff(liffRequested ? liffId : undefined)') &&
     registrationPage.includes('idToken: idToken || undefined') &&
-    registrationPage.includes('(liffRequested && !liffReady)') &&
+    registrationPage.includes('liffRequested && (!liffReady || !idToken || liffError)') &&
     customerEntryView.includes('liff: "1"'),
 );
 
@@ -914,9 +942,8 @@ invariant(
   "booking service binding is tenant-validated and failures do not leave active appointments",
   bookingReserveApi.includes('.eq("clinic_id", clinicId)') &&
     bookingReserveApi.includes('.eq("active", true)') &&
-    bookingReserveApi.includes('const metadataPatch: { source: "online"; service_id?: string; booking_answers?: Record<string, unknown>; booking_form_snapshot?: unknown[] }') &&
-    bookingReserveApi.includes('if (selectedServiceId) metadataPatch.service_id = selectedServiceId') &&
-    bookingReserveApi.includes('rpc("cancel_appointment"') &&
+    bookingReserveApi.includes('rpc("submit_booking_once"') &&
+    schema.includes("set service_id=service,booking_answers=answers,booking_form_snapshot=snapshot where clinic_id=p_clinic_id and id=any(ids)") &&
     adminActions.includes('.eq("clinic_id", opts.clinicId)') &&
     adminActions.includes('rpc("cancel_appointment"'),
 );
@@ -971,13 +998,14 @@ invariant(
     schema.includes("payment_orders_registration_pending_idx") &&
     schema.includes("payment_orders_appointment_pending_idx") &&
     schema.includes("provider_event_key") &&
-    paymentWebhook.includes("provider_event_key") &&
+    schema.includes("p_event_key)") &&
     schema.includes("clinic_payment_provider_merchant_idx"),
 );
 invariant(
   "payment webhook cannot downgrade a terminal order and only notifies on a real transition",
-  paymentWebhook.includes('if (order.status !== "pending")') &&
-    paymentWebhook.includes('eq("status", "pending")') &&
+  paymentWebhook.includes('if (order.status !== "pending" && !lateReservationPayment)') &&
+    paymentWebhook.includes('order.status === "expired" && event.success && Boolean(order.appointment_id || order.registration_id)') &&
+    paymentWebhook.includes('p_expected_status: order.status') &&
     paymentWebhook.includes("changed: true") &&
     paymentEcpayApi.includes("result.changed") &&
     paymentNewebpayApi.includes("result.changed"),
@@ -1010,14 +1038,14 @@ invariant(
     paymentCreateApi.includes('.eq("merchant_order_no", existingOrder.merchant_order_no)') &&
     paymentOrderLookup.includes("_merchant_order_history") &&
     paymentOrderLookup.includes('.contains("provider_payload"') &&
-    paymentWebhook.includes("mergePaymentProviderEvent"),
+    schema.includes("last_merchant_order_no"),
 );
 invariant(
   "payment webhook retries reconcile downstream registration state",
   paymentWebhook.includes("duplicateEvent") &&
     paymentWebhook.includes("reconcilePaymentState") &&
     paymentWebhook.includes("order.status === \"paid\" && event.success") &&
-    paymentWebhook.includes("if (updatedRegistration)"),
+    paymentWebhook.includes('rpc("reconcile_registration_payment"'),
 );
 invariant(
   "appointment lifecycle notifications have idempotent LINE and email delivery",
@@ -1089,7 +1117,7 @@ invariant(
     !paymentCreateApi.includes("x-forwarded-host") &&
     read("app/book/page.tsx").includes("window.location.pathname + window.location.search") &&
     read("app/book/browser/page.tsx").includes("window.location.pathname + window.location.search") &&
-    read("app/register/page.tsx").includes("window.location.pathname + window.location.search"),
+    registrationPage.includes('return_path: `/register/pay?registration_id=${encodeURIComponent(result.registration_id)}${paymentScope.replace("?", "&")}`'),
 );
 invariant(
   "payment browser return preserves status and branded context",
@@ -1207,13 +1235,14 @@ invariant(
 );
 invariant(
   "browser booking does not preselect one provider when several are available",
-  browserBookingPage.includes("value.doctors.length === 1") &&
-    browserBookingPage.includes("config.doctors.length === 1") &&
+  browserBookingPage.includes("bookingDoctorSelection(entryService?.booking_target") &&
+    browserBookingPage.includes("bookingDoctorSelection(selectedService.booking_target") &&
+    read("lib/booking-selection.ts").includes('target === "provider_required" && doctors.length === 1') &&
     browserBookingPage.includes('providerRequired ? "請選擇服務提供者" : "不指定，由系統安排"') &&
     browserBookingPage.includes("required={providerRequired}") &&
     browserBookingPage.includes("}, [serviceId]);") &&
-    browserReschedulePage.includes("config.doctors.length === 1") &&
-    reschedulePage.includes("config.doctors.length === 1"),
+    browserReschedulePage.includes("bookingDoctorSelection(target, doctorId, config.doctors)") &&
+    reschedulePage.includes("bookingDoctorSelection(target, doctorId, config.doctors)"),
 );
 invariant(
   "public brand identity is not hardcoded to the legacy clinic",
@@ -1317,7 +1346,7 @@ invariant(
   "public appointment captures optional email within verified identity scope",
   bookingReserveApi.includes("email?: string") &&
     bookingReserveApi.includes("Email 格式不正確") &&
-    bookingReserveApi.includes('.update({ email })') &&
+    schema.includes("update public.patients set email=p_payload->>'email' where id=p_patient_id and clinic_id=p_clinic_id") &&
     bookingReserveApi.includes('eq("clinic_id", clinicId)') &&
     bookingPage.includes('name="email"') &&
     browserBookingPage.includes('type="email"') &&
@@ -1497,13 +1526,16 @@ invariant(
     adminActions.includes('p_actor_user_id: user.id'),
 );
 invariant(
-  "staff password reset is tenant-bound and brand-admin-protected",
-  adminActions.includes('export async function resetStaffPasswordAction') &&
+  "staff password setup email is tenant-bound and cannot directly change shared credentials",
+  adminActions.includes('export async function sendStaffPasswordSetupAction') &&
     adminActions.includes('.from("clinic_members")') &&
     adminActions.includes('.eq("clinic_id", clinicId)') &&
     adminActions.includes('.eq("user_id", userId)') &&
     adminActions.includes('target.access_type === "brand_admin"') &&
-    adminActions.includes("requireBrandAdmin"),
+    adminActions.includes("requireBrandAdmin") &&
+    adminActions.includes('service.auth.resetPasswordForEmail(') &&
+    !adminActions.includes('auth.admin.updateUserById(') &&
+    !adminActions.includes('auth.admin.createUser('),
 );
 invariant(
   "serving numbers bind to an active doctor in the same clinic",
@@ -1559,7 +1591,7 @@ invariant(
   "CRM timeline failures do not retry delivered marketing messages",
   marketingCron.includes('await markDelivery(svc, claim, "sent", null);') &&
     marketingCron.includes('await recordCrmInteraction(svc, {') &&
-    marketingCron.includes('}).catch((error: unknown) => console.error("CRM campaign interaction failed", error));'),
+    marketingCron.includes('}).catch((error: unknown) => console.error("CRM campaign interaction failed", { category: deliveryError(error) }));'),
 );
 invariant(
   "status audit records authenticated actor context",
@@ -1598,7 +1630,7 @@ invariant(
     migrationRegistration.includes("events_access_mode_check") &&
     read("app/api/registration/events/route.ts").includes('eq("access_mode", "public")') &&
     registrationDetailApi.includes("access_token_hash") &&
-    registrationApi.includes("p_access_token") &&
+    registrationApi.includes("access_token: accessToken") &&
     read("app/admin/events/actions.ts").includes("randomBytes(24)") &&
     read("app/admin/events/page.tsx").includes("重新產生私密連結"),
 );
@@ -1744,11 +1776,11 @@ invariant(
 );
 invariant(
   "public registration and booking can apply benefits through server RPCs",
-  (registrationApi.includes("register_for_event_with_benefits") || registrationApi.includes("register_for_event_with_terms")) &&
-    registrationApi.includes("p_discount_code") &&
-    registrationApi.includes("p_membership_code") &&
-    read("app/api/booking/reserve/route.ts").includes("book_time_slot_with_membership") &&
-    read("app/api/booking/reserve/route.ts").includes("book_number_with_membership"),
+  (registrationApi.includes("register_for_event_with_benefits") || registrationApi.includes("submit_registration_once")) &&
+    registrationApi.includes("discount_code: discountCode") &&
+    registrationApi.includes("membership_code: membershipCode") &&
+    schema.includes("book_time_slot_with_membership") &&
+    bookingReserveApi.includes("submit_booking_once") && schema.includes("book_number_with_membership"),
 );
 invariant(
   "registration form snapshot is written in the atomic registration transaction",
@@ -1756,7 +1788,7 @@ invariant(
     registrationBenefitsFunction.includes("form_id,form_version") &&
     registrationBenefitsMigrationFunction.includes("p_form_id uuid") &&
     registrationBenefitsMigrationFunction.includes("form_id, form_version") &&
-    registrationApi.includes("p_form_id: form?.id") &&
+    registrationApi.includes("form_id: form?.id") &&
     !registrationApi.includes('.from("registrations").update({ form_id'),
 );
 invariant(
@@ -2146,8 +2178,12 @@ invariant(
   "task-focused LIFF closes back to LINE and admin support replies are actually pushed",
   read("lib/useLiff.ts").includes("closeLiffWindow") &&
     read("app/book/page.tsx").includes('taskMode || view === "home" ? null') &&
-    read("app/book/page.tsx").includes("完成並回到 LINE") &&
-    read("app/register/page.tsx").includes("完成並回到 LINE") &&
+    read("app/book/page.tsx").includes("ReturnToLineButton") &&
+    read("app/register/page.tsx").includes("ReturnToLineButton") &&
+    read("app/book/reschedule/page.tsx").includes("ReturnToLineButton") &&
+    bookingFlowUi.includes("完成並回到 LINE") &&
+    bookingFlowUi.includes('role="status"') &&
+    !bookingFlowUi.includes("LINE 安全連線") &&
     read("app/api/admin/chat/route.ts").includes("pushMessages(payload.lineUserId") &&
     read("app/api/admin/chat/route.ts").includes('updateStaffMessageDelivery(supabase, clinicId, messageId, "failed"'),
 );

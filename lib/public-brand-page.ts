@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { publicCustomerEntryUrl } from "@/lib/customer-entry";
 import {
   brandPagePreferredEntry,
   isBrandPageTemplate,
@@ -105,10 +107,14 @@ export async function loadPublicBrandPage(supabase: SupabaseClient, clinicId: st
     description: typeof row.description === "string" ? row.description : null,
   }));
   const events = activeEvents((eventsResult.data ?? []) as Array<Record<string, unknown>>);
+  const line = await getClinicLineChannelContext(supabase, clinicId).catch(() => null);
+  const entryContext = { clinicId, clinicSlug: clinic.slug, enabled: line?.enabled ?? false, liffId: line?.liffId ?? null, loginChannelId: line?.loginChannelId ?? null };
+  for (const service of services) service.href = publicCustomerEntryUrl("booking", entryContext, { service_id: service.id });
+  for (const event of events) event.href = publicCustomerEntryUrl("events", entryContext, { event: event.id });
   const content = normalizeBrandPageContent(settings.brand_page_content, settings.brand_page_template);
-  const booking = settings.public_booking_enabled ? scopedPath("/book/browser", clinic, clinicId) : null;
-  const registration = settings.events_enabled && settings.public_registration_enabled ? scopedPath("/register", clinic, clinicId) : null;
-  const membership = settings.memberships_enabled ? scopedPath("/membership", clinic, clinicId) : null;
+  const booking = settings.public_booking_enabled ? publicCustomerEntryUrl("booking", entryContext) : null;
+  const registration = settings.events_enabled && settings.public_registration_enabled ? publicCustomerEntryUrl("events", entryContext) : null;
+  const membership = settings.memberships_enabled ? publicCustomerEntryUrl("membership", entryContext) : null;
   const records = scopedPath("/my", clinic, clinicId);
   const learning = settings.brand_page_template === "education" && settings.events_enabled
     ? scopedPath("/learn", clinic, clinicId)

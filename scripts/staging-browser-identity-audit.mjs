@@ -10,6 +10,7 @@ const baseUrl = (process.env.STAGING_BASE_URL ?? process.env.PUBLIC_APP_URL ?? "
 if (!supabaseUrl || !serviceKey || !browserSecret) throw new Error("缺少 Supabase 或 BROWSER_BOOKING_SECRET staging 環境變數");
 if (browserSecret.length < 32) throw new Error("BROWSER_BOOKING_SECRET 長度不足");
 if (environmentName.toLowerCase() !== "staging") throw new Error(`僅允許 staging；目前環境為 ${environmentName || "unknown"}`);
+if (new URL(supabaseUrl).hostname !== "ongjsegewpnbkqugrpom.supabase.co") throw new Error("Refusing to run against an unpinned Supabase project");
 
 const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const suffix = `${Date.now()}-${randomBytes(3).toString("hex")}`;
@@ -74,6 +75,8 @@ async function cleanup() {
     await remove("isolated LINE channel", service.from("clinic_line_channels").delete().eq("clinic_id", isolatedClinicId));
     await remove("isolated entitlements", service.from("brand_entitlements").delete().eq("clinic_id", isolatedClinicId));
     await remove("isolated settings", service.from("clinic_settings").delete().eq("clinic_id", isolatedClinicId));
+    await remove("isolated attendance settings", service.from("attendance_settings").delete().eq("clinic_id", isolatedClinicId));
+    await remove("isolated activation metrics", service.from("clinic_activation_metrics").delete().eq("clinic_id", isolatedClinicId));
     await remove("isolated clinic", service.from("clinics").delete().eq("id", isolatedClinicId));
   }
   if (errors.length > 0) throw new Error(errors.join("; "));

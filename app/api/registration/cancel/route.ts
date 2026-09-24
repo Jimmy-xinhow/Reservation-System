@@ -1,3 +1,4 @@
+import { rpcFailure } from "@/lib/rpc-error";
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
@@ -12,14 +13,14 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const rate = await checkRateLimit(req, "registration:cancel", 8);
   if (!rate.allowed) {
-    const response = fail("請稍後再試", 429);
+    const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
     return response;
   }
 
   try {
     const body = (await req.json().catch(() => null)) as { token?: string } | null;
-    const token = body?.token?.trim() ?? "";
+    const token = typeof body?.token === "string" ? body.token.trim() : "";
     if (!token) return fail("缺少取消憑證", 400);
     if (token.length > 128) return fail("取消憑證格式錯誤", 400);
 
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
       p_clinic_id: clinicId,
       p_token: token,
     });
-    if (error) return fail(error.message, 409);
+    if (error) return rpcFailure(error, "cancel");
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) return fail("取消失敗", 409);
     const notificationKind = notificationKindForStatus(String(row.registration_status));

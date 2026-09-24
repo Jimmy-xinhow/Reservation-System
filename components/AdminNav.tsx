@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useState } from "react";
 import type { Role } from "@/lib/admin";
+import type { BrandAccessType } from "@/lib/access-control";
 import type { PlatformAccessType, SystemPermission } from "@/lib/platform-roles";
 
 interface Item {
@@ -12,6 +13,7 @@ interface Item {
   icon: IconName;
   activePrefixes?: string[];
   adminOnly?: boolean;
+  brandAdminOnly?: boolean;
   systemAdminOnly?: boolean;
   systemPermission?: SystemPermission;
   exact?: boolean;
@@ -83,7 +85,7 @@ const GROUPS: Group[] = [
     label: "顧客與會員",
     items: [
       { href: "/admin/patients", label: "顧客管理", icon: "customer" },
-      { href: "/admin/memberships", label: "會員、套票、儲值訂閱管理", icon: "membership", module: "memberships", activePrefixes: ["/admin/customer-value", "/admin/membership-levels"] },
+      { href: "/admin/memberships", label: "會員與資產", icon: "membership", module: "memberships", activePrefixes: ["/admin/customer-value", "/admin/membership-levels"] },
       { href: "/admin/crm", label: "顧客回訪與自動提醒", icon: "crm", module: "crm", adminOnly: true, activePrefixes: ["/admin/crm/deliveries"] },
       { href: "/admin/followups", label: "指定日期回訪", icon: "message", module: "crm" },
     ],
@@ -91,7 +93,7 @@ const GROUPS: Group[] = [
   {
     label: "員工管理",
     items: [
-      { href: "/admin/users", label: "員工與權限", icon: "users", adminOnly: true },
+      { href: "/admin/users", label: "員工與權限", icon: "users", brandAdminOnly: true },
       { href: "/admin/attendance", label: "出勤打卡", icon: "checkin" },
       { href: "/admin/handoff", label: "交班待辦", icon: "list" },
     ],
@@ -99,7 +101,7 @@ const GROUPS: Group[] = [
   {
     label: "營運中心",
     items: [
-      { href: "/admin/services", label: "服務方案與排程設定", icon: "service", adminOnly: true, activePrefixes: ["/admin/resources", "/admin/schedules", "/admin/exceptions"] },
+      { href: "/admin/services", label: "服務與排程", icon: "service", adminOnly: true, activePrefixes: ["/admin/resources", "/admin/schedules", "/admin/exceptions"] },
       { href: "/admin/operations/service-records", label: "服務過程紀錄", icon: "list" },
       { href: "/admin/operations/inventory", label: "耗材與商品庫存", icon: "membership" },
       { href: "/admin/operations/commissions", label: "服務獎金試算", icon: "report" },
@@ -125,7 +127,7 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/settings", label: "品牌與規則", icon: "settings", exact: true },
       { href: "/admin/settings/add-ons", label: "擴充功能規劃", icon: "settings" },
-      { href: "/admin/import", label: "匯入顧客與預約資料", icon: "list" },
+      { href: "/admin/import", label: "資料匯入", icon: "list" },
       { href: "/admin/channels", label: "通知與付款測試", icon: "line" },
       { href: "/admin/line", label: "LINE 官方帳號連線", icon: "line" },
       { href: "/admin/richmenu", label: "LINE 圖文選單", icon: "menu", module: "line" },
@@ -233,7 +235,7 @@ function NavigationContent({ groups, unread, close, mode }: { groups: Group[]; u
                 aria-expanded={groupOpen}
                 aria-controls={groupId}
                 onClick={() => setOpenGroup(groupOpen ? null : group.label)}
-                className="flex min-h-9 w-full items-center gap-2 border-b border-white/5 px-2.5 text-left text-[10px] font-semibold tracking-[0.08em] text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                className="flex min-h-9 w-full items-center gap-2 border-b border-white/5 px-2.5 text-left text-xs font-semibold tracking-[0.08em] text-slate-400 transition-colors hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
               >
                 <span className={`transition-transform ${groupOpen ? "rotate-90" : ""}`} aria-hidden="true">›</span>
                 <span className="flex-1">{group.label}</span>
@@ -255,9 +257,10 @@ function NavItem({ item, pathname, unread, close }: { item: Item; pathname: stri
   return (
     <Link
       href={item.href}
+      title={item.label}
       onClick={close}
       aria-current={active ? "page" : undefined}
-      className={`flex min-h-10 items-center gap-2.5 border-l-2 px-2.5 text-[12px] transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
+      className={`flex min-h-10 items-center gap-2.5 border-l-2 px-2.5 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
         active ? "border-[#65c4a1] bg-white/9 font-semibold text-white" : "border-transparent text-slate-300 hover:bg-white/5 hover:text-white"
       }`}
     >
@@ -268,7 +271,7 @@ function NavItem({ item, pathname, unread, close }: { item: Item; pathname: stri
   );
 }
 
-export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platformAccessType = null, platformPermissions = [], hasBrandContext = true, modules = { events: true, memberships: true, crm: true, line: true, legacy: false, beauty: false } }: { role: Role; chatUnread?: number; isPlatformAdmin?: boolean; platformAccessType?: PlatformAccessType | null; platformPermissions?: SystemPermission[]; hasBrandContext?: boolean; modules?: AdminModuleVisibility }) {
+export function AdminNav({ role, brandAccessType = null, chatUnread = 0, isPlatformAdmin = false, platformAccessType = null, platformPermissions = [], hasBrandContext = true, modules = { events: true, memberships: true, crm: true, line: true, legacy: false, beauty: false } }: { role: Role; brandAccessType?: BrandAccessType | null; chatUnread?: number; isPlatformAdmin?: boolean; platformAccessType?: PlatformAccessType | null; platformPermissions?: SystemPermission[]; hasBrandContext?: boolean; modules?: AdminModuleVisibility }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(chatUnread);
@@ -278,7 +281,7 @@ export function AdminNav({ role, chatUnread = 0, isPlatformAdmin = false, platfo
   const groups = GROUPS.filter((group) => (isAdmin || !group.adminOnly) && (mode === "platform" ? group.platformOnly === true : !group.platformOnly))
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => (!item.systemAdminOnly || platformAccessType === "system_admin") && (!item.systemPermission || platformAccessType === "system_admin" || platformPermissions.includes(item.systemPermission)) && (!item.module || modules[item.module]) && (isAdmin || (!item.adminOnly && (role !== "provider" || providerAllowed.has(item.href))))),
+      items: group.items.filter((item) => (!item.brandAdminOnly || brandAccessType === "brand_admin") && (!item.systemAdminOnly || platformAccessType === "system_admin") && (!item.systemPermission || platformAccessType === "system_admin" || platformPermissions.includes(item.systemPermission)) && (!item.module || modules[item.module]) && (isAdmin || (!item.adminOnly && (role !== "provider" || providerAllowed.has(item.href))))),
     }))
     .filter((group) => group.items.length > 0);
 

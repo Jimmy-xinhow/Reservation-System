@@ -1,4 +1,5 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -70,12 +71,12 @@ export async function getClinicSettings(
   svc: SupabaseClient,
   clinicId: string,
 ): Promise<ClinicSettings | null> {
-  const { data, error } = await svc
+  const { data, error } = await adminQuery(svc
     .from("clinic_settings")
     .select("clinic_id, booking_mode, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, line_flex_designs")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+    .maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
   if (!data) return null;
   if (!isClinicSettings(data)) throw new Error("clinic_settings 設定格式錯誤");
   return data;

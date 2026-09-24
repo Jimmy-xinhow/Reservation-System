@@ -1,8 +1,10 @@
+import { deliveryError } from "@/lib/delivery-error";
+import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyClinicLiffIdToken } from "@/lib/line-channel";
-import { formatDateTime, taipeiDateString } from "@/lib/slots";
+import { formatDateTime } from "@/lib/slots";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { verifyBrowserBookingToken, type BrowserBookingIdentity } from "@/lib/browser-booking";
@@ -13,6 +15,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface ReserveBody {
+  request_id?: string;
   idToken?: string;
   browser_token?: string;
   patient_id?: string;
@@ -40,12 +43,13 @@ export async function POST(req: NextRequest) {
   try {
     const rate = await checkRateLimit(req, "booking:reserve", 20);
     if (!rate.allowed) {
-      const response = fail("請稍後再試", 429);
+      const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
       return response;
     }
     const body = (await req.json().catch(() => null)) as ReserveBody | null;
     if (!body) return fail("請求格式錯誤");
+    if (body.request_id !== undefined && (typeof body.request_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.request_id))) return fail("送出識別碼格式錯誤", 400);
     if (!body.idToken && !body.browser_token) return fail("缺少預約身分驗證");
     if (!body.patient_id && !body.browser_token) return fail("缺少顧客");
 
@@ -129,132 +133,43 @@ export async function POST(req: NextRequest) {
     }
     if (addonIds.length > 0 && !selectedServiceId) return fail("加購必須搭配服務", 400);
 
-    // 同一顧客同一天不可重複預約
-    const targetDate =
-      settings.booking_mode === "time" && body.start_at
-        ? taipeiDateString(body.start_at)
-        : body.date ?? "";
-    if (targetDate) {
-      const dayStart = new Date(`${targetDate}T00:00:00+08:00`).toISOString();
-      const dayEnd = new Date(`${targetDate}T23:59:59.999+08:00`).toISOString();
-      const { data: dup } = await svc
-        .from("appointments")
-        .select("id")
-        .eq("clinic_id", clinicId)
-        .eq("patient_id", patientId)
-        .in("status", ["booked", "confirmed", "done"])
-        .gte("start_at", dayStart)
-        .lte("start_at", dayEnd)
-        .limit(1);
-      if ((dup ?? []).length > 0) {
-        return fail("此顧客當天已有預約,無法重複預約。", 409);
-      }
-    }
-
-    let appointmentId: string;
-    let queueNumber: number | null = null;
-    let appointmentIds: string[] = [];
-
-    if (recurrenceCount > 1) {
-      if (!selectedServiceId) return fail("重複預約必須選擇服務", 400);
-      if (settings.booking_mode === "time" && !body.start_at) return fail("缺少預約時間");
-      if (settings.booking_mode === "number" && (!body.template_id || !body.date || !/^\d{4}-\d{2}-\d{2}$/.test(body.date))) return fail("缺少有效的服務場次");
-      const { data, error } = await svc.rpc("book_recurring_appointments", {
-        p_clinic_id: clinicId,
-        p_service_id: selectedServiceId,
-        p_doctor_id: body.doctor_id || null,
-        p_patient_id: patientId,
-        p_start_at: body.start_at || null,
-        p_template_id: body.template_id || null,
-        p_date: body.date || null,
-        p_visit_type: visitType,
-        p_is_self_pay: isSelfPay,
-        p_membership_code: membershipCode,
-        p_booking_answers: body.booking_answers ?? {},
-        p_booking_form_snapshot: bookingFormSnapshot,
-        p_addon_ids: addonIds,
-        p_occurrence_count: recurrenceCount,
-        p_interval_weeks: 1,
-      });
-      if (error) return fail(translateDbError(error.message));
-      const rows = Array.isArray(data) ? data as Array<{ appointment_id: string; queue_number: number | null }> : [];
-      if (rows.length !== recurrenceCount) return fail("重複預約建立不完整，請重新選擇", 500);
-      appointmentIds = rows.map((row) => row.appointment_id);
-      appointmentId = appointmentIds[0];
-      queueNumber = rows[0]?.queue_number ?? null;
-    } else if (settings.booking_mode === "time") {
-      if (!body.start_at) return fail("缺少預約時間");
-      const { data, error } = selectedServiceId
-        ? await svc.rpc("book_time_slot_with_options", { p_clinic_id: clinicId, p_service_id: selectedServiceId, p_doctor_id: body.doctor_id || null, p_patient_id: patientId, p_start_at: body.start_at, p_visit_type: visitType, p_is_self_pay: isSelfPay, p_membership_code: membershipCode, p_booking_answers: body.booking_answers ?? {}, p_booking_form_snapshot: bookingFormSnapshot, p_addon_ids: addonIds })
-        : await svc.rpc(membershipCode ? "book_time_slot_with_membership_for_service" : "book_time_slot_for_service", { p_clinic_id: clinicId, p_doctor_id: body.doctor_id, p_patient_id: patientId, p_start_at: body.start_at, p_visit_type: visitType, p_is_self_pay: isSelfPay, p_service_id: null, ...(membershipCode ? { p_membership_code: membershipCode } : {}) });
-      if (error) return fail(translateDbError(error.message));
-      appointmentId = data as string;
-      appointmentIds = [appointmentId];
-    } else {
-      if (!body.template_id) return fail("缺少服務場次");
-      if (!body.date || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) return fail("date 格式須為 YYYY-MM-DD");
-      const { data, error } = selectedServiceId
-        ? await svc.rpc("book_number_with_options", { p_clinic_id: clinicId, p_service_id: selectedServiceId, p_doctor_id: body.doctor_id || null, p_patient_id: patientId, p_template_id: body.template_id, p_date: body.date, p_visit_type: visitType, p_is_self_pay: isSelfPay, p_membership_code: membershipCode, p_booking_answers: body.booking_answers ?? {}, p_booking_form_snapshot: bookingFormSnapshot, p_addon_ids: addonIds })
-        : await svc.rpc(membershipCode ? "book_number_with_membership" : "book_number", { p_clinic_id: clinicId, p_doctor_id: body.doctor_id, p_patient_id: patientId, p_template_id: body.template_id, p_date: body.date, p_visit_type: visitType, p_is_self_pay: isSelfPay, ...(membershipCode ? { p_membership_code: membershipCode } : {}) });
-      if (error) return fail(translateDbError(error.message));
-      const row = Array.isArray(data) ? data[0] : data;
-      if (!row) return fail("預約失敗", 500);
-      appointmentId = row.appointment_id as string;
-      queueNumber = row.queue_number as number;
-      appointmentIds = [appointmentId];
-    }
-
-    // RPC 成功後一次綁定來源與服務；失敗時取消剛建立的約診，避免留下無法回傳的活躍預約。
-    const metadataPatch: { source: "online"; service_id?: string; booking_answers?: Record<string, unknown>; booking_form_snapshot?: unknown[] } = { source: "online" };
-    // 套票 RPC 已在同一交易中綁定方案服務；沒有新服務值時不可用 null 覆蓋它。
-    if (selectedServiceId) metadataPatch.service_id = selectedServiceId;
-    if (body.booking_answers && selectedServiceId) metadataPatch.booking_answers = body.booking_answers;
-    if (selectedServiceId) metadataPatch.booking_form_snapshot = bookingFormSnapshot;
-    const { error: bindingError } = await svc
-      .from("appointments")
-      .update(metadataPatch)
-      .in("id", appointmentIds)
-      .eq("clinic_id", clinicId);
-    if (bindingError) {
-      await Promise.all(appointmentIds.map((id) => svc.rpc("cancel_appointment", { p_clinic_id: clinicId, p_appointment_id: id, p_note: "booking metadata binding failed" })));
-      return fail(bindingError.message, 500);
-    }
-
-    // 只有在 LINE／瀏覽器身分已驗證且預約建立成功後，才更新顧客 Email。
-    // 更新失敗時取消剛建立的預約，避免成功頁與 Email 資料不同步。
-    if (email) {
-      let emailUpdate = svc
-        .from("patients")
-        .update({ email })
-        .eq("id", patientId)
-        .eq("clinic_id", clinicId);
-      if (lineUserId) emailUpdate = emailUpdate.eq("line_user_id", lineUserId);
-      const { error: emailError } = await emailUpdate;
-      if (emailError) {
-        await Promise.all(appointmentIds.map((id) => svc.rpc("cancel_appointment", { p_clinic_id: clinicId, p_appointment_id: id, p_note: "booking email update failed" })));
-        return fail(emailError.message, 500);
-      }
-    }
+    if (settings.booking_mode === "time" && (!body.start_at || !Number.isFinite(Date.parse(body.start_at)))) return fail("缺少有效的預約時間", 400);
+    if (settings.booking_mode === "number" && (!body.template_id || !body.date || !/^\d{4}-\d{2}-\d{2}$/.test(body.date))) return fail("缺少有效的服務場次", 400);
+    const { data: submission, error: submissionError } = await svc.rpc("submit_booking_once", {
+      p_clinic_id: clinicId, p_patient_id: patientId, p_request_id: body.request_id ?? randomUUID(),
+      p_payload: { service_id: selectedServiceId, doctor_id: body.doctor_id || null, start_at: settings.booking_mode === "time" ? body.start_at : null,
+        template_id: settings.booking_mode === "number" ? body.template_id : null, date: settings.booking_mode === "number" ? body.date : null,
+        visit_type: visitType, is_self_pay: isSelfPay, membership_code: membershipCode, booking_answers: body.booking_answers ?? {},
+        booking_form_snapshot: bookingFormSnapshot, addon_ids: addonIds, recurrence_count: recurrenceCount, email },
+    });
+    if (submissionError) return fail(translateDbError(submissionError.message), 409);
+    const receipt = submission as { appointment_ids?: string[]; queue_number?: number | null; replayed?: boolean } | null;
+    if (!receipt?.appointment_ids?.length) return fail("預約結果尚未確認，請使用相同內容重試或查看我的紀錄", 503);
+    const appointmentIds = receipt.appointment_ids;
+    const appointmentId = appointmentIds[0];
+    const queueNumber = receipt.queue_number ?? null;
 
     // 回傳訂金狀態與行事曆所需資訊供成功頁顯示
-    const { data: appt } = await svc
+    const { data: appt, error: resultError } = await svc
       .from("appointments")
       .select("deposit_status, deposit_amount, addons_amount, start_at, end_at, doctors(name), services(name)")
       .eq("id", appointmentId)
       .single();
+
+    if (resultError || !appt) return fail("預約結果暫時無法讀取，請使用相同內容重試或查看我的紀錄", 503);
 
     const doctors = appt?.doctors as { name: string } | { name: string }[] | null;
     const services = appt?.services as { name: string } | { name: string }[] | null;
     const doctorName = Array.isArray(doctors) ? doctors[0]?.name : doctors?.name;
     const serviceName = Array.isArray(services) ? services[0]?.name : services?.name;
 
-    await Promise.all(appointmentIds.map((id) => notifyAppointmentStatus(
+    if (!receipt.replayed) await Promise.all(appointmentIds.map((id) => notifyAppointmentStatus(
       svc,
       id,
       appt?.deposit_status === "pending" ? "pending" : "confirmed",
-    ).catch((error: unknown) => console.error("Appointment confirmation notification failed", error))));
+    ).catch((error: unknown) => console.error("Appointment confirmation notification failed", { category: deliveryError(error) }))));
 
-    await Promise.all(appointmentIds.map((id, index) => recordCrmInteraction(svc, {
+    if (!receipt.replayed) await Promise.all(appointmentIds.map((id, index) => recordCrmInteraction(svc, {
       clinicId,
       patientId,
       kind: "booking",
@@ -262,7 +177,7 @@ export async function POST(req: NextRequest) {
       title: appointmentIds.length > 1 ? `建立週期預約（${index + 1}/${appointmentIds.length}）` : "建立預約",
       body: appointmentIds.length > 1 ? `已建立連續 ${appointmentIds.length} 週預約` : `預約已建立：${appt?.start_at ?? body.start_at ?? body.date ?? "未指定時間"}${doctorName ? `，${doctorName}` : ""}`,
       appointmentId: id,
-    }).catch((error: unknown) => console.error("CRM booking interaction failed", error))));
+    }).catch((error: unknown) => console.error("CRM booking interaction failed", { category: deliveryError(error) }))));
 
     return ok({
       appointment_id: appointmentId,
@@ -284,6 +199,8 @@ export async function POST(req: NextRequest) {
 
 /** RPC raise 的中文訊息直接回前端;其餘給通用訊息。 */
 function translateDbError(msg: string): string {
+  if (msg.includes("submission content mismatch")) return "送出識別碼已用於其他內容，請重新開啟預約頁";
+  if (msg.includes("customer already has") || msg.includes("當日已有預約")) return "此顧客當天已有預約，請先查看我的紀錄";
   if (msg.includes("membership")) return "套票序號無效、已用完、已過期或不適用於此服務";
   if (msg.includes("add-on duration exceeds schedule")) return "所選加購會超過服務時段，請改選其他時間";
   if (msg.includes("add-on duration slot is full")) return "所選加購需要較長時間，此時段容量已滿";

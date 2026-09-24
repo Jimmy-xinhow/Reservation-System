@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { customerSubmissionFetch } from "@/lib/customer-submission";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { formatAmount, formatEventDate, type PublicEvent } from "@/lib/registration";
 import { createQrSvg } from "@/lib/qr";
 import { trackFunnelEvent } from "@/lib/funnel-client";
-import { closeLiffWindow, useLiff } from "@/lib/useLiff";
-import { Shell as CustomerAppShell } from "@/app/book/BookingFlowUi";
+import { useLiff } from "@/lib/useLiff";
+import { ReturnToLineButton, Shell as CustomerAppShell } from "@/app/book/BookingFlowUi";
 
 interface EventSummary {
   id: string;
@@ -29,9 +30,9 @@ interface RegistrationResult {
 }
 
 async function readApi<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await customerSubmissionFetch(url, init);
   const body = (await response.json().catch(() => null)) as { ok?: boolean; data?: T; error?: string } | null;
-  if (!body?.ok) throw new Error(body?.error ?? "伺服器回應異常");
+  if (!response.ok || !body?.ok) throw new Error(body?.error ?? "伺服器回應異常");
   return body.data as T;
 }
 
@@ -126,11 +127,21 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, liffReques
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedTicket = useMemo(() => event.ticket_types.find((ticket) => ticket.id === ticketId) ?? null, [event.ticket_types, ticketId]);
+  const submitLock = useRef(false);
 
   async function submit() {
+    if (submitLock.current) return;
+    if (!name.trim() || !phone.trim() || !event.sessions.some((session) => session.id === sessionId) || (event.ticket_types.length > 0 && !selectedTicket)) {
+      setError("請確認姓名、電話、場次與票種。");
+      return;
+    }
+    if (liffRequested && (!liffReady || !idToken || liffError)) {
+      setError("尚未完成 LINE 身分驗證，請重新開啟報名頁。");
+      return;
+    }
     const missing = event.fields.find((field) => {
       const value = answers[field.field_key];
-      return field.required && (value === undefined || value === "" || value === false);
+      return field.required && (value === undefined || value === null || value === false || (typeof value === "string" && !value.trim()));
     });
     if (missing) {
       setError(`請填寫${missing.label}`);
@@ -140,6 +151,7 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, liffReques
       setError("請先閱讀並同意活動條款");
       return;
     }
+    submitLock.current = true;
     setSubmitting(true);
     trackFunnelEvent("registration_start", { event_id: event.id });
     setError(null);
@@ -153,8 +165,8 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, liffReques
       trackFunnelEvent("registration_success", { event_id: event.id });
       onSuccess(data);
     } catch (submitError) {
+      submitLock.current = false;
       setError(submitError instanceof Error ? submitError.message : "報名失敗");
-    } finally {
       setSubmitting(false);
     }
   }
@@ -172,7 +184,7 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, liffReques
         )}
         <div className="space-y-5 p-5 sm:p-7">
           <div><div className="eyebrow">{event.clinic_name}</div><h1 className="text-2xl font-bold text-slate-900">{event.title}</h1>{event.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-600">{event.description}</p>}</div>
-          <div className="space-y-4 border-t border-slate-100 pt-5">
+          <fieldset disabled={submitting} className="space-y-4 border-t border-slate-100 pt-5">
             <label className="block text-sm"><span className="label">場次</span><select className="input" value={sessionId} onChange={(e) => setSessionId(e.target.value)}>{event.sessions.map((session) => <option key={session.id} value={session.id}>{session.name} · {formatEventDate(session.start_at)} · 容量 {session.capacity}</option>)}</select></label>
             {event.ticket_types.length > 0 && <label className="block text-sm"><span className="label">票種</span><select className="input" value={ticketId} onChange={(e) => setTicketId(e.target.value)}>{event.ticket_types.map((ticket) => <option key={ticket.id} value={ticket.id}>{ticket.name} · {formatAmount(ticket.price)}</option>)}</select></label>}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm"><span className="label">姓名</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label><label className="text-sm"><span className="label">電話</span><input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" autoComplete="tel" /></label></div>
@@ -189,8 +201,8 @@ function RegistrationForm({ event, clinicSlug, clinicId, accessToken, liffReques
             {liffRequested && !liffReady && !liffError && <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">正在確認 LINE 身分…</p>}
             {liffError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{liffError}</p>}
             {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            <button type="button" disabled={submitting || !sessionId || !name.trim() || !phone.trim() || (liffRequested && !liffReady)} onClick={() => void submit()} className="btn btn-primary w-full">{submitting ? "送出中…" : "送出報名"}</button>
-          </div>
+            <button type="button" disabled={submitting || !sessionId || !name.trim() || !phone.trim() || (liffRequested && (!liffReady || !idToken || !!liffError))} onClick={() => void submit()} className="btn btn-primary w-full">{submitting ? "送出中…" : "送出報名"}</button>
+          </fieldset>
         </div>
       </article>
     </Shell>
@@ -210,6 +222,7 @@ function Success({ result, clinicSlug, clinicId, accessToken, liffRequested, isI
 }
 
 function SuccessCard({ result, clinicSlug, clinicId, accessToken, liffRequested, isInClient }: { result: RegistrationResult; clinicSlug: string | null; clinicId: string | null; accessToken: string | null; liffRequested: boolean; isInClient: boolean }) {
+  const paymentLock = useRef(false);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const qrSvg = useMemo(() => createQrSvg(result.checkin_token), [result.checkin_token]);
@@ -229,6 +242,8 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken, liffRequested,
   }, [result, clinicSlug, clinicId]);
 
   async function pay() {
+    if (paymentLock.current || result.payment_status !== "pending" || result.registration_status !== "pending") return;
+    paymentLock.current = true;
     setPaying(true);
     setError(null);
     try {
@@ -240,7 +255,7 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken, liffRequested,
       const data = await readApi<{ form: { action: string; fields: Record<string, string> } }>(`/api/payment/create${paymentScope}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registration_id: result.registration_id, checkin_token: result.checkin_token, return_path: window.location.pathname + window.location.search }),
+        body: JSON.stringify({ registration_id: result.registration_id, checkin_token: result.checkin_token, return_path: `/register/pay?registration_id=${encodeURIComponent(result.registration_id)}${paymentScope.replace("?", "&")}` }),
       });
       const form = document.createElement("form");
       form.method = "POST";
@@ -256,6 +271,7 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken, liffRequested,
       document.body.appendChild(form);
       form.submit();
     } catch (payError) {
+      paymentLock.current = false;
       setError(payError instanceof Error ? payError.message : "付款頁開啟失敗");
       setPaying(false);
     }
@@ -272,7 +288,7 @@ function SuccessCard({ result, clinicSlug, clinicId, accessToken, liffRequested,
   else if (clinicId) myScope.set("clinic_id", clinicId);
   if (liffRequested) myScope.set("view", "tickets");
   const myHref = `${liffRequested ? "/book" : "/my"}${myScope.toString() ? `?${myScope.toString()}` : ""}`;
-  return <div className="card overflow-hidden"><div className="customer-state-panel p-7 text-center"><div className="text-3xl">✓</div><h1 className="mt-2 text-xl font-bold">報名資料已送出</h1><p className="mt-1 text-sm text-white/80">報名編號與報到憑證已建立，也可在「我的紀錄」查看。</p></div><div className="space-y-4 p-6 text-center"><div className="rounded-xl bg-slate-50 p-4"><div className="text-xs text-slate-500">報名編號</div><div className="mt-1 font-mono text-xl font-bold text-slate-900">{result.registration_no}</div></div>{result.registration_status !== "waitlisted" && result.payment_status !== "pending" && <div className="mx-auto w-52 rounded-xl border border-slate-200 bg-white p-3" dangerouslySetInnerHTML={{ __html: qrSvg }} />}{result.registration_status !== "waitlisted" && <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50 p-4 text-left"><div className="text-xs text-brand-700">報到憑證（請勿轉傳）</div><code className="mt-2 block break-all text-xs text-slate-700">{result.checkin_token}</code></div>}{result.payment_status === "pending" && <div className="space-y-2"><button type="button" onClick={() => void pay()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（${formatAmount(result.amount)}）`}</button>{error && <p className="rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}</div>}<p className="text-sm text-slate-500">目前狀態：{result.registration_status === "waitlisted" ? "候補中" : result.payment_status === "pending" ? "待付款" : "已確認"}</p>{isInClient && result.payment_status !== "pending" && <button type="button" className="btn btn-primary w-full" onClick={() => closeLiffWindow()}>完成並回到 LINE</button>}<Link href={myHref} className="btn btn-primary w-full">查看我的紀錄</Link><Link href={backHref} className="btn btn-secondary w-full">返回活動列表</Link></div></div>;
+  return <div className="card overflow-hidden"><div className="customer-state-panel p-7 text-center"><div className="text-3xl">✓</div><h1 className="mt-2 text-xl font-bold">報名資料已送出</h1><p className="mt-1 text-sm text-white/80">報名編號與報到憑證已建立，也可在「我的紀錄」查看。</p></div><div className="space-y-4 p-6 text-center"><div className="rounded-xl bg-slate-50 p-4"><div className="text-xs text-slate-500">報名編號</div><div className="mt-1 font-mono text-xl font-bold text-slate-900">{result.registration_no}</div></div>{result.registration_status !== "waitlisted" && result.payment_status !== "pending" && <div className="mx-auto w-52 rounded-xl border border-slate-200 bg-white p-3" dangerouslySetInnerHTML={{ __html: qrSvg }} />}{result.registration_status !== "waitlisted" && <div className="rounded-xl border border-dashed border-brand-200 bg-brand-50 p-4 text-left"><div className="text-xs text-brand-700">報到憑證（請勿轉傳）</div><code className="mt-2 block break-all text-xs text-slate-700">{result.checkin_token}</code></div>}{result.payment_status === "pending" && <div className="space-y-2"><button type="button" onClick={() => void pay()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（${formatAmount(result.amount)}）`}</button>{error && <p className="rounded-xl bg-red-50 p-3 text-left text-sm text-red-700">{error}</p>}</div>}<p className="text-sm text-slate-500">目前狀態：{result.registration_status === "waitlisted" ? "候補中" : result.payment_status === "pending" ? "待付款" : "已確認"}</p>{isInClient && result.payment_status !== "pending" && <ReturnToLineButton />}<Link href={myHref} className="btn btn-primary w-full">查看我的紀錄</Link><Link href={backHref} className="btn btn-secondary w-full">返回活動列表</Link></div></div>;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

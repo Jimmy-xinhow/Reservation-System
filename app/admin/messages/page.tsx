@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +33,12 @@ export default async function MessagesPage({
   const { edit } = await searchParams;
   const supabase = await createSupabaseServer();
   if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="訊息模板" />;
-  const { data } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("line_messages")
     .select("id, name, kind, data")
     .eq("clinic_id", clinicId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false }));
+  if (error) throw new Error(adminErrorMessage(error));
   const messages = (data ?? []) as Msg[];
   const editing = edit ? messages.find((m) => m.id === edit) ?? null : null;
 

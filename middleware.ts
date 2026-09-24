@@ -1,3 +1,4 @@
+import { ACCESS_UNAVAILABLE, readVerifiedUser } from "@/lib/auth-boundary";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
@@ -30,9 +31,12 @@ export async function middleware(req: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user;
+  try {
+    user = await readVerifiedUser(supabase);
+  } catch {
+    return new NextResponse(ACCESS_UNAVAILABLE, { status: 503, headers: { "Retry-After": "5", "Cache-Control": "no-store" } });
+  }
 
   const path = req.nextUrl.pathname;
   const isLogin = path.startsWith("/admin/login");
@@ -52,7 +56,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
   }
-  // 帶有權限原因或邀請完成狀態時仍顯示獨立登入頁，由頁面安全登出舊 session。
+  // 權限拒絕頁保留既有 session；只有邀請完成頁會登出以重新登入。
   return res;
 }
 

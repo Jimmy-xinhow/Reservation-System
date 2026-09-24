@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -28,28 +30,28 @@ export async function createPlatformBrandAction(fd: FormData): Promise<void> {
   if (phone.length > 80 || address.length > 240) throw new Error("聯絡資料長度超過限制。");
 
   const service = createServiceClient();
-  const { data: users, error: listError } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (listError) throw new Error(`查詢品牌管理者失敗：${listError.message}`);
+  const { data: users, error: listError } = await adminQuery(service.auth.admin.listUsers({ page: 1, perPage: 1000 }));
+  if (listError) throw new Error(adminErrorMessage(`查詢品牌管理者失敗：${listError.message}`));
   let owner = users.users.find((user) => user.email?.toLowerCase() === ownerEmail) ?? null;
   if (!owner) {
-    const { data, error } = await service.auth.admin.inviteUserByEmail(ownerEmail, {
+    const { data, error } = await adminQuery(service.auth.admin.inviteUserByEmail(ownerEmail, {
       redirectTo: authInviteRedirectUrl(),
-    });
-    if (error || !data.user) throw new Error(`寄送品牌管理者邀請失敗：${error?.message ?? "無法建立使用者"}`);
+    }));
+    if (error || !data.user) throw new Error(adminErrorMessage(`寄送品牌管理者邀請失敗：${error?.message ?? "無法建立使用者"}`));
     owner = data.user;
   }
 
-  const { data, error } = await service.rpc("create_brand_with_platform_admin", {
+  const { data, error } = await adminQuery(service.rpc("create_brand_with_platform_admin", {
     p_actor_user_id: platform.user.id,
     p_owner_user_id: owner.id,
     p_name: name,
     p_slug: slug,
     p_phone: phone || null,
     p_address: address || null,
-  });
+  }));
   if (error) {
     if (error.code === "23505") throw new Error("品牌代號已存在，請換一個。");
-    throw new Error(`建立品牌失敗：${error.message}`);
+    throw new Error(adminErrorMessage(`建立品牌失敗：${error.message}`));
   }
   if (!data) throw new Error("建立品牌失敗：資料庫沒有回傳品牌資料。");
   revalidatePath("/admin/platform");
@@ -61,8 +63,8 @@ export async function setPlatformBrandActiveAction(fd: FormData): Promise<void> 
   const clinicId = value(fd, "clinic_id");
   const active = value(fd, "active") === "true";
   if (!clinicId) throw new Error("缺少品牌識別碼。");
-  const { error } = await createServiceClient().from("clinics").update({ active }).eq("id", clinicId);
-  if (error) throw new Error(`更新品牌狀態失敗：${error.message}`);
+  const { error } = await adminQuery(createServiceClient().from("clinics").update({ active }).eq("id", clinicId));
+  if (error) throw new Error(adminErrorMessage(`更新品牌狀態失敗：${error.message}`));
   revalidatePath("/admin/platform");
 }
 
@@ -74,13 +76,13 @@ export async function updatePlatformEntitlementAction(fd: FormData): Promise<voi
   if (!clinicId) throw new Error("缺少品牌識別碼。");
   if (!["standard", "professional", "enterprise"].includes(planCode)) throw new Error("方案代碼不正確。");
   const featureFlags = Object.fromEntries(PLATFORM_ADD_ONS.map(({ key }) => [key, checked(fd, key)]));
-  const { error } = await createServiceClient().from("brand_entitlements").upsert({
+  const { error } = await adminQuery(createServiceClient().from("brand_entitlements").upsert({
     clinic_id: clinicId,
     plan_code: planCode,
     feature_flags: featureFlags,
     note: note || null,
     updated_at: new Date().toISOString(),
-  }, { onConflict: "clinic_id" });
-  if (error) throw new Error(`更新品牌方案失敗：${error.message}`);
+  }, { onConflict: "clinic_id" }));
+  if (error) throw new Error(adminErrorMessage(`更新品牌方案失敗：${error.message}`));
   revalidatePath("/admin/platform");
 }

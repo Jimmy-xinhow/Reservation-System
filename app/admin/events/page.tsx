@@ -1,3 +1,6 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { requireNonProvider } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { formatAmount, formatEventDate, type EventStatus } from "@/lib/registration";
@@ -43,25 +46,18 @@ export default async function EventsPage({ searchParams }: { searchParams: Promi
 const { supabase, clinicId, role } = await requireNonProvider();
   if (!(await isAdminModuleEnabled(supabase, clinicId, "events"))) return <ModuleDisabled title="活動與報名" />;
   const query = await searchParams;
-  const [{ data: events, error: eventsError }, { data: sessions, error: sessionsError }, { data: tickets, error: ticketsError }, { data: forms, error: formsError }, { data: fields, error: fieldsError }, { data: clinicData, error: clinicError }, { data: membershipPlans, error: membershipPlansError }] = await Promise.all([
-    supabase.from("events").select("id, slug, title, description, status, access_mode").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
-    supabase.from("event_sessions").select("id, event_id, name, start_at, end_at, venue, capacity, waitlist_enabled").eq("clinic_id", clinicId).order("start_at"),
-    supabase.from("event_ticket_types").select("id, event_id, name, price, capacity, membership_plan_id, sale_start_at, sale_end_at").eq("clinic_id", clinicId).eq("active", true).order("price"),
-    supabase.from("registration_forms").select("id, event_id, version, status").eq("clinic_id", clinicId).eq("status", "published").order("version", { ascending: false }),
-    supabase.from("registration_form_fields").select("id, form_id, field_key, label, field_type, required, options").eq("clinic_id", clinicId).order("sort_order"),
-    supabase.from("clinics").select("slug").eq("id", clinicId).maybeSingle(),
-    supabase.from("membership_plans").select("id, name, credits_total").eq("clinic_id", clinicId).eq("active", true).order("name"),
+  const [eventRows, sessionRows, ticketRows, formRows, fieldRows, clinicResult, membershipPlanRows] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("events").select("id, slug, title, description, status, access_mode").eq("clinic_id", clinicId).order("created_at", { ascending: false }).order("id").range(from, to)) as Promise<EventRow[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("event_sessions").select("id, event_id, name, start_at, end_at, venue, capacity, waitlist_enabled").eq("clinic_id", clinicId).order("start_at").order("id").range(from, to)) as Promise<SessionRow[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("event_ticket_types").select("id, event_id, name, price, capacity, membership_plan_id, sale_start_at, sale_end_at").eq("clinic_id", clinicId).eq("active", true).order("price").order("id").range(from, to)) as Promise<TicketRow[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("registration_forms").select("id, event_id, version, status").eq("clinic_id", clinicId).eq("status", "published").order("version", { ascending: false }).order("id").range(from, to)) as Promise<FormRow[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("registration_form_fields").select("id, form_id, field_key, label, field_type, required, options").eq("clinic_id", clinicId).order("sort_order").order("id").range(from, to)) as Promise<FieldRow[]>,
+    adminQuery(supabase.from("clinics").select("slug").eq("id", clinicId).maybeSingle()),
+    fetchAllSupabasePages((from, to) => supabase.from("membership_plans").select("id, name, credits_total").eq("clinic_id", clinicId).eq("active", true).order("name").order("id").range(from, to)) as Promise<MembershipPlanRow[]>,
   ]);
-  if (eventsError || sessionsError || ticketsError || formsError || fieldsError || clinicError) throw new Error(eventsError?.message ?? sessionsError?.message ?? ticketsError?.message ?? formsError?.message ?? fieldsError?.message ?? clinicError?.message ?? "活動資料讀取失敗");
-  if (membershipPlansError) throw new Error(membershipPlansError.message);
-  const eventRows = (events ?? []) as EventRow[];
-  const sessionRows = (sessions ?? []) as SessionRow[];
-  const ticketRows = (tickets ?? []) as TicketRow[];
-  const formRows = (forms ?? []) as FormRow[];
-  const fieldRows = (fields ?? []) as FieldRow[];
-  const membershipPlanRows = (membershipPlans ?? []) as MembershipPlanRow[];
+  if (clinicResult.error) throw new Error(adminErrorMessage(clinicResult.error));
   const canEdit = role === "owner" || role === "admin";
-  const clinicSlug = typeof clinicData?.slug === "string" ? clinicData.slug : null;
+  const clinicSlug = typeof clinicResult.data?.slug === "string" ? clinicResult.data.slug : null;
   const privateLink = query.private_event && query.private_token
     ? `/register?event=${encodeURIComponent(query.private_event)}${clinicSlug ? `&clinic_slug=${encodeURIComponent(clinicSlug)}` : ""}&access_token=${encodeURIComponent(query.private_token)}`
     : null;

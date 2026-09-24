@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireMember, canViewSensitiveCustomerData, hasBrandPermission } from "@/lib/admin";
@@ -98,15 +100,15 @@ export default async function PatientsPage({
   const service = createServiceClient();
   const canManageMembershipLevels = hasBrandPermission(member, "brand.manage");
   const { data: membershipLevels, error: membershipLevelsError } = canManageMembershipLevels
-    ? await service.from("membership_levels").select("id, name, active").eq("clinic_id", clinicId).order("sort_order").order("name")
+    ? await adminQuery(service.from("membership_levels").select("id, name, active").eq("clinic_id", clinicId).order("sort_order").order("name"))
     : { data: [] as MembershipLevel[], error: null };
-  if (membershipLevelsError) throw new Error(`讀取會員等級失敗：${membershipLevelsError.message}`);
+  if (membershipLevelsError) throw new Error(adminErrorMessage(`讀取會員等級失敗：${membershipLevelsError.message}`));
   const levelRows = (membershipLevels ?? []) as MembershipLevel[];
   const levelName = new Map(levelRows.map((level) => [level.id, level.name]));
   let segmentName: string | null = null;
   let segmentPatientIds: string[] | null = null;
   if (segmentId) {
-    const [{ data: segment }, members] = await Promise.all([
+    const [{ data: segment, error: segmentError }, members] = await adminQuery(Promise.all([
       supabase.from("crm_segments").select("id, name").eq("id", segmentId).eq("clinic_id", clinicId).maybeSingle(),
       fetchAllSupabasePages((from, to) =>
         supabase
@@ -117,7 +119,8 @@ export default async function PatientsPage({
           .order("patient_id")
           .range(from, to),
       ),
-    ]);
+    ]));
+    if (segmentError) throw new Error(adminErrorMessage(segmentError));
     segmentName = (segment?.name as string | undefined) ?? null;
     segmentPatientIds = members.map((member) => member.patient_id as string);
   }
@@ -141,7 +144,8 @@ export default async function PatientsPage({
       .eq("active", true)
       .or(orParts.join(","));
     if (segmentPatientIds) query = query.in("id", segmentPatientIds);
-    const { data } = await query.order("created_at", { ascending: false }).limit(100);
+    const { data, error: searchError } = await adminQuery(query.order("created_at", { ascending: false }).limit(100));
+    if (searchError) throw new Error(adminErrorMessage(searchError));
     patients = (data ?? []) as Patient[];
 
     // MMDD:PostgREST 無法對 date 抽月/日,改在此處掃描生日後合併。
@@ -153,7 +157,8 @@ export default async function PatientsPage({
         .eq("active", true)
         .eq("birthday_mmdd", mmdd);
       if (segmentPatientIds) birthdayQuery = birthdayQuery.in("id", segmentPatientIds);
-      const { data: withBday } = await birthdayQuery.order("created_at", { ascending: false }).limit(100);
+      const { data: withBday, error: birthdayError } = await adminQuery(birthdayQuery.order("created_at", { ascending: false }).limit(100));
+      if (birthdayError) throw new Error(adminErrorMessage(birthdayError));
       patients = (withBday ?? []) as Patient[];
     }
   } else if (segmentPatientIds?.length !== 0) {
@@ -163,7 +168,8 @@ export default async function PatientsPage({
       .eq("clinic_id", clinicId)
       .eq("active", true);
     if (segmentPatientIds) query = query.in("id", segmentPatientIds);
-    const { data, count } = await query.order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
+    const { data, count, error: searchError } = await adminQuery(query.order("created_at", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1));
+    if (searchError) throw new Error(adminErrorMessage(searchError));
     patients = (data ?? []) as Patient[];
     total = count ?? 0;
   }
@@ -171,14 +177,15 @@ export default async function PatientsPage({
   // 各顧客的預約/未到統計
   const counts = new Map<string, { all: number; noShow: number }>();
   if (patients.length > 0) {
-    const { data: appts } = await supabase
+    const { data: appts, error: appointmentError } = await adminQuery(supabase
       .from("appointments")
       .select("patient_id, status")
       .eq("clinic_id", clinicId)
       .in(
         "patient_id",
         patients.map((p) => p.id),
-      );
+      ));
+    if (appointmentError) throw new Error(adminErrorMessage(appointmentError));
     for (const a of appts ?? []) {
       const c = counts.get(a.patient_id) ?? { all: 0, noShow: 0 };
       c.all += 1;
@@ -191,7 +198,7 @@ export default async function PatientsPage({
   let recentAppointments: RecentAppointment[] = [];
   let recentRegistrations: RecentRegistration[] = [];
   if (selectedPatientId) {
-    const [{ data: selectedData, error: selectedError }, { data: recentData, error: recentError }, { data: registrationData, error: registrationError }] = await Promise.all([
+    const [{ data: selectedData, error: selectedError }, { data: recentData, error: recentError }, { data: registrationData, error: registrationError }] = await adminQuery(Promise.all([
       supabase
         .from("patients")
         .select("id, name, phone, tags, blocked_until, membership_level_id, created_at, birthday, gender, email, marketing_opt_in")
@@ -213,8 +220,8 @@ export default async function PatientsPage({
         .eq("patient_id", selectedPatientId)
         .order("created_at", { ascending: false })
         .limit(8),
-    ]);
-    if (selectedError || recentError || registrationError) throw new Error(selectedError?.message ?? recentError?.message ?? registrationError?.message ?? "讀取顧客詳情失敗");
+    ]));
+    if (selectedError || recentError || registrationError) throw new Error(adminErrorMessage(selectedError?.message ?? recentError?.message ?? registrationError?.message ?? "讀取顧客詳情失敗"));
     selectedPatient = selectedData as PatientDetail | null;
     recentAppointments = (recentData ?? []) as unknown as RecentAppointment[];
     recentRegistrations = (registrationData ?? []) as unknown as RecentRegistration[];

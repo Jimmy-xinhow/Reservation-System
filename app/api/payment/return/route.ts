@@ -5,6 +5,7 @@ import {
   decryptAndVerifyNewebpay,
   getPaymentSettingsByMerchant,
   verifyEcpay,
+  parseNewebpayPaymentResult,
 } from "@/lib/payment";
 import { processPaymentWebhook } from "@/lib/payment-webhook";
 import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/registration-notifications";
@@ -45,7 +46,8 @@ function resultRedirect(req: NextRequest, order: string, provider: Provider, sta
   url.searchParams.set("provider", provider);
   url.searchParams.set("state", state);
   if (clinicSlug) url.searchParams.set("clinic_slug", clinicSlug);
-  return NextResponse.redirect(url);
+  // Gateway returns are form POSTs; the result page must be opened with GET.
+  return NextResponse.redirect(url, 303);
 }
 
 async function notifyRegistrationForPayment(svc: SupabaseClient, clinicId: string, provider: Provider, merchantOrderNo: string): Promise<void> {
@@ -74,6 +76,7 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
     if (!settings || !merchantOrderNo || !verifyEcpay(fields, settings)) {
       return orderFromQuery ? resultRedirect(req, orderFromQuery, provider, "error", clinicSlug) : new NextResponse("付款回傳驗證失敗", { status: 400 });
     }
+    if (fields.SimulatePaid === "1") return resultRedirect(req, merchantOrderNo, provider, "returned", clinicSlug);
     await processPaymentWebhook(svc, {
       provider,
       clinicId: settings.clinic_id,
@@ -93,19 +96,15 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
   const settings = await getPaymentSettingsByMerchant(svc, "newebpay", merchantId);
   if (!settings) return orderFromQuery ? resultRedirect(req, orderFromQuery, provider, "error", clinicSlug) : new NextResponse("付款回傳驗證失敗", { status: 400 });
   const payload = decryptAndVerifyNewebpay(fields, settings);
-  const merchantOrderNo = validOrder(String(payload.MerchantOrderNo ?? "")) ?? orderFromQuery;
-  if (!merchantOrderNo) return new NextResponse("付款回傳缺少訂單", { status: 400 });
-  const tradeNo = payload.TradeNo ? String(payload.TradeNo) : null;
-  const status = String(payload.Status ?? "");
-  const resultCode = String(payload.ResultCode ?? "");
+  const { merchantOrderNo, tradeNo, eventKey, success, amount } = parseNewebpayPaymentResult(payload, settings.merchant_id);
   await processPaymentWebhook(svc, {
     provider,
     clinicId: settings.clinic_id,
     merchantOrderNo,
     providerTransactionNo: tradeNo,
-    eventKey: `${merchantOrderNo}:${tradeNo ?? "none"}:${status}:${resultCode}`,
-    success: status === "SUCCESS" && resultCode === "00",
-    amount: Number(payload.Amt ?? 0),
+    eventKey,
+    success,
+    amount,
     payload,
   });
   await notifyRegistrationForPayment(svc, settings.clinic_id, provider, merchantOrderNo).catch(() => undefined);

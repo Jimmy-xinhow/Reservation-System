@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { randomBytes } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
@@ -38,24 +40,24 @@ export async function updateEmailSettingsAction(fd: FormData) {
     throw new Error("寄件者格式不正確，例如 品牌名稱 <booking@example.com>");
   }
   const service = createServiceClient();
-  const { data: existing, error: existingError } = await service
+  const { data: existing, error: existingError } = await adminQuery(service
     .from("clinic_email_secret_refs")
     .select("clinic_id")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (existingError) throw new Error(existingError.message);
+    .maybeSingle());
+  if (existingError) throw new Error(adminErrorMessage(existingError));
   if (!existing && Boolean(apiKey) !== Boolean(fromAddress)) {
     throw new Error("第一次設定時，寄件者與 Resend API key 都必須填寫");
   }
 
-  const { error } = await service.rpc("save_clinic_email_configuration", {
+  const { error } = await adminQuery(service.rpc("save_clinic_email_configuration", {
     p_clinic_id: clinicId,
     p_actor_user_id: user.id,
     p_enabled: bool(fd, "email_enabled"),
     p_api_key: apiKey || null,
     p_from_address: fromAddress || null,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/settings");
   revalidatePath("/admin/channels");
 }
@@ -78,7 +80,7 @@ export async function updatePaymentSettingsAction(fd: FormData) {
     }
   }
 
-  const { error } = await createServiceClient().rpc("save_clinic_payment_configuration", {
+  const { error } = await adminQuery(createServiceClient().rpc("save_clinic_payment_configuration", {
     p_clinic_id: clinicId,
     p_actor_user_id: user.id,
     p_provider: provider,
@@ -87,8 +89,8 @@ export async function updatePaymentSettingsAction(fd: FormData) {
     p_active: bool(fd, "active"),
     p_hash_key: hashKey || null,
     p_hash_iv: hashIv || null,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/settings");
   revalidatePath("/admin/channels");
 }
@@ -100,26 +102,26 @@ export async function addClinicDomainAction(fd: FormData) {
     redirect(`/admin/settings?section=domain&err=${encodeURIComponent("請填寫正確網域名稱，例如 booking.example.com")}`);
   }
   const verificationToken = `booking-domain-${randomBytes(12).toString("hex")}`;
-  const { error } = await supabase.from("clinic_domains").insert({
+  const { error } = await adminQuery(supabase.from("clinic_domains").insert({
     clinic_id: clinicId,
     hostname,
     kind: "custom",
     verification_token: verificationToken,
     active: false,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/settings");
 }
 
 export async function verifyClinicDomainAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
-  const { data: domain } = await supabase
+  const { data: domain } = await adminQuery(supabase
     .from("clinic_domains")
     .select("id, hostname, verification_token")
     .eq("id", id)
     .eq("clinic_id", clinicId)
-    .maybeSingle();
+    .maybeSingle());
   if (!domain?.verification_token) throw new Error("找不到待驗證網域");
 
   let records: string[][] = [];
@@ -130,12 +132,12 @@ export async function verifyClinicDomainAction(fd: FormData) {
   }
   if (!records.flat().includes(domain.verification_token)) throw new Error("DNS TXT 驗證值不一致");
 
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("clinic_domains")
     .update({ verified_at: new Date().toISOString(), active: true })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/settings");
 }
 
@@ -149,7 +151,7 @@ export async function updateClinicProfileAction(fd: FormData) {
   if (slug && !/^[a-z0-9](?:[a-z0-9-]{0,78}[a-z0-9])?$/.test(slug)) {
     throw new Error("品牌短網址只能使用英數字與連字號");
   }
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("clinics")
     .update({
       name,
@@ -159,8 +161,8 @@ export async function updateClinicProfileAction(fd: FormData) {
       address: str(fd, "address") || null,
       intro: str(fd, "intro") || null,
     })
-    .eq("id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/settings");
   revalidatePath("/");
 }
@@ -263,7 +265,7 @@ export async function updateBrandPageAction(fd: FormData): Promise<void> {
   if (rawLogoUrl.length > 1000) throw new Error("品牌 Logo 網址過長");
   const logoUrl = rawLogoUrl ? safeBrandImageUrl(rawLogoUrl, "品牌 Logo") : null;
 
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("clinic_settings")
     .update({
       brand_page_enabled: bool(fd, "brand_page_enabled"),
@@ -273,8 +275,8 @@ export async function updateBrandPageAction(fd: FormData): Promise<void> {
       brand_primary_color: brandColor(fd, "brand_primary_color", "品牌主色"),
       brand_accent_color: brandColor(fd, "brand_accent_color", "強調色"),
     })
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
 
   revalidatePath("/admin/settings");
   revalidatePath("/");
@@ -295,7 +297,7 @@ export async function updateSettingsAction(fd: FormData) {
     : "self_pay";
   const eventsEnabled = bool(fd, "events_enabled");
 
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("clinic_settings")
     .update({
       booking_mode: bookingMode,
@@ -320,8 +322,8 @@ export async function updateSettingsAction(fd: FormData) {
       beauty_operations_enabled: bool(fd, "beauty_operations_enabled"),
       public_registration_enabled: eventsEnabled && bool(fd, "public_registration_enabled"),
     })
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/settings");
   revalidatePath("/admin/dashboard");
   revalidatePath("/admin/operations/service-records");

@@ -7,6 +7,7 @@ import {
   updateLineTextsAction,
 } from "../line-actions";
 import { requireAdmin } from "@/lib/admin";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import RepliesEditor, { type Reply } from "./RepliesEditor";
 import LineReplySettingsEditor from "./LineReplySettingsEditor";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
@@ -19,7 +20,7 @@ export default async function RepliesPage() {
   const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
   if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="LINE 自動回覆" />;
-  const [{ data: replies }, { data: settings }, { data: msgs }, { data: clinic }] = await Promise.all([
+  const [{ data: replies, error: repliesError }, { data: settings, error: settingsError }, { data: msgs, error: messagesError }, { data: clinic, error: clinicError }] = await adminQuery(Promise.all([
     supabase
       .from("line_auto_replies")
       .select("id, keywords, action, reply_text, message_id, sort, active")
@@ -34,7 +35,9 @@ export default async function RepliesPage() {
       .maybeSingle(),
     supabase.from("line_messages").select("id, name, kind, data").eq("clinic_id", clinicId).order("created_at"),
     supabase.from("clinics").select("name").eq("id", clinicId).maybeSingle(),
-  ]);
+  ]));
+  const readError = repliesError ?? settingsError ?? messagesError ?? clinicError;
+  if (readError || !settings || !clinic) throw new Error(adminErrorMessage(readError ?? "LINE 自動回覆設定載入失敗"));
   const s = settings as Record<string, unknown> | null;
   const messages = (msgs ?? []) as { id: string; name: string; kind: MsgKind; data: MsgData }[];
   const replyRows = (replies ?? []) as Reply[];

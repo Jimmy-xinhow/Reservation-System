@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin";
@@ -39,7 +41,7 @@ export async function createServiceAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const name = str(fd, "name");
   if (!name) throw new Error("請填服務名稱");
-  const { error } = await supabase.from("services").insert({
+  const { error } = await adminQuery(supabase.from("services").insert({
     clinic_id: clinicId,
     name,
     category: str(fd, "category") || null,
@@ -50,8 +52,8 @@ export async function createServiceAction(fd: FormData) {
     booking_target: ["provider_required", "provider_optional", "resource_only"].includes(str(fd, "booking_target")) ? str(fd, "booking_target") : "provider_required",
     booking_fields: parseServiceBookingFields(fd),
     active: true,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/services");
 }
 
@@ -60,7 +62,7 @@ export async function updateServiceAction(fd: FormData) {
   const id = str(fd, "id");
   const name = str(fd, "name");
   if (!id || !name) throw new Error("缺少服務或名稱");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("services")
     .update({
       name,
@@ -73,8 +75,8 @@ export async function updateServiceAction(fd: FormData) {
       booking_fields: parseServiceBookingFields(fd),
     })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/services");
 }
 
@@ -82,23 +84,23 @@ export async function toggleServiceAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("services")
     .update({ active: !active })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/services");
 }
 
 export async function deleteServiceAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("services")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", clinicId);
+    .eq("clinic_id", clinicId));
   if (error) throw new Error("此服務已有預約使用，無法刪除，請改為停用。");
   revalidatePath("/admin/services");
 }

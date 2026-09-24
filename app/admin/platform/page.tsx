@@ -1,6 +1,9 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
 import { PLATFORM_ADD_ONS, hasSystemPermission, requireSystemPermission } from "@/lib/platform";
 import { createServiceClient } from "@/lib/supabase";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createPlatformBrandAction, setPlatformBrandActiveAction, updatePlatformEntitlementAction } from "./actions";
 
@@ -13,6 +16,13 @@ interface SettingsRow { clinic_id: string; public_registration_enabled: boolean;
 interface ClinicCountRow { clinic_id: string; }
 type PlatformSectionId = "overview" | "create" | "brands";
 
+function completeCount(result: { count: number | null; error: unknown }): number {
+  if (result.error || result.count === null || !Number.isSafeInteger(result.count) || result.count < 0) {
+    throw new Error(adminErrorMessage("平台統計資料讀取不完整"));
+  }
+  return result.count;
+}
+
 export default async function PlatformPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const platform = await requireSystemPermission("platform.overview");
   const canManageBrands = hasSystemPermission(platform, "brands.manage");
@@ -24,47 +34,39 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
     : "overview";
   const service = createServiceClient();
   const [
-    { data: brands, error: brandError },
-    { data: entitlements, error: entitlementError },
-    { data: members, error: memberError },
-    { data: settings, error: settingsError },
-    { data: services, error: serviceError },
-    { data: schedules, error: scheduleError },
-    { count: appointmentCount, error: appointmentCountError },
-    { count: registrationCount, error: registrationCountError },
-    { count: patientCount, error: patientCountError },
-    { count: failedDeliveryCount, error: failedDeliveryError },
-  ] = await Promise.all([
-    service.from("clinics").select("id, name, slug, line_basic_id, active, created_at").order("created_at", { ascending: false }),
-    service.from("brand_entitlements").select("clinic_id, plan_code, feature_flags, note"),
-    service.from("clinic_members").select("clinic_id, role"),
-    service.from("clinic_settings").select("clinic_id, public_registration_enabled, public_booking_enabled, booking_mode"),
-    service.from("services").select("clinic_id").eq("active", true),
-    service.from("schedule_templates").select("clinic_id").eq("active", true),
+    brands, entitlements, members, settings, services, schedules,
+    appointmentResult, registrationResult, patientResult, failedDeliveryResult,
+  ] = await adminQuery(Promise.all([
+    fetchAllSupabasePages((from, to) => service.from("clinics")
+      .select("id, name, slug, line_basic_id, active, created_at")
+      .order("created_at", { ascending: false }).order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("brand_entitlements")
+      .select("clinic_id, plan_code, feature_flags, note").order("clinic_id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("clinic_members")
+      .select("clinic_id, role").order("clinic_id").order("user_id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("clinic_settings")
+      .select("clinic_id, public_registration_enabled, public_booking_enabled, booking_mode").order("clinic_id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("services")
+      .select("clinic_id").eq("active", true).order("clinic_id").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("schedule_templates")
+      .select("clinic_id").eq("active", true).order("clinic_id").order("id").range(from, to)),
     service.from("appointments").select("id", { count: "exact", head: true }),
     service.from("registrations").select("id", { count: "exact", head: true }),
     service.from("patients").select("id", { count: "exact", head: true }),
     service.from("crm_delivery_logs").select("id", { count: "exact", head: true }).eq("status", "failed"),
-  ]);
-  if (brandError) throw new Error(`讀取品牌清單失敗：${brandError.message}`);
-  if (entitlementError) throw new Error(`讀取品牌方案失敗：${entitlementError.message}`);
-  if (memberError) throw new Error(`讀取品牌成員失敗：${memberError.message}`);
-  if (settingsError) throw new Error(`讀取品牌設定失敗：${settingsError.message}`);
-  if (serviceError) throw new Error(`讀取品牌服務失敗：${serviceError.message}`);
-  if (scheduleError) throw new Error(`讀取品牌排程失敗：${scheduleError.message}`);
-  if (appointmentCountError) throw new Error(`讀取預約統計失敗：${appointmentCountError.message}`);
-  if (registrationCountError) throw new Error(`讀取報名統計失敗：${registrationCountError.message}`);
-  if (patientCountError) throw new Error(`讀取顧客統計失敗：${patientCountError.message}`);
-  if (failedDeliveryError) throw new Error(`讀取訊息失敗統計失敗：${failedDeliveryError.message}`);
-
-  const brandRows = (brands ?? []) as BrandRow[];
-  const entitlementRows = (entitlements ?? []) as EntitlementRow[];
-  const memberRows = (members ?? []) as MemberRow[];
-  const settingsByBrand = new Map((settings ?? []).map((row) => [row.clinic_id, row as SettingsRow]));
+  ]));
+  const appointmentCount = completeCount(appointmentResult);
+  const registrationCount = completeCount(registrationResult);
+  const patientCount = completeCount(patientResult);
+  const failedDeliveryCount = completeCount(failedDeliveryResult);
+  const brandRows = brands as BrandRow[];
+  const entitlementRows = entitlements as EntitlementRow[];
+  const memberRows = members as MemberRow[];
+  const settingsByBrand = new Map(settings.map((row) => [row.clinic_id, row as SettingsRow]));
   const entitlementByBrand = new Map(entitlementRows.map((row) => [row.clinic_id, row]));
   const membersByBrand = countByClinic(memberRows);
-  const servicesByBrand = countByClinic((services ?? []) as ClinicCountRow[]);
-  const schedulesByBrand = countByClinic((schedules ?? []) as ClinicCountRow[]);
+  const servicesByBrand = countByClinic(services as ClinicCountRow[]);
+  const schedulesByBrand = countByClinic(schedules as ClinicCountRow[]);
   const progressByBrand = new Map(brandRows.map((brand) => [brand.id, getBrandProgress(brand, membersByBrand, settingsByBrand, servicesByBrand, schedulesByBrand)]));
   const readyCount = brandRows.filter((brand) => progressByBrand.get(brand.id)?.complete === true).length;
 
@@ -96,12 +98,12 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
       {activeSection === "overview" && <div className="platform-metrics">
         <Metric label="品牌總數" value={brandRows.length} detail={`${brandRows.filter((brand) => brand.active).length} 個啟用中`} />
         <Metric label="品牌成員" value={memberRows.length} detail="跨品牌成員總數" />
-        <Metric label="累計預約" value={appointmentCount ?? 0} detail="所有品牌" />
-        <Metric label="累計報名" value={registrationCount ?? 0} detail="所有品牌" />
-        <Metric label="累計顧客" value={patientCount ?? 0} detail="品牌資料隔離統計" />
+        <Metric label="累計預約" value={appointmentCount} detail="所有品牌" />
+        <Metric label="累計報名" value={registrationCount} detail="所有品牌" />
+        <Metric label="累計顧客" value={patientCount} detail="品牌資料隔離統計" />
         <Metric label="完成基本開通" value={readyCount} detail={`${brandRows.length === 0 ? 0 : Math.round((readyCount / brandRows.length) * 100)}% 品牌`} />
         <Metric label="啟用服務" value={servicesByBrandTotal(servicesByBrand)} detail="跨品牌服務總數" />
-        <Metric label="投遞失敗" value={failedDeliveryCount ?? 0} detail="CRM 訊息需處理" tone="warning" />
+        <Metric label="投遞失敗" value={failedDeliveryCount} detail="CRM 訊息需處理" tone="warning" />
       </div>}
 
       {activeSection === "overview" && <section className="platform-panel platform-link-list">

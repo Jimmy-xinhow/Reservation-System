@@ -1,6 +1,10 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
-import { requireOperator } from "@/lib/admin";
+import { requireNonProvider } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { readAdminAccountSummaries } from "@/lib/admin-account-summaries";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createHandoffTaskAction, updateHandoffTaskAction } from "./actions";
 
@@ -23,29 +27,35 @@ const STATUS: Record<string, string> = { open: "待處理", in_progress: "處理
 const PRIORITY: Record<string, string> = { low: "低", normal: "一般", high: "高" };
 
 export default async function HandoffPage({ searchParams }: { searchParams: Promise<{ status?: string; category?: string; priority?: string; assignee?: string }> }) {
-  const [member, params] = await Promise.all([requireOperator(), searchParams]);
-  let query = member.supabase
-    .from("handoff_tasks")
-    .select("id, title, category, status, priority, due_at, assigned_to, note, created_at")
-    .eq("clinic_id", member.clinicId)
-    .order("status")
-    .order("priority", { ascending: false })
-    .order("due_at", { ascending: true, nullsFirst: false })
-    .order("created_at", { ascending: false });
-  if (["open", "in_progress", "done"].includes(params.status ?? "")) query = query.eq("status", params.status!);
-  if (Object.hasOwn(CATEGORY, params.category ?? "")) query = query.eq("category", params.category!);
-  if (Object.hasOwn(PRIORITY, params.priority ?? "")) query = query.eq("priority", params.priority!);
-  if (params.assignee) query = query.eq("assigned_to", params.assignee);
-
-  const service = createServiceClient();
-  const [{ data, error }, { data: members, error: membersError }, { data: authUsers, error: authError }] = await Promise.all([
-    query,
-    member.supabase.from("clinic_members").select("user_id, access_type").eq("clinic_id", member.clinicId),
-    service.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-  ]);
-  if (error || membersError || authError) throw new Error(error?.message ?? membersError?.message ?? authError?.message ?? "讀取交班待辦失敗");
-  const emailById = new Map(authUsers.users.map((user) => [user.id, user.email ?? user.id]));
-  const tasks = (data ?? []) as Task[];
+  const [member, params] = await Promise.all([requireNonProvider(), searchParams]);
+  const service = await adminQuery(Promise.resolve().then(() => createServiceClient()));
+  const [taskRows, members] = await Promise.all([
+    fetchAllSupabasePages((from, to) => {
+      let query = member.supabase
+        .from("handoff_tasks")
+        .select("id, title, category, status, priority, due_at, assigned_to, note, created_at")
+        .eq("clinic_id", member.clinicId);
+      if (["open", "in_progress", "done"].includes(params.status ?? "")) query = query.eq("status", params.status!);
+      if (Object.hasOwn(CATEGORY, params.category ?? "")) query = query.eq("category", params.category!);
+      if (Object.hasOwn(PRIORITY, params.priority ?? "")) query = query.eq("priority", params.priority!);
+      if (params.assignee) query = query.eq("assigned_to", params.assignee);
+      return query.order("status")
+        .order("priority", { ascending: false })
+        .order("due_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(from, to);
+    }),
+    fetchAllSupabasePages((from, to) => service.from("clinic_members")
+      .select("user_id, access_type")
+      .eq("clinic_id", member.clinicId)
+      .order("user_id")
+      .range(from, to)),
+  ]).catch(() => { throw new Error(adminErrorMessage("交班資料讀取不完整")); });
+  const emailById = new Map(
+    [...(await readAdminAccountSummaries(service, members.map((staff) => staff.user_id)))].map(([id, summary]) => [id, summary.email]),
+  );
+  const tasks = taskRows as Task[];
   const openCount = tasks.filter((task) => task.status !== "done").length;
   const highPriorityCount = tasks.filter((task) => task.priority === "high" && task.status !== "done").length;
   return (
@@ -75,7 +85,7 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
             <label className="text-sm"><span className="label">分類</span><select name="category" className="input" defaultValue="appointment">{Object.entries(CATEGORY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
             <label className="text-sm"><span className="label">優先度</span><select name="priority" className="input" defaultValue="normal">{Object.entries(PRIORITY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
             <label className="text-sm"><span className="label">完成期限（台北時間）</span><input type="datetime-local" name="due_at" className="input" /></label>
-            <label className="text-sm"><span className="label">負責人</span><select name="assigned_to" className="input" defaultValue=""><option value="">未指派</option>{(members ?? []).map((staff) => <option key={staff.user_id} value={staff.user_id}>{emailById.get(staff.user_id) ?? "品牌成員（未設定 Email）"}</option>)}</select></label>
+            <label className="text-sm"><span className="label">負責人</span><select name="assigned_to" className="input" defaultValue=""><option value="">未指派</option>{members.map((staff) => <option key={staff.user_id} value={staff.user_id}>{emailById.get(staff.user_id) ?? "品牌成員（未設定 Email）"}</option>)}</select></label>
             <label className="text-sm sm:col-span-2"><span className="label">交班備註</span><textarea name="note" className="input min-h-20" maxLength={1000} /></label>
             <div className="sm:col-span-2"><SubmitButton className="btn btn-primary min-h-11">新增交班待辦</SubmitButton></div>
           </form>
@@ -89,7 +99,7 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
             <label className="text-sm"><span className="label">狀態</span><select name="status" className="input" defaultValue={params.status ?? ""}><option value="">全部</option>{Object.entries(STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
             <label className="text-sm"><span className="label">分類</span><select name="category" className="input" defaultValue={params.category ?? ""}><option value="">全部</option>{Object.entries(CATEGORY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
             <label className="text-sm"><span className="label">優先度</span><select name="priority" className="input" defaultValue={params.priority ?? ""}><option value="">全部</option>{Object.entries(PRIORITY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-            <label className="text-sm"><span className="label">負責人</span><select name="assignee" className="input" defaultValue={params.assignee ?? ""}><option value="">全部</option>{(members ?? []).map((staff) => <option key={staff.user_id} value={staff.user_id}>{emailById.get(staff.user_id) ?? "品牌成員（未設定 Email）"}</option>)}</select></label>
+            <label className="text-sm"><span className="label">負責人</span><select name="assignee" className="input" defaultValue={params.assignee ?? ""}><option value="">全部</option>{members.map((staff) => <option key={staff.user_id} value={staff.user_id}>{emailById.get(staff.user_id) ?? "品牌成員（未設定 Email）"}</option>)}</select></label>
             <button className="btn btn-secondary min-h-11 sm:col-span-2" type="submit">套用交班篩選</button>
           </form>
         </section>

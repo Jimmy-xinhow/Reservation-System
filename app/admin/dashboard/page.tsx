@@ -1,3 +1,6 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import Link from "next/link";
 import { getAssignedDoctorIds, hasBrandPermission, requireMember } from "@/lib/admin";
 import { taipeiDateString } from "@/lib/slots";
@@ -70,12 +73,28 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const canManageProducts = hasBrandPermission(member, "brand.manage");
   const { clinicId, role } = member;
   const supabase = member.supabase;
-  const { data: productSettings, error: productSettingsError } = await supabase
-    .from("clinic_settings")
-    .select("public_booking_enabled, public_registration_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, email_enabled, deposit_enabled, brand_page_enabled, dashboard_focus")
-    .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (productSettingsError || !productSettings) throw new Error(productSettingsError?.message ?? "品牌設定載入失敗");
+  // Providers only need their assigned work. The settings row is deliberately
+  // hidden from their RLS role, so render the provider-only booking view without
+  // reading or exposing brand configuration.
+  const { data: productSettings, error: productSettingsError } = role === "provider"
+    ? { data: {
+        public_booking_enabled: false,
+        public_registration_enabled: false,
+        events_enabled: false,
+        memberships_enabled: false,
+        crm_automation_enabled: false,
+        line_channel_enabled: false,
+        email_enabled: false,
+        deposit_enabled: false,
+        brand_page_enabled: false,
+        dashboard_focus: "booking",
+      }, error: null }
+    : await adminQuery(supabase
+      .from("clinic_settings")
+      .select("public_booking_enabled, public_registration_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, email_enabled, deposit_enabled, brand_page_enabled, dashboard_focus")
+      .eq("clinic_id", clinicId)
+      .maybeSingle());
+  if (productSettingsError || !productSettings) throw new Error(adminErrorMessage(productSettingsError?.message ?? "品牌設定載入失敗"));
   const setupReadsPromise = role === "owner" || role === "admin"
     ? Promise.all([
         supabase.from("clinics").select("name, slug").eq("id", clinicId).maybeSingle(),
@@ -87,6 +106,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         supabase.from("clinic_line_channels").select("verification_status, liff_id").eq("clinic_id", clinicId).maybeSingle(),
         supabase.from("line_richmenu").select("published_version_id, published_id").eq("clinic_id", clinicId).maybeSingle(),
         supabase.from("clinic_payment_settings").select("active").eq("clinic_id", clinicId).maybeSingle(),
+        supabase.from("schedule_templates")
+          .select("id, services!inner(booking_target, active)")
+          .eq("clinic_id", clinicId)
+          .eq("active", true)
+          .is("doctor_id", null)
+          .eq("services.active", true)
+          .in("services.booking_target", ["provider_optional", "resource_only"])
+          .limit(1),
       ])
     : Promise.resolve(null);
   const assignedDoctorIds = role === "provider" ? await getAssignedDoctorIds(member) : [];
@@ -103,22 +130,24 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const todayStartIso = new Date(`${today}T00:00:00+08:00`).toISOString();
   const todayEndIso = new Date(`${today}T23:59:59.999+08:00`).toISOString();
 
-  let appointmentsQuery = supabase
-    .from("appointments")
-    .select("start_at, end_at, status, doctors(name), services(name)")
-    .eq("clinic_id", clinicId)
-    .gte("start_at", winStartIso)
-    .lte("start_at", winEndIso);
-  if (role === "provider") {
-    appointmentsQuery = appointmentsQuery.in("doctor_id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
-  }
+  const appointmentsPage = (from: number, to: number) => {
+    let query = supabase.from("appointments")
+      .select("start_at, end_at, status, doctors(name), services(name)")
+      .eq("clinic_id", clinicId)
+      .gte("start_at", winStartIso)
+      .lte("start_at", winEndIso);
+    if (role === "provider") {
+      query = query.in("doctor_id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
+    }
+    return query.order("start_at").order("id").range(from, to);
+  };
 
   const [
-    { data: appointmentData, error: appointmentError },
-    { data: registrationData, error: registrationError },
-    { data: paymentData, error: paymentError },
-    { data: deliveryData, error: deliveryError },
-    { count: patientCount },
+    { data: appointmentData },
+    { data: registrationData },
+    { data: paymentData },
+    { data: deliveryData },
+    { count: patientCount, error: patientCountError },
     attendanceSettingsResult,
     attendanceResult,
     handoffResult,
@@ -128,32 +157,31 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     inventoryResult,
     chatThreads,
     setupReads,
-  ] = await Promise.all([
-    appointmentsQuery,
-    role === "provider" || !eventsEnabled ? Promise.resolve({ data: [], error: null }) : supabase.from("registrations").select("created_at, status, payment_status, amount").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso),
-    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso),
-    role === "provider" || !crmEnabled ? Promise.resolve({ data: [], error: null }) : supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso),
-    role === "provider" ? Promise.resolve({ count: null as number | null }) : supabase.from("patients").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("active", true),
+  ] = await adminQuery(Promise.all([
+    fetchAllSupabasePages(appointmentsPage).then((data) => ({ data, error: null })),
+    role === "provider" || !eventsEnabled ? Promise.resolve({ data: [], error: null }) : fetchAllSupabasePages((from, to) => supabase.from("registrations").select("created_at, status, payment_status, amount").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso).order("created_at").order("id").range(from, to)).then((data) => ({ data, error: null })),
+    role === "provider" ? Promise.resolve({ data: [], error: null }) : fetchAllSupabasePages((from, to) => supabase.from("payment_orders").select("status, amount").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso).order("created_at").order("id").range(from, to)).then((data) => ({ data, error: null })),
+    role === "provider" || !crmEnabled ? Promise.resolve({ data: [], error: null }) : fetchAllSupabasePages((from, to) => supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", winStartIso).lte("created_at", winEndIso).order("created_at").order("id").range(from, to)).then((data) => ({ data, error: null })),
+    role === "provider" ? Promise.resolve({ count: null as number | null, error: null }) : supabase.from("patients").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("active", true),
     supabase.from("attendance_settings").select("click_enabled, qr_enabled").eq("clinic_id", clinicId).maybeSingle(),
     supabase.from("attendance_events").select("event_type, occurred_at").eq("clinic_id", clinicId).eq("user_id", member.user.id).gte("occurred_at", todayStartIso).lte("occurred_at", todayEndIso).order("occurred_at", { ascending: false }).limit(20),
-    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("handoff_tasks").select("id, priority, status", { count: "exact" }).eq("clinic_id", clinicId).neq("status", "done").limit(50),
-    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("sales_payments").select("amount, received_at").eq("clinic_id", clinicId).gte("received_at", monthStartIso).lte("received_at", todayEndIso),
-    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("sales_orders").select("total_amount, paid_amount, status").eq("clinic_id", clinicId).neq("status", "void").gte("created_at", monthStartIso).lte("created_at", todayEndIso),
-    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("purchase_orders").select("status, purchase_order_items(quantity, unit_cost)").eq("clinic_id", clinicId).in("status", ["ordered", "received"]).gte("created_at", monthStartIso).lte("created_at", todayEndIso),
-    role === "provider" ? Promise.resolve({ data: [], error: null }) : supabase.from("inventory_items").select("stock_on_hand, reorder_level, retail_price").eq("clinic_id", clinicId).eq("active", true),
+    role === "provider" ? Promise.resolve({ data: [], error: null }) : fetchAllSupabasePages((from, to) => supabase.from("handoff_tasks").select("id, priority, status").eq("clinic_id", clinicId).neq("status", "done").order("id").range(from, to)).then((data) => ({ data, error: null })),
+    role === "provider" ? Promise.resolve({ data: [] as Array<{ amount: number }>, error: null }) : fetchAllSupabasePages((from, to) => supabase.from("sales_payments").select("amount").eq("clinic_id", clinicId).gte("received_at", monthStartIso).lte("received_at", todayEndIso).order("received_at").order("id").range(from, to)).then((data) => ({ data, error: null })),
+    role === "provider" ? Promise.resolve({ data: [] as SalesOrderRow[], error: null }) : fetchAllSupabasePages((from, to) => supabase.from("sales_orders").select("total_amount, paid_amount, status").eq("clinic_id", clinicId).neq("status", "void").gte("created_at", monthStartIso).lte("created_at", todayEndIso).order("created_at").order("id").range(from, to)).then((data) => ({ data, error: null })),
+    role === "provider" ? Promise.resolve({ data: [] as PurchaseOrderRow[], error: null }) : fetchAllSupabasePages((from, to) => supabase.from("purchase_orders").select("status, purchase_order_items(quantity, unit_cost)").eq("clinic_id", clinicId).in("status", ["ordered", "received"]).gte("created_at", monthStartIso).lte("created_at", todayEndIso).order("created_at").order("id").range(from, to)).then((data) => ({ data, error: null })),
+    role === "provider" ? Promise.resolve({ data: [] as InventoryItemRow[], error: null }) : fetchAllSupabasePages((from, to) => supabase.from("inventory_items").select("stock_on_hand, reorder_level, retail_price").eq("clinic_id", clinicId).eq("active", true).order("id").range(from, to)).then((data) => ({ data, error: null })),
     role === "provider" || productSettings.line_channel_enabled !== true ? Promise.resolve([]) : buildThreads(supabase, clinicId),
     setupReadsPromise,
-  ]);
+  ]));
 
-  if (appointmentError || registrationError || paymentError || deliveryError) {
-    throw new Error(appointmentError?.message ?? registrationError?.message ?? paymentError?.message ?? deliveryError?.message ?? "營運資料載入失敗");
-  }
-  if (setupReads?.some((result) => result.error)) throw new Error(setupReads.find((result) => result.error)?.error?.message ?? "品牌開通資料載入失敗");
+  if (patientCountError) throw new Error(adminErrorMessage(patientCountError.message));
+  if (setupReads?.some((result) => result.error)) throw new Error(adminErrorMessage(setupReads.find((result) => result.error)?.error?.message ?? "品牌開通資料載入失敗"));
   const setupItems = setupReads ? buildSetupItems({
     brandReady: Boolean(setupReads[0].data?.name && setupReads[0].data?.slug),
     brandPageReady: productSettings.brand_page_enabled === true && Boolean(setupReads[0].data?.slug),
     serviceReady: (setupReads[1].count ?? 0) > 0 || (productSettings.events_enabled && (setupReads[2].count ?? 0) > 0),
-    peopleOrResourcesReady: (setupReads[3].count ?? 0) > 0 || (setupReads[4].count ?? 0) > 0,
+    serviceScheduleRequired: productSettings.public_booking_enabled || (setupReads[1].count ?? 0) > 0 || !productSettings.events_enabled,
+    peopleOrResourcesReady: (setupReads[3].count ?? 0) > 0 || (setupReads[4].count ?? 0) > 0 || (setupReads[9].data?.length ?? 0) > 0,
     scheduleReady: (setupReads[5].count ?? 0) > 0,
     publicFlowReady: productSettings.public_booking_enabled || (productSettings.events_enabled && productSettings.public_registration_enabled),
     lineEnabled: productSettings.line_channel_enabled,
@@ -163,6 +191,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     paymentRequired: productSettings.deposit_enabled,
     paymentReady: setupReads[8].data?.active === true,
   }) : [];
+  const showFirstScreenSetup = setupItems.slice(0, 7).some((item) => item.status === "blocked");
+  const needsService = setupItems[2]?.status === "blocked";
+  const needsSchedule = setupItems[3]?.status === "blocked";
 
   const appointments = (appointmentData ?? []) as unknown as AppointmentRow[];
   const registrations = (registrationData ?? []) as unknown as RegistrationRow[];
@@ -170,7 +201,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const deliveries = (deliveryData ?? []) as unknown as DeliveryRow[];
 
   const supplementalError = [attendanceSettingsResult.error, attendanceResult.error, handoffResult.error, salesPaymentsResult.error, salesOrdersResult.error, purchaseOrdersResult.error, inventoryResult.error].find(Boolean);
-  if (supplementalError && supplementalError.code !== "42P01") throw new Error(`工作台摘要載入失敗：${supplementalError.message}`);
+  if (supplementalError) throw new Error(adminErrorMessage(`工作台摘要載入失敗：${supplementalError.message}`));
 
   const attendanceEvents = (attendanceResult.data ?? []) as AttendanceEventRow[];
   const latestAttendance = attendanceEvents[0];
@@ -222,15 +253,19 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </div>
       )}
 
+      {showFirstScreenSetup && <BrandSetupGuide items={setupItems} />}
+
+      <section className="admin-section p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-2 text-sm font-semibold text-slate-800">常用操作</span>{role === "provider" ? <><Link href="/admin/calendar" className="btn btn-primary">查看我的預約</Link><Link href="/admin/attendance" className="btn btn-secondary">出勤打卡</Link></> : <>{needsService ? <Link href={eventsEnabled && dashboardFocus === "registration" ? "/admin/events" : "/admin/services"} className="btn btn-primary">{eventsEnabled && dashboardFocus === "registration" ? "＋ 建立課程／活動" : "＋ 建立服務"}</Link> : needsSchedule ? <Link href="/admin/schedules" className="btn btn-primary">設定可預約時段</Link> : dashboardFocus === "registration" && eventsEnabled ? <Link href="/admin/events" className="btn btn-primary">＋ 建立課程／活動</Link> : <Link href={`/admin/calendar?modal=new&date=${today}`} className="btn btn-primary">＋ 新增預約</Link>}{!needsService && !needsSchedule && dashboardFocus === "registration" && eventsEnabled && <Link href={`/admin/calendar?modal=new&date=${today}`} className="btn btn-secondary">新增服務預約</Link>}{!needsService && !needsSchedule && dashboardFocus !== "registration" && eventsEnabled && <Link href="/admin/events" className="btn btn-secondary">建立課程／活動</Link>}<Link href="/admin/patients" className="btn btn-secondary">顧客管理</Link><Link href="/admin/checkout?modal=new-sale" className="btn btn-secondary">建立銷售單</Link><Link href="/admin/handoff" className="btn btn-secondary">新增交班待辦</Link></>}</div></section>
+
       <div className="admin-metric-strip grid-cols-2 sm:grid-cols-5">{dashboardFocus === "registration" && eventsEnabled && role !== "provider" ? <><Stat label="今日新報名" value={todayRegistrations.length} accent /><Stat label="待付款報名" value={pendingPayments} tone={pendingPayments ? "warning" : undefined} /><Stat label="近 14 日報名" value={activeRegistrations.length} /><Stat label="今日服務預約" value={todayAppointments.length} /><Stat label="待確認服務" value={waitingConfirmation} tone={waitingConfirmation ? "warning" : undefined} /></> : <><Stat label={dashboardFocus === "mixed" ? "今日服務預約" : "今日預約"} value={todayAppointments.length} accent />{eventsEnabled && role !== "provider" && <Stat label="今日課程／活動報名" value={todayRegistrations.length} />}<Stat label="待確認預約" value={waitingConfirmation} tone={waitingConfirmation ? "warning" : undefined} />{role !== "provider" && <Stat label="待付款報名" value={pendingPayments} tone={pendingPayments ? "warning" : undefined} />}<Stat label="未來 7 日預約" value={upcomingAppointments.length} /></>}</div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]">
-        <section className="admin-section"><div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">今日待處理</h2><p className="mt-0.5 text-xs text-slate-500">需要人工確認或補救的工作。</p></div><span className="text-xs text-slate-400">每 30 秒更新</span></div><div className="grid divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0">{dashboardFocus === "registration" && eventsEnabled && role !== "provider" ? <><ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款報名"} tone={pendingPayments ? "warning" : "neutral"} /><ActionCard href="/admin" label="待確認服務" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認服務"} tone={waitingConfirmation ? "warning" : "neutral"} /></> : <><ActionCard href="/admin" label="待確認預約" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認預約"} tone={waitingConfirmation ? "warning" : "neutral"} />{eventsEnabled && role !== "provider" && <ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款報名"} tone={pendingPayments ? "warning" : "neutral"} />}</>}{role !== "provider" && <ActionCard href="/admin/crm/deliveries" label="通知失敗" value={failedDeliveries} description={failedDeliveries ? "查看投遞紀錄" : "近期沒有失敗"} tone={failedDeliveries ? "danger" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/crm" label="近期未到" value={noShows} description={noShows ? "可檢查回訪與分眾" : "近期沒有未到"} tone={noShows ? "warning" : "neutral"} />}</div></section>
+        <section className="admin-section"><div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">今日待處理</h2><p className="mt-0.5 text-xs text-slate-500">需要人工確認或補救的工作。</p></div><span className="text-xs text-slate-400">每 30 秒更新</span></div><div className="grid divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0">{dashboardFocus === "registration" && eventsEnabled && role !== "provider" ? <><ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款報名"} tone={pendingPayments ? "warning" : "neutral"} /><ActionCard href={`/admin?date=${today}&status=booked`} label="待確認服務" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認服務"} tone={waitingConfirmation ? "warning" : "neutral"} /></> : <><ActionCard href={`/admin?date=${today}&status=booked`} label="待確認預約" value={waitingConfirmation} description={waitingConfirmation ? "請確認或聯絡顧客" : "目前沒有待確認預約"} tone={waitingConfirmation ? "warning" : "neutral"} />{eventsEnabled && role !== "provider" && <ActionCard href="/admin/registrations" label="待付款報名" value={pendingPayments} description={pendingPayments ? "檢查付款狀態與逾時" : "目前沒有待付款報名"} tone={pendingPayments ? "warning" : "neutral"} />}</>}{role !== "provider" && <ActionCard href="/admin/crm/deliveries" label="CRM 發送失敗" value={failedDeliveries} description={failedDeliveries ? "查看近 14 日 CRM 投遞" : "近 14 日沒有 CRM 發送失敗"} tone={failedDeliveries ? "danger" : "neutral"} />}{role !== "provider" && <ActionCard href="/admin/crm" label="近期未到" value={noShows} description={noShows ? "可檢查回訪與分眾" : "近期沒有未到"} tone={noShows ? "warning" : "neutral"} />}</div></section>
         <section className="admin-section p-4">
-          <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">出勤與交班</p><h2 className="font-semibold text-slate-900">我的打卡</h2><p className="mt-1 text-xs leading-5 text-slate-500">{latestAttendance ? `最近：${latestAttendance.event_type === "clock_in" ? "上班" : "下班"} ${new Date(latestAttendance.occurred_at).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })}` : "今天尚無打卡紀錄"}</p></div><Link href="/admin/handoff" className="text-xs font-semibold text-brand-700">交班 {openHandoffTasks.length} 項 →</Link></div>
+          <div className="flex items-start justify-between gap-3"><div><p className="eyebrow">{role === "provider" ? "我的出勤" : "出勤與交班"}</p><h2 className="font-semibold text-slate-900">我的打卡</h2><p className="mt-1 text-xs leading-5 text-slate-500">{latestAttendance ? `最近：${latestAttendance.event_type === "clock_in" ? "上班" : "下班"} ${new Date(latestAttendance.occurred_at).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false })}` : "今天尚無打卡紀錄"}</p></div>{role !== "provider" && <Link href="/admin/handoff" className="text-xs font-semibold text-brand-700">交班 {openHandoffTasks.length} 項 →</Link>}</div>
           <div className="mt-4 border-y border-slate-200 py-3 text-left"><span className="attendance-live-mark"><i />台北時間</span><div className="mt-1"><LiveTaipeiClock /></div></div>
           {attendanceSettings.click_enabled && <div className="mt-4 grid grid-cols-2 gap-2"><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_in" /><SubmitButton className="btn btn-primary w-full">上班打卡</SubmitButton></form><form action={recordButtonAttendanceAction}><input type="hidden" name="event_type" value="clock_out" /><SubmitButton className="btn btn-secondary w-full">下班打卡</SubmitButton></form></div>}
-          <div className="mt-3 grid grid-cols-2 gap-2"><Link href="/admin/attendance#attendance-scanner" className="btn btn-secondary text-center">掃描 QR</Link><Link href="/admin/attendance#attendance-manager" className="btn btn-secondary text-center">顯示 QR</Link></div>
+          <div className="mt-3 flex flex-wrap gap-2"><Link href="/admin/attendance#attendance-scanner" className="btn btn-secondary text-center">掃描 QR</Link>{(role === "owner" || role === "admin") && <Link href="/admin/attendance#attendance-manager" className="btn btn-secondary text-center">顯示 QR</Link>}</div>
           <p className={`mt-3 text-xs ${highPriorityHandoffs ? "text-amber-700" : "text-slate-500"}`}>{highPriorityHandoffs ? `${highPriorityHandoffs} 項高優先交班尚未完成` : "目前沒有高優先交班"}</p>
         </section>
       </div>
@@ -248,15 +283,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         </section>
       </div>}
 
-      <section className="admin-section p-4"><div className="flex flex-wrap items-center gap-2"><span className="mr-2 text-sm font-semibold text-slate-800">常用操作</span>{dashboardFocus === "registration" && eventsEnabled && role !== "provider" ? <><Link href="/admin/events" className="btn btn-primary">＋ 建立課程／活動</Link><Link href={`/admin/calendar?modal=new&date=${today}`} className="btn btn-secondary">新增服務預約</Link></> : <><Link href={`/admin/calendar?modal=new&date=${today}`} className="btn btn-primary">＋ 新增預約</Link>{eventsEnabled && role !== "provider" && <Link href="/admin/events" className="btn btn-secondary">建立課程／活動</Link>}</>}<Link href="/admin/patients" className="btn btn-secondary">顧客管理</Link>{role !== "provider" && <Link href="/admin/checkout?modal=new" className="btn btn-secondary">建立銷售單</Link>}<Link href="/admin/handoff" className="btn btn-secondary">新增交班待辦</Link></div></section>
-
-      {setupItems.length > 0 && setupItems.some((item) => item.status !== "done") && <BrandSetupGuide items={setupItems} />}
+      {!showFirstScreenSetup && setupItems.length > 0 && setupItems.some((item) => item.status !== "done") && <BrandSetupGuide items={setupItems} />}
 
       <div className="admin-workbench-grid"><section className="admin-section p-4"><div><h2 className="font-semibold text-slate-900">{dashboardFocus === "registration" ? "課程／活動報名趨勢" : dashboardFocus === "booking" ? "服務預約趨勢" : "預約與報名趨勢"}</h2><p className="mt-1 text-xs text-slate-500">近 14 日數量曲線，可直接辨識尖峰與低谷。</p></div><TrendLineChart data={perDay} today={today} /></section><section className="admin-section p-4"><div><h2 className="font-semibold text-slate-900">今日服務／教學排程</h2><p className="mt-1 text-xs text-slate-500">時間軸顯示人員佔用區間與目前狀態。</p></div><ScheduleTimeline items={todayTimeline} /></section></div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2"><section className="admin-section p-4"><h2 className="mb-4 font-semibold text-slate-900">{dashboardFocus === "registration" ? "課程／活動報名狀態" : "預約狀態"}</h2><StatusBars labels={dashboardFocus === "registration" ? REGISTRATION_STATUS_LABEL : STATUS_LABEL} colors={dashboardFocus === "registration" ? REGISTRATION_STATUS_COLOR : STATUS_COLOR} counts={dashboardFocus === "registration" ? registrationStatusCounts : statusCounts} total={dashboardFocus === "registration" ? registrations.length : appointments.length} /></section><section className="admin-section p-4"><h2 className="mb-4 font-semibold text-slate-900">服務／教學人員分佈</h2>{Object.keys(providerCounts).length === 0 ? <p className="text-sm text-slate-400">尚無資料</p> : <div className="space-y-2.5">{Object.entries(providerCounts).map(([name, count]) => <div key={name} className="flex items-center gap-3 text-sm"><span className="w-24 shrink-0 truncate text-slate-600">{name}</span><div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-accent-500" style={{ width: `${count / maxProvider * 100}%` }} /></div><span className="w-8 shrink-0 text-right text-slate-500">{count}</span></div>)}</div>}</section></div>
 
-      <section className="admin-section p-5"><h2 className="mb-4 font-semibold text-slate-900">資料範圍摘要</h2><div className="grid gap-x-8 text-sm sm:grid-cols-2 xl:grid-cols-4"><SummaryLine label="可管理顧客" value={role === "provider" ? "依指派範圍" : `${patientCount ?? 0} 人`} /><SummaryLine label="近期付款成功" value={`${payments.filter((item) => item.status === "paid").length} 筆`} /><SummaryLine label="通知已送達" value={`${deliveries.filter((item) => item.status === "sent").length} 筆`} /><SummaryLine label="資料時間範圍" value={`${winStart} 至 ${winEnd}`} /></div></section>
+      <section className="admin-section p-5"><h2 className="mb-4 font-semibold text-slate-900">資料範圍摘要</h2><div className="grid gap-x-8 text-sm sm:grid-cols-2 xl:grid-cols-4"><SummaryLine label="可管理顧客" value={role === "provider" ? "依指派範圍" : `${patientCount ?? 0} 人`} /><SummaryLine label="近期付款成功" value={`${payments.filter((item) => item.status === "paid").length} 筆`} /><SummaryLine label="通知已送出" value={`${deliveries.filter((item) => item.status === "sent").length} 筆`} /><SummaryLine label="資料時間範圍" value={`${winStart} 至 ${winEnd}`} /></div></section>
     </div>
   );
 }
@@ -270,30 +303,34 @@ function BrandSetupGuide({ items }: { items: SetupItem[] }) {
   const next = items.find((item) => item.status === "blocked") ?? items.find((item) => item.status === "warning");
   const completed = items.filter((item) => item.status === "done").length;
   return (
-    <details className="admin-section group">
-      <summary className="flex min-h-16 cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
-        <div>
+    <section className="admin-section">
+      <details className="group">
+      <summary className="flex min-h-16 cursor-pointer list-none flex-col items-start gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="min-w-0 flex-1">
           <p className="font-semibold text-slate-900">新品牌上線準備</p>
           <p className="mt-1 text-sm text-slate-600">{next ? `下一步：${next.label}－${next.reason}` : "所有設定步驟皆已完成"}</p>
         </div>
-        <span className="badge shrink-0 bg-white text-brand-700">{completed}／{items.length} 完成 · 展開</span>
+        <span className="badge shrink-0 bg-white text-brand-700">已完成 {completed} 項 · 查看清單</span>
       </summary>
       <div className="border-t border-brand-100 px-5 pb-5 pt-4">
         <p className="mb-4 text-sm leading-6 text-slate-600">依序處理尚未完成的項目；「需確認」代表可先使用部分功能，但正式上線前仍要測試。</p>
         <div className="admin-setup-list border-y border-slate-200">{items.map((item, index) => <Link key={item.label} href={item.href} className="admin-setup-row" data-status={item.status}><span className="admin-setup-row-number">{item.status === "done" ? "✓" : index + 1}</span><strong>{item.label.replace(/^\d+\.\s*/, "")}</strong><p>{item.reason}</p><span className="admin-setup-row-state">{item.status === "done" ? "已完成" : item.status === "warning" ? "需確認" : "尚未完成"} →</span></Link>)}</div>
       </div>
-    </details>
+      </details>
+      {next && <div className="flex flex-wrap items-center justify-between gap-3 border-t border-brand-100 bg-brand-50/60 px-5 py-3"><p className="text-sm text-slate-700">從這一步繼續：<strong className="text-slate-900">{next.label.replace(/^\d+\.\s*/, "")}</strong></p><Link href={next.href} className="btn btn-primary">前往{next.label.replace(/^\d+\.\s*/, "")} →</Link></div>}
+    </section>
   );
 }
-function buildSetupItems(state: { brandReady: boolean; brandPageReady: boolean; serviceReady: boolean; peopleOrResourcesReady: boolean; scheduleReady: boolean; publicFlowReady: boolean; lineEnabled: boolean; lineReady: boolean; richMenuReady: boolean; notificationReady: boolean; paymentRequired: boolean; paymentReady: boolean; }): SetupItem[] {
-  const operationsReady = state.brandReady && state.serviceReady && state.peopleOrResourcesReady && state.scheduleReady && state.publicFlowReady;
+function buildSetupItems(state: { brandReady: boolean; brandPageReady: boolean; serviceReady: boolean; serviceScheduleRequired: boolean; peopleOrResourcesReady: boolean; scheduleReady: boolean; publicFlowReady: boolean; lineEnabled: boolean; lineReady: boolean; richMenuReady: boolean; notificationReady: boolean; paymentRequired: boolean; paymentReady: boolean; }): SetupItem[] {
+  const scheduleReady = !state.serviceScheduleRequired || (state.peopleOrResourcesReady && state.scheduleReady);
+  const operationsReady = state.brandReady && state.serviceReady && scheduleReady && state.publicFlowReady;
   const lineLaunchReady = !state.lineEnabled || (state.lineReady && state.richMenuReady);
   const paymentLaunchReady = !state.paymentRequired || state.paymentReady;
   return [
     { label: "1. 品牌資料", href: "/admin/settings?section=brand", status: state.brandReady ? "done" : "blocked", reason: state.brandReady ? "品牌名稱與短網址已完成" : "缺少品牌名稱或短網址" },
     { label: "2. 品牌形象頁", href: "/admin/settings?section=page", status: state.brandPageReady ? "done" : "warning", reason: state.brandPageReady ? "公開形象頁已啟用，可從工作台直接查看" : "尚未啟用公開形象頁" },
     { label: "3. 服務／活動", href: "/admin/services", status: state.serviceReady ? "done" : "blocked", reason: state.serviceReady ? "已有可營運的服務或活動" : "至少建立一項服務；啟用活動時也可建立活動" },
-    { label: "4. 人員／資源／排班", href: "/admin/schedules", status: state.peopleOrResourcesReady && state.scheduleReady ? "done" : "blocked", reason: !state.peopleOrResourcesReady ? "缺少服務提供者或資源" : state.scheduleReady ? "人員／資源與排班已建立" : "尚未建立可用排班" },
+    { label: "4. 人員／資源／排班", href: "/admin/schedules", status: scheduleReady ? "done" : "blocked", reason: !state.serviceScheduleRequired ? "目前只開放活動報名，無需設定服務排班" : !state.peopleOrResourcesReady ? "缺少服務提供者、資源或免指定人員服務排班" : state.scheduleReady ? "可提供服務的排班已建立" : "尚未建立可用排班" },
     { label: "5. 預約與報名規則", href: "/admin/settings?section=booking", status: state.publicFlowReady ? "done" : "warning", reason: state.publicFlowReady ? "至少一個公開流程已開放" : "目前沒有開放預約或報名入口" },
     { label: "6. LINE 官方帳號入口", href: "/admin/line", status: !state.lineEnabled ? "warning" : state.lineReady && state.richMenuReady ? "done" : "blocked", reason: !state.lineEnabled ? "LINE 入口未啟用，可先使用一般瀏覽器網址" : !state.lineReady ? "LINE 登入與顧客入口尚未完成驗證" : state.richMenuReady ? "LINE 連線與圖文選單已就緒" : "尚未發布 LINE 圖文選單" },
     { label: "7. 通知與付款", href: "/admin/settings?section=channels", status: state.notificationReady && paymentLaunchReady ? "done" : "warning", reason: !state.notificationReady ? "尚未啟用 LINE 或 Email 通知" : !paymentLaunchReady ? "已要求訂金，但標準金流尚未啟用" : "通知與必要付款設定已完成" },

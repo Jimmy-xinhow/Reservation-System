@@ -9,6 +9,12 @@ const publicDomain = process.env.STAGING_BASE_URL?.trim() ||
   (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "https://reservation-system-staging-staging.up.railway.app");
 if (!supabaseUrl || !serviceKey || !cronSecret) throw new Error("Missing staging Supabase or CRON environment variables");
 if (environmentName.toLowerCase() !== "staging") throw new Error(`Refusing to run outside staging: ${environmentName || "unknown"}`);
+if (new URL(supabaseUrl).hostname !== "ongjsegewpnbkqugrpom.supabase.co") throw new Error("Refusing to run against an unpinned Supabase project");
+if (new URL(publicDomain).hostname !== "reservation-system-staging-staging.up.railway.app") throw new Error("Refusing an unpinned staging API host");
+if (process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim() || process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON?.trim() ||
+    process.env.RESEND_API_KEY?.trim() || process.env.RESEND_API_KEYS_JSON?.trim()) {
+  throw new Error("External delivery credentials present; refusing synthetic notification audit");
+}
 
 const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const suffix = `${Date.now()}-${randomBytes(3).toString("hex")}`;
@@ -60,6 +66,7 @@ async function cleanupClinic(targetClinicId) {
     "reminder_logs",
     "appointment_waitlist_entries",
     "appointments",
+    "customer_submission_requests",
     "schedule_exceptions",
     "schedule_templates",
     "services",
@@ -67,22 +74,28 @@ async function cleanupClinic(targetClinicId) {
     "patient_records",
     "patients",
     "clinic_members",
+    "funnel_events",
+    "admin_product_events",
+    "attendance_settings",
     "clinic_line_channels",
     "brand_entitlements",
     "clinic_settings",
   ]) await remove(table, service.from(table).delete().eq("clinic_id", targetClinicId));
+  await remove("activation metrics", service.from("clinic_activation_metrics").delete().eq("clinic_id", targetClinicId));
   await remove("clinic", service.from("clinics").delete().eq("id", targetClinicId));
   if (errors.length) throw new Error(errors.join("; "));
 }
 
-async function cron(path, authorized = true) {
+async function cron(path, body, authorized = true) {
   const response = await fetch(new URL(path, publicDomain), {
-    headers: authorized ? { Authorization: `Bearer ${cronSecret}` } : {},
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(authorized ? { Authorization: `Bearer ${cronSecret}` } : {}) },
+    body: JSON.stringify(body),
   });
   const text = await response.text();
-  let body = null;
-  try { body = JSON.parse(text); } catch { body = text; }
-  return { status: response.status, body };
+  let parsedBody = null;
+  try { parsedBody = JSON.parse(text); } catch { parsedBody = text; }
+  return { status: response.status, body: parsedBody };
 }
 
 function taipeiDate(date = new Date()) {
@@ -90,10 +103,6 @@ function taipeiDate(date = new Date()) {
 }
 
 try {
-  const staleClinics = await must("find stale notification QA clinics", service.from("clinics").select("id").like("slug", "qa-notifications-%"));
-  for (const staleClinic of staleClinics ?? []) await cleanupClinic(staleClinic.id);
-  if ((staleClinics ?? []).length) pass(`Removed ${staleClinics.length} stale notification QA clinic(s)`);
-
   const clinic = await must("create clinic", service.from("clinics").insert({
     name: "QA Notification Lifecycle",
     slug: qaSlug,
@@ -206,46 +215,30 @@ try {
   ]).select("id,trigger_type"));
   assert("appointment_done, birthday and inactive automations exist", new Set(automations.map((row) => row.trigger_type)).size === 3);
 
-  const unauthorizedReminder = await cron("/api/cron/reminders", false);
-  const unauthorizedMarketing = await cron("/api/cron/marketing", false);
+  const reminderScope = { clinic_id: clinicId, appointment_ids: [reminderAppointment.id] };
+  const marketingScope = { clinic_id: clinicId, automation_ids: automations.map(row => row.id), patient_ids: patients.map(row => row.id) };
+  const queueScope = { clinic_id: clinicId, registration_ids: [registration.id], appointment_ids: [reminderAppointment.id], membership_payment_ids: [], waitlist_ids: [] };
+  const unauthorizedReminder = await cron("/api/cron/reminders", reminderScope, false);
+  const unauthorizedMarketing = await cron("/api/cron/marketing", marketingScope, false);
   assert("reminder and marketing cron reject missing authorization", unauthorizedReminder.status === 401 && unauthorizedMarketing.status === 401);
-
-  const hours = Number(process.env.REMINDER_HOURS_BEFORE ?? 24) || 24;
-  const otherReminderRows = await must("check other reminder candidates", service.from("appointments")
-    .select("id,clinic_id")
-    .neq("clinic_id", clinicId)
-    .in("status", ["booked", "confirmed"])
-    .gt("start_at", new Date().toISOString())
-    .lte("start_at", new Date(Date.now() + hours * 3600_000).toISOString()));
-  if (otherReminderRows.length) throw new Error(`Unsafe reminder precondition: ${otherReminderRows.length} non-QA appointment(s) are inside the reminder window`);
-
-  const tokenMapConfigured = Boolean(process.env.LINE_CHANNEL_ACCESS_TOKENS_JSON?.trim());
-  const fallbackTokenConfigured = Boolean(process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim());
-  if (fallbackTokenConfigured && !tokenMapConfigured) {
-    throw new Error("Unsafe reminder precondition: a shared LINE token could send to the fake QA user");
-  }
-  const firstReminder = await cron("/api/cron/reminders");
+  const firstReminder = await cron("/api/cron/reminders", reminderScope);
   assert("same-day appointment is scanned and missing brand LINE credentials fail closed", firstReminder.status === 200 && firstReminder.body?.scanned === 1 && firstReminder.body?.lineFailed === 1 && firstReminder.body?.line === 0);
   const firstReminderLogs = await must("read first reminder log", service.from("reminder_logs")
     .select("id,result,error").eq("appointment_id", reminderAppointment.id).eq("channel", "line"));
   assert("failed reminder is auditable in one tenant-scoped row", firstReminderLogs.length === 1 && firstReminderLogs[0].result === "failed" && Boolean(firstReminderLogs[0].error));
 
-  const secondReminder = await cron("/api/cron/reminders");
+  const secondReminder = await cron("/api/cron/reminders", reminderScope);
   const secondReminderLogs = await must("read retried reminder log", service.from("reminder_logs")
     .select("id,result").eq("appointment_id", reminderAppointment.id).eq("channel", "line"));
   assert("failed reminder retries without creating a duplicate row", secondReminder.status === 200 && secondReminder.body?.lineFailed === 1 && secondReminderLogs.length === 1 && secondReminderLogs[0].id === firstReminderLogs[0].id);
   await must("simulate successful reminder completion", service.from("reminder_logs")
     .update({ result: "sent", error: null, sent_at: new Date().toISOString() }).eq("id", firstReminderLogs[0].id));
-  const thirdReminder = await cron("/api/cron/reminders");
+  const thirdReminder = await cron("/api/cron/reminders", reminderScope);
   const finalReminderLogs = await must("read final reminder log", service.from("reminder_logs")
     .select("id,result").eq("appointment_id", reminderAppointment.id).eq("channel", "line"));
   assert("sent reminder is never claimed again", thirdReminder.status === 200 && thirdReminder.body?.lineFailed === 0 && finalReminderLogs.length === 1 && finalReminderLogs[0].result === "sent");
 
-  const otherAutomations = await must("check other active automations", service.from("crm_automations")
-    .select("id,clinic_id").neq("clinic_id", clinicId).eq("active", true));
-  if (otherAutomations.length) throw new Error(`Unsafe marketing precondition: ${otherAutomations.length} non-QA active automation(s) exist`);
-
-  const firstMarketing = await cron("/api/cron/marketing");
+  const firstMarketing = await cron("/api/cron/marketing", marketingScope);
   console.log(`[INFO] first marketing summary: ${JSON.stringify(firstMarketing.body)}`);
   assert("three CRM trigger types run without external delivery", firstMarketing.status === 200 && firstMarketing.body?.automations === 3 && firstMarketing.body?.scanned === 5 && firstMarketing.body?.skipped === 5 && firstMarketing.body?.sent === 0 && firstMarketing.body?.failed === 0);
   const deliveryLogs = await must("read CRM delivery logs", service.from("crm_delivery_logs")
@@ -256,7 +249,7 @@ try {
     deliveryLogs.some((row) => row.error.includes("沒有 LINE 身分")) &&
     deliveryLogs.some((row) => row.error.includes("被封鎖")));
 
-  const secondMarketing = await cron("/api/cron/marketing");
+  const secondMarketing = await cron("/api/cron/marketing", marketingScope);
   console.log(`[INFO] second marketing summary: ${JSON.stringify(secondMarketing.body)}`);
   const deliveryLogsAfterRetry = await must("read deduplicated CRM delivery logs", service.from("crm_delivery_logs")
     .select("id,attempt_count").eq("clinic_id", clinicId));
@@ -281,19 +274,7 @@ try {
     .select("id,status,attempt_count,error").eq("id", retryLog.id).single());
   assert("failed CRM delivery becomes retryable after ten minutes", reclaimed === retryLog.id && reclaimedLog.status === "pending" && reclaimedLog.attempt_count === 2 && reclaimedLog.error === null);
 
-  const [otherAppointmentEvents, otherRegistrationEvents] = await Promise.all([
-    must("check other appointment notification events", service.from("appointment_status_events")
-      .select("id,clinic_id").neq("clinic_id", clinicId).is("notification_processed_at", null)
-      .in("to_status", ["booked", "confirmed", "cancelled"])),
-    must("check other registration notification events", service.from("registration_status_events")
-      .select("id,clinic_id").neq("clinic_id", clinicId).is("notification_processed_at", null)
-      .in("to_status", ["pending", "confirmed", "waitlisted", "cancelled"])),
-  ]);
-  if (otherAppointmentEvents.length || otherRegistrationEvents.length) {
-    throw new Error(`Unsafe notification precondition: ${otherAppointmentEvents.length} appointment and ${otherRegistrationEvents.length} registration event(s) belong to other clinics`);
-  }
-
-  const firstQueue = await cron("/api/cron/registration");
+  const firstQueue = await cron("/api/cron/registration", queueScope);
   console.log(`[INFO] first registration queue summary: ${JSON.stringify(firstQueue.body)}`);
   assert("appointment and registration queues fail LINE closed while independently recording Email skips", firstQueue.status === 200 &&
     firstQueue.body?.appointment_notifications?.failed === 1 && firstQueue.body?.appointment_notifications?.skipped === 1 &&
@@ -309,7 +290,7 @@ try {
     registrationNotificationLogs.some((row) => row.channel === "line" && row.status === "failed" && row.attempt_count === 1) &&
     registrationNotificationLogs.some((row) => row.channel === "email" && row.status === "skipped" && row.attempt_count === 0));
 
-  const secondQueue = await cron("/api/cron/registration");
+  const secondQueue = await cron("/api/cron/registration", queueScope);
   const appointmentLogsAfterRetry = await must("read retried appointment notifications", service.from("appointment_notification_logs")
     .select("id,channel,status,attempt_count").eq("appointment_id", reminderAppointment.id));
   const registrationLogsAfterRetry = await must("read retried registration notifications", service.from("registration_notification_logs")
@@ -325,14 +306,14 @@ try {
   await must("simulate delivered registration LINE notification", service.from("registration_notification_logs")
     .update({ status: "sent", error: null, sent_at: new Date().toISOString() })
     .eq("registration_id", registration.id).eq("channel", "line"));
-  const thirdQueue = await cron("/api/cron/registration");
+  const thirdQueue = await cron("/api/cron/registration", queueScope);
   const appointmentEvent = await must("read completed appointment event", service.from("appointment_status_events")
     .select("notification_processed_at").eq("appointment_id", reminderAppointment.id).eq("to_status", "booked").single());
   const registrationEvent = await must("read completed registration event", service.from("registration_status_events")
     .select("notification_processed_at").eq("registration_id", registration.id).eq("to_status", "confirmed").single());
   assert("notification event cursor completes only after every channel has no failure", thirdQueue.status === 200 && Boolean(appointmentEvent.notification_processed_at) && Boolean(registrationEvent.notification_processed_at));
 
-  console.log(`[INFO] external capabilities: LINE map=${tokenMapConfigured}, shared LINE=${fallbackTokenConfigured}, Email=${Boolean(process.env.RESEND_API_KEY?.trim() || process.env.RESEND_API_KEYS_JSON?.trim())}, payment=${Boolean(process.env.PAYMENT_SECRETS_JSON?.trim())}`);
+  console.log("[INFO] External LINE and Email delivery credentials absent; scoped internal notification checks only");
 } catch (error) {
   fail(error instanceof Error ? error.message : String(error));
 } finally {

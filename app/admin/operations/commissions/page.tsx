@@ -1,5 +1,7 @@
+
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { SubmitButton } from "@/components/SubmitButton";
-import { requireOperator } from "@/lib/admin";
+import { requireNonProvider } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import { saveCommissionRuleAction } from "../../beauty/actions";
 
@@ -13,21 +15,19 @@ interface RuleRow { id: string; doctor_id: string; service_id: string | null; am
 const twd = new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD", maximumFractionDigits: 0 });
 
 export default async function CommissionOperationsPage() {
-  const { clinicId } = await requireOperator();
+  const { clinicId } = await requireNonProvider();
   const service = createServiceClient();
-  const startOfMonth = new Date(); startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
-  const [doctorsResult, servicesResult, rulesResult, completedResult] = await Promise.all([
-    service.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
-    service.from("services").select("id, name, price").eq("clinic_id", clinicId).eq("active", true).order("name"),
-    service.from("beauty_commission_rules").select("id, doctor_id, service_id, amount_per_service, calculation_type, rate_percent, doctors(name), services(name, price)").eq("clinic_id", clinicId).eq("active", true),
-    service.from("appointments").select("id, doctor_id, service_id").eq("clinic_id", clinicId).eq("status", "done").gte("start_at", startOfMonth.toISOString()),
+  const monthParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit" }).formatToParts(new Date());
+  const year = monthParts.find((part) => part.type === "year")?.value;
+  const month = monthParts.find((part) => part.type === "month")?.value;
+  if (!year || !month) throw new Error("無法確認台北月份");
+  const startOfMonth = new Date(`${year}-${month}-01T00:00:00+08:00`).toISOString();
+  const [doctors, services, rules, completed] = await Promise.all([
+    fetchAllSupabasePages((from, to) => service.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name").order("id").range(from, to)) as Promise<DoctorRow[]>,
+    fetchAllSupabasePages((from, to) => service.from("services").select("id, name, price").eq("clinic_id", clinicId).eq("active", true).order("name").order("id").range(from, to)) as Promise<ServiceRow[]>,
+    fetchAllSupabasePages((from, to) => service.from("beauty_commission_rules").select("id, doctor_id, service_id, amount_per_service, calculation_type, rate_percent, doctors(name), services(name, price)").eq("clinic_id", clinicId).eq("active", true).order("id").range(from, to)) as Promise<RuleRow[]>,
+    fetchAllSupabasePages((from, to) => service.from("appointments").select("id, doctor_id, service_id").eq("clinic_id", clinicId).eq("status", "done").gte("start_at", startOfMonth).order("id").range(from, to)) as Promise<Array<{ id: string; doctor_id: string | null; service_id: string | null }>>,
   ]);
-  const firstError = [doctorsResult, servicesResult, rulesResult, completedResult].find((result) => result.error)?.error;
-  if (firstError) throw new Error(firstError.message);
-  const doctors = (doctorsResult.data ?? []) as DoctorRow[];
-  const services = (servicesResult.data ?? []) as ServiceRow[];
-  const rules = (rulesResult.data ?? []) as unknown as RuleRow[];
-  const completed = (completedResult.data ?? []) as Array<{ id: string; doctor_id: string | null; service_id: string | null }>;
   const rows = doctors.map((doctor) => {
     const done = completed.filter((appointment) => appointment.doctor_id === doctor.id);
     const amount = done.reduce((sum, appointment) => {

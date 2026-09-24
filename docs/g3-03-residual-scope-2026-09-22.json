@@ -1,0 +1,173 @@
+{
+  "changes": [
+    {
+      "path": "app/admin/appointments/AppointmentEditor.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/attendance/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/audit/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/checkout/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/crm/deliveries/page.tsx",
+      "throws": 1,
+      "queries": 0
+    },
+    {
+      "path": "app/admin/dashboard/page.tsx",
+      "throws": 4,
+      "queries": 2
+    },
+    {
+      "path": "app/admin/events/page.tsx",
+      "throws": 2,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/handoff/actions.ts",
+      "throws": 2,
+      "queries": 3
+    },
+    {
+      "path": "app/admin/handoff/attendance-actions.ts",
+      "throws": 3,
+      "queries": 6
+    },
+    {
+      "path": "app/admin/handoff/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/import/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/layout.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/membership-levels/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/operations/commissions/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/operations/finance/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/operations/inventory/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/operations/service-records/page.tsx",
+      "throws": 1,
+      "queries": 2
+    },
+    {
+      "path": "app/admin/patients/page.tsx",
+      "throws": 2,
+      "queries": 4
+    },
+    {
+      "path": "app/admin/platform/actions.ts",
+      "throws": 5,
+      "queries": 5
+    },
+    {
+      "path": "app/admin/platform/admins/actions.ts",
+      "throws": 11,
+      "queries": 10
+    },
+    {
+      "path": "app/admin/platform/admins/page.tsx",
+      "throws": 2,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/platform/audit/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/platform/operations/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/platform/page.tsx",
+      "throws": 10,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/platform/reports/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/platform/reports/TrialObservationPanel.tsx",
+      "throws": 2,
+      "queries": 2
+    },
+    {
+      "path": "app/admin/platform/settings/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/products/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/registrations/actions.ts",
+      "throws": 4,
+      "queries": 4
+    },
+    {
+      "path": "app/admin/resources/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/services/addon-actions.ts",
+      "throws": 3,
+      "queries": 4
+    },
+    {
+      "path": "app/admin/services/page.tsx",
+      "throws": 1,
+      "queries": 1
+    },
+    {
+      "path": "app/admin/settings/page.tsx",
+      "throws": 1,
+      "queries": 1
+    }
+  ],
+  "excluded": [
+    "app/admin/crm/actions.ts",
+    "app/admin/channels/actions.ts"
+  ]
+}

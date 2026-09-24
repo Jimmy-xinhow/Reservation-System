@@ -1,4 +1,6 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { deliveryError } from "@/lib/delivery-error";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ChatThread {
@@ -22,13 +24,13 @@ export async function buildThreads(
   supabase: SupabaseClient,
   clinicId: string,
 ): Promise<ChatThread[]> {
-  const { data: rows, error } = await supabase
+  const { data: rows, error } = await adminQuery(supabase
     .from("chat_messages")
     .select("line_user_id, sender, body, read_by_staff, created_at")
     .eq("clinic_id", clinicId)
     .order("created_at", { ascending: false })
-    .limit(800);
-  if (error) return []; // 資料表未建(尚未跑 migration_chat.sql)時顯示空頁,不報錯
+    .limit(800));
+  if (error) throw new Error(adminErrorMessage(error));
   const msgs = rows ?? [];
 
   const map = new Map<string, ChatThread>();
@@ -52,15 +54,16 @@ export async function buildThreads(
 
   const uids = [...map.keys()];
   if (uids.length > 0) {
-    const [{ data: pats }, blocked] = await Promise.all([
+    const [patientsResult, blocked] = await adminQuery(Promise.all([
       supabase
         .from("patients")
         .select("line_user_id, name")
         .eq("clinic_id", clinicId)
         .in("line_user_id", uids),
       getBlockedSet(supabase, clinicId),
-    ]);
-    for (const p of pats ?? []) {
+    ]));
+    if (patientsResult.error) throw new Error(adminErrorMessage(patientsResult.error));
+    for (const p of patientsResult.data ?? []) {
       const t = map.get(p.line_user_id as string);
       if (t && !t.name) t.name = p.name as string;
     }
@@ -70,16 +73,16 @@ export async function buildThreads(
   return [...map.values()].sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1));
 }
 
-/** 本診所客服黑名單的 line_user_id 集合(資料表未建時回空集)。 */
+/** 本診所客服黑名單的 line_user_id 集合（查詢失敗時拒絕繼續）。 */
 export async function getBlockedSet(
   supabase: SupabaseClient,
   clinicId: string,
 ): Promise<Set<string>> {
-  const { data, error } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("chat_blocks")
     .select("line_user_id")
-    .eq("clinic_id", clinicId);
-  if (error) return new Set();
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   return new Set((data ?? []).map((r) => r.line_user_id as string));
 }
 
@@ -92,17 +95,17 @@ export async function setChatBlock(
 ): Promise<void> {
   if (!lineUserId) throw new Error("缺少對話對象");
   if (blocked) {
-    const { error } = await supabase
+    const { error } = await adminQuery(supabase
       .from("chat_blocks")
-      .upsert({ clinic_id: clinicId, line_user_id: lineUserId }, { onConflict: "clinic_id,line_user_id" });
-    if (error) throw new Error(error.message);
+      .upsert({ clinic_id: clinicId, line_user_id: lineUserId }, { onConflict: "clinic_id,line_user_id" }));
+    if (error) throw new Error(adminErrorMessage(error));
   } else {
-    const { error } = await supabase
+    const { error } = await adminQuery(supabase
       .from("chat_blocks")
       .delete()
       .eq("clinic_id", clinicId)
-      .eq("line_user_id", lineUserId);
-    if (error) throw new Error(error.message);
+      .eq("line_user_id", lineUserId));
+    if (error) throw new Error(adminErrorMessage(error));
   }
 }
 
@@ -113,34 +116,36 @@ export async function getThreadMessages(
   lineUserId: string,
 ): Promise<ChatMsg[]> {
   if (!lineUserId) return [];
-  const { data } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("chat_messages")
     .select("id, sender, body, created_at")
     .eq("clinic_id", clinicId)
     .eq("line_user_id", lineUserId)
     .order("created_at", { ascending: true })
-    .limit(500);
+    .limit(500));
 
-  await supabase
+  if (error) throw new Error(adminErrorMessage(error));
+  const { error: readError } = await adminQuery(supabase
     .from("chat_messages")
     .update({ read_by_staff: true })
     .eq("clinic_id", clinicId)
     .eq("line_user_id", lineUserId)
     .eq("sender", "patient")
-    .eq("read_by_staff", false);
+    .eq("read_by_staff", false));
 
+  if (readError) throw new Error(adminErrorMessage(readError));
   return (data ?? []) as ChatMsg[];
 }
 
-/** 尚未被服務人員讀取的顧客訊息數。資料表未建時回 0。 */
+/** 尚未被服務人員讀取的顧客訊息數。查詢失敗時不冒充零未讀。 */
 export async function unreadCount(supabase: SupabaseClient, clinicId: string): Promise<number> {
-  const { count, error } = await supabase
+  const { count, error } = await adminQuery(supabase
     .from("chat_messages")
     .select("id", { count: "exact", head: true })
     .eq("clinic_id", clinicId)
     .eq("sender", "patient")
-    .eq("read_by_staff", false);
-  if (error) return 0;
+    .eq("read_by_staff", false));
+  if (error) throw new Error(adminErrorMessage(error));
   return count ?? 0;
 }
 
@@ -155,15 +160,15 @@ export async function insertStaffMessage(
   if (!lineUserId) throw new Error("缺少對話對象");
   if (!text) throw new Error("請輸入訊息");
   if (text.length > 2000) throw new Error("訊息過長");
-  const { data, error } = await supabase.from("chat_messages").insert({
+  const { data, error } = await adminQuery(supabase.from("chat_messages").insert({
     clinic_id: clinicId,
     line_user_id: lineUserId,
     sender: "staff",
     body: text,
     read_by_staff: true,
     delivery_status: "sending",
-  }).select("id").single();
-  if (error) throw new Error(error.message);
+  }).select("id").single());
+  if (error) throw new Error(adminErrorMessage(error));
   return String(data.id);
 }
 
@@ -174,11 +179,11 @@ export async function updateStaffMessageDelivery(
   status: "sent" | "failed",
   errorMessage?: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("chat_messages")
-    .update({ delivery_status: status, delivery_error: errorMessage?.slice(0, 1000) ?? null })
+    .update({ delivery_status: status, delivery_error: errorMessage ? deliveryError(errorMessage) : null })
     .eq("clinic_id", clinicId)
     .eq("id", messageId)
-    .eq("sender", "staff");
-  if (error) throw new Error(error.message);
+    .eq("sender", "staff"));
+  if (error) throw new Error(adminErrorMessage(error));
 }

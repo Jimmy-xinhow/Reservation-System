@@ -3,6 +3,7 @@ import { getOptionalMember, hasBrandPermission } from "@/lib/admin";
 import { fail, ok } from "@/lib/http";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createServiceClient } from "@/lib/supabase";
+import { safeImportErrors } from "@/lib/import-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ const ENTITIES = new Set(["patients", "services", "memberships"]);
 
 export async function POST(request: NextRequest) {
   const rate = await checkRateLimit(request, "admin:csv-import", 10);
-  if (!rate.allowed) return fail("匯入要求過於頻繁", 429);
+  if (!rate.allowed) return fail("匯入要求過於頻繁", rate.unavailable ? 503 : 429);
   try {
     const member = await getOptionalMember();
     if (!member) return fail("請先登入品牌後台", 401);
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
       p_idempotency_key: key,
       p_rows: body.rows,
     });
-    if (error || !jobId) return fail(`匯入失敗：${error?.message ?? "沒有工作編號"}`, 400);
+    if (error || !jobId) return fail(error?.message ?? "沒有工作編號", 500);
     const { data: job, error: jobError } = await service
       .from("data_import_jobs")
       .select("id, entity, status, total_rows, imported_rows, failed_rows, error_summary, created_at, completed_at")
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
       .eq("clinic_id", member.clinicId)
       .single();
     if (jobError) return fail("無法讀取匯入結果", 500);
-    return ok(job);
+    return ok({ ...job, error_summary: safeImportErrors(job.error_summary) });
   } catch (error) {
     return fail(error instanceof Error ? error.message : "匯入失敗", 500);
   }

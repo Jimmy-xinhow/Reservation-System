@@ -1,6 +1,7 @@
+import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { getClinicSettings } from "@/lib/http";
+import { fail, getClinicSettings } from "@/lib/http";
 import { lineAccessTokenForDestination, pushMessages, type LineMessage } from "@/lib/line";
 import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
@@ -9,6 +10,7 @@ import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { customerEntryUrl } from "@/lib/customer-entry";
 import { lineFlexDesignForDelivery } from "@/lib/line-flex-design";
+import { readCronRecordScope, type CronRecordScope } from "@/lib/cron-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +30,15 @@ interface ApptRow {
  * 有 line_user_id 就發 Flex,成功後寫 reminder_logs(unique 防重複)。
  * 因每次執行都掃整個視窗,當天才新增的預約也會被涵蓋。
  */
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
+  const scope = await readCronRecordScope(req, "appointment_ids");
+  if (scope instanceof Response) return scope;
+  return runReminders(req, scope);
+}
+
+export async function GET(req: NextRequest) { return runReminders(req); }
+
+async function runReminders(req: NextRequest, scope?: CronRecordScope) {
   // CRON_SECRET 驗證(Vercel Cron 會帶 Authorization: Bearer <CRON_SECRET>)
   const secret = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
@@ -38,32 +48,31 @@ export async function GET(req: NextRequest) {
 
   try {
     const svc = createServiceClient();
-    const { data: clinics, error: clinicError } = await svc.from("clinics").select("id").eq("active", true);
+    let clinicQuery = svc.from("clinics").select("id").eq("active", true);
+    if (scope) clinicQuery = clinicQuery.eq("id", scope.clinicId);
+    const { data: clinics, error: clinicError } = await clinicQuery;
     if (clinicError) throw new Error(clinicError.message);
     const summary = { line: 0, lineFailed: 0, email: 0, emailFailed: 0, scanned: 0 };
     const errors: string[] = [];
     for (const clinic of clinics ?? []) {
       try {
-        const result = await runReminderClinic(svc, clinic.id as string);
+        const result = await runReminderClinic(svc, clinic.id as string, scope?.recordIds);
         summary.line += result.line;
         summary.lineFailed += result.lineFailed;
         summary.email += result.email;
         summary.emailFailed += result.emailFailed;
         summary.scanned += result.scanned;
       } catch (error) {
-        errors.push(`${clinic.id}: ${error instanceof Error ? error.message : "執行失敗"}`);
+        errors.push(`${clinic.id}: ${deliveryError(error)}`);
       }
     }
-    return Response.json({ ok: errors.length === 0, ...summary, errors });
+    return Response.json({ ok: errors.length === 0 && summary.lineFailed === 0 && summary.emailFailed === 0, ...summary, errors });
   } catch (e) {
-    return Response.json(
-      { ok: false, error: e instanceof Error ? e.message : "提醒排程失敗" },
-      { status: 500 },
-    );
+    return fail(e instanceof Error ? e.message : "提醒排程失敗", 500);
   }
 }
 
-async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise<{ line: number; lineFailed: number; email: number; emailFailed: number; scanned: number }> {
+async function runReminderClinic(svc: SupabaseClient, clinicId: string, appointmentIds?: string[]): Promise<{ line: number; lineFailed: number; email: number; emailFailed: number; scanned: number }> {
   const settings = await getClinicSettings(svc, clinicId);
   if (!settings) throw new Error("查無品牌設定");
   const { data: clinic, error: clinicError } = await svc
@@ -75,7 +84,9 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
   const hours = Number(process.env.REMINDER_HOURS_BEFORE ?? 24) || 24;
   const now = new Date();
   const until = new Date(now.getTime() + hours * 3600 * 1000);
-  const { data: appts, error } = await svc.from("appointments").select("id, start_at, queue_number, doctors(name), services(name), patients(name, line_user_id, email)").eq("clinic_id", clinicId).in("status", ["booked", "confirmed"]).gt("start_at", now.toISOString()).lte("start_at", until.toISOString());
+  let appointmentQuery = svc.from("appointments").select("id, start_at, queue_number, doctors(name), services(name), patients(name, line_user_id, email)").eq("clinic_id", clinicId).in("status", ["booked", "confirmed"]).gt("start_at", now.toISOString()).lte("start_at", until.toISOString());
+  if (appointmentIds) appointmentQuery = appointmentQuery.in("id", appointmentIds);
+  const { data: appts, error } = await appointmentQuery;
   if (error) throw new Error(error.message);
   const rows = (appts ?? []) as unknown as ApptRow[];
   let lineAccessToken: string | null = null;
@@ -110,8 +121,8 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
       line += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "LINE reminder failed";
-      console.error("Reminder LINE delivery failed", { clinicId, appointmentId: appointment.id, error: message });
-      await finishReminder(svc, claim, "failed", message).catch(() => undefined);
+      console.error("Reminder LINE delivery failed", { clinicId, appointmentId: appointment.id, category: deliveryError(message) });
+      // Preserve sending: provider acceptance or its DB acknowledgement may be lost.
       lineFailed += 1;
     }
   }
@@ -130,8 +141,8 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string): Promise
         email += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Email reminder failed";
-        console.error("Reminder Email delivery failed", { clinicId, appointmentId: appointment.id, error: message });
-        await finishReminder(svc, claim, "failed", message).catch(() => undefined);
+        console.error("Reminder Email delivery failed", { clinicId, appointmentId: appointment.id, category: deliveryError(message) });
+        // Preserve sending: provider acceptance or its DB acknowledgement may be lost.
         emailFailed += 1;
       }
     }
@@ -158,7 +169,7 @@ async function finishReminder(
   result: "sent" | "failed",
   errorMessage: string | null = null,
 ): Promise<void> {
-  const { error } = await svc.from("reminder_logs").update({ result, error: errorMessage }).eq("id", claimId);
+  const { error } = await svc.from("reminder_logs").update({ result, error: result === "failed" ? deliveryError(errorMessage) : null }).eq("id", claimId);
   if (error) throw new Error(error.message);
 }
 

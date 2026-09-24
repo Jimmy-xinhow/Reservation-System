@@ -4,7 +4,6 @@ import { headers } from "next/headers";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { Brand } from "@/components/Brand";
 import { AutoRefresh } from "@/components/AutoRefresh";
-import { isLegacyProgressEnabled } from "@/lib/legacy-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -22,16 +21,17 @@ export default async function QueueBoard({ searchParams }: { searchParams?: Prom
       host: requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"),
     });
     if (!clinicId) return <Centered message="尚未設定公開品牌" />;
-    if (!(await isLegacyProgressEnabled(svc, clinicId))) return <Centered message="此品牌目前未開放服務進度頁" />;
-    const { data: settings } = await svc
+    const { data: settings, error: settingsError } = await svc
       .from("clinic_settings")
-      .select("booking_mode")
+      .select("booking_mode, legacy_progress_enabled")
       .eq("clinic_id", clinicId)
       .maybeSingle();
+    if (settingsError || !settings) throw new Error("服務進度設定載入失敗");
+    if (settings.legacy_progress_enabled !== true) return <Centered message="此品牌目前未開放服務進度頁" />;
     const mode = (settings?.booking_mode as "time" | "number") ?? "time";
     sessions = await getQueueForDate(svc, clinicId, today, mode);
   } catch {
-    sessions = [];
+    return <Centered message="服務進度暫時無法載入，請稍後再試" />;
   }
 
   return (

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { requireAdmin } from "@/lib/admin";
 import { createSupabaseServer } from "@/lib/supabase-server";
@@ -11,11 +12,12 @@ export default async function LineTemplatesPage({ searchParams }: { searchParams
   const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
   if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="LINE 訊息範本" />;
-  const [params, { data: clinic }, { data: settings }] = await Promise.all([
+  const [params, { data: clinic, error: clinicError }, { data: settings, error: settingsError }] = await adminQuery(Promise.all([
     searchParams,
     supabase.from("clinics").select("name").eq("id", clinicId).maybeSingle(),
     supabase.from("clinic_settings").select("line_flex_designs, brand_primary_color, brand_accent_color").eq("clinic_id", clinicId).maybeSingle(),
-  ]);
+  ]));
+  if (clinicError || settingsError || !clinic || !settings) throw new Error(adminErrorMessage(clinicError ?? settingsError ?? "LINE 範本設定載入失敗"));
   return (
     <div className="line-workbench">
       <header className="admin-page-header flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">

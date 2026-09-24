@@ -1,3 +1,5 @@
+import type { CronRecordScope } from "@/lib/cron-scope";
+import { deliveryError } from "@/lib/delivery-error";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -55,6 +57,10 @@ export async function notifyRegistrationStatus(
   if (!registration) return { sent: 0, failed: 0, skipped: 1 };
 
   const row = registration as RegistrationRecord;
+  if (kind === "confirmed" && row.status !== "confirmed") {
+    if (row.status !== "cancelled") return { sent: 0, failed: 0, skipped: 1 };
+    kind = "cancelled";
+  }
   const [{ data: clinic, error: clinicError }, { data: event, error: eventError }, { data: session, error: sessionError }, { data: settings, error: settingsError }] = await Promise.all([
     svc.from("clinics").select("name, slug, line_destination").eq("id", row.clinic_id).maybeSingle(),
     svc.from("events").select("title").eq("id", row.event_id).eq("clinic_id", row.clinic_id).maybeSingle(),
@@ -72,6 +78,7 @@ export async function notifyRegistrationStatus(
   if (row.line_user_id) {
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "line");
     if (claim) {
+      let deliveryAttempted = false;
       try {
         const context = await getClinicLineChannelContext(svc, row.clinic_id);
         const ticketsUrl = customerEntryUrl("tickets", {
@@ -85,6 +92,7 @@ export async function notifyRegistrationStatus(
           liffId: context.liffId,
         });
         const token = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+        deliveryAttempted = true;
         await pushMessages(row.line_user_id, [buildRegistrationStatusFlex({
           kind,
           clinicName: clinic?.name ?? "品牌",
@@ -104,7 +112,9 @@ export async function notifyRegistrationStatus(
         await finishNotification(svc, claim, "sent");
         result.sent += 1;
       } catch (error) {
-        await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "LINE 通知失敗");
+        // A lost provider/DB acknowledgement must never make delivery retryable.
+        if (!deliveryAttempted) await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "LINE 通知失敗");
+        else console.error("Notification delivery unconfirmed", { category: deliveryError(error) });
         result.failed += 1;
       }
     } else {
@@ -119,12 +129,16 @@ export async function notifyRegistrationStatus(
   if (row.email && emailConfig) {
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "email");
     if (claim) {
+      let deliveryAttempted = false;
       try {
+        deliveryAttempted = true;
         await sendEmail(emailConfig, row.email, message.subject, message.html);
         await finishNotification(svc, claim, "sent");
         result.sent += 1;
       } catch (error) {
-        await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "Email 通知失敗");
+        // A lost provider/DB acknowledgement must never make delivery retryable.
+        if (!deliveryAttempted) await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "Email 通知失敗");
+        else console.error("Notification delivery unconfirmed", { category: deliveryError(error) });
         result.failed += 1;
       }
     } else {
@@ -143,8 +157,9 @@ export async function notifyRegistrationStatus(
   return result;
 }
 
-export async function processRegistrationNotificationQueue(svc: SupabaseClient): Promise<NotificationResult> {
+export async function processRegistrationNotificationQueue(svc: SupabaseClient, scope?: CronRecordScope): Promise<NotificationResult> {
   const summary: NotificationResult = { sent: 0, failed: 0, skipped: 0 };
+  if (scope && scope.recordIds.length === 0) return summary;
   const pageSize = 250;
   let cursorCreatedAt: string | null = null;
   let cursorId: string | null = null;
@@ -160,6 +175,7 @@ export async function processRegistrationNotificationQueue(svc: SupabaseClient):
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
       .limit(pageSize);
+    if (scope) query = query.eq("clinic_id", scope.clinicId).in("registration_id", scope.recordIds);
     if (cursorCreatedAt && cursorId) {
       query = query.or(`created_at.gt.${cursorCreatedAt},and(created_at.eq.${cursorCreatedAt},id.gt.${cursorId})`);
     }
@@ -227,7 +243,10 @@ async function claimNotification(
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
   if (!existing || existing.status === "sent") return null;
-  if (existing.status === "sending" && new Date(existing.updated_at).getTime() > Date.now() - 10 * 60 * 1000) return null;
+  // Time passing cannot prove that the provider rejected a previous attempt.
+  // Throw so the queue keeps its event pending and the worker reports failure.
+  if (existing.status === "sending") throw new Error("notification_delivery_unconfirmed");
+  if (!["failed", "skipped"].includes(existing.status)) throw new Error("notification_delivery_state_invalid");
 
   const { data: claimed, error: claimError } = await svc
     .from("registration_notification_logs")
@@ -244,7 +263,7 @@ async function claimNotification(
 async function finishNotification(svc: SupabaseClient, id: string, status: "sent" | "failed", error?: string): Promise<void> {
   const { error: updateError } = await svc
     .from("registration_notification_logs")
-    .update({ status, error: error ?? null, sent_at: status === "sent" ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+    .update({ status, error: status === "failed" ? deliveryError(error) : null, sent_at: status === "sent" ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
     .eq("id", id);
   if (updateError) throw new Error(updateError.message);
 }

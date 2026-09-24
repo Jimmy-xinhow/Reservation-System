@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
 import { createServiceClient } from "@/lib/supabase";
@@ -19,21 +21,21 @@ export async function upsertPlatformAdminAction(fd: FormData): Promise<void> {
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("請輸入有效的系統管理員 Email。");
 
   const service = createServiceClient();
-  const { data: users, error: usersError } = await service.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (usersError) throw new Error(`查詢使用者失敗：${usersError.message}`);
+  const { data: users, error: usersError } = await adminQuery(service.auth.admin.listUsers({ page: 1, perPage: 1000 }));
+  if (usersError) throw new Error(adminErrorMessage(`查詢使用者失敗：${usersError.message}`));
   let user = users.users.find((candidate) => candidate.email?.toLowerCase() === email) ?? null;
   if (!user) {
-    const { data, error } = await service.auth.admin.inviteUserByEmail(email, {
+    const { data, error } = await adminQuery(service.auth.admin.inviteUserByEmail(email, {
       redirectTo: authInviteRedirectUrl(),
-    });
-    if (error || !data.user) throw new Error(`寄送系統人員邀請失敗：${error?.message ?? "找不到使用者"}`);
+    }));
+    if (error || !data.user) throw new Error(adminErrorMessage(`寄送系統人員邀請失敗：${error?.message ?? "找不到使用者"}`));
     user = data.user;
   }
 
   if (user.id === actor.user.id && accessType !== "system_admin") throw new Error("不可降低目前登入帳號的系統管理身分");
 
-  const { error } = await service.from("platform_admins").upsert({ user_id: user.id, role: "admin", access_type: accessType, permissions, active: true }, { onConflict: "user_id" });
-  if (error) throw new Error(`儲存系統人員權限失敗：${error.message}`);
+  const { error } = await adminQuery(service.from("platform_admins").upsert({ user_id: user.id, role: "admin", access_type: accessType, permissions, active: true }, { onConflict: "user_id" }));
+  if (error) throw new Error(adminErrorMessage(`儲存系統人員權限失敗：${error.message}`));
   revalidatePath("/admin/platform/admins");
   revalidatePath("/admin/platform");
 }
@@ -48,16 +50,16 @@ export async function setPlatformAdminPasswordAction(fd: FormData): Promise<void
   if (password !== passwordConfirmation) throw new Error("兩次輸入的新密碼不一致。");
 
   const service = createServiceClient();
-  const { data: target, error: targetError } = await service
+  const { data: target, error: targetError } = await adminQuery(service
     .from("platform_admins")
     .select("user_id")
     .eq("user_id", userId)
-    .maybeSingle();
-  if (targetError) throw new Error(`查詢系統人員失敗：${targetError.message}`);
+    .maybeSingle());
+  if (targetError) throw new Error(adminErrorMessage(`查詢系統人員失敗：${targetError.message}`));
   if (!target) throw new Error("找不到系統人員或無權限操作。");
 
-  const { error } = await service.auth.admin.updateUserById(userId, { password, email_confirm: true });
-  if (error) throw new Error(`設定系統人員登入密碼失敗：${error.message}`);
+  const { error } = await adminQuery(service.auth.admin.updateUserById(userId, { password, email_confirm: true }));
+  if (error) throw new Error(adminErrorMessage(`設定系統人員登入密碼失敗：${error.message}`));
   revalidatePath("/admin/platform/admins");
 }
 
@@ -68,18 +70,18 @@ export async function sendPlatformPasswordSetupAction(fd: FormData): Promise<voi
   if (userId === actor.user.id) throw new Error("不可從人員名單寄送目前登入帳號的設定密碼信。");
 
   const service = createServiceClient();
-  const [{ data: target, error: targetError }, { data: authUser, error: authError }] = await Promise.all([
+  const [{ data: target, error: targetError }, { data: authUser, error: authError }] = await adminQuery(Promise.all([
     service.from("platform_admins").select("user_id").eq("user_id", userId).maybeSingle(),
     service.auth.admin.getUserById(userId),
-  ]);
-  if (targetError) throw new Error(`查詢系統人員失敗：${targetError.message}`);
+  ]));
+  if (targetError) throw new Error(adminErrorMessage(`查詢系統人員失敗：${targetError.message}`));
   if (!target) throw new Error("找不到系統人員或無權限操作。");
-  if (authError || !authUser.user?.email) throw new Error(`讀取登入帳號失敗：${authError?.message ?? "缺少 Email"}`);
+  if (authError || !authUser.user?.email) throw new Error(adminErrorMessage(`讀取登入帳號失敗：${authError?.message ?? "缺少 Email"}`));
 
-  const { error } = await service.auth.resetPasswordForEmail(authUser.user.email, {
+  const { error } = await adminQuery(service.auth.resetPasswordForEmail(authUser.user.email, {
     redirectTo: authInviteRedirectUrl(),
-  });
-  if (error) throw new Error(`寄送設定密碼信失敗：${error.message}`);
+  }));
+  if (error) throw new Error(adminErrorMessage(`寄送設定密碼信失敗：${error.message}`));
   revalidatePath("/admin/platform/admins");
 }
 
@@ -92,16 +94,16 @@ export async function setPlatformAdminActiveAction(fd: FormData): Promise<void> 
 
   const service = createServiceClient();
   if (!active) {
-    const { data: target, error: targetError } = await service.from("platform_admins").select("access_type, active").eq("user_id", userId).maybeSingle();
-    if (targetError) throw new Error(`查詢系統人員失敗：${targetError.message}`);
+    const { data: target, error: targetError } = await adminQuery(service.from("platform_admins").select("access_type, active").eq("user_id", userId).maybeSingle());
+    if (targetError) throw new Error(adminErrorMessage(`查詢系統人員失敗：${targetError.message}`));
     if (target?.access_type === "system_admin" && target.active) {
-      const { count, error: adminError } = await service.from("platform_admins").select("user_id", { count: "exact", head: true }).eq("access_type", "system_admin").eq("active", true);
-      if (adminError) throw new Error(`查詢系統管理者失敗：${adminError.message}`);
+      const { count, error: adminError } = await adminQuery(service.from("platform_admins").select("user_id", { count: "exact", head: true }).eq("access_type", "system_admin").eq("active", true));
+      if (adminError) throw new Error(adminErrorMessage(`查詢系統管理者失敗：${adminError.message}`));
       if ((count ?? 0) <= 1) throw new Error("系統至少要保留一位啟用中的系統管理者。");
     }
   }
 
-  const { error } = await service.from("platform_admins").update({ active }).eq("user_id", userId);
-  if (error) throw new Error(`更新系統人員失敗：${error.message}`);
+  const { error } = await adminQuery(service.from("platform_admins").update({ active }).eq("user_id", userId));
+  if (error) throw new Error(adminErrorMessage(`更新系統人員失敗：${error.message}`));
   revalidatePath("/admin/platform/admins");
 }

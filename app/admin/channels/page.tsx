@@ -35,16 +35,20 @@ const STATUS: Record<Status, { label: string; cls: string; dot: string }> = {
 export default async function ChannelsPage({ searchParams }: { searchParams: Promise<{ tested?: string }> }) {
   const { clinicId } = await requireAdmin();
   const tested = (await searchParams).tested === "1";
-  const { data, error } = await createServiceClient()
-    .from("channel_test_runs")
-    .select("id, channel, status, checks, created_at")
-    .eq("clinic_id", clinicId)
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (error) throw new Error(`讀取渠道測試失敗：${error.message}`);
-
+  const supabase = createServiceClient();
+  const results = await Promise.all(CHANNELS.map(async (channel) => {
+    const { data, error } = await supabase.from("channel_test_runs")
+      .select("id, channel, status, checks, created_at")
+      .eq("clinic_id", clinicId)
+      .eq("channel", channel.key)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1);
+    if (error || !Array.isArray(data)) throw new Error("讀取渠道測試失敗，請重新整理後再試");
+    return data[0] as Run | undefined;
+  })).catch(() => { throw new Error("讀取渠道測試失敗，請重新整理後再試"); });
   const latest = new Map<string, Run>();
-  for (const run of (data ?? []) as Run[]) if (!latest.has(run.channel)) latest.set(run.channel, run);
+  for (const run of results) if (run) latest.set(run.channel, run);
   const counts = CHANNELS.reduce((result, channel) => {
     const status = latest.get(channel.key)?.status ?? "untested";
     result[status] += 1;
@@ -98,7 +102,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
                       {run.checks.map((check, index) => (
                         <div key={`${check.label}-${index}`} className="flex gap-3 border-l-2 border-slate-200 bg-white px-3 py-2.5">
                           <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${STATUS[check.status].dot}`} />
-                          <div><p className="text-sm font-medium text-slate-800">{check.label}</p><p className="mt-0.5 text-xs leading-5 text-slate-600">{check.detail}</p></div>
+                          <div><p className="text-sm font-medium text-slate-800">{check.label}</p><p className="mt-0.5 text-xs leading-5 text-slate-600">{run.channel === "line" && check.label === "Messaging API" && check.status === "failed" ? "無法確認 LINE 連線，請檢查官方帳號授權設定後重試。" : check.detail}</p></div>
                         </div>
                       ))}
                     </div>

@@ -102,21 +102,24 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
     };
     setMessages((m) => [...m, optimistic]);
     setText("");
+    let explicitlyRejected = false;
     try {
       const res = await fetch("/api/admin/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lineUserId: active, body }),
       });
-      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string } | null;
-      if (!json?.ok) throw new Error(json?.error ?? "送出失敗");
+      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string; data?: { notice?: string } } | null;
+      explicitlyRejected = json?.ok === false;
+      if (!json?.ok) throw new Error(json?.error ?? "無法確認送出結果，請先核對對話，勿重複送出。");
       await loadMessages(active); // 用真實資料取代樂觀訊息
       refreshThreads();
+      if (json.data?.notice) setErr(json.data.notice);
     } catch (e) {
-      // 失敗:移除樂觀訊息並還原輸入
+      // Only a received rejection proves that sending did not proceed.
       setMessages((m) => m.filter((x) => x.id !== optimistic.id));
-      setText(body);
-      setErr(e instanceof Error ? e.message : "送出失敗");
+      if (explicitlyRejected) setText(body);
+      setErr(explicitlyRejected && e instanceof Error ? e.message : "無法確認送出結果，請先核對對話，勿重複送出。");
     } finally {
       setSending(false);
     }

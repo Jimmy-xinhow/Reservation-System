@@ -1,4 +1,5 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import { createHash, createCipheriv, createDecipheriv, timingSafeEqual, randomBytes } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -57,8 +58,8 @@ function environmentPaymentSecretsForClinic(clinicId: string): PaymentSecret | n
 }
 
 async function vaultPaymentSecretsForClinic(supabase: SupabaseClient, clinicId: string): Promise<PaymentSecret | null> {
-  const { data, error } = await supabase.rpc("get_clinic_payment_secrets", { p_clinic_id: clinicId });
-  if (error) throw new Error(error.message);
+  const { data, error } = await adminQuery(supabase.rpc("get_clinic_payment_secrets", { p_clinic_id: clinicId }));
+  if (error) throw new Error(adminErrorMessage(error));
   const row = Array.isArray(data) ? data[0] as Record<string, unknown> | undefined : undefined;
   if (typeof row?.hash_key !== "string" || typeof row.hash_iv !== "string") return null;
   return { hashKey: row.hash_key, hashIv: row.hash_iv };
@@ -68,12 +69,12 @@ export async function getPaymentSecretStatus(
   supabase: SupabaseClient,
   clinicId: string,
 ): Promise<PaymentSecretStatus> {
-  const { data, error } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("clinic_payment_secret_refs")
     .select("updated_at")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+    .maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
   if (data) return { configured: true, source: "vault", updatedAt: data.updated_at as string };
   if (environmentPaymentSecretsForClinic(clinicId)) return { configured: true, source: "environment", updatedAt: null };
   return { configured: false, source: "none", updatedAt: null };
@@ -90,13 +91,13 @@ export function paymentAction(provider: PaymentProvider, environment: PaymentEnv
 }
 
 export async function getPaymentSettings(supabase: SupabaseClient, clinicId: string): Promise<PaymentSettings | null> {
-  const { data, error } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("clinic_payment_settings")
     .select("clinic_id, provider, merchant_id, environment, active")
     .eq("clinic_id", clinicId)
     .eq("active", true)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+    .maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
   if (!data) return null;
   return await withPaymentSecrets(supabase, data as Omit<PaymentSettings, "hash_key" | "hash_iv">);
 }
@@ -106,14 +107,14 @@ export async function getPaymentSettingsByMerchant(
   provider: PaymentProvider,
   merchantId: string,
 ): Promise<PaymentSettings | null> {
-  const { data, error } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("clinic_payment_settings")
     .select("clinic_id, provider, merchant_id, environment, active")
     .eq("provider", provider)
     .eq("merchant_id", merchantId)
     .eq("active", true)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+    .maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
   if (!data) return null;
   return await withPaymentSecrets(supabase, data as Omit<PaymentSettings, "hash_key" | "hash_iv">);
 }
@@ -280,6 +281,28 @@ export function decryptAndVerifyNewebpay(
   const parsed = JSON.parse(decryptNewebpay(fields.TradeInfo, settings.hash_key, settings.hash_iv)) as unknown;
   if (!parsed || typeof parsed !== "object") throw new Error("藍新回呼內容格式錯誤");
   return parsed as Record<string, unknown>;
+}
+
+// MPG RespondType=JSON: Status is in TradeInfo, transaction fields are in Result.
+// Validate only the signed/decrypted payload; outer form Status is not trusted.
+export function parseNewebpayPaymentResult(payload: Record<string, unknown>, merchantId: string) {
+  const result = payload.Result;
+  if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("藍新回呼缺少交易資料");
+  const transaction = result as Record<string, unknown>;
+  if (transaction.MerchantID !== merchantId) throw new Error("藍新回呼商店不符");
+  const merchantOrderNo = transaction.MerchantOrderNo;
+  const status = payload.Status;
+  const amount = transaction.Amt;
+  if (typeof merchantOrderNo !== "string" || !/^[A-Za-z0-9_]{1,30}$/.test(merchantOrderNo) ||
+      typeof status !== "string" || !status ||
+      !(typeof amount === "number" || (typeof amount === "string" && /^\d+$/.test(amount))) ||
+      !Number.isSafeInteger(Number(amount)) || Number(amount) <= 0) {
+    throw new Error("藍新回呼交易欄位錯誤");
+  }
+  const tradeNo = typeof transaction.TradeNo === "string" && transaction.TradeNo ? transaction.TradeNo : null;
+  if (status === "SUCCESS" && !tradeNo) throw new Error("藍新成功回呼缺少交易序號");
+  return { merchantOrderNo, tradeNo, amount: Number(amount), success: status === "SUCCESS",
+    eventKey: `${merchantOrderNo}:${tradeNo ?? "none"}:${status}` };
 }
 
 export function asPaymentFormFields(value: FormData | URLSearchParams): Record<string, string> {

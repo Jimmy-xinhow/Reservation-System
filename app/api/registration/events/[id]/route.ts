@@ -71,7 +71,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       event: {
         ...event,
         clinic_name: clinic?.name ?? "",
-        sessions: sessions ?? [],
+        sessions: (sessions ?? []).filter((session) => new Date(session.end_at).getTime() > now),
         ticket_types: visibleTickets,
         form: form ?? null,
         fields: (fields ?? []).map((field) => ({ ...field, options: Array.isArray(field.options) ? field.options : [] })),

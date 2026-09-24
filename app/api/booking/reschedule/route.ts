@@ -1,3 +1,4 @@
+import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
@@ -25,7 +26,7 @@ interface RescheduleBody {
 export async function POST(req: NextRequest) {
   const rate = await checkRateLimit(req, "booking:reschedule", 10);
   if (!rate.allowed) {
-    const response = fail("請稍後再試", 429);
+    const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
     return response;
   }
@@ -113,7 +114,8 @@ export async function POST(req: NextRequest) {
       p_date: body.date ?? null,
     });
     if (rescheduleError || typeof newAppointmentId !== "string") {
-      return fail(translateRescheduleError(rescheduleError?.message ?? ""), 409);
+      const message = translateRescheduleError(rescheduleError?.message ?? "");
+      return message ? fail(message, 409) : fail(rescheduleError?.message ?? "改期結果不明", 500);
     }
 
     const { data: newAppointment, error: newAppointmentError } = await svc
@@ -125,7 +127,7 @@ export async function POST(req: NextRequest) {
     if (newAppointmentError) return fail(newAppointmentError.message, 500);
 
     await notifyAppointmentStatus(svc, newAppointmentId, "rescheduled")
-      .catch((error: unknown) => console.error("Public appointment reschedule notification failed", error));
+      .catch((error: unknown) => console.error("Public appointment reschedule notification failed", { category: deliveryError(error) }));
     await recordCrmInteraction(svc, {
       clinicId,
       patientId: appointment.patient_id,
@@ -134,7 +136,7 @@ export async function POST(req: NextRequest) {
       title: "顧客改期預約",
       body: "顧客完成預約改期，原預約已保留為取消狀態",
       appointmentId: newAppointmentId,
-    }).catch((error: unknown) => console.error("CRM reschedule interaction failed", error));
+    }).catch((error: unknown) => console.error("CRM reschedule interaction failed", { category: deliveryError(error) }));
 
     const doctors = newAppointment?.doctors as { name: string } | { name: string }[] | null;
     const services = newAppointment?.services as { name: string } | { name: string }[] | null;
@@ -154,9 +156,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function translateRescheduleError(message: string): string {
+function translateRescheduleError(message: string): string | null {
   if (message.includes("appointment cannot be rescheduled")) return "此預約目前無法改期";
   if (message.includes("slot") || message.includes("session") || message.includes("capacity")) return "新時段已額滿或不可預約";
   if (message.includes("doctor")) return "新服務提供者不可預約";
-  return message || "改期失敗，請稍後再試";
+  return null;
 }

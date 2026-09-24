@@ -1,4 +1,5 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -22,7 +23,7 @@ export interface CrmInteractionInput {
  * 呼叫端應在主要業務成功後使用；時間軸失敗不應回滾已完成的預約／報名。
  */
 export async function recordCrmInteraction(svc: SupabaseClient, input: CrmInteractionInput): Promise<void> {
-  const { error } = await svc.from("crm_interactions").insert({
+  const { error } = await adminQuery(svc.from("crm_interactions").insert({
     clinic_id: input.clinicId,
     patient_id: input.patientId,
     kind: input.kind,
@@ -32,6 +33,6 @@ export async function recordCrmInteraction(svc: SupabaseClient, input: CrmIntera
     appointment_id: input.appointmentId ?? null,
     registration_id: input.registrationId ?? null,
     created_by: input.createdBy ?? null,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
 }
