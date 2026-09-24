@@ -11,11 +11,11 @@ interface Check { label: string; status: Status; detail: string; }
 interface Run { id: string; channel: string; status: Status; checks: Check[]; created_at: string; }
 
 const CHANNELS = [
-  { key: "line", label: "LINE 訊息", detail: "確認官方帳號可發送通知", icon: "message" },
-  { key: "liff", label: "LINE 顧客入口", detail: "確認顧客可從 LINE 開啟服務", icon: "phone" },
-  { key: "email", label: "Email 通知", detail: "確認寄件設定與通知功能", icon: "mail" },
-  { key: "payment", label: "綠界／藍新付款", detail: "確認測試金流與回傳網址", icon: "payment" },
-  { key: "domain", label: "公開網址", detail: "確認短網址與自訂網域", icon: "globe" },
+  { key: "line", label: "LINE 訊息", detail: "檢查官方帳號連線與回應模式", icon: "message" },
+  { key: "liff", label: "LINE 顧客入口", detail: "檢查 LIFF 設定與後端驗證狀態", icon: "phone" },
+  { key: "email", label: "Email 通知", detail: "檢查寄件設定；不會寄送測試信", icon: "mail" },
+  { key: "payment", label: "綠界／藍新付款", detail: "檢查商店設定；不會建立測試交易", icon: "payment" },
+  { key: "domain", label: "公開網址", detail: "檢查短網址解析或已驗證的網域紀錄", icon: "globe" },
 ] as const;
 
 const LINK: Record<string, string> = {
@@ -27,7 +27,7 @@ const LINK: Record<string, string> = {
 };
 
 const STATUS: Record<Status, { label: string; cls: string; dot: string }> = {
-  passed: { label: "可使用", cls: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
+  passed: { label: "本項通過", cls: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" },
   warning: { label: "待完成", cls: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
   failed: { label: "需處理", cls: "bg-red-50 text-red-700", dot: "bg-red-500" },
 };
@@ -62,7 +62,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
         <div>
           <p className="eyebrow">外部服務</p>
           <h1 className="admin-page-title">通知與付款檢查</h1>
-          <p className="admin-page-description">先看哪些服務已可使用，再從同一列進入設定。檢查不會顯示或保存任何密鑰。</p>
+          <p className="admin-page-description">逐項查看目前完成的設定與連線檢查，再從同一列進入設定。此處不寄送 Email、不建立付款交易，也不顯示密鑰。</p>
         </div>
         <form action={runChannelTestsAction}>
           <SubmitButton className="btn btn-primary"><ActionIcon name="refresh" />重新檢查全部服務</SubmitButton>
@@ -72,7 +72,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
       {tested && <p role="status" className="border-l-4 border-emerald-500 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">檢查已完成。請依下方狀態處理尚未完成的項目。</p>}
 
       <section className="admin-metric-strip sm:grid-cols-4" aria-label="渠道狀態摘要">
-        <Metric label="可使用" value={counts.passed} tone="text-emerald-700" />
+        <Metric label="本項通過" value={counts.passed} tone="text-emerald-700" />
         <Metric label="待完成" value={counts.warning} tone="text-amber-700" />
         <Metric label="需處理" value={counts.failed} tone="text-red-700" />
         <div className="admin-metric"><span className="admin-metric-label">最後檢查</span><strong className="mt-1 block text-sm font-semibold text-slate-900">{lastRunAt ? formatTime(lastRunAt) : "尚未執行"}</strong></div>
@@ -118,7 +118,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
         </div>
       </section>
 
-      <p className="text-sm leading-6 text-slate-600">系統檢查通過後，上線前仍需用手機實際完成一次 LINE 登入、接收訊息與測試付款。</p>
+      <p className="text-sm leading-6 text-slate-600">上線前仍需用手機完成 LINE 登入、實際接收 LINE／Email 訊息，並走完測試付款與返回；設定檢查通過不代表這些旅程已驗證。</p>
     </div>
   );
 }
