@@ -9,19 +9,7 @@ import { createServiceClient } from "@/lib/supabase";
 function text(fd: FormData, key: string): string { return String(fd.get(key) ?? "").trim(); }
 function numberValue(fd: FormData, key: string): number { const value = Number(text(fd, key)); return Number.isFinite(value) ? value : 0; }
 
-function photoPaths(fd: FormData, clinicId: string, sourceId: string): string[] {
-  const raw = text(fd, "private_photo_paths");
-  if (!raw) return [];
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { throw new Error("照片資料格式錯誤"); }
-  if (!Array.isArray(parsed) || parsed.length > 6) throw new Error("每筆服務紀錄最多 6 張照片");
-  const prefix = `${clinicId}/${sourceId}/`;
-  const paths = parsed.filter((value): value is string => typeof value === "string");
-  if (paths.length !== parsed.length || paths.some((path) => !path.startsWith(prefix))) throw new Error("附件不屬於目前品牌或服務紀錄");
-  return paths;
-}
-
-export async function createTreatmentRecordAction(fd: FormData): Promise<void> {
+export async function createTreatmentRecordAction(fd: FormData): Promise<string> {
   const { clinicId, user } = await requireOperator();
   const sourceKey = text(fd, "source_key");
   const [sourceKind, sourceId] = sourceKey.split(":", 2);
@@ -37,10 +25,11 @@ export async function createTreatmentRecordAction(fd: FormData): Promise<void> {
   if (sourceResult.error) throw new Error(adminErrorMessage(sourceResult.error));
   if (!sourceResult.data) throw new Error("服務／課程來源不屬於目前品牌");
   if (!sourceResult.data.patient_id) throw new Error("這筆報名尚未連結顧客，請先從顧客資料完成關聯");
-  const paths = photoPaths(fd, clinicId, sourceId);
   const consent = fd.get("photo_consent") === "on";
-  if (paths.length > 0 && !consent) throw new Error("儲存照片前必須確認顧客已同意");
-  const { error } = await adminQuery(service.from("patient_records").insert({
+  const photoCount = Number(text(fd, "photo_count"));
+  if (!Number.isInteger(photoCount) || photoCount < 0 || photoCount > 6) throw new Error("每筆服務紀錄最多 6 張照片");
+  if (photoCount > 0 && !consent) throw new Error("儲存照片前必須確認顧客已同意");
+  const { data: record, error } = await adminQuery(service.from("patient_records").insert({
     clinic_id: clinicId,
     patient_id: sourceResult.data.patient_id,
     appointment_id: sourceKind === "appointment" ? sourceId : null,
@@ -50,12 +39,13 @@ export async function createTreatmentRecordAction(fd: FormData): Promise<void> {
     assessment: assessment.slice(0, 3000) || null,
     content: content.slice(0, 5000),
     aftercare: aftercare.slice(0, 3000) || null,
-    private_photo_paths: paths,
+    private_photo_paths: [],
     photo_consent: consent,
     recorded_by: user.id,
-  }));
+  }).select("id").single());
   if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/operations/service-records");
+  return record.id;
 }
 
 export async function createInventoryItemAction(fd: FormData): Promise<void> {
