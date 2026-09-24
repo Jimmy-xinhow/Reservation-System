@@ -8,8 +8,8 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const member = await requireOperator();
   try {
-    const member = await requireOperator();
     if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) return fail("此品牌未啟用活動與報名", 403);
     const body = (await req.json().catch(() => null)) as { token?: string } | null;
     if (!body?.token) return fail("缺少報到憑證");

@@ -48,6 +48,35 @@ interface LineWebhookBody {
   events?: LineEvent[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function optionalStrings(value: Record<string, unknown>, keys: string[]): boolean {
+  return keys.every((key) => value[key] === undefined || typeof value[key] === "string");
+}
+
+function isWebhookBody(value: unknown): value is LineWebhookBody {
+  if (!isRecord(value) || !optionalStrings(value, ["destination"])) return false;
+  if (value.events === undefined) return true;
+  return Array.isArray(value.events) && value.events.every((event: unknown) => {
+    if (!isRecord(event) || typeof event.type !== "string" || !event.type.trim()) return false;
+    if (!optionalStrings(event, ["webhookEventId", "replyToken"])) return false;
+    for (const [key, fields] of [
+      ["source", ["userId"]], ["message", ["type", "text"]],
+      ["postback", ["data"]], ["link", ["result", "nonce"]],
+    ] as const) {
+      const nested = event[key];
+      if (nested !== undefined && (!isRecord(nested) || !optionalStrings(nested, [...fields]))) return false;
+    }
+    const postback = event.postback;
+    if (isRecord(postback) && postback.params !== undefined) {
+      if (!isRecord(postback.params) || !optionalStrings(postback.params, ["date", "time", "datetime"])) return false;
+    }
+    return true;
+  });
+}
+
 /**
  * POST /api/line/webhook
  * 驗 x-line-signature 後處理:
@@ -58,12 +87,14 @@ interface LineWebhookBody {
 export async function POST(req: NextRequest) {
   const raw = await req.text();
   const signature = req.headers.get("x-line-signature");
-  let payload: LineWebhookBody;
+  let payload: unknown;
   try {
-    payload = JSON.parse(raw) as LineWebhookBody;
+    payload = JSON.parse(raw);
   } catch {
     return new Response("bad request", { status: 400 });
   }
+  if (!isWebhookBody(payload)) return new Response("bad request", { status: 400 });
+  if (!signature) return new Response("invalid signature", { status: 401 });
   const destination = payload.destination?.trim() || undefined;
   const svc = createServiceClient();
   let lineCredentials: Awaited<ReturnType<typeof lineCredentialsForDestination>>;
