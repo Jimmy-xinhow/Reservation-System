@@ -15,7 +15,9 @@ function str(fd: FormData, k: string): string {
 export async function setActiveClinicAction(fd: FormData): Promise<void> {
   const context = await requireMember();
   const clinicId = str(fd, "clinic_id");
-  if (!context.clinics.some((clinic) => clinic.id === clinicId)) throw new Error("無權限切換此品牌");
+  if (!context.clinics.some((clinic) => clinic.id === clinicId)) {
+    redirect("/admin/dashboard?notice=brand-access");
+  }
   const store = await cookies();
   store.set(ACTIVE_CLINIC_COOKIE, clinicId, {
     httpOnly: true,

@@ -252,6 +252,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           <PermissionHelpButton />
         </div>
       )}
+      {params.notice === "brand-access" && (
+        <p role="status" className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+          目前帳號沒有切換至該品牌的權限，已保留原本的品牌工作台。
+        </p>
+      )}
 
       {showFirstScreenSetup && <BrandSetupGuide items={setupItems} />}
 
