@@ -62,56 +62,67 @@ async function removeClinic(clinicId) {
   if (failures.length) throw new Error(failures.join("; "));
 }
 
-async function cleanup() {
-  const clinics = await must("list role fixtures", service.from("clinics").select("id").like("slug", `${clinicPrefix}%`));
-  for (const clinic of clinics ?? []) await removeClinic(clinic.id);
-
-  let page = 1;
-  const userIds = [];
-  while (true) {
-    const result = await service.auth.admin.listUsers({ page, perPage: 1000 });
-    if (result.error) throw new Error(`list auth users: ${result.error.message}`);
-    const users = result.data.users ?? [];
-    userIds.push(...users.filter((user) => user.email?.startsWith(emailPrefix)).map((user) => user.id));
-    if (users.length < 1000) break;
-    page += 1;
+async function cleanup({ suffix, clinicId, userIds }) {
+  if (!/^\d{13}-[0-9a-f]{6}$/.test(suffix) ||
+      (clinicId !== null && !/^[0-9a-f-]{36}$/.test(clinicId)) ||
+      !Array.isArray(userIds) || userIds.some((id) => !/^[0-9a-f-]{36}$/.test(id)) ||
+      new Set(userIds).size !== userIds.length) {
+    throw new Error("Invalid exact role fixture cleanup scope");
+  }
+  if (clinicId) {
+    const clinic = await must("verify role fixture clinic", service.from("clinics")
+      .select("id,slug").eq("id", clinicId).maybeSingle());
+    if (clinic && clinic.slug !== `${clinicPrefix}${suffix}`) {
+      throw new Error("Role fixture clinic scope mismatch");
+    }
   }
   for (const userId of userIds) {
-    const { error } = await service.auth.admin.deleteUser(userId);
-    if (error) throw new Error(`delete auth user ${userId}: ${error.message}`);
+    const result = await service.auth.admin.getUserById(userId);
+    if (result.error || !result.data.user?.email?.startsWith(emailPrefix) ||
+        !result.data.user.email.endsWith(`-${suffix}@example.invalid`)) {
+      throw new Error(`Role fixture user scope mismatch: ${userId}`);
+    }
   }
-  return { clinics: clinics?.length ?? 0, users: userIds.length };
+  if (clinicId) await removeClinic(clinicId);
+  for (const userId of userIds) {
+    await must("remove role fixture platform admin", service.from("platform_admins").delete().eq("user_id", userId));
+    const { error } = await service.auth.admin.deleteUser(userId);
+    if (error) throw new Error(`delete role fixture auth user ${userId}: ${error.message}`);
+  }
+  return { clinics: clinicId ? 1 : 0, users: userIds.length };
 }
 
 if (mode === "cleanup") {
-  console.log(JSON.stringify({ cleaned: await cleanup() }));
+  const scope = JSON.parse(process.argv[3] ?? "null");
+  console.log(JSON.stringify({ cleaned: await cleanup(scope) }));
   process.exit(0);
 }
 if (mode !== "setup") throw new Error("Usage: node scripts/staging-role-fixture.mjs [setup|cleanup]");
 
-await cleanup();
 const suffix = `${Date.now()}-${randomBytes(3).toString("hex")}`;
 const password = `${randomBytes(18).toString("base64url")}!Aa1`;
 const identities = ["system-admin", "system-employee", "brand-admin", "brand-employee"];
 const users = {};
-for (const identity of identities) {
-  const email = `${emailPrefix}${identity}-${suffix}@example.invalid`;
-  const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
-  if (created.error || !created.data.user) throw new Error(`create ${identity}: ${created.error?.message ?? "missing user"}`);
-  users[identity] = { id: created.data.user.id, email, password };
-}
+let clinic = null;
+try {
+  for (const identity of identities) {
+    const email = `${emailPrefix}${identity}-${suffix}@example.invalid`;
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    if (created.error || !created.data.user) throw new Error(`create ${identity}: ${created.error?.message ?? "missing user"}`);
+    users[identity] = { id: created.data.user.id, email, password };
+  }
 
-const clinic = await must("create role fixture clinic", service.from("clinics").insert({
-  name: "QA Role Matrix Brand", slug: `${clinicPrefix}${suffix}`, active: true,
-}).select("id,slug").single());
-await must("enable role fixture modules", service.from("clinic_settings").upsert({
-  clinic_id: clinic.id,
-  events_enabled: true,
-  memberships_enabled: true,
-  crm_automation_enabled: true,
-  line_channel_enabled: true,
-}, { onConflict: "clinic_id" }));
-await must("create brand identities", service.from("clinic_members").insert([
+  clinic = await must("create role fixture clinic", service.from("clinics").insert({
+    name: "QA Role Matrix Brand", slug: `${clinicPrefix}${suffix}`, active: true,
+  }).select("id,slug").single());
+  await must("enable role fixture modules", service.from("clinic_settings").upsert({
+    clinic_id: clinic.id,
+    events_enabled: true,
+    memberships_enabled: true,
+    crm_automation_enabled: true,
+    line_channel_enabled: true,
+  }, { onConflict: "clinic_id" }));
+  await must("create brand identities", service.from("clinic_members").insert([
   {
     clinic_id: clinic.id, user_id: users["system-admin"].id, role: "admin",
     access_type: "brand_admin", permissions: ["brand.manage", "operations.manage"],
@@ -124,21 +135,26 @@ await must("create brand identities", service.from("clinic_members").insert([
     clinic_id: clinic.id, user_id: users["brand-employee"].id, role: "staff",
     access_type: "employee", permissions: ["operations.manage"],
   },
-]));
-await must("create system identities", service.from("platform_admins").insert([
+  ]));
+  await must("create system identities", service.from("platform_admins").insert([
   {
     user_id: users["system-admin"].id, role: "admin", access_type: "system_admin", permissions: [], active: true,
   },
   {
     user_id: users["system-employee"].id, role: "admin", access_type: "employee", permissions: ["platform.overview"], active: true,
   },
-]));
-await must("create role fixture patient", service.from("patients").insert({
-  clinic_id: clinic.id, name: "QA Role Customer", phone: `09${suffix.replace(/\D/g, "").slice(-8).padStart(8, "0")}`,
-}));
+  ]));
+  await must("create role fixture patient", service.from("patients").insert({
+    clinic_id: clinic.id, name: "QA Role Customer", phone: `09${suffix.replace(/\D/g, "").slice(-8).padStart(8, "0")}`,
+  }));
+} catch (error) {
+  await cleanup({ suffix, clinicId: clinic?.id ?? null, userIds: Object.values(users).map((user) => user.id) });
+  throw error;
+}
 
 console.log(JSON.stringify({
   clinic,
+  suffix,
   baseUrl: process.env.PUBLIC_APP_URL ?? "https://reservation-system-staging-staging.up.railway.app",
   users,
 }));

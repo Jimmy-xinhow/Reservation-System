@@ -19,8 +19,14 @@ const denseBrandWorkspaces = [
   ["/admin/course-content", "課程內容與學習驗收"],
 ];
 
-function runFixture(mode) {
-  const result = spawnSync(process.execPath, [fixtureScript, mode], {
+function runFixture(mode, scope) {
+  const args = [fixtureScript, mode];
+  if (scope) args.push(JSON.stringify({
+    suffix: scope.suffix,
+    clinicId: scope.clinic.id,
+    userIds: Object.values(scope.users).map((user) => user.id),
+  }));
+  const result = spawnSync(process.execPath, args, {
     cwd: root,
     env: process.env,
     encoding: "utf8",
@@ -101,7 +107,7 @@ test.beforeAll(() => {
 });
 
 test.afterAll(() => {
-  runFixture("cleanup");
+  if (fixture) runFixture("cleanup", fixture);
 });
 
 test("系統管理者可進入系統人員頁", async ({ page }) => {
