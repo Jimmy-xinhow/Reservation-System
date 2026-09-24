@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/slots";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readCronSelections } from "@/lib/cron-scope";
+import { cronScopeDenied } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -74,6 +75,8 @@ async function runMarketing(req: NextRequest, scope?: MarketingScope) {
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return new Response("unauthorized", { status: 401 });
   }
+  const denied = cronScopeDenied(scope?.clinicId);
+  if (denied) return denied;
 
   try {
     const svc = createServiceClient();

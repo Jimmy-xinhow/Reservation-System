@@ -2,6 +2,7 @@ import { fail } from "@/lib/http";
 import { CRON_JOB_EXPECTATIONS, cronRunState, type CronRunSummary } from "@/lib/cron-operations-health";
 import { createServiceClient } from "@/lib/supabase";
 import type { NextRequest } from "next/server";
+import { cronAllowedClinics } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,9 +26,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const service = createServiceClient();
+    const mode = cronAllowedClinics() ? "scoped" : "global";
     const results = await Promise.all(CRON_JOB_EXPECTATIONS.map(({ job }) =>
       service.from("cron_job_runs").select("status,result_code,http_status,completed_at")
-        .eq("mode", "global").eq("job", job)
+        .eq("mode", mode).eq("job", job)
         .order("completed_at", { ascending: false }).limit(1),
     ));
     if (results.some((result) => result.error || !Array.isArray(result.data))) {

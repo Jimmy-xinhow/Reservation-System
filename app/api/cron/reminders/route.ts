@@ -11,6 +11,7 @@ import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { customerEntryUrl } from "@/lib/customer-entry";
 import { lineFlexDesignForDelivery } from "@/lib/line-flex-design";
 import { readCronRecordScope, type CronRecordScope } from "@/lib/cron-scope";
+import { cronScopeDenied } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,8 @@ async function runReminders(req: NextRequest, scope?: CronRecordScope) {
   if (!secret || auth !== `Bearer ${secret}`) {
     return new Response("unauthorized", { status: 401 });
   }
+  const denied = cronScopeDenied(scope?.clinicId);
+  if (denied) return denied;
 
   try {
     const svc = createServiceClient();

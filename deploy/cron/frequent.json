@@ -1,10 +1,10 @@
 {
   "build": {
     "builder": "RAILPACK",
-    "buildCommand": "node --check scripts/trigger-reminders.mjs"
+    "buildCommand": "node --check scripts/run-allowlisted-cron.mjs"
   },
   "deploy": {
-    "startCommand": "node scripts/trigger-reminders.mjs --jobs=followups,registration,richmenu",
+    "startCommand": "node scripts/run-allowlisted-cron.mjs --jobs=followups,registration,richmenu",
     "cronSchedule": "*/5 * * * *",
     "restartPolicyType": "NEVER"
   }

@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { processRegistrationNotificationQueue } from "@/lib/registration-notifications";
 import { processAppointmentNotificationQueue } from "@/lib/appointment-notifications";
 import { processAppointmentWaitlistNotificationQueue } from "@/lib/appointment-waitlist-notifications";
+import { cronScopeDenied } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("unauthorized", { status: 401 });
+  const denied = cronScopeDenied();
+  if (denied) return denied;
   try {
     const svc = createServiceClient();
     const { data, error } = await svc.rpc("expire_registration_payments");
@@ -41,6 +44,8 @@ interface ScopedResult {
 export async function POST(req: NextRequest) {
   const scope = await readCronSelections(req, ["registration_ids", "appointment_ids", "membership_payment_ids", "waitlist_ids"], true);
   if (scope instanceof Response) return scope;
+  const denied = cronScopeDenied(scope.clinicId);
+  if (denied) return denied;
   try {
     const svc = createServiceClient();
     const { data, error } = await svc.rpc("process_registration_cron_scope", {

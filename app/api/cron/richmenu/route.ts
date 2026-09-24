@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { clearDefaultRichMenu, lineAccessTokenForDestination, setDefaultRichMenu } from "@/lib/line";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { readCronRecordScope, type CronRecordScope } from "@/lib/cron-scope";
+import { cronScopeDenied } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,8 @@ export async function GET(req: NextRequest) { return runRichMenuSchedules(req); 
 async function runRichMenuSchedules(req: NextRequest, scope?: CronRecordScope) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("unauthorized", { status: 401 });
+  const denied = cronScopeDenied(scope?.clinicId);
+  if (denied) return denied;
   try {
     const service = createServiceClient();
     const { data, error } = scope

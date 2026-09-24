@@ -26,6 +26,7 @@ function fixture(name,mode){
    if(key==='@/lib/http')return {...load('lib/http.ts'),getClinicSettings:async()=>{throw Error(privateMessage);}};
    if(key==='@/lib/delivery-error')return load('lib/delivery-error.ts');
    if(key==='@/lib/cron-scope')return load('lib/cron-scope.ts');
+   if(key==='@/lib/cron-allowlist')return load('lib/cron-allowlist.ts');
    if(key==='@/lib/supabase')return {createServiceClient:()=>{calls++;if(mode==='thrown')throw Error(privateMessage);return service;}};
    if(key==='@/lib/line-channel')return {getClinicLineChannelContext:async()=>{throw Error(privateMessage);}};
    if(key.endsWith('notifications'))return new Proxy({},{get:()=>async()=>({sent:0,failed:0,skipped:0})});
@@ -37,6 +38,18 @@ function fixture(name,mode){
 const request=token=>({headers:new Headers(token?{authorization:'Bearer '+token}:{})});
 const brandId='11111111-1111-4111-8111-111111111111',jobId='22222222-2222-4222-8222-222222222222';
 const scopedRequest=(body,token='test-secret')=>({...request(token),json:async()=>body});
+test('allowlisted cron rejects every global route before service access',async()=>{
+ for(const name of names){
+  const f=fixture(name,'empty');f.context.process.env.CRON_ALLOWED_CLINIC_IDS=brandId;
+  assert.equal((await f.GET(request('test-secret'))).status,403);
+  assert.equal(f.calls(),0);
+ }
+});
+test('allowlisted cron rejects a foreign scoped brand before service access',async()=>{
+ const f=fixture('followups','empty');f.context.process.env.CRON_ALLOWED_CLINIC_IDS=brandId;
+ const r=await f.POST(scopedRequest({clinic_id:jobId,followup_ids:[jobId]}));
+ assert.equal(r.status,403);assert.equal(f.calls(),0);
+});
 test('scoped followup rejects unauthorized callers before reading JSON or DB',async()=>{const f=fixture('followups','empty');const r=await f.POST({...request('wrong'),json:async()=>{throw Error('must not read');}});assert.equal(r.status,401);assert.equal(f.calls(),0);});
 for(const body of [null,{}, {clinic_id:brandId,followup_ids:[]},{clinic_id:brandId,followup_ids:[jobId,jobId]},{clinic_id:brandId,followup_ids:[null]},{clinic_id:'bad',followup_ids:[jobId]},{clinic_id:brandId,followup_ids:[jobId],all:true},{clinic_id:brandId,followup_ids:Array(101).fill(jobId)}])test('scoped followup rejects invalid input '+JSON.stringify(body).slice(0,100),async()=>{const f=fixture('followups','empty');assert.equal((await f.POST(scopedRequest(body))).status,400);assert.equal(f.calls(),0);});
 test('scoped followup uses only exact brand and selected ids RPC',async()=>{const f=fixture('followups','empty');const r=await f.POST(scopedRequest({clinic_id:brandId,followup_ids:[jobId]}));assert.equal(r.status,200);assert.equal((await r.json()).claimed,0);assert.deepEqual(JSON.parse(JSON.stringify(f.rpcs)),[{method:'claim_scheduled_followups_for_clinic',args:{p_clinic_id:brandId,p_followup_ids:[jobId]}}]);});

@@ -123,6 +123,7 @@ node scripts/audit-storage-buckets.mjs --project-ref=<Supabase project ref>
 | `PLATFORM_ADMIN_USER_IDS` | 平台總後台 bootstrap 管理員 UUID（逗號分隔；僅 server environment） |
 | `CRON_SECRET` | Vercel／Railway Cron 呼叫提醒、報名逾時、行銷與 Rich Menu 排程 endpoint 的密鑰(長亂數) |
 | `CRON_HEALTH_ENABLED` | Railway worker 專用；`1` 代表每項工作後以 `CRON_SECRET` 回寫不含顧客資料的執行結果。須先套用 `cron_job_runs` migration 並部署 `/api/cron/health`；未設定時沿用既有 worker 行為 |
+| `CRON_ALLOWED_CLINIC_IDS` | Web 與隔離 worker 必須設定相同的品牌 UUID 清單；設定後七支全域 GET 排程拒絕執行，POST 只接受清單內品牌。空值、重複或不合法 UUID 會 fail closed；排程健康頁改查 scoped 執行紀錄 |
 | `REMINDER_HOURS_BEFORE` | 預約前幾小時發提醒(預設 24) |
 | `MEMBERSHIP_LOW_BALANCE_THRESHOLD` | 會員餘額提醒門檻（預設 1 堂） |
 | `MEMBERSHIP_EXPIRY_NOTICE_DAYS` | 會員到期前提醒天數（預設 7 天） |
@@ -204,7 +205,7 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
 
 ### (b) Cron 服務(提醒、報名與行銷排程)
 
-Railway **不會** 讀 `vercel.json`。`npm run reminders` 是人工整批執行七個 endpoint 的命令；正式排程依下表拆成五組，避免把五分鐘工作延後至每小時。設定範本位於 `deploy/cron/`，目前尚未部署。
+Railway **不會** 讀 `vercel.json`。`npm run reminders` 是人工全域執行命令，在設定 `CRON_ALLOWED_CLINIC_IDS` 的環境會被 Web 拒絕。正式排程依下表拆成五組，範本位於 `deploy/cron/`，使用 `scripts/run-allowlisted-cron.mjs` 每次重新查詢清單內品牌的現有工作，再以指定品牌／紀錄的 POST 執行；目前尚未部署。
 
 | worker 設定檔 | UTC 排程 | 工作／台北時間 |
 |---|---|---|
@@ -215,14 +216,16 @@ Railway **不會** 讀 `vercel.json`。`npm run reminders` 是人工整批執行
 | subscription-freezes.json | `5 16 * * *` | 會籍凍結／恢復；每日 00:05 |
 
 1. 每組使用獨立 worker service，Config File 指定對應的 `/deploy/cron/<name>.json`，不得沿用 Web 的根 `railway.json`：
-   - Start Command 與 Cron Schedule 由該設定檔提供；`--jobs=` 僅選工作類型，不是品牌篩選。
+   - Start Command 與 Cron Schedule 由該設定檔提供；`--jobs=` 僅選工作類型。品牌由 Web 與 worker 相同的 `CRON_ALLOWED_CLINIC_IDS` 強制限制。
    - Restart Policy 為 `NEVER`，避免平台立即重送結果不明的通知；下一週期的恢復仍依各 endpoint 投遞狀態判斷。
    - **Variables**:
      - `CRON_SECRET`(與 web 服務相同)
+     - `CRON_ALLOWED_CLINIC_IDS`(與 web 服務相同；不得空白或加入未授權品牌)
+     - `NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`(worker 只在 server 讀取可執行紀錄 ID，不輸出顧客資料)
      - `APP_URL`(web 服務的公開網址,例如 `https://your-app.up.railway.app`)
       — 或分別改設 `CRON_TARGET_URL`、`CRON_MARKETING_TARGET_URL`、`CRON_MEMBERSHIP_TARGET_URL`、`CRON_FOLLOWUP_TARGET_URL`、`CRON_REGISTRATION_TARGET_URL`、`CRON_RICHMENU_TARGET_URL`、`CRON_SUBSCRIPTION_FREEZE_TARGET_URL` 指定完整 endpoint。
 
-2. 腳本會帶 `Authorization: Bearer <CRON_SECRET>` 依序打:
+2. 腳本會帶 `Authorization: Bearer <CRON_SECRET>`、指定品牌與動態選出的紀錄 ID，依序 POST 到:
    - `${APP_URL}/api/cron/reminders`
    - `${APP_URL}/api/cron/marketing`
    - `${APP_URL}/api/cron/membership`
@@ -231,7 +234,7 @@ Railway **不會** 讀 `vercel.json`。`npm run reminders` 是人工整批執行
    - `${APP_URL}/api/cron/richmenu`
    - `${APP_URL}/api/cron/subscription-freezes`
 
-   七個 endpoint 必須回傳成功 HTTP、JSON `ok:true` 且無部分失敗才回 0；任一失敗回 1，仍繼續其餘工作。日誌只保留工作名稱、狀態、時間、耗時與安全數字摘要，不輸出完整回應／目標網址／憑證；不自動重送逾時或未知結果。
+   七個 endpoint 必須回傳成功 HTTP、JSON `ok:true` 才回 0；沒有待辦紀錄的工作只寫成功心跳。任何品牌的單一類別超過 100 筆時停止該類工作並回非零，須分批處理，不能退回全域 GET。日誌只保留工作名稱、狀態、時間、耗時與安全數字摘要，不輸出完整回應／目標網址／憑證；不自動重送逾時或未知結果。
 
 排程設定只代表預期行為；須確認 Railway 有獨立 Cron 服務、下一次執行時間及成功執行紀錄。Web 服務本身不會執行此腳本。漏跑／失敗告警須在部署平台另行設定並驗證送達；僅有 `CRON_SECRET` 不代表排程健康。
 

@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
+import { cronScopeDenied } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ export async function GET(req: NextRequest) { return runFollowups(req); }
 async function runFollowups(req: NextRequest, scope?: FollowupScope) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return new Response("unauthorized", { status: 401 });
+  const denied = cronScopeDenied(scope?.clinicId);
+  if (denied) return denied;
   try {
     const service = createServiceClient();
     const { data, error } = scope
