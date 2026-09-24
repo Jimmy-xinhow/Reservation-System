@@ -13,7 +13,7 @@ const db = createClient(host, process.env.SUPABASE_SERVICE_ROLE_KEY,
 const suffix = Date.now().toString(36).toUpperCase() + randomBytes(2).toString('hex').toUpperCase();
 const marker = 'G303_PRIVATE_CANARY_' + suffix;
 const base = 'https://reservation-system-production-9b71.up.railway.app';
-if (process.env.G303_EXPECTED_DEPLOYMENT !== '65b27deb-e3d1-4ebc-bfb1-e300fbd0cfc2') {
+if (process.env.G303_EXPECTED_DEPLOYMENT !== '2eddad9a-2ff6-4419-a42f-f689ac606c4a') {
   throw new Error('Production deployment guard failed');
 }
 const created = { patient: null, plan: null, orders: [], events: [] };
