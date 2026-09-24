@@ -31,6 +31,7 @@ async function removeClinic(clinicId) {
     "line_richmenu",
     "line_richmenu_versions",
     "funnel_events",
+    "admin_product_events",
     "appointment_waitlist_notification_logs",
     "appointment_waitlist_events",
     "appointment_waitlist_entries",
