@@ -56,6 +56,7 @@ function fixture({ insertFailure = null, healthRows = {}, readFailure = false } 
     require(name) {
       if (name === '@/lib/http') return { fail: (message, status) => Response.json({ ok: false, error: status >= 500 ? '暫時無法完成' : message }, { status }) };
       if (name === '@/lib/cron-operations-health') return healthExports;
+      if (name === '@/lib/cron-allowlist') return { cronAllowedClinics: () => null };
       if (name === '@/lib/supabase') return { createServiceClient: () => { clients++; return service; } };
       throw Error(`Unexpected dependency ${name}`);
     },

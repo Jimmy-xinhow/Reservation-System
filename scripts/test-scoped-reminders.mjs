@@ -24,6 +24,7 @@ function fixture(name,{inactive=false,fail=false,dbError=false}={}){
  function load(path){if(cache.has(path))return cache.get(path);const exports={};cache.set(path,exports);const js=ts.transpileModule(readFileSync(path,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
   vm.runInNewContext(js,{exports,Response,Headers,process:{env:{CRON_SECRET:'secret'}},console:{error:()=>{}},require:key=>{
    if(key==='@/lib/cron-scope')return load('lib/cron-scope.ts');
+   if(key==='@/lib/cron-allowlist')return load('lib/cron-allowlist.ts');
    if(key==='@/lib/supabase')return {createServiceClient:()=>{calls++;return svc;}};
    if(key==='@/lib/http')return {getClinicSettings:async()=>({booking_mode:'time',email_enabled:false}),fail:()=>Response.json({ok:false},{status:500})};
    if(key==='@/lib/email')return {emailConfigForClinic:async()=>null,sendEmail:async()=>sent.push('email')};

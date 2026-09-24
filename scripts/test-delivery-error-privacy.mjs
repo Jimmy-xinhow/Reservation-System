@@ -33,7 +33,7 @@ async function extractedFactory(path, names, dependencies) {
  }).join('\n');
  return (await compile(`export function factory(deps) { const {${dependencies.join(',')}}=deps; ${bodies} return ${names.at(-1)}; }`)).factory;
 }
-const followupFactory=await extractedFactory('app/api/cron/followups/route.ts',['escapeHtml','runFollowups','GET'],['deliveryError','createServiceClient','process','Response','console','fail','lineAccessTokenForDestination','pushMessages','emailConfigForClinic','sendEmail','recordCrmInteraction']);
+const followupFactory=await extractedFactory('app/api/cron/followups/route.ts',['escapeHtml','runFollowups','GET'],['deliveryError','createServiceClient','process','Response','console','fail','cronScopeDenied','lineAccessTokenForDestination','pushMessages','emailConfigForClinic','sendEmail','recordCrmInteraction']);
 async function runFollowups(options={}) {
  const events=[],logs=[];
  const jobs=options.jobs??[{id:'one',clinic_id:'brand',patient_id:'patient',purpose:'marketing',channel:options.channel??'line',body:'<test>',subject:null}];
@@ -47,7 +47,7 @@ async function runFollowups(options={}) {
   from:table=>{const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='patients'?{active:options.active??true,marketing_opt_in:options.optIn??true,line_user_id:'synthetic',email:'test@example.invalid'}:table==='clinics'?{name:'brand'}:{email_enabled:true},error:null})};return q;}
  };
  const send=async()=>{events.push(['send']);if(options.sendThrows)throw new Error(privateError);};
- const run=followupFactory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response,console:{error:(...args)=>logs.push(args)},fail:()=>{throw new Error('unexpected outer failure');},lineAccessTokenForDestination:async()=>'synthetic',pushMessages:send,emailConfigForClinic:async()=>({}),sendEmail:send,recordCrmInteraction:async()=>{events.push(['crm']);if(options.crmThrows)throw new Error(privateError);}});
+ const run=followupFactory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response,console:{error:(...args)=>logs.push(args)},fail:()=>{throw new Error('unexpected outer failure');},cronScopeDenied:()=>null,lineAccessTokenForDestination:async()=>'synthetic',pushMessages:send,emailConfigForClinic:async()=>({}),sendEmail:send,recordCrmInteraction:async()=>{events.push(['crm']);if(options.crmThrows)throw new Error(privateError);}});
  const body=await (await run({headers:new Headers({authorization:'Bearer test'})})).json();
  assert(!JSON.stringify(logs).includes('secret-token'));assert(!JSON.stringify(logs).includes('test@example.invalid'));
  return {body,events,logs};
@@ -129,10 +129,10 @@ test('waitlist finalizer scrubs provider failure and preserves static skip reaso
 test('scheduled followup stores safe failure when customer lookup fails, without sending',async()=>{
  const source=ts.createSourceFile('route.ts',read('app/api/cron/followups/route.ts'),ts.ScriptTarget.Latest,true);
  const get=source.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='runFollowups');
- const {factory}=await compile(`export function factory(deps) { const {deliveryError,createServiceClient,process,Response}=deps; ${get.getText(source).replace(/^export /,'')} return runFollowups; }`);
+ const {factory}=await compile(`export function factory(deps) { const {deliveryError,createServiceClient,process,Response,cronScopeDenied}=deps; ${get.getText(source).replace(/^export /,'')} return runFollowups; }`);
  const writes=[];
  const service={rpc:async(name,args)=>{if(name==='claim_due_scheduled_followups')return {data:[{id:'followup',clinic_id:'brand',patient_id:'patient'}]};writes.push(args);return {error:null};},from:()=>({select:()=>{const q={eq:()=>q,maybeSingle:async()=>({error:{message:privateError}})};return q;}})};
- const run=factory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response});
+ const run=factory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response,cronScopeDenied:()=>null});
  const result=await run({headers:new Headers({authorization:'Bearer test'})});
  assert.equal((await result.json()).failed,1);assert.equal(writes[0].p_error,'delivery_error:connection');
  assert(!JSON.stringify(writes).includes('secret-token'));
@@ -197,7 +197,7 @@ async function runChannels(mode){
   const data=table==='clinic_settings'?{line_channel_enabled:mode!=='disabled',email_enabled:true,deposit_enabled:true}:table==='clinics'?{slug:'synthetic',line_destination:'destination'}:[];
   return Promise.resolve({data,error:mode==='readError'?{message:privateError}:null}).then(resolve,reject);
  },insert:async rows=>{writes.push(rows);if(mode==='writeThrows')failure();return {error:mode==='writeError'?{message:privateError}:null};}};return q;}};
- const run=channelFactory({requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {clinicId:'brand',user:{id:'admin'}};},createServiceClient:()=>{effects.push('client');if(mode==='client')failure();return service;},getClinicLineChannelContext:async()=>{if(mode==='context')failure();return {liffId:'synthetic',loginChannelId:'synthetic',liffEndpointPath:'/book',verificationStatus:'ready'};},getPaymentSettings:async()=>{if(mode==='payment')failure();return {provider:'ecpay',environment:'test',hash_key:'key-private',hash_iv:'iv-private'};},lineAccessTokenForDestination:async()=>{effects.push('token');if(mode==='token')failure();return 'token-private';},getBotInfo:async()=>{effects.push('bot');if(mode==='line')failure();return {displayName:'Synthetic brand',basicId:'@synthetic',chatMode:'bot'};},emailConfigForClinic:async()=>{if(mode==='email')failure();return {apiKey:'email-private',from:'sender@example.invalid'};},resolvePublicClinicIdFromScope:async()=>{if(mode==='domain')failure();return 'brand';},process:{env:{PUBLIC_APP_URL:'https://example.invalid'}},console:{error:(...args)=>logs.push(args)},errorCategory,revalidatePath:path=>effects.push(path),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');}});
+ const run=channelFactory({requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {clinicId:'brand',user:{id:'admin'}};},createServiceClient:()=>{effects.push('client');if(mode==='client')failure();return service;},getClinicLineChannelContext:async()=>{if(mode==='context')failure();return {enabled:mode!=='disabled',liffId:'synthetic',loginChannelId:'synthetic',liffEndpointPath:'/book',verificationStatus:'ready'};},getPaymentSettings:async()=>{if(mode==='payment')failure();return {provider:'ecpay',environment:'test',hash_key:'key-private',hash_iv:'iv-private'};},lineAccessTokenForDestination:async()=>{effects.push('token');if(mode==='token')failure();return 'token-private';},getBotInfo:async()=>{effects.push('bot');if(mode==='line')failure();return {displayName:'Synthetic brand',basicId:'@synthetic',chatMode:'bot'};},emailConfigForClinic:async()=>{if(mode==='email')failure();return {apiKey:'email-private',from:'sender@example.invalid'};},resolvePublicClinicIdFromScope:async()=>{if(mode==='domain')failure();return 'brand';},process:{env:{PUBLIC_APP_URL:'https://example.invalid'}},console:{error:(...args)=>logs.push(args)},errorCategory,revalidatePath:path=>effects.push(path),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');}});
  let error;try{await run();}catch(e){error=e;}
  const serialized=JSON.stringify({writes,logs});for(const secret of ['secret-token','token-private','key-private','iv-private','email-private'])assert(!serialized.includes(secret));
  return {writes,logs,effects,error};

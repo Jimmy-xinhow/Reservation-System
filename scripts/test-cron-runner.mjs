@@ -11,10 +11,10 @@ test('Railway groups cover every Vercel job once at the same cadence without cra
  const expected=JSON.parse(readFileSync('vercel.json','utf8')).crons;
  const actual=[];
  for(const file of readdirSync('deploy/cron')){
-  if(file==='health-monitor.json')continue;
+  if(file==='health-monitor.json'||!file.endsWith('.json'))continue;
   const config=JSON.parse(readFileSync('deploy/cron/'+file,'utf8'));
   assert.equal(config.deploy.restartPolicyType,'NEVER');
-  const match=/^node scripts\/trigger-reminders\.mjs --jobs=([a-z,-]+)$/.exec(config.deploy.startCommand);assert(match);
+  const match=/^node scripts\/run-allowlisted-cron\.mjs --jobs=([a-z,-]+)$/.exec(config.deploy.startCommand);assert(match);
   for(const job of match[1].split(','))actual.push({path:'/api/cron/'+job,schedule:config.deploy.cronSchedule});
  }
  assert.equal(new Set(actual.map(x=>x.path)).size,7);
