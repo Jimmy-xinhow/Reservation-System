@@ -18,6 +18,7 @@ function chat(mode){let pushes=0,crm=0;const statuses=[];const service=db('succe
  '@/lib/supabase':{createServiceClient:()=>service},'@/lib/line-channel':{getClinicLineChannelContext:async()=>({enabled:mode!=='disabled'})},
  '@/lib/line':{lineAccessTokenForDestination:async()=>'token',pushMessages:async()=>{pushes++;if(mode==='transport')throw Error(secret);}},
  '@/lib/crm-interactions':{recordCrmInteraction:async()=>{crm++;if(mode==='crm')throw Error(secret);}},
+ '@/lib/admin-modules':{isAdminModuleEnabled:async()=>true},
  });return{api,statuses,pushes:()=>pushes,crm:()=>crm};}
 for(const mode of ['ok','insert','disabled','transport','status','crm'])test(`actual chat POST ${mode} preserves delivery certainty`,async()=>{const h=chat(mode),res=await h.api.POST({json:async()=>({lineUserId:'user',body:'text'})}),value=await res.json();assert.ok(!JSON.stringify(value).includes('PRIVATE_NAME'));assert.ok(h.pushes()<=1);
  if(mode==='insert'||mode==='disabled'){assert.equal(value.ok,false);assert.equal(h.pushes(),0);}else{assert.equal(value.ok,true);assert.equal(h.pushes(),1);assert.equal(value.data.delivery,mode==='transport'?'unconfirmed':'accepted');assert.equal(value.data.sent,mode!=='transport');if(mode!=='ok')assert.match(value.data.notice,/勿重複送出/);assert.ok(!h.statuses.some(s=>s.status==='failed'));}

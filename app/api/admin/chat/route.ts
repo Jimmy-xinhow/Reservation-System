@@ -14,6 +14,7 @@ import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { createServiceClient } from "@/lib/supabase";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export async function GET(req: NextRequest) {
   const { supabase, clinicId } = member;
   const type = req.nextUrl.searchParams.get("type");
   try {
+    if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return fail("此品牌未啟用 LINE 訊息", 403);
     if (member.role === "provider") {
       if (type === "unread") return ok({ count: 0 });
       if (type === "messages") return ok({ messages: [] });
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
   } | null;
   if (!payload?.lineUserId) return fail("缺少對話對象");
   try {
+    if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return fail("此品牌未啟用 LINE 訊息", 403);
     if (payload.action === "block") {
       await setChatBlock(supabase, clinicId, payload.lineUserId, true);
       return ok({ blocked: true });
