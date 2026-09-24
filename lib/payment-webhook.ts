@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PaymentProvider } from "./payment";
 import { findPaymentOrderByMerchant, mergePaymentProviderEvent } from "./payment-order-lookup";
@@ -92,11 +93,24 @@ export async function processPaymentWebhook(
   if (!order) throw new Error("找不到付款訂單");
   if (Number(order.amount) !== event.amount) throw new Error("付款金額不一致");
 
+  // Keep only the verified transaction receipt. The full callback may contain
+  // customer fields or provider signatures and must not be stored three times.
+  const receipt = {
+    receipt_version: 1,
+    provider: event.provider,
+    merchant_order_no: event.merchantOrderNo,
+    provider_transaction_no: event.providerTransactionNo,
+    event_key: event.eventKey,
+    success: event.success,
+    amount: event.amount,
+    payload_sha256: createHash("sha256").update(JSON.stringify(event.payload)).digest("hex"),
+  };
+
   const { error: webhookError } = await supabase.from("payment_webhook_events").insert({
     clinic_id: order.clinic_id,
     provider: event.provider,
     event_key: event.eventKey,
-    payload: event.payload,
+    payload: receipt,
   });
   const duplicateEvent = webhookError?.code === "23505";
   if (webhookError) {
@@ -124,7 +138,7 @@ export async function processPaymentWebhook(
     provider_transaction_no: event.providerTransactionNo,
     event_key: event.eventKey,
     status: event.success ? "accepted" : "rejected",
-    payload: event.payload,
+    payload: receipt,
   });
   if (transactionError && transactionError.code !== "23505") throw new Error(transactionError.message);
 
@@ -133,7 +147,7 @@ export async function processPaymentWebhook(
     .from("payment_orders")
     .update({
       status: nextStatus,
-      provider_payload: mergePaymentProviderEvent(order.provider_payload, event.merchantOrderNo, event.payload),
+      provider_payload: mergePaymentProviderEvent(order.provider_payload, event.merchantOrderNo, receipt),
       updated_at: new Date().toISOString(),
     })
     .eq("id", order.id)

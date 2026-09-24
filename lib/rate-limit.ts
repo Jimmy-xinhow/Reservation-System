@@ -1,8 +1,10 @@
 import "server-only";
 
 import { createHash } from "node:crypto";
+import { isIP } from "node:net";
 import type { NextRequest } from "next/server";
 import { createServiceClient } from "./supabase";
+import { errorCategory } from "./error-category";
 
 interface Bucket {
   count: number;
@@ -15,10 +17,11 @@ const MAX_LOCAL_BUCKETS = 2_000;
 export interface RateLimitResult {
   allowed: boolean;
   retryAfterSeconds: number;
+  unavailable?: boolean;
 }
 
 /**
- * Shared PostgreSQL limiter with a bounded in-process fallback.
+ * Shared PostgreSQL limiter with a bounded local rejection cache.
  * The local layer also absorbs bursts before they reach the database.
  */
 export async function checkRateLimit(
@@ -46,11 +49,11 @@ export async function checkRateLimit(
       retryAfterSeconds: Math.max(0, row.retry_after_seconds),
     };
   } catch (error) {
-    console.error("[rate-limit] shared store unavailable; using local fallback", {
+    console.error("[rate-limit] shared store unavailable; rejecting request", {
       key,
-      detail: error instanceof Error ? error.message.slice(0, 500) : "unknown error",
+      category: errorCategory(error instanceof Error ? error.message : ""),
     });
-    return localResult;
+    return { allowed: false, retryAfterSeconds: 5, unavailable: true };
   }
 }
 
@@ -60,8 +63,7 @@ function checkLocalRateLimit(
   limit: number,
   windowMs: number,
 ): RateLimitResult {
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = forwarded || req.headers.get("x-real-ip") || "unknown";
+  const address = rateLimitAddress(req);
   const bucketKey = `${key}:${address}`;
   const now = Date.now();
   const current = buckets.get(bucketKey);
@@ -90,13 +92,22 @@ function checkLocalRateLimit(
 }
 
 function rateLimitBucketKey(req: NextRequest, key: string): string {
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = forwarded || req.headers.get("x-real-ip") || "unknown";
+  const address = rateLimitAddress(req);
   return createHash("sha256").update(`${key}:${address}`).digest("hex");
+}
+
+function rateLimitAddress(req: NextRequest): string {
+  // Railway Edge supplies X-Real-IP as the remote address. Do not use the
+  // client-controlled X-Forwarded-For chain to choose a rate-limit bucket.
+  const address = req.headers.get("x-real-ip")?.trim() ?? "";
+  return isIP(address) ? address : "unknown";
 }
 
 function isSharedRateLimitRow(value: unknown): value is { allowed: boolean; retry_after_seconds: number } {
   if (!value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;
-  return typeof row.allowed === "boolean" && typeof row.retry_after_seconds === "number";
+  return typeof row.allowed === "boolean" && typeof row.retry_after_seconds === "number"
+    && Number.isInteger(row.retry_after_seconds) && row.retry_after_seconds >= 0
+    && row.retry_after_seconds <= 86400
+    && (row.allowed ? row.retry_after_seconds === 0 : row.retry_after_seconds >= 1);
 }
