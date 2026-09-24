@@ -17,10 +17,10 @@ for(const path of files)test(path+' all logged exceptions discard provider paylo
  ts.forEachChild(node,visit);}
  visit(source);assert.equal(count,path.includes('appointment-actions')?4:path.includes('line-actions')?10:path.includes('line/page')?3:1);
 });
-function action(name, deps){const s=ts.createSourceFile('actions',read('app/admin/line-actions.ts'),ts.ScriptTarget.Latest,true);const names=['str','intOr',name];const code=names.map(n=>s.statements.find(x=>ts.isFunctionDeclaration(x)&&x.name?.text===n).getText(s)).join('\n');const exports={};vm.runInNewContext(compile('class RichMenuUserError extends Error {}\n'+code),{exports,Error,deliveryError,randomUUID:()=> '12345678',revalidatePath:()=>{},...deps});return exports[name];}
+function action(name, deps){const s=ts.createSourceFile('actions',read('app/admin/line-actions.ts'),ts.ScriptTarget.Latest,true);const names=['str','intOr','requireEnabledLineAdmin',name];const code=names.map(n=>s.statements.find(x=>ts.isFunctionDeclaration(x)&&x.name?.text===n).getText(s)).join('\n');const exports={};vm.runInNewContext(compile('class RichMenuUserError extends Error {}\n'+code),{exports,Error,deliveryError,randomUUID:()=> '12345678',revalidatePath:()=>{},...deps});return exports[name];}
 test('publication query failure stores safe reason; audit failure does not escape or leak',async()=>{
  const records=[],logs=[];const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:null,error:{message:secret}})};const db={from:()=>q,rpc:async(n,p)=>{records.push([n,p]);throw Error(secret);}};
- const fn=action('publishRichMenuAction',{requireAdmin:async()=>({clinicId:'own',user:{id:'actor'}}),createServiceClient:()=>db,console:{error:(...v)=>logs.push(v)}});
+ const fn=action('publishRichMenuAction',{requireAdmin:async()=>({clinicId:'own',user:{id:'actor'}}),isAdminModuleEnabled:async()=>true,createServiceClient:()=>db,console:{error:(...v)=>logs.push(v)}});
  const result=await fn(new Map([['version_id','version']]));assert.equal(result.ok,false);assert.equal(records.length,1);assert.equal(records[0][1].p_clinic_id,'own');assert.match(records[0][1].p_error,/^delivery_error:/);assert(!JSON.stringify({records,logs,result}).includes('SYNTHETIC_SECRET'));
 });
 test('LINE validation provider failure persists safe reason and preserves redirect control flow',async()=>{
@@ -30,7 +30,27 @@ test('LINE validation provider failure persists safe reason and preserves redire
 });
 test('database error reaches action framework as safe message; input validation stays actionable',async()=>{
  const q={insert:async()=>({error:{message:secret}})};
- const fn=action('createReplyAction',{REPLY_ACTIONS:['text','booking','query','progress','message'],requireAdmin:async()=>({supabase:{from:()=>q},clinicId:'own'}),console:{error:()=>{}}});
+ const fn=action('createReplyAction',{REPLY_ACTIONS:['text','booking','query','progress','message'],requireAdmin:async()=>({supabase:{from:()=>q},clinicId:'own'}),isAdminModuleEnabled:async()=>true,console:{error:()=>{}}});
  await assert.rejects(fn(new Map([['keywords','hello'],['action','text']])),e=>e.message.includes('操作暫時無法完成')&&!e.message.includes('SYNTHETIC_SECRET')&&!e.message.includes('0912345678'));
  await assert.rejects(fn(new Map()),e=>e.message==='請填關鍵字');
+});
+test('disabled LINE rejects stale reply action before database write',async()=>{
+ let writes=0;
+ const fn=action('createReplyAction',{REPLY_ACTIONS:['text','booking','query','progress','message'],requireAdmin:async()=>({supabase:{from:()=>{writes++;throw Error('unexpected write');}},clinicId:'own'}),isAdminModuleEnabled:async(_supabase,clinicId,module)=>{assert.equal(clinicId,'own');assert.equal(module,'line');return false;}});
+ await assert.rejects(fn(new Map([['keywords','hello'],['action','text']])),e=>e.message==='此品牌未啟用 LINE 訊息');
+ assert.equal(writes,0);
+});
+test('LINE content actions check current module state at execution',()=>{
+ const source=ts.createSourceFile('line-actions',read('app/admin/line-actions.ts'),ts.ScriptTarget.Latest,true);
+ const start=source.text.indexOf('export async function createReplyAction');
+ const end=source.text.indexOf('export async function updateLineChannelSettingsAction');
+ assert(start>0&&end>start);
+ const actions=source.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name&&node.getStart(source)>=start&&node.getStart(source)<end&&node.modifiers?.some(modifier=>modifier.kind===ts.SyntaxKind.ExportKeyword));
+ assert(actions.length>=18);
+ for(const entry of actions){
+  const body=entry.body?.getText(source)??'';
+  assert(/await requireEnabledLineAdmin\(\)|updateLineFlexDesign\(/.test(body),`${entry.name.text} lacks current LINE module gate`);
+ }
+ const internal=source.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='updateLineFlexDesign');
+ assert(internal?.body?.getText(source).includes('await requireEnabledLineAdmin()'));
 });

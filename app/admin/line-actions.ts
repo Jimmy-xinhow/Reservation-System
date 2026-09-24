@@ -7,6 +7,7 @@ import { headers } from "next/headers";
 import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin, requireBrandAdmin } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 import {
   pushMessages,
@@ -74,6 +75,14 @@ function redirectRichMenuFailure(userMessage: string, cause?: unknown): never {
 
 class RichMenuUserError extends Error {}
 
+async function requireEnabledLineAdmin() {
+  const member = await requireAdmin();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "line"))) {
+    throw new Error("此品牌未啟用 LINE 訊息");
+  }
+  return member;
+}
+
 // ── LINE 測試推播 ─────────────────────────────────────────
 export async function sendTestPushAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
@@ -103,7 +112,7 @@ export async function sendTestPushAction(fd: FormData) {
 // ── LINE 自動回覆規則 ─────────────────────────────────────
 const REPLY_ACTIONS = ["text", "booking", "query", "progress", "message"] as const;
 export async function createReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
   if (!keywords) throw new Error("請填關鍵字");
@@ -122,7 +131,7 @@ export async function createReplyAction(fd: FormData) {
 }
 
 export async function updateReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
@@ -144,7 +153,7 @@ export async function updateReplyAction(fd: FormData) {
 }
 
 export async function toggleReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
@@ -157,7 +166,7 @@ export async function toggleReplyAction(fd: FormData) {
 }
 
 export async function deleteReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_auto_replies")
@@ -169,7 +178,7 @@ export async function deleteReplyAction(fd: FormData) {
 }
 
 export async function updateLineTextsAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const { error } = await supabase
     .from("clinic_settings")
     .update({
@@ -249,7 +258,7 @@ function lineFlexDesignFromForm(fd: FormData): LineFlexDesignConfig {
 }
 
 async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<never> {
-  const { clinicId } = await requireAdmin();
+  const { clinicId } = await requireEnabledLineAdmin();
   const design = lineFlexDesignFromForm(fd);
   const service = createServiceClient();
   const { data: current, error: readError } = await service
@@ -290,7 +299,7 @@ export async function publishLineFlexDesignAction(fd: FormData): Promise<never> 
 
 // ── LINE 訊息素材 line_messages ───────────────────────────
 export async function saveMessageAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const name = str(fd, "name");
   const kind = str(fd, "kind");
@@ -320,7 +329,7 @@ export async function saveMessageAction(fd: FormData) {
 }
 
 export async function deleteMessageAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_messages")
@@ -443,7 +452,7 @@ function inspectRichMenuImage(bytes: ArrayBuffer): { contentType: "image/png" | 
 }
 
 export async function saveRichMenuAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const layout = str(fd, "layout") as Layout;
   if (!LAYOUTS[layout]) throw new Error("版型錯誤");
   const count = LAYOUTS[layout].slots;
@@ -477,7 +486,7 @@ export async function saveRichMenuAction(fd: FormData) {
 }
 
 export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const service = createServiceClient();
   const versionId = str(fd, "version_id");
   let errMsg: string | null = null;
@@ -590,7 +599,7 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
 }
 
 export async function unpublishRichMenuAction() {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const service = createServiceClient();
   const { data: cfg } = await service
     .from("line_richmenu")
@@ -609,7 +618,7 @@ export async function unpublishRichMenuAction() {
 }
 
 export async function rollbackRichMenuVersionAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const versionId = str(fd, "version_id");
   const service = createServiceClient();
   const [{ data: target }, { data: current }] = await Promise.all([
@@ -633,7 +642,7 @@ export async function rollbackRichMenuVersionAction(fd: FormData) {
 }
 
 export async function cloneRichMenuVersionAction(fd: FormData) {
-  const { clinicId, user } = await requireAdmin();
+  const { clinicId, user } = await requireEnabledLineAdmin();
   const sourceVersionId = str(fd, "version_id");
   const name = str(fd, "name") || null;
   if (!sourceVersionId) redirect("/admin/richmenu?err=%E6%89%BE%E4%B8%8D%E5%88%B0%E8%A6%81%E8%A4%87%E8%A3%BD%E7%9A%84%E7%89%88%E6%9C%AC");
@@ -649,7 +658,7 @@ export async function cloneRichMenuVersionAction(fd: FormData) {
 }
 
 export async function syncRichMenuAliasAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const aliasId = str(fd, "alias_id");
   const label = str(fd, "label");
   const versionId = str(fd, "version_id");
@@ -714,7 +723,7 @@ export async function syncRichMenuAliasAction(fd: FormData) {
 }
 
 export async function removeRichMenuAliasAction(fd: FormData) {
-  const { clinicId, user } = await requireAdmin();
+  const { clinicId, user } = await requireEnabledLineAdmin();
   const aliasId = str(fd, "alias_id");
   if (!RICH_MENU_ALIAS_ID_PATTERN.test(aliasId)) redirect(`/admin/richmenu?err=${encodeURIComponent("Alias ID 格式錯誤")}`);
   const service = createServiceClient();
@@ -756,7 +765,7 @@ function taipeiLocalDateTime(value: string): string | null {
 }
 
 export async function createRichMenuScheduleAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const versionId = str(fd, "version_id");
   const startsAt = taipeiLocalDateTime(str(fd, "starts_at"));
   const endsAt = taipeiLocalDateTime(str(fd, "ends_at"));
@@ -775,7 +784,7 @@ export async function createRichMenuScheduleAction(fd: FormData) {
 }
 
 export async function cancelRichMenuScheduleAction(fd: FormData) {
-  const { clinicId, user } = await requireAdmin();
+  const { clinicId, user } = await requireEnabledLineAdmin();
   const scheduleId = str(fd, "schedule_id");
   const { error } = await createServiceClient().rpc("cancel_line_richmenu_schedule", {
     p_clinic_id: clinicId,
