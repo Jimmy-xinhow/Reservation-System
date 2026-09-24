@@ -205,9 +205,9 @@ DB 與 Auth 維持 Supabase(照第一節建好 schema 與帳號即可),Railway �
 
 ### (b) Cron 服務(提醒、報名與行銷排程)
 
-Railway **不會** 讀 `vercel.json`。`npm run reminders` 是人工全域執行命令，在設定 `CRON_ALLOWED_CLINIC_IDS` 的環境會被 Web 拒絕。正式排程依下表拆成五組，範本位於 `deploy/cron/`，使用 `scripts/run-allowlisted-cron.mjs` 每次重新查詢清單內品牌的現有工作，再以指定品牌／紀錄的 POST 執行；目前尚未部署。
+Railway **不會** 讀 `vercel.json`。`npm run reminders` 是人工全域執行命令，在設定 `CRON_ALLOWED_CLINIC_IDS` 的環境會被 Web 拒絕。正式排程依下表拆成五組，範本位於 `deploy/cron/`，使用 `scripts/run-allowlisted-cron.mjs` 每次重新查詢清單內品牌的現有工作，再以指定品牌／紀錄的 POST 執行；正式排程尚未部署，staging 已部署下述背景服務。
 
-共享 staging 可用單一獨立背景服務：其 `RAILWAY_DOCKERFILE_PATH` 設為 `deploy/cron/Dockerfile.allowlisted`，容器執行 `scripts/start-allowlisted-worker.mjs`，每輪七類工作完成後等待五分鐘再啟動下一輪，絕不重疊。Web 與 worker 都要設相同的 `CRON_ALLOWED_CLINIC_IDS`；worker 另引用 Web 的 `CRON_SECRET`、`NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`APP_URL`，並設 `CRON_HEALTH_ENABLED=1`。此背景服務沒有 Railway Cron Schedule，也不需公開網域；仍需外部漏跑／失敗告警與實際收件驗證。
+共享 staging 可用單一獨立背景服務：其 `RAILWAY_DOCKERFILE_PATH` 設為 `deploy/cron/Dockerfile.allowlisted`，容器執行 `scripts/start-allowlisted-worker.mjs`，每輪七類工作完成後等待五分鐘再啟動下一輪，絕不重疊。worker 的 `CRON_ALLOWED_CLINIC_IDS` 只列明確授權的 DEMO；Web 至少列同一清單。staging gate 另保留固定、執行前必須不存在的 QA ID `7e26a360-9717-4fec-842f-0328e9813c77` 在 **Web 清單**，worker 不包含此 ID，避免與驗收夾具競爭。worker 另引用 Web 的 `CRON_SECRET`、`NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`APP_URL`，並設 `CRON_HEALTH_ENABLED=1`。此背景服務沒有 Railway Cron Schedule，也不需公開網域；仍需外部漏跑／失敗告警與實際收件驗證。
 
 | worker 設定檔 | UTC 排程 | 工作／台北時間 |
 |---|---|---|

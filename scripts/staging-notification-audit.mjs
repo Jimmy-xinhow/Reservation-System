@@ -19,6 +19,9 @@ if (process.env.LINE_CHANNEL_ACCESS_TOKEN?.trim() || process.env.LINE_CHANNEL_AC
 const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const suffix = `${Date.now()}-${randomBytes(3).toString("hex")}`;
 const qaSlug = `qa-notifications-${suffix}`;
+// The shared staging Web allowlist reserves this otherwise absent ID for this gate.
+// The staging worker deliberately does not include it, so the gate cannot race it.
+const qaClinicId = "7e26a360-9717-4fec-842f-0328e9813c77";
 let clinicId = null;
 let failed = false;
 
@@ -103,7 +106,10 @@ function taipeiDate(date = new Date()) {
 }
 
 try {
+  const existing = await must("check reserved QA clinic ID", service.from("clinics").select("id").eq("id", qaClinicId).maybeSingle());
+  if (existing) throw new Error("Reserved QA clinic ID is already occupied; refusing to alter it");
   const clinic = await must("create clinic", service.from("clinics").insert({
+    id: qaClinicId,
     name: "QA Notification Lifecycle",
     slug: qaSlug,
     active: true,
