@@ -129,8 +129,10 @@ test("系統管理者可替既有系統員工設定密碼且員工能登入", as
   await page.getByLabel("要設定密碼的系統人員").selectOption({ label: account.email });
   await page.getByLabel("新密碼（至少 8 碼）").fill(nextPassword);
   await page.getByLabel("再次輸入新密碼").fill(nextPassword);
+  const saveResponse = page.waitForResponse((response) => response.url().startsWith(`${baseUrl}/admin/platform/admins`)
+    && response.request().method() === "POST");
   await page.getByRole("button", { name: "只更新所選帳號" }).click();
-  await expect(page.getByLabel("要設定密碼的系統人員")).toHaveValue("");
+  expect((await saveResponse).ok()).toBe(true);
 
   fixture.users["system-employee"].password = nextPassword;
   const employeeContext = await browser.newContext();

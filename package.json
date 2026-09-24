@@ -22,7 +22,7 @@
     "audit:staging-notifications": "node scripts/staging-notification-audit.mjs",
     "audit:staging-browser-identity": "node scripts/staging-browser-identity-audit.mjs",
     "audit:staging-core": "node scripts/staging-core-acceptance.mjs",
-    "audit:staging-role-ui": "playwright test tests/staging-role-ui.spec.mjs --reporter=line",
+    "audit:staging-role-ui": "playwright test tests/staging-role-ui.spec.mjs --reporter=line --retries=0",
     "audit:staging-growth": "node scripts/staging-growth-features-audit.mjs",
     "fixture:staging-roles": "node scripts/staging-role-fixture.mjs",
     "reminders": "node scripts/trigger-reminders.mjs"
