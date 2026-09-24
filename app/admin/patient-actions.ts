@@ -3,7 +3,6 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { hasBrandPermission, requireAdmin, requireOperator } from "@/lib/admin";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { createServiceClient } from "@/lib/supabase";
@@ -206,7 +205,7 @@ export async function deletePatientRecordAction(fd: FormData) {
   revalidatePath(`/admin/patients/${patientId}`);
 }
 
-export async function mergePatientAction(fd: FormData): Promise<void> {
+export async function mergePatientAction(fd: FormData): Promise<string> {
   const member = await requireAdmin();
   const sourcePatientId = str(fd, "source_patient_id");
   const targetPatientId = str(fd, "target_patient_id");
@@ -219,5 +218,5 @@ export async function mergePatientAction(fd: FormData): Promise<void> {
   }
   if (typeof data !== "string") throw new Error("顧客合併失敗");
   revalidatePath("/admin/patients");
-  redirect(`/admin/patients/${encodeURIComponent(data)}`);
+  return data;
 }

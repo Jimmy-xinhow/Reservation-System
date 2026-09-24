@@ -10,11 +10,11 @@ import {
   addPatientRecordAction,
   deletePatientRecordAction,
   setPatientBlockAction,
-  mergePatientAction,
 } from "../../patient-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createScheduledFollowupAction, setScheduledFollowupStatusAction } from "../../followups/actions";
 import FollowupComposer from "../../followups/FollowupComposer";
+import MergePatientForm from "./MergePatientForm";
 
 export const dynamic = "force-dynamic";
 
@@ -95,7 +95,7 @@ export default async function PatientDetailPage({
     );
   }
 
-  const [apptResult, recResult, interactionResult, walletResult, pointResult, subscriptionResult, followupResult, mergeTargetResult] = await adminQuery(Promise.all([
+  const [apptResult, recResult, interactionResult, walletResult, pointResult, subscriptionResult, followupResult] = await adminQuery(Promise.all([
     supabase
       .from("appointments")
       .select("id, start_at, status, queue_number, doctors(name), services(name)")
@@ -119,9 +119,8 @@ export default async function PatientDetailPage({
     supabase.from("loyalty_accounts").select("points_balance, lifetime_earned, lifetime_redeemed").eq("clinic_id", clinicId).eq("patient_id", id).maybeSingle(),
     supabase.from("patient_subscriptions").select("id, status, current_period_end, subscription_plans(name)").eq("clinic_id", clinicId).eq("patient_id", id).in("status", ["active", "paused", "past_due"]).order("created_at", { ascending: false }),
     supabase.from("scheduled_followups").select("id, channel, body, scheduled_for, status, last_error").eq("clinic_id", clinicId).eq("patient_id", id).order("scheduled_for", { ascending: false }).limit(20),
-    hasBrandPermission(member, "brand.manage") ? supabase.from("patients").select("id, name, phone, email").eq("clinic_id", clinicId).eq("active", true).neq("id", id).order("name").limit(500) : Promise.resolve({ data: [], error: null }),
   ]));
-  const queryError = [apptResult.error, recResult.error, interactionResult.error, walletResult.error, pointResult.error, subscriptionResult.error, followupResult.error, mergeTargetResult.error].find(Boolean);
+  const queryError = [apptResult.error, recResult.error, interactionResult.error, walletResult.error, pointResult.error, subscriptionResult.error, followupResult.error].find(Boolean);
   if (queryError) throw new Error(adminErrorMessage(queryError));
   const { data: apptData } = apptResult;
   const { data: recData } = recResult;
@@ -130,7 +129,6 @@ export default async function PatientDetailPage({
   const { data: pointData } = pointResult;
   const { data: subscriptionData } = subscriptionResult;
   const { data: followupData } = followupResult;
-  const { data: mergeTargetData } = mergeTargetResult;
   const history = (apptData ?? []) as unknown as Appt[];
   const records = (recData ?? []) as PatientRecord[];
   const interactions = (interactionData ?? []) as CrmInteraction[];
@@ -170,7 +168,7 @@ export default async function PatientDetailPage({
         <section className="admin-section p-4"><div className="flex items-center justify-between"><h2 className="font-semibold text-slate-900">最近回訪</h2><Link href="/admin/followups" className="text-xs font-medium text-brand-700 hover:underline">查看全部</Link></div>{followups.length === 0 ? <p className="mt-4 text-sm text-slate-400">尚未安排回訪</p> : <div className="mt-3 divide-y divide-slate-100">{followups.slice(0, 6).map((followup) => <div key={followup.id} className="py-2 text-sm"><div className="flex items-center justify-between gap-2"><span>{formatDateTime(followup.scheduled_for)} · {followup.channel.toUpperCase()}</span><span className="text-xs text-slate-500">{followup.status === "pending" ? "待處理" : followup.status === "failed" ? "失敗" : followup.status === "completed" ? "已完成" : followup.status === "sent" ? "已發送" : "已取消"}</span></div><p className="mt-1 line-clamp-2 text-xs text-slate-500">{followup.body}</p>{followup.last_error && <p className="mt-1 text-xs text-red-700">{deliveryError(followup.last_error)}</p>}{["pending", "failed"].includes(followup.status) && ["phone", "manual"].includes(followup.channel) && <form action={setScheduledFollowupStatusAction} className="mt-1"><input type="hidden" name="id" value={followup.id} /><input type="hidden" name="status" value="completed" /><SubmitButton className="admin-inline-action">標記完成</SubmitButton></form>}</div>)}</div>}</section>
       </section>
 
-      {hasBrandPermission(member, "brand.manage") && (mergeTargetData ?? []).length > 0 && <details className="admin-section"><summary className="cursor-pointer px-4 py-3 font-semibold text-red-800">合併重複顧客資料</summary><form action={mergePatientAction} className="space-y-3 border-t border-red-100 p-4"><input type="hidden" name="source_patient_id" value={p.id} /><p className="text-sm leading-6 text-slate-600">目前這筆「{p.name} · {p.phone}」會停用，預約、報名、套票、互動、訂閱與回訪歷史移到選定的保留顧客。若兩筆綁定不同 LINE 帳號，系統會拒絕合併。</p><label className="text-sm"><span className="label">保留哪一筆顧客</span><select name="target_patient_id" className="input" required defaultValue=""><option value="" disabled>選擇要保留的顧客</option>{(mergeTargetData ?? []).map((target) => <option key={target.id} value={target.id}>{target.name} · {target.phone}{target.email ? ` · ${target.email}` : ""}</option>)}</select></label><label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" name="confirmed" value="yes" required className="mt-1" />我已核對兩筆是同一位顧客，並確認要保留上方選擇的資料。</label><SubmitButton className="btn btn-danger">合併顧客</SubmitButton></form></details>}
+      {hasBrandPermission(member, "brand.manage") && <details className="admin-section"><summary className="cursor-pointer px-4 py-3 font-semibold text-red-800">合併重複顧客資料</summary><MergePatientForm sourcePatientId={p.id} sourceName={p.name} sourcePhone={p.phone} /></details>}
 
       {/* 基本資料(修正顧客自填錯誤) */}
       <form action={updatePatientBasicAction} className="card space-y-4 p-5">

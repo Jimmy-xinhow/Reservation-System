@@ -33,7 +33,7 @@ function harness({fault = '', thrown = false, denied = false, permitted = true, 
     const filters = []; const query = {table, filters}; queries.push(query);
     const q = new Proxy({}, {get: (_, key) => key === 'then'
       ? (yes, no) => Promise.resolve().then(() => {
-        const target = table === 'patients' && filters.some(filter => filter[0] === 'neq') ? 'merge_targets' : table;
+        const target = table;
         if (fault === target) {
           if (thrown) throw Error(canary);
           return {data: null, error: {message: canary, code: 'XX000'}};
@@ -56,6 +56,7 @@ function harness({fault = '', thrown = false, denied = false, permitted = true, 
     '@/lib/slots': {formatDateTime: value => String(value)},
     '@/components/SubmitButton': {SubmitButton: component('SubmitButton')},
     '../../followups/FollowupComposer': {default: component('FollowupComposer')},
+    './MergePatientForm': {default: component('MergePatientForm')},
     '../../patient-actions': new Proxy({}, {get: () => '/fixture-action'}),
     '../../followups/actions': new Proxy({}, {get: () => '/fixture-action'}),
   };
@@ -89,23 +90,27 @@ test('patient detail successful state uses clinic and patient scopes with select
   assert.match(html, /Approved note/);
   assert.ok(!html.includes(canary));
   assert.ok(!JSON.stringify(h.boundary).includes(canary));
-  assert.equal(h.queries.length, 9);
+  assert.equal(h.queries.length, 8);
   for (const query of h.queries) {
     assert.ok(query.filters.some(f => f[0] === 'eq' && f[1] === 'clinic_id' && f[2] === 'brand'), query.table);
     assert.ok(query.filters.some(f => f[0] === 'select' && typeof f[1] === 'string' && !f[1].includes('*')), query.table);
     if (query.table !== 'patients') assert.ok(query.filters.some(f => f[0] === 'eq' && f[1] === 'patient_id' && f[2] === 'patient'), query.table);
   }
 });
-test('non-manager never queries merge targets', async () => {
-  const h = harness({manager: false}); await h.run();
-  assert.equal(h.queries.filter(q => q.table === 'patients').length, 1);
+test('merge form is only offered to brand management and does not preload other patients', async () => {
+  const manager = harness(); await manager.run();
+  assert.equal(manager.boundary.filter(item => item.name === 'MergePatientForm').length, 1);
+  assert.equal(manager.queries.filter(q => q.table === 'patients').length, 1);
+  const staff = harness({manager: false}); await staff.run();
+  assert.equal(staff.boundary.filter(item => item.name === 'MergePatientForm').length, 0);
+  assert.equal(staff.queries.filter(q => q.table === 'patients').length, 1);
 });
 test('patient detail classifies a historical raw followup error before rendering', async () => {
   const html = await harness({storedFollowupError: 'fetch failed phone=0912345678 Authorization=Bearer private-token'}).run();
   assert.ok(!html.includes('private-token'));
   assert.match(html, /delivery_error:connection/);
 });
-for (const fault of ['patients', 'appointments', 'patient_records', 'crm_interactions', 'customer_wallets', 'loyalty_accounts', 'patient_subscriptions', 'scheduled_followups', 'merge_targets']) {
+for (const fault of ['patients', 'appointments', 'patient_records', 'crm_interactions', 'customer_wallets', 'loyalty_accounts', 'patient_subscriptions', 'scheduled_followups']) {
   for (const thrown of [false, true]) test(`${fault} ${thrown ? 'throw' : 'returned error'} cannot appear as empty customer data`, async () => {
     const h = harness({fault, thrown});
     await assert.rejects(h.run(), error => {
