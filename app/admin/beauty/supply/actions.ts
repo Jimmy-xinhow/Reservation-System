@@ -30,8 +30,22 @@ export async function createPurchaseOrderAction(fd: FormData): Promise<void> {
 }
 
 export async function addPurchaseOrderItemAction(fd: FormData): Promise<void> {
-  const member=await requireOperator();const quantity=number(fd,"quantity");const cost=Math.round(number(fd,"unit_cost"));if(quantity<=0||cost<0)throw new Error("採購數量或成本不正確");
-  const {error}=await adminQuery(createServiceClient().from("purchase_order_items").insert({clinic_id:member.clinicId,purchase_order_id:text(fd,"order_id"),item_id:text(fd,"item_id"),quantity,unit_cost:cost}));if(error)throw new Error(error.message.includes("duplicate key") ? "此品項已在採購單中" : adminErrorMessage(error));refresh();
+  const member=await requireOperator();
+  const quantity=number(fd,"quantity");
+  const cost=Math.round(number(fd,"unit_cost"));
+  const orderId=text(fd,"order_id");
+  const itemId=text(fd,"item_id");
+  if(!orderId||!itemId||quantity<=0||cost<0)throw new Error("採購數量或成本不正確");
+  const service=createServiceClient();
+  const [{data:order,error:orderError},{data:item,error:itemError}]=await adminQuery(Promise.all([
+    service.from("purchase_orders").select("id,status").eq("id",orderId).eq("clinic_id",member.clinicId).maybeSingle(),
+    service.from("inventory_items").select("id").eq("id",itemId).eq("clinic_id",member.clinicId).eq("active",true).maybeSingle(),
+  ]));
+  if(orderError||itemError)throw new Error(adminErrorMessage(orderError??itemError));
+  if(!order||order.status!=="draft"||!item)throw new Error("採購單或品項不屬於目前品牌，或採購單已非草稿");
+  const {error}=await adminQuery(service.from("purchase_order_items").insert({clinic_id:member.clinicId,purchase_order_id:orderId,item_id:itemId,quantity,unit_cost:cost}));
+  if(error)throw new Error(error.message.includes("duplicate key")?"此品項已在採購單中":adminErrorMessage(error));
+  refresh();
 }
 
 export async function setPurchaseOrderOrderedAction(fd: FormData): Promise<void> {

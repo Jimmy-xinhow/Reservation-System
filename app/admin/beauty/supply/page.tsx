@@ -18,7 +18,7 @@ export default async function SupplyPage({searchParams}:{searchParams:Promise<{o
   const [suppliers,items,orders,stocktakes]=await adminQuery(Promise.all([
     supabase.from("inventory_suppliers").select("id,name").eq("clinic_id",member.clinicId).eq("active",true).order("name"),
     fetchAllSupabasePages((from,to)=>supabase.from("inventory_items").select("id,name,sku,unit,stock_on_hand").eq("clinic_id",member.clinicId).eq("active",true).order("name").order("id").range(from,to)),
-    supabase.from("purchase_orders").select("id,order_no,status,expected_at,inventory_suppliers(name),purchase_order_items(id,item_id,quantity,unit_cost,inventory_items(name,unit))").eq("clinic_id",member.clinicId).order("created_at",{ascending:false}).limit(100),
+    supabase.from("purchase_orders").select("id,order_no,status,expected_at,inventory_suppliers:inventory_suppliers!purchase_orders_supplier_id_fkey(name),purchase_order_items:purchase_order_items!purchase_order_items_purchase_order_id_fkey(id,item_id,quantity,unit_cost,inventory_items:inventory_items!purchase_order_items_item_id_fkey(name,unit))").eq("clinic_id",member.clinicId).order("created_at",{ascending:false}).limit(100),
     supabase.from("inventory_stocktakes").select("id,stocktake_no,note,completed_at,inventory_stocktake_items(variance,inventory_items(name))").eq("clinic_id",member.clinicId).order("created_at",{ascending:false}).limit(20),
   ]));const error=[suppliers.error,orders.error,stocktakes.error].find(Boolean);if(error)throw new Error(adminErrorMessage(error));
   const requestedPage=Number(params.page);const pageCount=Math.max(1,Math.ceil(items.length/STOCKTAKE_PAGE_SIZE));
