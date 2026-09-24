@@ -53,9 +53,11 @@ async function removeClinic(clinicId) {
     "doctors",
     "patients",
     "clinic_members",
+    "attendance_settings",
     "clinic_line_channels",
     "brand_entitlements",
     "clinic_settings",
+    "clinic_activation_metrics",
   ]) await remove(table);
   const { error } = await service.from("clinics").delete().eq("id", clinicId);
   if (error) failures.push(`clinics: ${error.message}`);
@@ -92,12 +94,41 @@ async function cleanup({ suffix, clinicId, userIds }) {
   return { clinics: clinicId ? 1 : 0, users: userIds.length };
 }
 
+if (mode === "list") {
+  const [from, to] = process.argv.slice(3);
+  if (![from, to].every((value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(value))) {
+    throw new Error("Usage: list <from UTC> <to UTC>");
+  }
+  const clinics = await must("list role fixtures in UTC window", service.from("clinics")
+    .select("id,slug,created_at").like("slug", `${clinicPrefix}%`)
+    .gte("created_at", from).lte("created_at", to));
+  const scopes = [];
+  for (const clinic of clinics ?? []) {
+    const suffix = clinic.slug.slice(clinicPrefix.length);
+    const userIds = [];
+    let page = 1;
+    while (true) {
+      const result = await service.auth.admin.listUsers({ page, perPage: 1000 });
+      if (result.error) throw result.error;
+      userIds.push(...(result.data.users ?? [])
+        .filter((user) => user.email?.startsWith(emailPrefix) &&
+          user.email.endsWith(`-${suffix}@example.invalid`))
+        .map((user) => user.id));
+      if ((result.data.users ?? []).length < 1000) break;
+      page += 1;
+    }
+    scopes.push({ clinicId: clinic.id, slug: clinic.slug, createdAt: clinic.created_at, suffix, userIds });
+  }
+  console.log(JSON.stringify(scopes));
+  process.exit(0);
+}
 if (mode === "cleanup") {
-  const scope = JSON.parse(process.argv[3] ?? "null");
+  const [suffix, clinicIdArg, ...userIds] = process.argv.slice(3);
+  const scope = { suffix, clinicId: clinicIdArg === "-" ? null : clinicIdArg, userIds };
   console.log(JSON.stringify({ cleaned: await cleanup(scope) }));
   process.exit(0);
 }
-if (mode !== "setup") throw new Error("Usage: node scripts/staging-role-fixture.mjs [setup|cleanup]");
+if (mode !== "setup") throw new Error("Usage: node scripts/staging-role-fixture.mjs [setup|list|cleanup]");
 
 const suffix = `${Date.now()}-${randomBytes(3).toString("hex")}`;
 const password = `${randomBytes(18).toString("base64url")}!Aa1`;

@@ -21,11 +21,8 @@ const denseBrandWorkspaces = [
 
 function runFixture(mode, scope) {
   const args = [fixtureScript, mode];
-  if (scope) args.push(JSON.stringify({
-    suffix: scope.suffix,
-    clinicId: scope.clinic.id,
-    userIds: Object.values(scope.users).map((user) => user.id),
-  }));
+  if (scope) args.push(scope.suffix, scope.clinic.id,
+    ...Object.values(scope.users).map((user) => user.id));
   const result = spawnSync(process.execPath, args, {
     cwd: root,
     env: process.env,
@@ -44,7 +41,7 @@ async function login(page, identity, entry) {
   if (entry === "platform") await page.getByRole("button", { name: "系統管理後台" }).click();
   await page.getByLabel("Email").fill(account.email);
   await page.getByLabel("密碼").fill(account.password);
-  await page.getByRole("button", { name: entry === "platform" ? "登入系統管理後台" : "登入品牌營運後台" }).click();
+  await page.getByRole("button", { name: entry === "platform" ? "進入系統管理" : "進入品牌營運", exact: true }).click();
   await expect(page).toHaveURL(entry === "platform" ? /\/admin\/platform(?:\?|$)/ : /\/admin\/dashboard(?:\?|$)/);
 }
 
