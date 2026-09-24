@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { checkRateLimit } from "./rate-limit";
+import { errorCategory } from "./error-category";
 
 export function ok<T>(data: T) {
   return NextResponse.json({ ok: true, data });
@@ -16,7 +17,7 @@ export function fail(message: string, status = 400) {
     console.error("[api-error]", {
       errorId,
       status,
-      detail: message.replace(/[\r\n\t]+/g, " ").slice(0, 1000),
+      category: errorCategory(message),
     });
     return NextResponse.json(
       {
@@ -33,7 +34,7 @@ export function fail(message: string, status = 400) {
 export async function rateLimitResponse(req: NextRequest, key: string, limit = 30) {
   const rate = await checkRateLimit(req, key, limit);
   if (rate.allowed) return null;
-  const response = fail("操作太頻繁，請稍候再試。", 429);
+  const response = fail("操作太頻繁，請稍候再試。", rate.unavailable ? 503 : 429);
   response.headers.set("Retry-After", String(rate.retryAfterSeconds));
   return response;
 }
