@@ -25,6 +25,7 @@ async function removeClinic(clinicId) {
     if (error) failures.push(`${table}: ${error.message}`);
   }
   for (const table of [
+    "channel_test_runs",
     "line_richmenu_publication_events",
     "line_richmenu_schedules",
     "line_richmenu_aliases",
