@@ -17,7 +17,7 @@ for (const job of ['reminders', 'marketing', 'membership', 'waitlist']) {
     for (const failure of ['none', 'provider', 'write', 'lost_ack']) {
       test(`${job}/${channel}/${failure}: uncertain outcomes never become retryable`, async () => {
         const writes = [], logs = []; let sent = 0, state = job === 'reminders' ? 'sending' : job === 'marketing' ? 'pending' : 'claimed';
-        const patient = { name: 'synthetic', active: true, marketing_opt_in: true, line_user_id: channel === 'line' ? 'synthetic' : null, email: channel === 'email' ? 'synthetic@example.invalid' : null };
+        const patient = { clinic_id: 'brand', name: 'synthetic', active: true, marketing_opt_in: true, line_user_id: channel === 'line' ? 'synthetic' : null, email: channel === 'email' ? 'synthetic@example.invalid' : null };
         const row = { id: 'item', log_id: 'claim', clinic_id: 'brand', patient_id: 'patient', patients: patient, credits_remaining: 1, expires_at: null, kind: 'joined', channel, ...patient, email_enabled: true };
         const svc = { from: table => { const q = { select: () => q, eq: () => q, in: () => q, gt: () => q, lte: () => q, order: () => q, limit: () => q, maybeSingle: async () => ({ data: {}, error: null }), then: (resolve, reject) => Promise.resolve({ data: [row], error: null }).then(resolve, reject) }; return q; }, rpc: async () => ({ data: [row], error: null }) };
         const send = async () => { sent++; if (failure === 'provider') throw Error('secret provider'); };
