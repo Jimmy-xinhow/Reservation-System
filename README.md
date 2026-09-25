@@ -381,10 +381,29 @@ vercel.json               (僅 Vercel 用;Railway 不讀)
 75. `supabase/migrations/202609200001_payment_transition_audit.sql`
 76. `supabase/migrations/202609200002_late_tenant_history_foreign_keys.sql`
 77. `supabase/migrations/202609200003_scoped_followup_claim.sql`
+78. `supabase/migrations/202609210001_scoped_operational_cron.sql`
+79. `supabase/migrations/202609210002_booking_uuid_array_type.sql`
+80. `supabase/migrations/202609210003_scoped_registration_cron.sql`
+81. `supabase/migrations/202609210004_notification_uncertainty_claims.sql`
+82. `supabase/migrations/202609220001_atomic_manual_checkin.sql`
+83. `supabase/migrations/202609230001_data_import_safe_errors.sql`
+84. `supabase/migrations/202609230002_inventory_movement_tenant_fk.sql`
+85. `supabase/migrations/202609230003_resource_assignment_tenant_fk.sql`
+86. `supabase/migrations/202609230004_crm_automation_archive.sql`
+87. `supabase/migrations/202609240001_payment_payload_column_privileges.sql`
+88. `supabase/migrations/202609240002_clinic_member_role_permission_consistency.sql`
+89. `supabase/migrations/202609240003_provider_status_only_guard.sql`
+90. `supabase/migrations/202609240004_cron_run_health.sql`
+91. `supabase/migrations/202609240005_purchase_order_tenant_fk.sql`
+92. `supabase/migrations/202609250001_patient_record_tenant_links.sql`
+93. `supabase/migrations/202609250002_chat_thread_summary.sql`
+94. `supabase/migrations/202609250003_appointment_registration_patient_tenant_links.sql`
 
-`202609200003` 新增 service-role 專用的品牌／指定回訪原子領取。單次維運使用 `POST /api/cron/followups`，Bearer `CRON_SECRET`，JSON 為 `{ "clinic_id": "品牌 UUID", "followup_ids": ["回訪 UUID"] }`；只處理該品牌、指定 ID、已到期且 pending 的 LINE／Email 回訪。空值、不合法或重複 ID 回 400，不回退全域。正常 GET 排程維持原行為。此入口可能真正發訊，僅能指定已授權的收件資料；不會替未知送達的 processing 紀錄自動重送。先部署 migration，再部署 route；目前本機待部署。
+上述 94 步包含前 8 支舊版 SQL 與 86 支時間戳 migration；CLI `db push` 只管理後 86 支。每次升級先對照實際 `migration list`／dry-run 與可回復備份，不能把 staging 已套用狀態當成正式環境已套用。`202609250003` 在 staging 已完成首跑、重跑與跨品牌拒絕；正式環境尚未套用，詳見 [G3-03 關聯驗證](docs/g3-03-appointment-registration-patient-tenant-fk-2026-09-25.md)。完整 Auth／Vault／Storage 還原仍待獨立環境，不能用 public schema 備份代替。
 
-`202609200002` 修正 9 張後建資料表的品牌外鍵刪除動作為 `RESTRICT`，保留歷史紀錄，使新建與升級的結構一致。本輪只完成本機驗證，尚未套用 staging／正式資料庫；完整 Supabase Vault／Auth 備份還原仍待獨立環境。詳見 [G3-05 本機重播與還原證據](docs/g3-05-local-evidence-2026-09-20.md)。
+`202609200003` 新增 service-role 專用的品牌／指定回訪原子領取。單次維運使用 `POST /api/cron/followups`，Bearer `CRON_SECRET`，JSON 為 `{ "clinic_id": "品牌 UUID", "followup_ids": ["回訪 UUID"] }`；只處理該品牌、指定 ID、已到期且 pending 的 LINE／Email 回訪。空值、不合法或重複 ID 回 400，不回退全域。正常 GET 排程維持原行為。此入口可能真正發訊，僅能指定已授權的收件資料；不會替未知送達的 processing 紀錄自動重送。新環境須先套 migration 再部署 route；既有環境以該環境的 migration list 與部署 SHA 判定，不沿用本文件的舊狀態註記。
+
+`202609200002` 修正 9 張後建資料表的品牌外鍵刪除動作為 `RESTRICT`，保留歷史紀錄，使新建與升級的結構一致。完整 Supabase Vault／Auth 備份還原仍待獨立環境。歷史本機重播詳見 [G3-05 證據](docs/g3-05-local-evidence-2026-09-20.md)；實際環境狀態以最新 migration list 判定。
 
 `202609200001` 必須先於新版付款回呼部署：新增僅 service_role 可執行的 `transition_verified_payment`，付款狀態與稽核同筆交易寫入。失敗會回滾狀態，回呼可重送；不回填歷史缺漏。回退應用程式時可保留此向後相容函式。
 
