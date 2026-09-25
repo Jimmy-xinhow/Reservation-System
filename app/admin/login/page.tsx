@@ -24,7 +24,7 @@ export default function AdminLoginPage() {
       setBrandLoading(false);
       return;
     }
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requested)) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requested)) {
       setBrandError("品牌入口無效，請從系統管理的品牌清單重新進入。");
       setBrandLoading(false);
       return;
