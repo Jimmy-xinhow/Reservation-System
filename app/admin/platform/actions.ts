@@ -30,9 +30,15 @@ export async function createPlatformBrandAction(fd: FormData): Promise<void> {
   if (phone.length > 80 || address.length > 240) throw new Error("聯絡資料長度超過限制。");
 
   const service = createServiceClient();
-  const { data: users, error: listError } = await adminQuery(service.auth.admin.listUsers({ page: 1, perPage: 1000 }));
-  if (listError) throw new Error(adminErrorMessage(`查詢品牌管理者失敗：${listError.message}`));
-  let owner = users.users.find((user) => user.email?.toLowerCase() === ownerEmail) ?? null;
+  let owner = null;
+  let page = 1;
+  while (!owner) {
+    const { data, error } = await adminQuery(service.auth.admin.listUsers({ page, perPage: 1000 }));
+    if (error || !data) throw new Error(adminErrorMessage(`查詢品牌管理者失敗：${error?.message ?? "無法取得帳號清單"}`));
+    owner = data.users.find((user) => user.email?.toLowerCase() === ownerEmail) ?? null;
+    if (owner || !data.nextPage) break;
+    page = data.nextPage;
+  }
   if (!owner) {
     const { data, error } = await adminQuery(service.auth.admin.inviteUserByEmail(ownerEmail, {
       redirectTo: authInviteRedirectUrl(),

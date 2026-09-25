@@ -21,9 +21,15 @@ export async function upsertPlatformAdminAction(fd: FormData): Promise<void> {
   if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("請輸入有效的系統管理員 Email。");
 
   const service = createServiceClient();
-  const { data: users, error: usersError } = await adminQuery(service.auth.admin.listUsers({ page: 1, perPage: 1000 }));
-  if (usersError) throw new Error(adminErrorMessage(`查詢使用者失敗：${usersError.message}`));
-  let user = users.users.find((candidate) => candidate.email?.toLowerCase() === email) ?? null;
+  let user = null;
+  let page = 1;
+  while (!user) {
+    const { data, error } = await adminQuery(service.auth.admin.listUsers({ page, perPage: 1000 }));
+    if (error || !data) throw new Error(adminErrorMessage(`查詢使用者失敗：${error?.message ?? "無法取得帳號清單"}`));
+    user = data.users.find((candidate) => candidate.email?.toLowerCase() === email) ?? null;
+    if (user || !data.nextPage) break;
+    page = data.nextPage;
+  }
   if (!user) {
     const { data, error } = await adminQuery(service.auth.admin.inviteUserByEmail(email, {
       redirectTo: authInviteRedirectUrl(),
