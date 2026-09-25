@@ -7,19 +7,24 @@ import React from 'react';
 import * as jsx from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-function fixture({ photoMode = 'ok', denied = false } = {}) {
+function fixture({ photoMode = 'ok', denied = false, crossTenantRecord = false } = {}) {
   const calls = [];
   let serviceCalls = 0;
   const appointments = Array.from({ length: 35 }, (_, index) => ({
-    id: `appointment-${index}`, clinic_id: 'fixture-brand', start_at: new Date(Date.UTC(2026, 8, 30, 0, 0) - index * 86400000).toISOString(),
-    status: 'booked', patients: { name: index === 34 ? '超過近期清單的顧客' : `近期顧客${index}` }, services: { name: '服務' },
+    id: `appointment-${index}`, clinic_id: 'fixture-brand', patient_id: `patient-${index}`, start_at: new Date(Date.UTC(2026, 8, 30, 0, 0) - index * 86400000).toISOString(),
+    status: 'booked', patients: { id: `patient-${index}`, clinic_id: 'fixture-brand', name: index === 34 ? '超過近期清單的顧客' : `近期顧客${index}` }, services: { name: '服務' },
   }));
-  appointments.push({ ...appointments[0], id: 'foreign-appointment', clinic_id: 'foreign-brand', patients: { name: '外品牌顧客' } });
+  appointments.push({ ...appointments[0], id: 'foreign-appointment', clinic_id: 'foreign-brand', patients: { id: 'patient-0', clinic_id: 'foreign-brand', name: '外品牌顧客' } });
+  const record = { id: 'record-1', clinic_id: 'fixture-brand', patient_id: 'patient-0', appointment_id: 'appointment-0', registration_id: null,
+    treatment_name: '服務紀錄', assessment: null, content: '內容', aftercare: null,
+    private_photo_paths: ['fixture-brand/appointment-0/photo.jpg'], created_at: '2026-09-24T00:00:00Z',
+    patients: appointments[0].patients, appointments: appointments[0], registrations: null };
   const rows = {
     appointments,
     registrations: [],
-    patient_records: [{ id: 'record-1', clinic_id: 'fixture-brand', treatment_name: '服務紀錄', assessment: null, content: '內容', aftercare: null,
-      private_photo_paths: ['fixture-brand/appointment-0/photo.jpg'], created_at: '2026-09-24T00:00:00Z', patients: { name: '近期顧客0' }, appointments: null, registrations: null }],
+    patient_records: [record, ...(crossTenantRecord ? [{ ...record, id: 'foreign-record', patient_id: 'foreign-patient',
+      content: '外品牌紀錄內容', private_photo_paths: ['foreign-brand/private.jpg'],
+      patients: { id: 'foreign-patient', clinic_id: 'foreign-brand', name: '外品牌顧客姓名' } }] : [])],
     clinic_settings: [{ clinic_id: 'fixture-brand', dashboard_focus: 'booking' }],
   };
   function from(table) {
@@ -70,6 +75,14 @@ test('recent options stay bounded and scoped without silently including older or
   assert(!html.includes('超過近期清單的顧客'));
   assert(!html.includes('外品牌顧客'));
   assert(h.calls.every(call => call.clinic === 'fixture-brand'));
+});
+
+test('foreign patient link is hidden before the private photo is signed', async () => {
+  const h = fixture({ crossTenantRecord: true });
+  const html = await h.render();
+  assert(!html.includes('外品牌顧客姓名'));
+  assert(!html.includes('外品牌紀錄內容'));
+  assert.match(html, /最近 1 筆服務／課程紀錄/);
 });
 
 for (const photoMode of ['error', 'incomplete']) {

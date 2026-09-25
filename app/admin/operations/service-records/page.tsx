@@ -11,36 +11,61 @@ export const dynamic = "force-dynamic";
 type Relation<T> = T | T[] | null;
 function one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
 
-interface AppointmentRow { id: string; start_at: string; status: string; patients: Relation<{ name: string }>; services: Relation<{ name: string }>; }
-interface RegistrationRow { id: string; created_at: string; status: string; patients: Relation<{ name: string }>; events: Relation<{ title: string }>; event_sessions: Relation<{ name: string; start_at: string }>; }
+interface PatientRelation { id: string; clinic_id: string; name: string; }
+interface AppointmentRow { id: string; clinic_id: string; patient_id: string; start_at: string; status: string; patients: Relation<PatientRelation>; services: Relation<{ name: string }>; }
+interface RegistrationRow { id: string; clinic_id: string; patient_id: string | null; created_at: string; status: string; patients: Relation<PatientRelation>; events: Relation<{ title: string }>; event_sessions: Relation<{ name: string; start_at: string }>; }
 interface RecordRow {
   id: string;
+  patient_id: string;
+  appointment_id: string | null;
+  registration_id: string | null;
   treatment_name: string | null;
   assessment: string | null;
   content: string;
   aftercare: string | null;
   private_photo_paths: string[];
   created_at: string;
-  patients: Relation<{ name: string }>;
-  appointments: Relation<{ start_at: string; services: Relation<{ name: string }> }>;
-  registrations: Relation<{ created_at: string; events: Relation<{ title: string }>; event_sessions: Relation<{ name: string; start_at: string }> }>;
+  patients: Relation<PatientRelation>;
+  appointments: Relation<AppointmentRow>;
+  registrations: Relation<RegistrationRow>;
+}
+
+function belongsToClinic(patient: PatientRelation | null, clinicId: string, patientId: string | null): boolean {
+  return Boolean(patient && patient.clinic_id === clinicId && patient.id === patientId);
+}
+
+function safeRecord(record: RecordRow, clinicId: string): boolean {
+  if (!belongsToClinic(one(record.patients), clinicId, record.patient_id)) return false;
+  const appointment = one(record.appointments);
+  const registration = one(record.registrations);
+  if (record.appointment_id) {
+    return !record.registration_id && Boolean(appointment && appointment.id === record.appointment_id
+      && appointment.clinic_id === clinicId && appointment.patient_id === record.patient_id
+      && belongsToClinic(one(appointment.patients), clinicId, appointment.patient_id));
+  }
+  if (record.registration_id) {
+    return Boolean(registration && registration.id === record.registration_id
+      && registration.clinic_id === clinicId && registration.patient_id === record.patient_id
+      && belongsToClinic(one(registration.patients), clinicId, registration.patient_id));
+  }
+  return false;
 }
 
 export default async function ServiceRecordsPage() {
   const member = await requireNonProvider();
   const service = createServiceClient();
   const [appointmentsResult, registrationsResult, recordsResult, settingsResult] = await adminQuery(Promise.all([
-    service.from("appointments").select("id, start_at, status, patients(name), services(name)").eq("clinic_id", member.clinicId).neq("status", "cancelled").order("start_at", { ascending: false }).order("id", { ascending: false }).limit(30),
-    service.from("registrations").select("id, created_at, status, patients(name), events(title), event_sessions(name,start_at)").eq("clinic_id", member.clinicId).not("patient_id", "is", null).not("status", "in", "(cancelled,waitlisted)").order("created_at", { ascending: false }).order("id", { ascending: false }).limit(30),
-    service.from("patient_records").select("id, treatment_name, assessment, content, aftercare, private_photo_paths, created_at, patients(name), appointments(start_at,services(name)), registrations(created_at,events(title),event_sessions(name,start_at))").eq("clinic_id", member.clinicId).in("record_type", ["beauty_treatment", "service_record"]).order("created_at", { ascending: false }).limit(60),
+    service.from("appointments").select("id, clinic_id, patient_id, start_at, status, patients(id,clinic_id,name), services(name)").eq("clinic_id", member.clinicId).neq("status", "cancelled").order("start_at", { ascending: false }).order("id", { ascending: false }).limit(30),
+    service.from("registrations").select("id, clinic_id, patient_id, created_at, status, patients(id,clinic_id,name), events(title), event_sessions(name,start_at)").eq("clinic_id", member.clinicId).not("patient_id", "is", null).not("status", "in", "(cancelled,waitlisted)").order("created_at", { ascending: false }).order("id", { ascending: false }).limit(30),
+    service.from("patient_records").select("id, patient_id, appointment_id, registration_id, treatment_name, assessment, content, aftercare, private_photo_paths, created_at, patients!patient_records_patient_id_fkey(id,clinic_id,name), appointments!patient_records_appointment_id_fkey(id,clinic_id,patient_id,start_at,patients(id,clinic_id,name),services(name)), registrations!patient_records_registration_id_fkey(id,clinic_id,patient_id,created_at,patients(id,clinic_id,name),events(title),event_sessions(name,start_at))").eq("clinic_id", member.clinicId).in("record_type", ["beauty_treatment", "service_record"]).order("created_at", { ascending: false }).limit(60),
     service.from("clinic_settings").select("dashboard_focus").eq("clinic_id", member.clinicId).maybeSingle(),
   ]));
   const firstError = [appointmentsResult, registrationsResult, recordsResult, settingsResult].find((result) => result.error)?.error;
   if (firstError) throw new Error(adminErrorMessage(firstError.message));
 
-  const appointments = (appointmentsResult.data ?? []) as unknown as AppointmentRow[];
-  const registrations = (registrationsResult.data ?? []) as unknown as RegistrationRow[];
-  const records = (recordsResult.data ?? []) as unknown as RecordRow[];
+  const appointments = ((appointmentsResult.data ?? []) as unknown as AppointmentRow[]).filter((item) => belongsToClinic(one(item.patients), member.clinicId, item.patient_id));
+  const registrations = ((registrationsResult.data ?? []) as unknown as RegistrationRow[]).filter((item) => belongsToClinic(one(item.patients), member.clinicId, item.patient_id));
+  const records = ((recordsResult.data ?? []) as unknown as RecordRow[]).filter((record) => safeRecord(record, member.clinicId));
   const focus = (["booking", "registration", "mixed"].includes(String(settingsResult.data?.dashboard_focus)) ? settingsResult.data?.dashboard_focus : "mixed") as OperationFocus;
   const sources: ServiceRecordSourceOption[] = [
     ...appointments.filter((item) => item.status !== "cancelled").map((item) => ({ id: item.id, kind: "appointment" as const, label: `${formatDateTime(item.start_at)}｜${one(item.patients)?.name ?? "顧客"}｜${one(item.services)?.name ?? "服務"}` })),
