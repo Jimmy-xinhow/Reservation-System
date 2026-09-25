@@ -47,8 +47,9 @@ export async function middleware(req: NextRequest) {
   }
   if (isLogin && user) {
     const hasAccessReason = req.nextUrl.searchParams.has("reason");
+    const hasBrandTarget = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.nextUrl.searchParams.get("brand") ?? "");
     const inviteAccepted = req.nextUrl.searchParams.get("invite") === "accepted";
-    if (!hasAccessReason && !inviteAccepted) {
+    if (!hasAccessReason && !inviteAccepted && !hasBrandTarget) {
       // 先交給 /admin 的 server guard 判定品牌或系統工作區，避免只憑 session 猜測權限。
       const url = req.nextUrl.clone();
       url.pathname = "/admin";

@@ -258,7 +258,7 @@ function lineFlexDesignFromForm(fd: FormData): LineFlexDesignConfig {
 }
 
 async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<never> {
-  const { clinicId } = await requireEnabledLineAdmin();
+  const { clinicId } = publish ? await requireEnabledLineAdmin() : await requireAdmin();
   const design = lineFlexDesignFromForm(fd);
   const service = createServiceClient();
   const { data: current, error: readError } = await service
@@ -299,7 +299,7 @@ export async function publishLineFlexDesignAction(fd: FormData): Promise<never> 
 
 // ── LINE 訊息素材 line_messages ───────────────────────────
 export async function saveMessageAction(fd: FormData) {
-  const { supabase, clinicId } = await requireEnabledLineAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const name = str(fd, "name");
   const kind = str(fd, "kind");
@@ -329,7 +329,7 @@ export async function saveMessageAction(fd: FormData) {
 }
 
 export async function deleteMessageAction(fd: FormData) {
-  const { supabase, clinicId } = await requireEnabledLineAdmin();
+  const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_messages")
@@ -452,7 +452,7 @@ function inspectRichMenuImage(bytes: ArrayBuffer): { contentType: "image/png" | 
 }
 
 export async function saveRichMenuAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
+  const { supabase, clinicId, user } = await requireAdmin();
   const layout = str(fd, "layout") as Layout;
   if (!LAYOUTS[layout]) throw new Error("版型錯誤");
   const count = LAYOUTS[layout].slots;
@@ -642,7 +642,7 @@ export async function rollbackRichMenuVersionAction(fd: FormData) {
 }
 
 export async function cloneRichMenuVersionAction(fd: FormData) {
-  const { clinicId, user } = await requireEnabledLineAdmin();
+  const { clinicId, user } = await requireAdmin();
   const sourceVersionId = str(fd, "version_id");
   const name = str(fd, "name") || null;
   if (!sourceVersionId) redirect("/admin/richmenu?err=%E6%89%BE%E4%B8%8D%E5%88%B0%E8%A6%81%E8%A4%87%E8%A3%BD%E7%9A%84%E7%89%88%E6%9C%AC");

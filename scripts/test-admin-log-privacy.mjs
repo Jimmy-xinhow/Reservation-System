@@ -40,17 +40,19 @@ test('disabled LINE rejects stale reply action before database write',async()=>{
  await assert.rejects(fn(new Map([['keywords','hello'],['action','text']])),e=>e.message==='此品牌未啟用 LINE 訊息');
  assert.equal(writes,0);
 });
-test('LINE content actions check current module state at execution',()=>{
+test('LINE delivery actions remain gated while draft-only actions can run before activation',()=>{
  const source=ts.createSourceFile('line-actions',read('app/admin/line-actions.ts'),ts.ScriptTarget.Latest,true);
  const start=source.text.indexOf('export async function createReplyAction');
  const end=source.text.indexOf('export async function updateLineChannelSettingsAction');
  assert(start>0&&end>start);
  const actions=source.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name&&node.getStart(source)>=start&&node.getStart(source)<end&&node.modifiers?.some(modifier=>modifier.kind===ts.SyntaxKind.ExportKeyword));
  assert(actions.length>=18);
+ const draftOnly=new Set(['saveMessageAction','deleteMessageAction','saveRichMenuAction','cloneRichMenuVersionAction','saveLineFlexDesignAction']);
  for(const entry of actions){
   const body=entry.body?.getText(source)??'';
-  assert(/await requireEnabledLineAdmin\(\)|updateLineFlexDesign\(/.test(body),`${entry.name.text} lacks current LINE module gate`);
+  if(draftOnly.has(entry.name.text))assert(/await requireAdmin\(\)|updateLineFlexDesign\(fd, false\)/.test(body),`${entry.name.text} lacks brand admin gate`);
+  else assert(/await requireEnabledLineAdmin\(\)|updateLineFlexDesign\(fd, true\)/.test(body),`${entry.name.text} lacks current LINE module gate`);
  }
  const internal=source.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='updateLineFlexDesign');
- assert(internal?.body?.getText(source).includes('await requireEnabledLineAdmin()'));
+ assert(internal?.body?.getText(source).includes('publish ? await requireEnabledLineAdmin() : await requireAdmin()'));
 });

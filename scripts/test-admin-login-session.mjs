@@ -13,6 +13,7 @@ async function visit(search) {
     if(name==='react/jsx-runtime')return {jsx:()=>null,jsxs:()=>null};
     if(name==='next/navigation')return {useRouter:()=>({})};
     if(name==='@/lib/supabase-browser')return {createSupabaseBrowser:()=>({auth:{signOut:async()=>{signouts++;}}})};
+    if(name==='../actions')return {setActiveClinicAction:async()=>{}};
     throw Error('Unexpected import '+name);
   }});
   exports.default();for(const effect of effects)effect();await Promise.resolve();

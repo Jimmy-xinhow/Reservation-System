@@ -68,14 +68,19 @@ for (const fault of ['missing','mismatch']) test(`account helper ${fault} fails 
 test('account helper deduplicates IDs, bounds concurrency and returns allowlisted summary', async () => {const h = harness(), ids=Array.from({length:19},(_,i)=>`u-${i}`); const result=await h.deps['@/lib/admin-account-summaries'].readAdminAccountSummaries(h.service,[...ids,...ids]); assert.equal(h.ids.length,19); assert.ok(h.peak()<=8); assert.equal(result.size,19); assert.deepEqual(Object.keys(result.get('u-18')).sort(),['email','emailConfirmedAt','invitedAt','lastSignInAt'].sort()); assert.ok(!JSON.stringify([...result]).includes(canary));});
 test('brand layout passes only navigation identity and module flags', async () => {const h=harness({role:'employee'});await h.run('layout');const nav=h.boundaries.find(x=>x.name==='AdminNav');assert.equal(nav.props.brandAccessType,'employee');assert.equal(nav.props.modules.events,true);assert.equal(nav.props.modules.memberships,false);assert.ok(!('user' in nav.props));assert.ok(!('supabase' in nav.props));});
 test('platform settings emits only configured booleans, not environment keys', async()=>{const h=harness();await h.run('settings');assert.equal(h.queries.length,3);for(const q of h.queries)assert.ok(q.filters.some(f=>f[0]==='select'&&f[2]?.head===true));});
-function navigation(accessType, role='admin', platform=false) {
+function navigation(accessType, role='admin', platform=false, modules=undefined) {
   const deps={'react/jsx-runtime':jsx,'react':{useState:v=>[v,()=>{}],useEffect:()=>{}},'next/navigation':{usePathname:()=>platform?'/admin/platform':'/admin/users'}};
   const path=process.env.SHELL_BEFORE?'tmp/shell-before/AdminNav.tsx':'components/AdminNav.tsx';
-  const tree=load(path,deps).AdminNav({role,brandAccessType:accessType,isPlatformAdmin:platform,platformAccessType:platform?'system_admin':null,hasBrandContext:!platform});
+  const tree=load(path,deps).AdminNav({role,brandAccessType:accessType,isPlatformAdmin:platform,platformAccessType:platform?'system_admin':null,hasBrandContext:!platform, ...(modules ? {modules} : {})});
   let groups;function walk(n){if(!n||typeof n!=='object')return;if(Array.isArray(n)){n.forEach(walk);return;}if(n.props?.groups)groups=n.props.groups;walk(n.props?.children);}walk(tree);assert.ok(groups);return groups.flatMap(g=>g.items.map(i=>i.href));
 }
 test('brand settings employee does not see people management but keeps brand settings',()=>{const links=navigation('employee');assert.ok(!links.includes('/admin/users'));assert.ok(links.includes('/admin/settings'));});
 test('brand administrator retains people management',()=>{assert.ok(navigation('brand_admin').includes('/admin/users'));});
+test('brand administrator can prepare LINE drafts while delivery module is off',()=>{
+  const links=navigation('brand_admin','admin',false,{events:true,memberships:true,crm:true,line:false,legacy:false,beauty:false});
+  for(const path of ['/admin/messages','/admin/line-templates','/admin/richmenu'])assert.ok(links.includes(path));
+  for(const path of ['/admin/chat','/admin/replies'])assert.ok(!links.includes(path));
+});
 test('missing management identity fails closed for people navigation',()=>{assert.ok(!navigation(undefined).includes('/admin/users'));});
 test('provider retains assigned-work navigation only',()=>{const links=navigation('employee','provider');assert.ok(links.includes('/admin/calendar'));assert.ok(!links.includes('/admin/users'));assert.ok(!links.includes('/admin/settings'));});
 test('system administrator retains system people navigation only',()=>{const links=navigation(null,'owner',true);assert.ok(links.includes('/admin/platform/admins'));assert.ok(!links.includes('/admin/users'));});

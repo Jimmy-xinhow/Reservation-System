@@ -256,16 +256,16 @@ for(const table of ['clinics','clinic_settings'])test(`LINE template page: ${tab
   await assert.rejects(()=>page.default({searchParams:Promise.resolve({})}),error=>{assert.match(error.message,/目前無法確認/);assert.ok(!error.message.includes(secret));return true;});
 });
 
-test('LINE message list sends selected brand record to composer',async()=>{
-  const f=fixture({rows:{line_messages:[{id:'message-a',name:'Fixture Message',kind:'text',data:{text:'Hello'},private:secret}]}});
+test('LINE message list sends selected brand record to composer while channel is disabled',async()=>{
+  const f=fixture({rows:{line_messages:[{id:'message-a',name:'Fixture Message',kind:'text',data:{text:'Hello'},private:secret}],clinic_settings:{line_channel_enabled:false}}});
   const page=load('app/admin/messages/page.tsx',f.deps);
   const html=await f.render(await page.default({searchParams:Promise.resolve({edit:'message-a'})}));
-  assert.match(html,/Fixture Message/);assert.ok(!html.includes(secret));
+  assert.match(html,/Fixture Message/);assert.match(html,/尚未啟用 LINE/);assert.ok(!html.includes(secret));
   const q=f.queries.find(x=>x.table==='line_messages');assert.equal(q.projection,'id, name, kind, data');assert.ok(q.filters.some(([name,column,value])=>name==='eq'&&column==='clinic_id'&&value==='fixture-brand'));
 });
 
 test('LINE message list: read failure cannot look like zero saved messages',async()=>{
-  const f=fixture({errors:{line_messages:{message:secret}}});const page=load('app/admin/messages/page.tsx',f.deps);
+  const f=fixture({rows:{clinic_settings:{line_channel_enabled:false}},errors:{line_messages:{message:secret}}});const page=load('app/admin/messages/page.tsx',f.deps);
   await assert.rejects(()=>page.default({searchParams:Promise.resolve({})}),error=>{assert.match(error.message,/目前無法確認/);assert.ok(!error.message.includes(secret));return true;});
 });
 

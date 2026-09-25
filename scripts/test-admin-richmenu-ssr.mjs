@@ -84,7 +84,7 @@ function fixture({ count = 1001, failTable, failFrom = 1000, denied = false, dis
       removeRichMenuAliasAction: noop, rollbackRichMenuVersionAction: noop, saveRichMenuAction: noop,
       syncRichMenuAliasAction: noop, unpublishRichMenuAction: noop },
     './RichMenuEditor': { __esModule: true, default: ({ messages }) => React.createElement('div', { 'data-last-message': messages.at(-1)?.name }) },
-    './PublishForm': { __esModule: true, default: () => null },
+    './PublishForm': { __esModule: true, default: ({ disabled }) => React.createElement('div', { 'data-publish-disabled': String(disabled) }) },
     '@/lib/admin': { requireAdmin: async () => { if (denied) throw new Error('DENIED'); return { clinicId }; } },
     '@/components/SubmitButton': { SubmitButton: ({ children }) => React.createElement('button', null, children) },
     '@/components/ConfirmSubmitButton': { ConfirmSubmitButton: ({ children }) => React.createElement('button', null, children) },
@@ -117,13 +117,19 @@ for (const table of ['line_richmenu_versions', 'line_messages', 'line_richmenu_a
   });
 }
 
-test('role rejection and disabled module stop before service-role reads', async () => {
-  for (const options of [{ denied: true }, { disabled: true }]) {
-    const h = fixture(options);
-    if (options.denied) await assert.rejects(h.render(), /DENIED/);
-    else assert((await h.render()).includes('Rich Menu'));
-    assert.equal(h.serviceCalls(), 0);
-  }
+test('role rejection stops before service-role reads', async () => {
+  const h = fixture({ denied: true });
+  await assert.rejects(h.render(), /DENIED/);
+  assert.equal(h.serviceCalls(), 0);
+});
+
+test('disabled LINE channel allows scoped draft editor but not publication', async () => {
+  const h = fixture({ disabled: true });
+  const html = await h.render();
+  assert.match(html, /尚未啟用 LINE/);
+  assert.match(html, /data-publish-disabled="true"/);
+  assert(h.serviceCalls() > 0);
+  assert(h.calls.every(call => call.clinic === clinicId));
 });
 
 test('insight conversion includes funnel event 1001 and is scoped to tenant', async () => {

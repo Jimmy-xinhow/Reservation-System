@@ -102,7 +102,7 @@ export default async function LinePage({
           <Link href="/admin/settings?section=page" className="admin-inline-action"><LineIcon name="template" />顧客 App 預覽</Link>
           <Link href="/admin/richmenu" className="admin-inline-action"><LineIcon name="grid" />圖文選單</Link>
           <Link href="/admin/line-templates" className="admin-inline-action"><LineIcon name="template" />訊息內容</Link>
-          <Link href="/admin/messages" className="admin-inline-action"><LineIcon name="send" />發送紀錄</Link>
+          <Link href="/admin/messages" className="admin-inline-action"><LineIcon name="send" />訊息素材</Link>
           <Link href="/admin/channels" className="admin-inline-action"><LineIcon name="check" />完整檢查</Link>
         </nav>
       </header>
@@ -216,7 +216,7 @@ export default async function LinePage({
         </aside>
       </section>
 
-      <section className="line-settings-grid">
+      <section id="channel-settings" className="line-settings-grid scroll-mt-24">
       <form action={updateLineChannelSettingsAction} className="line-panel">
         <div className="line-form-body">
         <div>

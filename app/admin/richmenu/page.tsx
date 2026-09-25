@@ -20,8 +20,6 @@ import { requireAdmin } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import { getRichMenuInsightSummary, lineAccessTokenForDestination, type RichMenuInsightSummary } from "@/lib/line";
-import { isAdminModuleEnabled } from "@/lib/admin-modules";
-import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { TechnicalDetails } from "@/components/TechnicalDetails";
 
@@ -120,7 +118,6 @@ export default async function RichMenuPage({
   const raw = await searchParams;
   const oneParam = (key: string) => typeof raw[key] === "string" ? raw[key] as string : undefined;
   const supabase = await createSupabaseServer();
-  if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="Rich Menu" />;
   const service = createServiceClient();
 
   const [compatibilityResult, versions, messages, settingsResult, aliases, schedules] = await adminQuery(Promise.all([
@@ -225,6 +222,7 @@ export default async function RichMenuPage({
   return (
     <div className="line-workbench">
       <header className="admin-page-header"><p className="eyebrow">LINE 顧客入口</p><h1 className="mt-1 text-2xl font-bold text-slate-900">LINE 圖文選單版本與發布</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">先建立草稿，確認內容後再發布。修改草稿不會直接影響顧客目前看到的選單。</p></header>
+      {!availability.line && <p role="status" className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">此品牌尚未啟用 LINE。你可以先編輯並儲存圖文選單草稿；要發布到顧客的 LINE，請先到 <a href="/admin/line#channel-settings" className="font-semibold underline">LINE 官方帳號連線</a> 啟用並完成檢查。</p>}
 
       {oneParam("err") && <p role="alert" className="border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm text-red-700">操作失敗：{oneParam("err")}{oneParam("error_id") ? `（錯誤識別碼：${oneParam("error_id")}）` : ""}</p>}
       {oneParam("ok") && <p role="status" className="border-l-4 border-emerald-600 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">已成功發布 LINE 圖文選單。</p>}

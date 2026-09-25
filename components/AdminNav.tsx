@@ -117,8 +117,8 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/chat", label: "客服對話", icon: "chat", module: "line" },
       { href: "/admin/replies", label: "自動回覆", icon: "message", module: "line", adminOnly: true },
-      { href: "/admin/messages", label: "訊息模板", icon: "message", module: "line", adminOnly: true },
-      { href: "/admin/line-templates", label: "LINE 訊息範本", icon: "line", module: "line", adminOnly: true },
+      { href: "/admin/messages", label: "訊息模板", icon: "message", adminOnly: true },
+      { href: "/admin/line-templates", label: "LINE 訊息範本", icon: "line", adminOnly: true },
     ],
   },
   {
@@ -130,7 +130,7 @@ const GROUPS: Group[] = [
       { href: "/admin/import", label: "資料匯入", icon: "list" },
       { href: "/admin/channels", label: "通知與付款測試", icon: "line" },
       { href: "/admin/line", label: "LINE 官方帳號連線", icon: "line" },
-      { href: "/admin/richmenu", label: "LINE 圖文選單", icon: "menu", module: "line" },
+      { href: "/admin/richmenu", label: "LINE 圖文選單", icon: "menu" },
       { href: "/admin/audit", label: "操作紀錄", icon: "settings" },
     ],
   },
