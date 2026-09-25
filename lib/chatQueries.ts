@@ -1,6 +1,7 @@
 import "server-only";
 import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { deliveryError } from "@/lib/delivery-error";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ChatThread {
@@ -23,6 +24,16 @@ export interface ChatMessagePage {
   messages: ChatMsg[];
   hasMore: boolean;
   nextCursor: string | null;
+}
+
+interface ChatThreadRow {
+  line_user_id: string;
+  name: string | null;
+  last_body: string;
+  last_at: string;
+  last_sender: "patient" | "staff";
+  unread: number;
+  blocked: boolean;
 }
 
 const CHAT_PAGE_SIZE = 500;
@@ -49,58 +60,25 @@ function encodeChatCursor(row: { created_at: string; id: string }): string {
   return Buffer.from(JSON.stringify({ createdAt: row.created_at, id: row.id })).toString("base64url");
 }
 
-/** 對話串列表:依 line_user_id 聚合最近訊息、未讀數,並帶入顧客姓名。 */
+/** 資料庫按品牌聚合完整對話串，避免單一高量對話擠掉其他顧客。 */
 export async function buildThreads(
   supabase: SupabaseClient,
   clinicId: string,
 ): Promise<ChatThread[]> {
-  const { data: rows, error } = await adminQuery(supabase
-    .from("chat_messages")
-    .select("line_user_id, sender, body, read_by_staff, created_at")
-    .eq("clinic_id", clinicId)
-    .order("created_at", { ascending: false })
-    .limit(800));
-  if (error) throw new Error(adminErrorMessage(error));
-  const msgs = rows ?? [];
-
-  const map = new Map<string, ChatThread>();
-  for (const m of msgs) {
-    const uid = m.line_user_id as string;
-    let t = map.get(uid);
-    if (!t) {
-      t = {
-        lineUserId: uid,
-        name: null,
-        lastBody: m.body as string,
-        lastAt: m.created_at as string,
-        lastSender: m.sender as "patient" | "staff",
-        unread: 0,
-        blocked: false,
-      };
-      map.set(uid, t);
-    }
-    if (m.sender === "patient" && m.read_by_staff === false) t.unread += 1;
-  }
-
-  const uids = [...map.keys()];
-  if (uids.length > 0) {
-    const [patientsResult, blocked] = await adminQuery(Promise.all([
-      supabase
-        .from("patients")
-        .select("line_user_id, name")
-        .eq("clinic_id", clinicId)
-        .in("line_user_id", uids),
-      getBlockedSet(supabase, clinicId),
-    ]));
-    if (patientsResult.error) throw new Error(adminErrorMessage(patientsResult.error));
-    for (const p of patientsResult.data ?? []) {
-      const t = map.get(p.line_user_id as string);
-      if (t && !t.name) t.name = p.name as string;
-    }
-    for (const t of map.values()) if (blocked.has(t.lineUserId)) t.blocked = true;
-  }
-
-  return [...map.values()].sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1));
+  const rows = await fetchAllSupabasePages<ChatThreadRow>((from, to) => supabase
+    .rpc("list_chat_threads", { p_clinic_id: clinicId })
+    .order("last_at", { ascending: false })
+    .order("line_user_id")
+    .range(from, to));
+  return rows.map((row) => ({
+    lineUserId: row.line_user_id,
+    name: row.name,
+    lastBody: row.last_body,
+    lastAt: row.last_at,
+    lastSender: row.last_sender,
+    unread: Number(row.unread),
+    blocked: row.blocked,
+  }));
 }
 
 /** 本診所客服黑名單的 line_user_id 集合（查詢失敗時拒絕繼續）。 */

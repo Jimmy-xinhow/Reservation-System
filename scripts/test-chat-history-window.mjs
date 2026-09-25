@@ -18,6 +18,17 @@ function loadChatQueries() {
         adminErrorMessage: () => '無法確認操作結果',
       };
       if (name === '@/lib/delivery-error') return { deliveryError: () => 'internal' };
+      if (name === '@/lib/supabase-pagination') return {
+        fetchAllSupabasePages: async (fetchPage) => {
+          const rows = [];
+          for (let from = 0; ; from += 1000) {
+            const result = await fetchPage(from, from + 999);
+            if (result.error) throw new Error('無法確認操作結果');
+            rows.push(...result.data);
+            if (result.data.length < 1000) return rows;
+          }
+        },
+      };
       throw new Error(`Unexpected import ${name}`);
     },
   });
@@ -87,4 +98,27 @@ test('無效客服游標在查詢資料庫前拒絕', async () => {
   await assert.rejects(getThreadMessages({ from() { queried = true; } }, 'clinic', 'line-user', 'invalid'),
     /訊息游標無效/);
   assert.equal(queried, false);
+});
+
+test('客服清單聚合跨過第 1,000 筆仍保留較舊未讀對話', async () => {
+  const { buildThreads } = loadChatQueries();
+  const requested = [];
+  const row = (index) => ({ line_user_id: `U${index}`, name: null,
+    last_body: `QA_${index}`, last_at: new Date(Date.UTC(2026, 8, 25, 0, 0, index)).toISOString(),
+    last_sender: 'patient', unread: index === 1000 ? 1 : 0, blocked: false });
+  const firstPage = Array.from({ length: 1000 }, (_, index) => row(index));
+  const db = { rpc(name, args) {
+    assert.equal(name, 'list_chat_threads');
+    assert.equal(args.p_clinic_id, 'clinic');
+    const query = { order() { return query; }, range(from, to) {
+      requested.push([from, to]);
+      return Promise.resolve({ data: from === 0 ? firstPage : [row(1000)], error: null });
+    } };
+    return query;
+  } };
+  const threads = await buildThreads(db, 'clinic');
+  assert.equal(threads.length, 1001);
+  assert.equal(threads.at(-1).lineUserId, 'U1000');
+  assert.equal(threads.at(-1).unread, 1);
+  assert.deepEqual(requested, [[0, 999], [1000, 1999]]);
 });
