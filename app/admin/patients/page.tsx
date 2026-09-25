@@ -87,7 +87,7 @@ export default async function PatientsPage({
 }) {
   const { q, page: pageStr, segment_id: segmentIdParam, patient_id: patientIdParam } = await searchParams;
   const keyword = (q ?? "").trim().replace(/[,%()*]/g, "");
-  const page = Math.max(1, Number(pageStr) || 1);
+  const page = /^[1-9]\d{0,6}$/.test(pageStr ?? "") ? Number(pageStr) : 1;
   const segmentId = (segmentIdParam ?? "").trim();
   const selectedPatientId = (patientIdParam ?? "").trim();
 
@@ -135,31 +135,33 @@ export default async function PatientsPage({
   let patients: Patient[] = [];
   let total = 0;
   if (keyword && segmentPatientIds?.length !== 0) {
-    const orParts = [`name.ilike.%${keyword}%`, `phone.ilike.%${keyword}%`];
-    if (isFullDate) orParts.push(`birthday.eq.${keyword}`);
-    let query = supabase
-      .from("patients")
-      .select(SELECT)
-      .eq("clinic_id", clinicId)
-      .eq("active", true)
-      .or(orParts.join(","));
-    if (segmentPatientIds) query = query.in("id", segmentPatientIds);
-    const { data, error: searchError } = await adminQuery(query.order("created_at", { ascending: false }).limit(100));
-    if (searchError) throw new Error(adminErrorMessage(searchError));
-    patients = (data ?? []) as Patient[];
-
-    // MMDD:PostgREST 無法對 date 抽月/日,改在此處掃描生日後合併。
     if (isMonthDay) {
+      // 生日搜尋會取代一般搜尋；先查一般搜尋的空頁可能回 PGRST103。
       let birthdayQuery = supabase
         .from("patients")
-        .select(SELECT)
+        .select(SELECT, { count: "exact" })
         .eq("clinic_id", clinicId)
         .eq("active", true)
         .eq("birthday_mmdd", mmdd);
       if (segmentPatientIds) birthdayQuery = birthdayQuery.in("id", segmentPatientIds);
-      const { data: withBday, error: birthdayError } = await adminQuery(birthdayQuery.order("created_at", { ascending: false }).limit(100));
+      const { data: withBday, count: birthdayCount, error: birthdayError } = await adminQuery(birthdayQuery.order("created_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1));
       if (birthdayError) throw new Error(adminErrorMessage(birthdayError));
       patients = (withBday ?? []) as Patient[];
+      total = birthdayCount ?? 0;
+    } else {
+      const orParts = [`name.ilike.%${keyword}%`, `phone.ilike.%${keyword}%`];
+      if (isFullDate) orParts.push(`birthday.eq.${keyword}`);
+      let query = supabase
+        .from("patients")
+        .select(SELECT, { count: "exact" })
+        .eq("clinic_id", clinicId)
+        .eq("active", true)
+        .or(orParts.join(","));
+      if (segmentPatientIds) query = query.in("id", segmentPatientIds);
+      const { data, count, error: searchError } = await adminQuery(query.order("created_at", { ascending: false }).order("id", { ascending: false }).range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1));
+      if (searchError) throw new Error(adminErrorMessage(searchError));
+      patients = (data ?? []) as Patient[];
+      total = count ?? 0;
     }
   } else if (segmentPatientIds?.length !== 0) {
     let query = supabase
@@ -337,10 +339,10 @@ export default async function PatientsPage({
         </table>
       </div>
 
-      {!keyword && totalPages > 1 && (
+      {totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 text-sm">
           {page > 1 ? (
-            <Link href={`/admin/patients?page=${page - 1}${segmentId ? `&segment_id=${encodeURIComponent(segmentId)}` : ""}`} className="btn btn-secondary px-3 py-1.5">
+            <Link href={listHref({ keyword, page: page - 1, segmentId })} className="btn btn-secondary px-3 py-1.5">
               上一頁
             </Link>
           ) : (
@@ -350,7 +352,7 @@ export default async function PatientsPage({
             {page} / {totalPages}(共 {total} 位)
           </span>
           {page < totalPages ? (
-            <Link href={`/admin/patients?page=${page + 1}${segmentId ? `&segment_id=${encodeURIComponent(segmentId)}` : ""}`} className="btn btn-secondary px-3 py-1.5">
+            <Link href={listHref({ keyword, page: page + 1, segmentId })} className="btn btn-secondary px-3 py-1.5">
               下一頁
             </Link>
           ) : (
