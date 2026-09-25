@@ -203,10 +203,14 @@ async function runChannels(mode){
  return {writes,logs,effects,error};
 }
 test('channel success saves five brand-scoped results and redirects outside catch',async()=>{
- const r=await runChannels();assert.equal(r.error.message,'NEXT_REDIRECT');assert.equal(r.logs.length,0);assert.equal(r.writes[0].length,5);assert(r.writes[0].every(row=>row.clinic_id==='brand'&&row.ran_by==='admin'&&row.status==='passed'));assert(r.effects.includes('/admin/channels?tested=1'));
+ const r=await runChannels();assert.equal(r.error.message,'NEXT_REDIRECT');assert.equal(r.logs.length,0);assert.equal(r.writes[0].length,5);assert(r.writes[0].every(row=>row.clinic_id==='brand'&&row.ran_by==='admin'));assert(r.effects.includes('/admin/channels?tested=1'));
+ const statuses=Object.fromEntries(r.writes[0].map(row=>[row.channel,row.status]));
+ assert.deepEqual(statuses,{line:'passed',liff:'passed',email:'warning',payment:'warning',domain:'passed'});
+ assert.match(r.writes[0].find(row=>row.channel==='email').checks.find(check=>check.label==='實際收件').detail,/尚未.*收件/);
+ assert.match(r.writes[0].find(row=>row.channel==='payment').checks.find(check=>check.label==='實際交易與回呼').detail,/尚未.*交易/);
 });
 for(const mode of ['token','line'])test(`channel ${mode} failure saves safe LINE detail and other channel results`,async()=>{
- const r=await runChannels(mode);assert.equal(r.error.message,'NEXT_REDIRECT');assert.equal(r.writes[0].length,5);const line=r.writes[0].find(row=>row.channel==='line');assert.equal(line.status,'failed');assert.equal(line.checks[0].detail,'無法確認 LINE 連線，請檢查官方帳號授權設定後重試。');assert.equal(r.logs[0][1].category,'connection');assert.equal(r.writes[0].find(row=>row.channel==='email').status,'passed');
+ const r=await runChannels(mode);assert.equal(r.error.message,'NEXT_REDIRECT');assert.equal(r.writes[0].length,5);const line=r.writes[0].find(row=>row.channel==='line');assert.equal(line.status,'failed');assert.equal(line.checks[0].detail,'無法確認 LINE 連線，請檢查官方帳號授權設定後重試。');assert.equal(r.logs[0][1].category,'connection');assert.equal(r.writes[0].find(row=>row.channel==='email').status,'warning');
 });
 for(const mode of ['client','readError','readThrows','context','payment','email','domain','writeError','writeThrows'])test(`channel ${mode} exception never reaches framework as raw detail`,async()=>{
  const r=await runChannels(mode);assert.equal(r.error.message,'渠道檢查未能確認完成，請重新整理查看結果後再試');assert(!r.effects.includes('/admin/channels?tested=1'));assert.equal(r.logs.length,1);assert.equal(r.writes.length,mode.startsWith('write')?1:0);

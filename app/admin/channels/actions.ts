@@ -69,6 +69,7 @@ export async function runChannelTestsAction(): Promise<void> {
       : [
           { label: "Email 寄送授權", status: emailConfig?.apiKey ? "passed" : "failed", detail: emailConfig?.apiKey ? "私密授權資料已設定" : "尚未設定 Email 寄送服務授權" },
           { label: "寄件人", status: emailConfig?.from ? "passed" : "failed", detail: emailConfig?.from ? emailConfig.from : "缺少寄件人" },
+          { label: "實際收件", status: "warning", detail: "尚未寄送測試信並確認收件；設定齊全不代表郵件已送達" },
         ];
     runs.push({ channel: "email", status: summarize(emailChecks), checks: emailChecks });
 
@@ -78,6 +79,7 @@ export async function runChannelTestsAction(): Promise<void> {
         ? [
             { label: "商店設定", status: "passed", detail: `${payment.provider === "ecpay" ? "綠界" : "藍新"} · ${payment.environment === "production" ? "正式" : "測試"}` },
             { label: "付款驗證資料", status: payment.hash_key && payment.hash_iv ? "passed" : "failed", detail: payment.hash_key && payment.hash_iv ? "私密授權資料已設定" : "尚未設定付款驗證資料" },
+            { label: "實際交易與回呼", status: "warning", detail: "尚未完成測試交易、返回與簽章回呼對帳；設定齊全不代表可收款" },
           ]
         : [{ label: "標準金流", status: "failed", detail: "訂金已啟用，但沒有啟用中的金流商店" }];
     runs.push({ channel: "payment", status: summarize(paymentChecks), checks: paymentChecks });
