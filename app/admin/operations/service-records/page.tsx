@@ -51,6 +51,11 @@ function safeRecord(record: RecordRow, clinicId: string): boolean {
   return false;
 }
 
+function safePhotoPath(path: string, clinicId: string, recordId: string): boolean {
+  const prefix = `${clinicId}/${recordId}/`;
+  return path.startsWith(prefix) && /^[0-9a-f]{32}\.(?:png|jpg|webp)$/.test(path.slice(prefix.length));
+}
+
 export default async function ServiceRecordsPage() {
   const member = await requireNonProvider();
   const service = createServiceClient();
@@ -71,7 +76,8 @@ export default async function ServiceRecordsPage() {
     ...appointments.filter((item) => item.status !== "cancelled").map((item) => ({ id: item.id, kind: "appointment" as const, label: `${formatDateTime(item.start_at)}｜${one(item.patients)?.name ?? "顧客"}｜${one(item.services)?.name ?? "服務"}` })),
     ...registrations.filter((item) => !["cancelled", "waitlisted"].includes(item.status)).map((item) => { const session = one(item.event_sessions); return { id: item.id, kind: "registration" as const, label: `${formatDateTime(session?.start_at ?? item.created_at)}｜${one(item.patients)?.name ?? "學員"}｜${one(item.events)?.title ?? session?.name ?? "課程／活動"}` }; }),
   ];
-  const allPaths = [...new Set(records.flatMap((record) => record.private_photo_paths ?? []))];
+  const allPaths = [...new Set(records.flatMap((record) =>
+    (record.private_photo_paths ?? []).filter((path) => safePhotoPath(path, member.clinicId, record.id))))];
   const signedResult = allPaths.length > 0 ? await adminQuery(service.storage.from("customer-media").createSignedUrls(allPaths, 3600)) : { data: [], error: null };
   if (signedResult.error || !Array.isArray(signedResult.data) || signedResult.data.length !== allPaths.length || signedResult.data.some((item) => !item.signedUrl)) {
     throw new Error(adminErrorMessage(signedResult.error ?? "私密圖片讀取不完整"));
