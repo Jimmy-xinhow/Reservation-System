@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 30;
 type Relation<T> = T | T[] | null;
-type Person = { name: string };
+type Person = { name: string; clinic_id: string };
 type Appointment = { id: string; start_at: string; status: string; patients: Relation<Person>; services: Relation<{ name: string }> };
 type Registration = { id: string; created_at: string; status: string; patients: Relation<Person>; events: Relation<{ title: string }>; event_sessions: Relation<{ name: string; start_at: string }> };
 function one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   try {
     const service = createServiceClient();
     const appointmentQuery = () => {
-      const patient = q ? "patients!inner(name)" : "patients(name)";
+      const patient = q ? "patients!inner(name,clinic_id)" : "patients(name,clinic_id)";
       let query = service.from("appointments")
         .select(`id, start_at, status, ${patient}, services(name)`)
         .eq("clinic_id", member.clinicId)
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       return query.order("start_at", { ascending: false }).order("id", { ascending: false }).range(from, to);
     };
     const registrationQuery = () => {
-      const patient = q ? "patients!inner(name)" : "patients(name)";
+      const patient = q ? "patients!inner(name,clinic_id)" : "patients(name,clinic_id)";
       let query = service.from("registrations")
         .select(`id, created_at, status, ${patient}, events(title), event_sessions(name,start_at)`)
         .eq("clinic_id", member.clinicId)
@@ -64,8 +64,12 @@ export async function GET(req: NextRequest) {
     if (appointmentResult.error || registrationResult.error || !Array.isArray(appointmentResult.data) || !Array.isArray(registrationResult.data)) {
       return fail("讀取服務來源失敗，請重新載入後再試", 500);
     }
-    const appointments = appointmentResult.data as unknown as Appointment[];
-    const registrations = registrationResult.data as unknown as Registration[];
+    // Service-role joins bypass RLS: discard a source if its linked patient
+    // is absent or belongs to another brand, including while old data is repaired.
+    const appointments = (appointmentResult.data as unknown as Appointment[])
+      .filter(item => one(item.patients)?.clinic_id === member.clinicId);
+    const registrations = (registrationResult.data as unknown as Registration[])
+      .filter(item => one(item.patients)?.clinic_id === member.clinicId);
     const sources = [
       ...appointments.slice(0, PAGE_SIZE).map(item => ({
         id: item.id, kind: "appointment" as const,

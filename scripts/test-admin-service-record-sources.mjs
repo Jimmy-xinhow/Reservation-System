@@ -29,14 +29,17 @@ function fixture({ member = { clinicId }, allowed = true, failure } = {}) {
   const rows = {
     appointments: Array.from({ length: 35 }, (_, i) => ({
       id: `appointment-${i}`, clinic_id: clinicId, start_at: `2026-09-${String(30 - (i % 30)).padStart(2, '0')}T02:00:00Z`,
-      status: 'done', patients: { name: i === 34 ? '歷史顧客' : `近期顧客${i}`, phone: i === 34 ? '0999000000' : '0911111111' }, services: { name: '服務' },
+      status: 'done', patients: { clinic_id: clinicId, name: i === 34 ? '歷史顧客' : `近期顧客${i}`, phone: i === 34 ? '0999000000' : '0911111111' }, services: { name: '服務' },
     })),
     registrations: Array.from({ length: 35 }, (_, i) => ({
       id: `registration-${i}`, clinic_id: clinicId, patient_id: `patient-${i}`, created_at: `2026-09-${String(30 - (i % 30)).padStart(2, '0')}T02:00:00Z`,
-      status: 'confirmed', patients: { name: i === 34 ? '歷史學員' : `近期學員${i}`, phone: i === 34 ? '0988000000' : '0922222222' }, events: { title: '課程' }, event_sessions: null,
+      status: 'confirmed', patients: { clinic_id: clinicId, name: i === 34 ? '歷史學員' : `近期學員${i}`, phone: i === 34 ? '0988000000' : '0922222222' }, events: { title: '課程' }, event_sessions: null,
     })),
   };
-  for (const table of Object.keys(rows)) rows[table].push({ ...rows[table][0], id: `foreign-${table}`, clinic_id: 'foreign-brand', patients: { name: '外品牌客戶', phone: '0977000000' } });
+  for (const table of Object.keys(rows)) {
+    rows[table].push({ ...rows[table][0], id: `foreign-${table}`, clinic_id: 'foreign-brand', patients: { clinic_id: 'foreign-brand', name: '外品牌客戶', phone: '0977000000' } });
+    rows[table].push({ ...rows[table][0], id: `mislinked-${table}`, patients: { clinic_id: 'foreign-brand', name: '錯連外品牌客戶', phone: '0966000000' } });
+  }
 
   function from(table) {
     const call = { table, filters: [], search: null, range: null };
@@ -89,10 +92,21 @@ test('older appointment and registration can be found by name or phone, within c
   assert.deepEqual(Array.from(byName.body.data.sources, row => row.id), ['appointment-34', 'registration-34']);
   assert(!JSON.stringify(byName.body).includes('0999000000'));
   assert(!JSON.stringify(byName.body).includes('foreign-'));
+  assert(!JSON.stringify(byName.body).includes('mislinked-'));
   const byPhone = await h.request('?q=0988000000');
   assert.deepEqual(Array.from(byPhone.body.data.sources, row => row.id), ['registration-34']);
   assert(h.calls.every(call => call.filters.some(([op, key, value]) => op === 'eq' && key === 'clinic_id' && value === clinicId)));
   assert(h.calls.filter(call => call.search).every(call => call.search[1].referencedTable === 'patients'));
+});
+
+test('service-role source joins never expose a foreign-brand patient even if the source itself belongs to this brand', async () => {
+  const h = fixture();
+  for (const search of ['', '?q=%E9%8C%AF%E9%80%A3', '?q=0966000000']) {
+    const result = await h.request(search);
+    assert.equal(result.status, 200);
+    assert(!JSON.stringify(result.body).includes('錯連外品牌客戶'));
+    assert(!JSON.stringify(result.body).includes('mislinked-'));
+  }
 });
 
 test('page two exposes the older item without a 30-item ceiling', async () => {
