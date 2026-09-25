@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { ModuleDisabled } from "@/components/ModuleDisabled";
-import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { requireAdmin } from "@/lib/admin";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import LineTemplateGallery from "./LineTemplateGallery";
@@ -10,12 +9,12 @@ export const dynamic = "force-dynamic";
 export default async function LineTemplatesPage({ searchParams }: { searchParams: Promise<{ saved?: string; published?: string; template?: string }> }) {
   const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
-  if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="LINE 訊息範本" />;
-  const [params, { data: clinic }, { data: settings }] = await Promise.all([
+  const [params, { data: clinic, error: clinicError }, { data: settings, error: settingsError }] = await adminQuery(Promise.all([
     searchParams,
     supabase.from("clinics").select("name").eq("id", clinicId).maybeSingle(),
-    supabase.from("clinic_settings").select("line_flex_designs, brand_primary_color, brand_accent_color").eq("clinic_id", clinicId).maybeSingle(),
-  ]);
+    supabase.from("clinic_settings").select("line_flex_designs, brand_primary_color, brand_accent_color, line_channel_enabled").eq("clinic_id", clinicId).maybeSingle(),
+  ]));
+  if (clinicError || settingsError || !clinic || !settings) throw new Error(adminErrorMessage(clinicError ?? settingsError ?? "LINE 範本設定載入失敗"));
   return (
     <div className="line-workbench">
       <header className="admin-page-header flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -30,6 +29,7 @@ export default async function LineTemplatesPage({ searchParams }: { searchParams
           <div className="line-status-step"><span>03</span><div><strong>在安全頁面完成</strong><small>預約、付款、票券與會員操作不塞在聊天訊息裡。</small></div></div>
         </div>
       </section>
+      {!settings.line_channel_enabled && <p role="status" className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">此品牌尚未啟用 LINE。可以先設計並儲存訊息草稿；實際發布前請到 <Link href="/admin/line#channel-settings" className="font-semibold underline">LINE 官方帳號連線</Link> 啟用並完成檢查。</p>}
       {params.published === "1" && <div className="alert alert-success">品牌 Flex 已發布；之後符合這個用途的 LINE 訊息會使用此版本。</div>}
       {params.saved === "1" && <div className="alert alert-success">草稿已儲存，尚未影響顧客收到的 LINE 訊息。</div>}
       <LineTemplateGallery
@@ -38,6 +38,7 @@ export default async function LineTemplatesPage({ searchParams }: { searchParams
         initialTemplateKey={params.template}
         brandPrimaryColor={(settings?.brand_primary_color as string | null) ?? null}
         brandAccentColor={(settings?.brand_accent_color as string | null) ?? null}
+        lineEnabled={settings.line_channel_enabled === true}
       />
     </div>
   );

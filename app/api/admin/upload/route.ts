@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
 import { requireOperator } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
+import { fail } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,14 @@ function matchesImageSignature(data: Buffer, type: string): boolean {
  * 後台上傳圖片到 Supabase Storage,回傳公開 URL。需登入且屬本診所。
  */
 export async function POST(req: NextRequest) {
+  try {
+    return await uploadImage(req);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "圖片上傳結果無法確認", 500);
+  }
+}
+
+async function uploadImage(req: NextRequest) {
   let clinicId = "";
   try {
     // 上傳路徑帶品牌鍵，避免不同品牌共用不可追蹤的平面檔名。
@@ -55,7 +64,7 @@ export async function POST(req: NextRequest) {
     .from(BUCKET)
     .upload(name, fileData, { contentType: type, upsert: false });
   if (error) {
-    return Response.json({ ok: false, error: error.message }, { status: 500 });
+    return fail(error.message, 500);
   }
   const { data } = svc.storage.from(BUCKET).getPublicUrl(name);
   return Response.json({ ok: true, url: data.publicUrl });

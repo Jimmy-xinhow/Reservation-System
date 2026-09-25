@@ -7,6 +7,8 @@ import { FunnelTracker } from "@/components/FunnelTracker";
 import { MarketingHome } from "@/components/MarketingHome";
 import { IndustryShowcase } from "@/components/showcase/IndustryShowcase";
 import { loadPublicBrandPage } from "@/lib/public-brand-page";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { publicCustomerEntryUrl } from "@/lib/customer-entry";
 
 export const dynamic = "force-dynamic";
 
@@ -80,9 +82,9 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
     : clinicIdParam
       ? `?clinic_id=${encodeURIComponent(clinicIdParam)}`
       : "";
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const liffUrl = liffId
-    ? `https://liff.line.me/${liffId}${clinicScopeSuffix}`
+  const lineContext = clinicId ? await getClinicLineChannelContext(createServiceClient(), clinicId).catch(() => null) : null;
+  const liffUrl = lineContext?.enabled && lineContext.liffId && lineContext.loginChannelId
+    ? publicCustomerEntryUrl("booking", lineContext)
     : null;
   const browserBookingUrl = `/book/browser${clinicScopeSuffix}`;
   const registrationUrl = `/register${clinicScopeSuffix}`;

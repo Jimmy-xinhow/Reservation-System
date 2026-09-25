@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { deliveryError } from "@/lib/delivery-error";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
-import { getBotInfo, getLineCredentialStatus, getQuota, lineAccessTokenForDestination, type LineBotInfo } from "@/lib/line";
+import { getBotInfo, getLineCredentialStatus, getQuota, getQuotaConsumption, lineAccessTokenForDestination, type LineBotInfo } from "@/lib/line";
 import { requireAdmin } from "@/lib/admin";
 import { saveLineCredentialsAction, sendTestPushAction, updateLineChannelSettingsAction, verifyLineChannelSettingsAction } from "../line-actions";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -23,9 +25,9 @@ export default async function LinePage({
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-app.up.railway.app";
   const proto = h.get("x-forwarded-proto") ?? "https";
   const base = `${proto}://${host}`;
-  const supabase = await createSupabaseServer();
-  const service = createServiceClient();
-  const [{ data: clinic }, { data: settings }, { data: channel }] = await Promise.all([
+  const supabase = await adminQuery(Promise.resolve().then(() => createSupabaseServer()));
+  const service = await adminQuery(Promise.resolve().then(() => createServiceClient()));
+  const [{ data: clinic, error: clinicError }, { data: settings, error: settingsError }, { data: channel, error: channelError }] = await adminQuery(Promise.all([
     supabase.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
     supabase.from("clinic_settings").select("line_channel_enabled, brand_logo_url").eq("clinic_id", clinicId).maybeSingle(),
     supabase
@@ -33,7 +35,10 @@ export default async function LinePage({
       .select("connection_mode, login_channel_id, liff_id, liff_endpoint_path, verification_status, verification_error, last_verified_at")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
-  ]);
+  ]));
+  if (clinicError || settingsError || channelError) {
+    throw new Error(adminErrorMessage(clinicError ?? settingsError ?? channelError));
+  }
   let clinicToken: string | null = null;
   try {
     clinicToken = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
@@ -50,28 +55,40 @@ export default async function LinePage({
   // 即時連線檢查：使用目前品牌的 Vault 或相容備援 token 向 LINE 查詢。
   let bot: LineBotInfo | null = null;
   let quota: { type: string; value?: number } | null = null;
+  let quotaConsumption: number | null = null;
   let connectionFailed = false;
   if (clinicToken) {
-    try {
-      [bot, quota] = await Promise.all([getBotInfo(clinicToken), getQuota(clinicToken)]);
-    } catch (error) {
+    const [botResult, quotaResult, consumptionResult] = await Promise.allSettled([
+      getBotInfo(clinicToken),
+      getQuota(clinicToken),
+      getQuotaConsumption(clinicToken),
+    ]);
+    if (botResult.status === "fulfilled") bot = botResult.value;
+    else {
       connectionFailed = true;
-      console.error("[line-connection-check]", error instanceof Error ? error.message.slice(0, 500) : "unknown error");
+      console.error("[line-connection-check]", { category: deliveryError(botResult.reason) });
     }
+    if (quotaResult.status === "fulfilled") quota = quotaResult.value;
+    else console.error("[line-quota-check]", { category: deliveryError(quotaResult.reason) });
+    if (consumptionResult.status === "fulfilled") quotaConsumption = consumptionResult.value;
+    else console.error("[line-consumption-check]", { category: deliveryError(consumptionResult.reason) });
   }
 
   // 取一個有 line_user_id 的顧客,方便快速測試
-  const { data: sample } = await supabase
+  const { data: sample, error: sampleError } = await adminQuery(supabase
     .from("patients")
     .select("name, line_user_id")
     .eq("clinic_id", clinicId)
     .not("line_user_id", "is", null)
     .limit(1)
-    .maybeSingle();
+    .maybeSingle());
+  if (sampleError) throw new Error(adminErrorMessage(sampleError));
 
   const isConnected = Boolean(clinicToken && bot && !connectionFailed);
   const isVerified = channel?.verification_status === "ready";
   const isEntryReady = settings?.line_channel_enabled === true && Boolean(channel?.liff_id);
+  const officialLimit = quota?.type === "limited" && Number.isSafeInteger(quota.value) ? Number(quota.value) : null;
+  const remaining = officialLimit !== null && quotaConsumption !== null ? Math.max(0, officialLimit - quotaConsumption) : null;
 
   return (
     <div className="line-workbench">
@@ -85,7 +102,7 @@ export default async function LinePage({
           <Link href="/admin/settings?section=page" className="admin-inline-action"><LineIcon name="template" />顧客 App 預覽</Link>
           <Link href="/admin/richmenu" className="admin-inline-action"><LineIcon name="grid" />圖文選單</Link>
           <Link href="/admin/line-templates" className="admin-inline-action"><LineIcon name="template" />訊息內容</Link>
-          <Link href="/admin/messages" className="admin-inline-action"><LineIcon name="send" />發送紀錄</Link>
+          <Link href="/admin/messages" className="admin-inline-action"><LineIcon name="send" />訊息素材</Link>
           <Link href="/admin/channels" className="admin-inline-action"><LineIcon name="check" />完整檢查</Link>
         </nav>
       </header>
@@ -97,6 +114,16 @@ export default async function LinePage({
           <ConnectionStep number="2" title="系統連線檢查" ready={isVerified} detail={isVerified ? "系統檢查已通過" : "等待重新檢查"} />
           <ConnectionStep number="3" title="顧客入口" ready={isEntryReady} detail={isEntryReady ? "LINE 入口已啟用" : "需要啟用並填入 LIFF"} />
         </div>
+      </section>
+
+      <section className="line-panel" aria-labelledby="line-quota-title">
+        <div className="line-panel-header"><div><h2 id="line-quota-title">LINE 官方帳號訊息用量</h2><p>預約通知、行前提醒及行銷主動推播共用同一個品牌官方帳號的訊息額度。</p></div><a href="https://manager.line.biz/" target="_blank" rel="noreferrer" className="admin-inline-action">查看 LINE 官方帳號 ↗</a></div>
+        <div className="grid gap-px bg-slate-200 sm:grid-cols-3">
+          <QuotaMetric label="LINE 官方本月上限" value={officialLimit !== null ? `${officialLimit.toLocaleString("zh-TW")} 則` : quota?.type === "none" ? "未設固定上限" : "無法取得"} />
+          <QuotaMetric label="LINE 官方本月已用" value={quotaConsumption !== null ? `約 ${quotaConsumption.toLocaleString("zh-TW")} 則` : "無法取得"} />
+          <QuotaMetric label="LINE 官方估計剩餘" value={remaining !== null ? `約 ${remaining.toLocaleString("zh-TW")} 則` : "無法估算"} />
+        </div>
+        <p className="px-4 py-3 text-xs leading-5 text-slate-600">這是 LINE 官方帳號回報的近似用量，包含從 LINE 官方後台發送的訊息。此頁只顯示 LINE 官方額度；若未來提供平台方案推播額度，兩者須分開計算，增加平台額度不會提高 LINE 官方上限。</p>
       </section>
 
       <section className="line-panel" aria-labelledby="line-identity-title">
@@ -183,13 +210,13 @@ export default async function LinePage({
           <div className="border-t border-slate-200 px-4 py-3">
             {!clinicToken ? <p className="text-sm text-amber-700">尚未設定 LINE 訊息授權，請完成下方連線設定。</p>
               : connectionFailed ? <p className="text-sm text-red-700">目前無法連上 LINE，請重新檢查授權資料。</p>
-                : bot ? <div className="flex flex-wrap items-center gap-2 text-xs"><span className="badge bg-emerald-50 text-emerald-700">官方帳號已連線</span><span className="badge bg-slate-100 text-slate-600">{quota?.type === "limited" ? `每月 ${quota.value} 則` : "推播無上限"}</span><span className={`badge ${bot.chatMode === "bot" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{bot.chatMode === "bot" ? "可接收顧客操作" : "回應模式需調整"}</span></div> : null}
+                : bot ? <div className="flex flex-wrap items-center gap-2 text-xs"><span className="badge bg-emerald-50 text-emerald-700">官方帳號已連線</span><span className="badge bg-slate-100 text-slate-600">{officialLimit !== null ? `LINE 官方每月 ${officialLimit.toLocaleString("zh-TW")} 則` : quota?.type === "none" ? "LINE 官方未設固定上限" : "LINE 官方額度無法取得"}</span><span className={`badge ${bot.chatMode === "bot" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{bot.chatMode === "bot" ? "可接收顧客操作" : "回應模式需調整"}</span></div> : null}
           </div>
           {bot && bot.chatMode !== "bot" && <p className="mx-4 mb-4 border-l-4 border-amber-400 bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-800">請到 LINE 官方帳號管理後台開啟「聊天機器人」與 Webhook，否則系統收不到顧客按鈕操作。</p>}
         </aside>
       </section>
 
-      <section className="line-settings-grid">
+      <section id="channel-settings" className="line-settings-grid scroll-mt-24">
       <form action={updateLineChannelSettingsAction} className="line-panel">
         <div className="line-form-body">
         <div>
@@ -238,7 +265,7 @@ export default async function LinePage({
             連線檢查：{channel?.verification_status === "ready" ? "已通過" : channel?.verification_status === "error" ? "未通過" : channel?.verification_status === "pending" ? "等待檢查" : "尚未檢查"}
           </span>
         </div>
-        {channel?.verification_error && <details className="technical-details border-red-200 bg-red-50"><summary className="text-red-700">查看技術錯誤內容</summary><code className="block overflow-x-auto border-t border-red-200 p-4 text-xs text-red-800">{channel.verification_error}</code></details>}
+        {channel?.verification_error && <details className="technical-details border-red-200 bg-red-50"><summary className="text-red-700">查看技術錯誤內容</summary><code className="block overflow-x-auto border-t border-red-200 p-4 text-xs text-red-800">{deliveryError(channel.verification_error)}</code></details>}
         {channel?.last_verified_at && <p className="text-sm text-slate-600">最後檢查：{new Date(channel.last_verified_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}</p>}
         </div>
       </form>
@@ -363,6 +390,10 @@ function CopyRow({ label, value }: { label: string; value: string }) {
       <code>{value}</code>
     </div>
   );
+}
+
+function QuotaMetric({ label, value }: { label: string; value: string }) {
+  return <div className="min-w-0 bg-white px-4 py-4"><span className="block text-xs text-slate-500">{label}</span><strong className="mt-1 block text-lg tabular-nums text-slate-900">{value}</strong></div>;
 }
 
 function ConnectionStep({ number, title, detail, ready }: { number: string; title: string; detail: string; ready: boolean }) {

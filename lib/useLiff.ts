@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { tryCloseLiffWindow } from "@/lib/liff-window";
 
 interface LiffSdk {
   init: (config: { liffId: string }) => Promise<void>;
   isLoggedIn: () => boolean;
-  login: () => void;
+  login: (config?: { redirectUri: string }) => void;
   getIDToken: () => string | null;
   isInClient?: () => boolean;
   isApiAvailable?: (apiName: "createShortcutOnHomeScreen") => boolean;
@@ -59,8 +60,11 @@ export function useLiff(liffId: string | null | undefined): LiffState {
       try {
         const liff = await loadSdk();
         await liff.init({ liffId });
+        if (cancelled) return;
         if (!liff.isLoggedIn()) {
-          liff.login();
+          // SDK initialization removes its credentials first. The default login
+          // return is the configured endpoint, which drops brand/task parameters.
+          liff.login({ redirectUri: window.location.href });
           return; // 導向登入後會重新載入頁面
         }
         const token = liff.getIDToken();
@@ -104,7 +108,5 @@ export async function createLiffHomeShortcut(url: string): Promise<void> {
 
 /** 完成單一 LIFF 任務後回到 LINE；瀏覽器備援入口則回傳 false。 */
 export function closeLiffWindow(): boolean {
-  if (typeof window === "undefined" || window.liff?.isInClient?.() !== true || !window.liff.closeWindow) return false;
-  window.liff.closeWindow();
-  return true;
+  return tryCloseLiffWindow(typeof window === "undefined" ? undefined : window.liff);
 }

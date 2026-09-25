@@ -1,3 +1,6 @@
+
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { PatientPicker } from "@/components/admin/PatientPicker";
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { canViewSensitiveCustomerData, hasBrandPermission, requireNonProvider } from "@/lib/admin";
@@ -24,22 +27,18 @@ export default async function CustomerValuePage() {
   const member = await requireNonProvider();
   if (!canViewSensitiveCustomerData(member.role)) return <p className="admin-section p-5 text-sm text-slate-500">目前角色不能查看顧客資產。</p>;
   const supabase = await createSupabaseServer();
-  const [patients, wallets, points, plans, subscriptions] = await Promise.all([
-    supabase.from("patients").select("id, name, phone").eq("clinic_id", member.clinicId).eq("active", true).order("name").limit(500),
-    supabase.from("customer_wallets").select("id, balance, lifetime_credit, lifetime_debit, patients(id, name, phone)").eq("clinic_id", member.clinicId).order("updated_at", { ascending: false }).limit(200),
-    supabase.from("loyalty_accounts").select("id, points_balance, lifetime_earned, lifetime_redeemed, patients(id, name, phone)").eq("clinic_id", member.clinicId).order("updated_at", { ascending: false }).limit(200),
-    supabase.from("subscription_plans").select("id, name, description, price, billing_interval, included_credits, benefits, active").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }),
-    supabase.from("patient_subscriptions").select("id, status, current_period_end, next_billing_at, note, patients(id, name, phone), subscription_plans(id, name, billing_interval)").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).limit(200),
+  const [walletRows, pointRows, planRows, subscriptionRows] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("customer_wallets").select("id, balance, lifetime_credit, lifetime_debit, patients(id, name, phone)").eq("clinic_id", member.clinicId).order("updated_at", { ascending: false }).order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("loyalty_accounts").select("id, points_balance, lifetime_earned, lifetime_redeemed, patients(id, name, phone)").eq("clinic_id", member.clinicId).order("updated_at", { ascending: false }).order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("subscription_plans").select("id, name, description, price, billing_interval, included_credits, benefits, active").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => supabase.from("patient_subscriptions").select("id, status, current_period_end, next_billing_at, note, patients(id, name, phone), subscription_plans(id, name, billing_interval)").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).order("id").range(from, to)),
   ]);
-  const error = [patients.error, wallets.error, points.error, plans.error, subscriptions.error].find(Boolean);
-  if (error) throw new Error(error.message);
-
-  const patientRows = patients.data ?? [];
-  const planRows = plans.data ?? [];
-  const walletRows = wallets.data ?? [];
-  const pointRows = points.data ?? [];
-  const subscriptionRows = subscriptions.data ?? [];
-  const assetPatients = patientRows.filter((patient) => walletRows.some((row) => one(row.patients)?.id === patient.id) || pointRows.some((row) => one(row.patients)?.id === patient.id));
+  const assetPatients = [...new Map([...walletRows, ...pointRows].flatMap((row) => {
+    const patient = one(row.patients);
+    return patient ? [[patient.id, patient] as const] : [];
+  })).values()].sort((a, b) => a.name.localeCompare(b.name, "zh-Hant"));
+  const walletByPatient = new Map(walletRows.map((row) => [one(row.patients)?.id, row]));
+  const pointsByPatient = new Map(pointRows.map((row) => [one(row.patients)?.id, row]));
   const totalWallet = walletRows.reduce((sum, row) => sum + Number(row.balance), 0);
   const totalPoints = pointRows.reduce((sum, row) => sum + Number(row.points_balance), 0);
   const activeSubscriptions = subscriptionRows.filter((row) => row.status === "active").length;
@@ -67,7 +66,7 @@ export default async function CustomerValuePage() {
         <form action={adjustWalletAction} className="admin-section">
           <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">記錄儲值金異動</h2><p className="mt-0.5 text-xs text-slate-500">儲值、消費、退款與人工調整都會保留操作流水。</p></div></div>
           <div className="grid gap-3 p-4 sm:grid-cols-2">
-            <label className="text-sm sm:col-span-2"><span className="label">顧客</span><select name="patient_id" className="input" required defaultValue=""><option value="" disabled>請選擇顧客</option>{patientRows.map((patient) => <option key={patient.id} value={patient.id}>{patient.name} · {patient.phone}</option>)}</select></label>
+            <div className="sm:col-span-2"><PatientPicker /></div>
             <label className="text-sm"><span className="label">異動類型</span><select name="kind" className="input" defaultValue="top_up"><option value="top_up">儲值入帳</option><option value="purchase">扣除消費</option><option value="refund">退回儲值金</option><option value="adjust">人工調整</option></select></label>
             <label className="text-sm"><span className="label">調整方向</span><select name="direction" className="input"><option value="credit">增加</option><option value="debit">扣除</option></select></label>
             <label className="text-sm"><span className="label">金額</span><input name="amount" type="number" min="1" className="input" required /></label>
@@ -79,7 +78,7 @@ export default async function CustomerValuePage() {
         <form action={adjustPointsAction} className="admin-section">
           <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">記錄點數異動</h2><p className="mt-0.5 text-xs text-slate-500">獲得、兌換與到期均使用同一份可追溯流水。</p></div></div>
           <div className="grid gap-3 p-4 sm:grid-cols-2">
-            <label className="text-sm sm:col-span-2"><span className="label">顧客</span><select name="patient_id" className="input" required defaultValue=""><option value="" disabled>請選擇顧客</option>{patientRows.map((patient) => <option key={patient.id} value={patient.id}>{patient.name} · {patient.phone}</option>)}</select></label>
+            <div className="sm:col-span-2"><PatientPicker /></div>
             <label className="text-sm"><span className="label">異動類型</span><select name="kind" className="input" defaultValue="earn"><option value="earn">消費獲得</option><option value="redeem">兌換扣除</option><option value="expire">到期扣除</option><option value="adjust">人工調整</option></select></label>
             <label className="text-sm"><span className="label">調整方向</span><select name="direction" className="input"><option value="credit">增加</option><option value="debit">扣除</option></select></label>
             <label className="text-sm"><span className="label">點數</span><input name="points" type="number" min="1" className="input" required /></label>
@@ -108,7 +107,7 @@ export default async function CustomerValuePage() {
         <form action={createPatientSubscriptionAction} className="admin-section self-start">
           <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">啟用顧客訂閱</h2><p className="mt-0.5 text-xs text-slate-500">建立週期與權益紀錄；尚未完成金流接入前不會自動扣款。</p></div></div>
           <div className="grid gap-3 p-4">
-            <label className="text-sm"><span className="label">顧客</span><select name="patient_id" className="input" required defaultValue=""><option value="" disabled>請選擇顧客</option>{patientRows.map((patient) => <option key={patient.id} value={patient.id}>{patient.name} · {patient.phone}</option>)}</select></label>
+            <PatientPicker />
             <label className="text-sm"><span className="label">訂閱方案</span><select name="plan_id" className="input" required defaultValue=""><option value="" disabled>請選擇方案</option>{planRows.filter((plan) => plan.active).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {INTERVAL[plan.billing_interval]} {money(plan.price)}</option>)}</select></label>
             <label className="text-sm"><span className="label">啟用備註（選填）</span><input name="note" className="input" /></label>
             <SubmitButton className="btn btn-primary">確認啟用訂閱</SubmitButton>
@@ -122,8 +121,8 @@ export default async function CustomerValuePage() {
           <thead><tr><th>顧客</th><th>儲值餘額</th><th>累計儲值／使用</th><th>點數餘額</th><th>累計獲得／兌換</th></tr></thead>
           <tbody>
             {assetPatients.length === 0 ? <tr><td colSpan={5} data-mobile-empty="true" className="py-8 text-center text-slate-400">尚無儲值金或點數紀錄</td></tr> : assetPatients.map((patient) => {
-              const wallet = walletRows.find((row) => one(row.patients)?.id === patient.id);
-              const account = pointRows.find((row) => one(row.patients)?.id === patient.id);
+              const wallet = walletByPatient.get(patient.id);
+              const account = pointsByPatient.get(patient.id);
               return (
                 <tr key={patient.id}>
                   <td data-label="顧客"><Link href={`/admin/patients/${patient.id}`} className="font-medium text-brand-700 hover:underline">{patient.name}</Link><div className="text-xs text-slate-500">{patient.phone}</div></td>

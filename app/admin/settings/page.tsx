@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireAdmin } from "@/lib/admin";
@@ -90,7 +92,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     lineChannelContext,
     paymentSecretStatus,
     emailCredentialStatus,
-  ] = await Promise.all([
+  ] = await adminQuery(Promise.all([
     supabase
       .from("clinic_settings")
       .select("booking_mode, dashboard_focus, first_visit_extends, first_visit_minutes, allow_multi_patient_per_phone, max_patients_per_phone, deposit_enabled, deposit_amount, deposit_scope, min_lead_minutes, max_advance_days, recurring_booking_enabled, max_recurring_occurrences, cancel_lead_minutes, reschedule_lead_minutes, public_booking_enabled, public_registration_enabled, email_enabled, events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled, brand_page_enabled, brand_page_template, brand_page_content, brand_logo_url, brand_primary_color, brand_accent_color")
@@ -110,9 +112,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     getClinicLineChannelContext(service, clinicId),
     getPaymentSecretStatus(service, clinicId),
     getEmailCredentialStatus(service, clinicId),
-  ]);
+  ]));
   if (settingsError || clinicError || paymentError || domainError) {
-    throw new Error(settingsError?.message ?? clinicError?.message ?? paymentError?.message ?? domainError?.message ?? "品牌設定載入失敗");
+    throw new Error(adminErrorMessage(settingsError?.message ?? clinicError?.message ?? paymentError?.message ?? domainError?.message ?? "品牌設定載入失敗"));
   }
   const s = data as Settings | null;
   const clinic = clinicData as Clinic | null;

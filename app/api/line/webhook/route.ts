@@ -29,6 +29,7 @@ import { handleLineStaffCommand } from "@/lib/line-staff-journeys";
 import { claimLineWebhookEvent, finishLineWebhookEvent } from "@/lib/line-session";
 import { resetLineAudienceMenu, syncLineAudienceMenu } from "@/lib/line-audience-menu";
 import { publicRequestOrigin } from "@/lib/public-origin";
+import { fail } from "@/lib/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,24 +86,34 @@ function isWebhookBody(value: unknown): value is LineWebhookBody {
  *  - postback:confirm/cancel(提醒按鈕)、my(查詢我的預約)
  */
 export async function POST(req: NextRequest) {
-  const raw = await req.text();
-  const signature = req.headers.get("x-line-signature");
+  try {
+    return await handleWebhook(req);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "LINE webhook unavailable", 503);
+  }
+}
+
+async function handleWebhook(req: NextRequest) {
+  let raw: string;
   let payload: unknown;
   try {
+    raw = await req.text();
     payload = JSON.parse(raw);
   } catch {
     return new Response("bad request", { status: 400 });
   }
   if (!isWebhookBody(payload)) return new Response("bad request", { status: 400 });
+  const signature = req.headers.get("x-line-signature");
   if (!signature) return new Response("invalid signature", { status: 401 });
   const destination = payload.destination?.trim() || undefined;
   const svc = createServiceClient();
   let lineCredentials: Awaited<ReturnType<typeof lineCredentialsForDestination>>;
   try {
     lineCredentials = await lineCredentialsForDestination(destination, svc);
-  } catch {
-    return new Response("brand LINE credentials unavailable", { status: 503 });
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : "LINE credentials unavailable", 503);
   }
+  if (!lineCredentials.channelSecret) return fail("LINE channel secret 未設定", 503);
   if (!verifyLineSignature(raw, signature, lineCredentials.channelSecret)) {
     return new Response("invalid signature", { status: 401 });
   }
@@ -113,13 +124,14 @@ export async function POST(req: NextRequest) {
 
   const baseUrl = publicRequestOrigin(req.nextUrl.origin);
 
-  const { data: destinationClinic } = destination
+  const { data: destinationClinic, error: destinationError } = destination
      ? await svc.from("clinics").select("id, slug, name").eq("line_destination", destination).eq("active", true).maybeSingle()
     : CLINIC_ID
        ? await svc.from("clinics").select("id, slug, name").eq("id", CLINIC_ID).eq("active", true).maybeSingle()
-      : { data: null };
+      : { data: null, error: null };
+  if (destinationError) throw new Error("LINE brand lookup failed");
   if (destination && !destinationClinic?.id) return new Response("brand destination not configured", { status: 404 });
-  const clinicId = (destinationClinic?.id as string | undefined) || CLINIC_ID;
+  const clinicId = destinationClinic?.id as string | undefined;
   if (!clinicId) return new Response("brand not configured", { status: 500 });
   const clinicSlug = (destinationClinic?.slug as string | null) ?? null;
   const clinicName = (destinationClinic?.name as string | null)?.trim() || "預約與報名平台";
@@ -129,7 +141,7 @@ export async function POST(req: NextRequest) {
   const lineAccessToken = lineCredentials.accessToken;
 
   // 讀取後台自訂的回覆規則與歡迎/預設文字
-  const [{ data: rules }, { data: cs }] = await Promise.all([
+  const [{ data: rules, error: rulesError }, { data: cs, error: settingsError }] = await Promise.all([
     svc
       .from("line_auto_replies")
       .select("keywords, action, reply_text, message_id")
@@ -144,6 +156,7 @@ export async function POST(req: NextRequest) {
       .eq("clinic_id", clinicId)
       .maybeSingle(),
   ]);
+  if (rulesError || settingsError || !cs) throw new Error("LINE reply configuration unavailable");
   const replyRules = (rules ?? []) as {
     keywords: string;
     action: string;
@@ -353,22 +366,14 @@ export async function POST(req: NextRequest) {
           await resetLineAudienceMenu(ev.source.userId, lineAccessToken).catch(() => undefined);
           await safeReply(ev.replyToken, "已解除這個品牌的會員綁定，其他品牌不受影響。", lineAccessToken);
         } else if (action === "msg") {
-          try {
-            const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl, clinicId, liffId, clinicSlug);
-            if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
-            else
-              await safeReply(
-                ev.replyToken,
-                "找不到此訊息素材或內容為空(請確認素材有填圖片、標題或文字)。",
-                lineAccessToken,
-              );
-          } catch (e) {
+          const msg = await buildMessageById(svc, params.get("id") ?? "", baseUrl, clinicId, liffId, clinicSlug);
+          if (msg) await replyMessages(ev.replyToken, [msg], lineAccessToken);
+          else
             await safeReply(
               ev.replyToken,
-              "訊息回覆失敗:" + (e instanceof Error ? e.message.slice(0, 300) : ""),
+              "找不到此訊息素材或內容為空(請確認素材有填圖片、標題或文字)。",
               lineAccessToken,
             );
-          }
         } else if (action === "confirm" || action === "cancel") {
           await handleStatusPostback(ev.replyToken, action, params.get("id"), ev.source?.userId, svc, clinicId, lineAccessToken);
         } else {

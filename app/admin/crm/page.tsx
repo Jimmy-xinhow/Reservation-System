@@ -23,6 +23,7 @@ import {
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
 import AutomationMessageFields from "./AutomationMessageFields";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -51,54 +52,74 @@ interface AutomationRow {
   active: boolean;
 }
 
-export default async function CrmPage() {
+function checkedCount(result: { count: number | null; error: unknown }): number {
+  if (result.error || result.count === null || !Number.isSafeInteger(result.count) || result.count < 0) {
+    throw new Error("CRM 統計資料讀取不完整，請重新載入後再試");
+  }
+  return result.count;
+}
+
+export default async function CrmPage({ searchParams }: { searchParams: Promise<{ notice?: string }> }) {
   const { supabase, role, clinicId } = await requireMember();
   if (!(await isAdminModuleEnabled(supabase, clinicId, "crm"))) return <ModuleDisabled title="顧客回訪與自動提醒" />;
   const canEdit = role === "owner" || role === "admin";
+  const notice = (await searchParams).notice;
   if (!canViewSensitiveCustomerData(role)) {
     return <p className="card p-6 text-sm text-slate-500">目前角色無法查看 CRM 顧客資料。</p>;
   }
-  const [{ data: segmentData, error: segmentError }, { data: automationData, error: automationError }, { count: customerCount }, { count: deliverySent }, { count: deliveryFailed }] =
+  const [segmentData, automationData, customerResult, sentResult, failedResult] =
     await Promise.all([
-      supabase
+      fetchAllSupabasePages((from, to) => supabase
         .from("crm_segments")
         .select("id, name, description, rule_type, rule_value, active, updated_at")
         .eq("clinic_id", clinicId)
-        .order("created_at", { ascending: false }),
-      supabase
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(from, to)),
+      fetchAllSupabasePages((from, to) => supabase
         .from("crm_automations")
         .select("id, name, trigger_type, segment_id, channel, delay_minutes, trigger_days, cooldown_days, subject, body, active")
         .eq("clinic_id", clinicId)
-        .order("created_at", { ascending: false }),
+        .is("archived_at", null)
+        .order("created_at", { ascending: false })
+        .order("id")
+        .range(from, to)),
       supabase.from("patients").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("active", true),
       supabase.from("crm_delivery_logs").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("status", "sent"),
       supabase.from("crm_delivery_logs").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("status", "failed"),
-    ]);
+    ]).catch(() => { throw new Error("CRM 統計資料讀取不完整，請重新載入後再試"); });
 
-  if (segmentError) throw new Error(segmentError.message);
-  if (automationError) throw new Error(automationError.message);
+  if (!Array.isArray(segmentData) || !Array.isArray(automationData)) {
+    throw new Error("CRM 統計資料讀取不完整，請重新載入後再試");
+  }
+  const customerCount = checkedCount(customerResult);
+  const deliverySent = checkedCount(sentResult);
+  const deliveryFailed = checkedCount(failedResult);
 
   const rawSegments = (segmentData ?? []) as unknown as Omit<SegmentRow, "memberCount">[];
   const memberCounts = await Promise.all(
     rawSegments.map(async (segment) => {
-      const { count } = await supabase
+      const result = await supabase
         .from("crm_segment_members")
         .select("patient_id", { count: "exact", head: true })
         .eq("clinic_id", clinicId)
         .eq("segment_id", segment.id);
-      return [segment.id, count ?? 0] as const;
+      return [segment.id, checkedCount(result)] as const;
     }),
-  );
+  ).catch(() => { throw new Error("CRM 統計資料讀取不完整，請重新載入後再試"); });
   const countMap = new Map(memberCounts);
   const segments: SegmentRow[] = rawSegments.map((segment) => ({
     ...segment,
-    memberCount: countMap.get(segment.id) ?? 0,
+    memberCount: checkedCount({ count: countMap.get(segment.id) ?? null, error: null }),
   }));
   const automations = (automationData ?? []) as unknown as AutomationRow[];
   const segmentName = new Map(segments.map((segment) => [segment.id, segment.name]));
 
   return (
     <div className="admin-page">
+      {canEdit && notice === "segment-created-refresh-failed" && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">分眾已建立，但名單刷新未能確認完成，目前人數可能尚未更新。請勿重新建立；請在該分眾按「重新計算」重試。</p>}
+      {canEdit && notice === "segment-refresh-failed" && <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">名單刷新未能確認完成，請稍後在原分眾重試。目前人數可能尚未更新，不需要重新建立分眾。</p>}
+      {canEdit && notice === "segment-refreshed" && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">分眾名單已刷新。</p>}
       <div className="admin-page-header">
         <div>
           <p className="eyebrow">顧客經營</p>
@@ -113,11 +134,11 @@ export default async function CrmPage() {
       </div>
 
       <div className="admin-metric-strip grid-cols-2 sm:grid-cols-5">
-        <Stat label="可管理顧客" value={customerCount ?? 0} />
+        <Stat label="可管理顧客" value={customerCount} />
         <Stat label="分眾" value={segments.length} />
         <Stat label="自動化" value={automations.length} />
-        <Stat label="已送達" value={deliverySent ?? 0} />
-        <Stat label="投遞失敗" value={deliveryFailed ?? 0} tone={deliveryFailed ? "danger" : undefined} />
+        <Stat label="已送出" value={deliverySent} />
+        <Stat label="投遞失敗" value={deliveryFailed} tone={deliveryFailed ? "danger" : undefined} />
       </div>
 
       <section className="admin-section border-l-[3px] border-l-brand-600 p-4">
@@ -208,7 +229,7 @@ export default async function CrmPage() {
                     </form>
                     <form action={deleteSegmentAction}>
                       <input type="hidden" name="id" value={segment.id} />
-                      <SubmitButton className="btn btn-danger px-3 py-1.5 text-xs">刪除</SubmitButton>
+                      <SubmitButton className="btn btn-danger px-3 py-1.5 text-xs">封存</SubmitButton>
                     </form>
                   </div>
                 )}
@@ -326,7 +347,7 @@ export default async function CrmPage() {
                     </form>
                     <form action={deleteAutomationAction}>
                       <input type="hidden" name="id" value={automation.id} />
-                      <SubmitButton className="btn btn-danger px-3 py-1.5 text-xs">刪除</SubmitButton>
+                      <SubmitButton className="btn btn-danger px-3 py-1.5 text-xs">封存</SubmitButton>
                     </form>
                   </div>
                 )}
@@ -345,8 +366,8 @@ export default async function CrmPage() {
           <Link href="/admin/crm/deliveries" className="btn btn-secondary w-fit px-3 py-1.5 text-xs">查看完整投遞紀錄</Link>
         </div>
         <div className="admin-metric-strip grid-cols-2 sm:max-w-md">
-          <Stat label="已送達" value={deliverySent ?? 0} />
-          <Stat label="投遞失敗" value={deliveryFailed ?? 0} tone={deliveryFailed ? "danger" : undefined} />
+          <Stat label="已送出" value={deliverySent} />
+          <Stat label="投遞失敗" value={deliveryFailed} tone={deliveryFailed ? "danger" : undefined} />
         </div>
       </section>
 

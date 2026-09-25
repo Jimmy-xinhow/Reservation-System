@@ -1,4 +1,5 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -17,12 +18,12 @@ export async function isAdminModuleEnabled(
   clinicId: string,
   module: AdminModuleKey,
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("clinic_settings")
     .select("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+    .maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
   if (!data) throw new Error("品牌設定不存在");
   const settings = data as ModuleSettingsRow;
   if (module === "events") return settings.events_enabled;

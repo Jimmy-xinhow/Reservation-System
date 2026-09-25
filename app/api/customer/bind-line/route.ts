@@ -18,7 +18,7 @@ interface BindLineBody {
 
 export async function POST(request: NextRequest) {
   const rate = await checkRateLimit(request, "customer:bind-line", 8);
-  if (!rate.allowed) return fail("綁定次數過多，請稍後再試", 429);
+  if (!rate.allowed) return fail("綁定次數過多，請稍後再試", rate.unavailable ? 503 : 429);
 
   try {
     const body = await request.json().catch(() => null) as BindLineBody | null;

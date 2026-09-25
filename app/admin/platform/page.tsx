@@ -1,6 +1,9 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
 import { PLATFORM_ADD_ONS, hasSystemPermission, requireSystemPermission } from "@/lib/platform";
 import { createServiceClient } from "@/lib/supabase";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createPlatformBrandAction, setPlatformBrandActiveAction, updatePlatformEntitlementAction } from "./actions";
 
@@ -13,6 +16,13 @@ interface SettingsRow { clinic_id: string; public_registration_enabled: boolean;
 interface ClinicCountRow { clinic_id: string; }
 type PlatformSectionId = "overview" | "create" | "brands";
 
+function completeCount(result: { count: number | null; error: unknown }): number {
+  if (result.error || result.count === null || !Number.isSafeInteger(result.count) || result.count < 0) {
+    throw new Error(adminErrorMessage("平台統計資料讀取不完整"));
+  }
+  return result.count;
+}
+
 export default async function PlatformPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const platform = await requireSystemPermission("platform.overview");
   const canManageBrands = hasSystemPermission(platform, "brands.manage");
@@ -24,47 +34,39 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
     : "overview";
   const service = createServiceClient();
   const [
-    { data: brands, error: brandError },
-    { data: entitlements, error: entitlementError },
-    { data: members, error: memberError },
-    { data: settings, error: settingsError },
-    { data: services, error: serviceError },
-    { data: schedules, error: scheduleError },
-    { count: appointmentCount, error: appointmentCountError },
-    { count: registrationCount, error: registrationCountError },
-    { count: patientCount, error: patientCountError },
-    { count: failedDeliveryCount, error: failedDeliveryError },
-  ] = await Promise.all([
-    service.from("clinics").select("id, name, slug, line_basic_id, active, created_at").order("created_at", { ascending: false }),
-    service.from("brand_entitlements").select("clinic_id, plan_code, feature_flags, note"),
-    service.from("clinic_members").select("clinic_id, role"),
-    service.from("clinic_settings").select("clinic_id, public_registration_enabled, public_booking_enabled, booking_mode"),
-    service.from("services").select("clinic_id").eq("active", true),
-    service.from("schedule_templates").select("clinic_id").eq("active", true),
+    brands, entitlements, members, settings, services, schedules,
+    appointmentResult, registrationResult, patientResult, failedDeliveryResult,
+  ] = await adminQuery(Promise.all([
+    fetchAllSupabasePages((from, to) => service.from("clinics")
+      .select("id, name, slug, line_basic_id, active, created_at")
+      .order("created_at", { ascending: false }).order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("brand_entitlements")
+      .select("clinic_id, plan_code, feature_flags, note").order("clinic_id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("clinic_members")
+      .select("clinic_id, role").order("clinic_id").order("user_id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("clinic_settings")
+      .select("clinic_id, public_registration_enabled, public_booking_enabled, booking_mode").order("clinic_id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("services")
+      .select("clinic_id").eq("active", true).order("clinic_id").order("id").range(from, to)),
+    fetchAllSupabasePages((from, to) => service.from("schedule_templates")
+      .select("clinic_id").eq("active", true).order("clinic_id").order("id").range(from, to)),
     service.from("appointments").select("id", { count: "exact", head: true }),
     service.from("registrations").select("id", { count: "exact", head: true }),
     service.from("patients").select("id", { count: "exact", head: true }),
     service.from("crm_delivery_logs").select("id", { count: "exact", head: true }).eq("status", "failed"),
-  ]);
-  if (brandError) throw new Error(`讀取品牌清單失敗：${brandError.message}`);
-  if (entitlementError) throw new Error(`讀取品牌方案失敗：${entitlementError.message}`);
-  if (memberError) throw new Error(`讀取品牌成員失敗：${memberError.message}`);
-  if (settingsError) throw new Error(`讀取品牌設定失敗：${settingsError.message}`);
-  if (serviceError) throw new Error(`讀取品牌服務失敗：${serviceError.message}`);
-  if (scheduleError) throw new Error(`讀取品牌排程失敗：${scheduleError.message}`);
-  if (appointmentCountError) throw new Error(`讀取預約統計失敗：${appointmentCountError.message}`);
-  if (registrationCountError) throw new Error(`讀取報名統計失敗：${registrationCountError.message}`);
-  if (patientCountError) throw new Error(`讀取顧客統計失敗：${patientCountError.message}`);
-  if (failedDeliveryError) throw new Error(`讀取訊息失敗統計失敗：${failedDeliveryError.message}`);
-
-  const brandRows = (brands ?? []) as BrandRow[];
-  const entitlementRows = (entitlements ?? []) as EntitlementRow[];
-  const memberRows = (members ?? []) as MemberRow[];
-  const settingsByBrand = new Map((settings ?? []).map((row) => [row.clinic_id, row as SettingsRow]));
+  ]));
+  const appointmentCount = completeCount(appointmentResult);
+  const registrationCount = completeCount(registrationResult);
+  const patientCount = completeCount(patientResult);
+  const failedDeliveryCount = completeCount(failedDeliveryResult);
+  const brandRows = brands as BrandRow[];
+  const entitlementRows = entitlements as EntitlementRow[];
+  const memberRows = members as MemberRow[];
+  const settingsByBrand = new Map(settings.map((row) => [row.clinic_id, row as SettingsRow]));
   const entitlementByBrand = new Map(entitlementRows.map((row) => [row.clinic_id, row]));
   const membersByBrand = countByClinic(memberRows);
-  const servicesByBrand = countByClinic((services ?? []) as ClinicCountRow[]);
-  const schedulesByBrand = countByClinic((schedules ?? []) as ClinicCountRow[]);
+  const servicesByBrand = countByClinic(services as ClinicCountRow[]);
+  const schedulesByBrand = countByClinic(schedules as ClinicCountRow[]);
   const progressByBrand = new Map(brandRows.map((brand) => [brand.id, getBrandProgress(brand, membersByBrand, settingsByBrand, servicesByBrand, schedulesByBrand)]));
   const readyCount = brandRows.filter((brand) => progressByBrand.get(brand.id)?.complete === true).length;
 
@@ -96,12 +98,12 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
       {activeSection === "overview" && <div className="platform-metrics">
         <Metric label="品牌總數" value={brandRows.length} detail={`${brandRows.filter((brand) => brand.active).length} 個啟用中`} />
         <Metric label="品牌成員" value={memberRows.length} detail="跨品牌成員總數" />
-        <Metric label="累計預約" value={appointmentCount ?? 0} detail="所有品牌" />
-        <Metric label="累計報名" value={registrationCount ?? 0} detail="所有品牌" />
-        <Metric label="累計顧客" value={patientCount ?? 0} detail="品牌資料隔離統計" />
+        <Metric label="累計預約" value={appointmentCount} detail="所有品牌" />
+        <Metric label="累計報名" value={registrationCount} detail="所有品牌" />
+        <Metric label="累計顧客" value={patientCount} detail="品牌資料隔離統計" />
         <Metric label="完成基本開通" value={readyCount} detail={`${brandRows.length === 0 ? 0 : Math.round((readyCount / brandRows.length) * 100)}% 品牌`} />
         <Metric label="啟用服務" value={servicesByBrandTotal(servicesByBrand)} detail="跨品牌服務總數" />
-        <Metric label="投遞失敗" value={failedDeliveryCount ?? 0} detail="CRM 訊息需處理" tone="warning" />
+        <Metric label="投遞失敗" value={failedDeliveryCount} detail="CRM 訊息需處理" tone="warning" />
       </div>}
 
       {activeSection === "overview" && <section className="platform-panel platform-link-list">
@@ -162,7 +164,7 @@ function BrandCard({ brand, entitlement, flags, progress, canManageBrands, canMa
   return <article className="platform-brand-row">
     <div className="platform-brand-row-head">
       <div><div className="platform-brand-row-title"><h3>{brand.name}</h3><span className={`badge ${brand.active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{brand.active ? "啟用" : "已停用"}</span><span className={`badge ${progress.complete ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{progress.complete ? "可開始營運" : `待完成 ${progress.total - progress.done} 項`}</span></div><p className="mt-1 text-xs text-slate-500">網址代號：/{brand.slug ?? "未設定"} · {progress.members} 位品牌成員</p></div>
-      <div className="flex flex-wrap gap-2"><Link href="/admin/login" className="btn btn-secondary px-3 py-1.5 text-xs">品牌登入入口</Link>{brand.slug && <a href={`/book/browser?clinic_slug=${encodeURIComponent(brand.slug)}`} target="_blank" rel="noreferrer" className="btn btn-secondary px-3 py-1.5 text-xs">預覽顧客入口</a>}{canManageBrands && <form action={setPlatformBrandActiveAction}><input type="hidden" name="clinic_id" value={brand.id} /><input type="hidden" name="active" value={brand.active ? "false" : "true"} /><SubmitButton className="btn btn-secondary px-3 py-1.5 text-xs">{brand.active ? "停用品牌" : "重新啟用"}</SubmitButton></form>}</div>
+      <div className="flex flex-wrap gap-2">{brand.active ? <Link href={`/admin/login?brand=${encodeURIComponent(brand.id)}`} className="btn btn-secondary px-3 py-1.5 text-xs">登入此品牌</Link> : <span className="btn btn-secondary cursor-not-allowed px-3 py-1.5 text-xs opacity-60">品牌已停用</span>}{brand.slug && <a href={`/book/browser?clinic_slug=${encodeURIComponent(brand.slug)}`} target="_blank" rel="noreferrer" className="btn btn-secondary px-3 py-1.5 text-xs">預覽顧客入口</a>}{canManageBrands && <form action={setPlatformBrandActiveAction}><input type="hidden" name="clinic_id" value={brand.id} /><input type="hidden" name="active" value={brand.active ? "false" : "true"} /><SubmitButton className="btn btn-secondary px-3 py-1.5 text-xs">{brand.active ? "停用品牌" : "重新啟用"}</SubmitButton></form>}</div>
     </div>
     <div className="platform-brand-progress" aria-label={`${brand.name} 開通進度`}>{progress.items.map((item) => <span key={item.label} data-complete={item.done}>{item.done ? "完成 · " : "待辦 · "}{item.label}</span>)}</div>{progress.next && <p className="mt-2 text-xs text-amber-700">下一步：{progress.next}</p>}
     {canManageEntitlements ? <form action={updatePlatformEntitlementAction} className="space-y-4 border-t border-slate-100 pt-4"><input type="hidden" name="clinic_id" value={brand.id} /><div className="grid gap-4 sm:grid-cols-[220px_1fr]"><label className="text-sm"><span className="label">服務層級（不限制標準功能）</span><select name="plan_code" className="input" defaultValue={entitlement?.plan_code ?? "standard"}><option value="standard">標準維護</option><option value="professional">專案支援</option><option value="enterprise">企業協作</option></select></label><label className="text-sm"><span className="label">系統備註</span><input name="note" className="input" defaultValue={entitlement?.note ?? ""} placeholder="合約、客製範圍或交付備註" /></label></div><div><p className="label">另行報價加購能力（僅記錄合作狀態）</p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{PLATFORM_ADD_ONS.map(({ key, label }) => <label key={key} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"><input type="checkbox" name={key} defaultChecked={flags[key] === true} className="h-4 w-4 accent-brand-600" />{label}</label>)}</div></div><SubmitButton className="btn btn-primary px-4 py-2 text-sm">儲存設定</SubmitButton></form> : <p className="border-t border-slate-100 pt-4 text-xs text-slate-500">目前帳號可查看方案摘要，但沒有修改方案與加購的權限。</p>}

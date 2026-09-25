@@ -1,11 +1,13 @@
+import { rpcFailure } from "@/lib/rpc-error";
+import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, ok } from "@/lib/http";
 import { verifyClinicLiffIdToken } from "@/lib/line-channel";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/registration-notifications";
-import { encryptRegistrationToken } from "@/lib/registration-credentials";
+import { encryptRegistrationToken, decryptRegistrationToken } from "@/lib/registration-credentials";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { createBrowserBookingToken } from "@/lib/browser-booking";
@@ -15,6 +17,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface Body {
+  request_id?: string;
   event_id?: string;
   session_id?: string;
   ticket_type_id?: string | null;
@@ -33,12 +36,13 @@ interface Body {
 export async function POST(req: NextRequest) {
   const rate = await checkRateLimit(req, "registration:register", 12);
   if (!rate.allowed) {
-    const response = fail("請稍後再試", 429);
+    const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
     return response;
   }
   try {
     const body = (await req.json().catch(() => null)) as Body | null;
+    if (body?.request_id !== undefined && (typeof body.request_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.request_id))) return fail("送出識別碼格式錯誤", 400);
     if (!body?.event_id || !body.session_id) return fail("缺少活動或場次");
     const name = body.name?.trim() ?? "";
     const phone = body.phone?.trim() ?? "";
@@ -138,7 +142,7 @@ export async function POST(req: NextRequest) {
       p_line_user_id: lineUserId,
       p_marketing_opt_in: body.marketing_opt_in === true,
     });
-    if (patientError) return fail(patientError.message, 409);
+    if (patientError) return rpcFailure(patientError, "patient");
     const patientRow = Array.isArray(patientData) ? patientData[0] : patientData;
     if (!patientRow?.patient_id) return fail("顧客身分建立失敗", 500);
     if (lineUserId) {
@@ -150,30 +154,23 @@ export async function POST(req: NextRequest) {
         profileCompleted: true,
       });
     }
-    const { data, error } = await svc.rpc("register_for_event_with_terms", {
-      p_clinic_id: event.clinic_id,
-      p_event_id: body.event_id,
-      p_session_id: body.session_id,
-      p_ticket_type_id: body.ticket_type_id || null,
-      p_name: name,
-      p_phone: phone,
-      p_email: email,
-      p_line_user_id: lineUserId,
-      p_marketing_opt_in: body.marketing_opt_in === true,
-      p_answers: answers,
-      p_access_token: accessToken || null,
-      p_discount_code: discountCode,
-      p_membership_code: membershipCode,
-      p_form_id: form?.id ?? null,
-      p_form_version: form?.version ?? null,
-      p_terms_version: event.terms_text ? event.terms_version : null,
-      p_terms_accepted_at: event.terms_text ? new Date().toISOString() : null,
-      p_patient_id: patientRow.patient_id,
+    const generatedToken = randomBytes(24).toString("hex");
+    const encryptedToken = encryptRegistrationToken(generatedToken);
+    if (!encryptedToken) return fail("報名憑證服務尚未就緒，請稍後再試", 503);
+    const { data, error } = await svc.rpc("submit_registration_once", {
+      p_clinic_id: event.clinic_id, p_patient_id: patientRow.patient_id, p_request_id: body.request_id ?? randomUUID(),
+      p_payload: { event_id: body.event_id, session_id: body.session_id, ticket_type_id: body.ticket_type_id || null,
+        name, phone, email, line_user_id: lineUserId, marketing_opt_in: body.marketing_opt_in === true, answers,
+        access_token: accessToken || null, discount_code: discountCode, membership_code: membershipCode,
+        form_id: form?.id ?? null, form_version: form?.version ?? null, terms_version: event.terms_text ? event.terms_version : null },
+      p_token: generatedToken, p_token_encrypted: encryptedToken,
     });
     if (error) return fail(translateRegistrationError(error.message), 409);
-    const row = Array.isArray(data) ? data[0] : data;
-    if (!row) return fail("報名失敗", 500);
-    if (patientRow?.patient_id) {
+    const row = data as { registration_id: string; registration_no: string; registration_status: string; payment_status: string; amount: number; checkin_token_encrypted: string; replayed: boolean } | null;
+    if (!row?.registration_id) return fail("報名結果尚未確認，請使用相同內容重試", 503);
+    const checkinToken = decryptRegistrationToken(row.checkin_token_encrypted);
+    if (!checkinToken) return fail("報名憑證暫時無法讀取，請使用相同內容重試", 503);
+    if (patientRow?.patient_id && !row.replayed) {
       await recordCrmInteraction(svc, {
         clinicId: event.clinic_id,
         patientId: patientRow.patient_id as string,
@@ -182,20 +179,11 @@ export async function POST(req: NextRequest) {
         title: "建立活動報名",
         body: `報名已建立：${String(row.registration_no)}`,
         registrationId: String(row.registration_id),
-      }).catch((interactionError: unknown) => console.error("CRM registration interaction failed", interactionError));
-    }
-    const encryptedToken = encryptRegistrationToken(String(row.checkin_token ?? ""));
-    if (encryptedToken) {
-      const { error: credentialError } = await svc
-        .from("registrations")
-        .update({ checkin_token_encrypted: encryptedToken })
-        .eq("id", String(row.registration_id))
-        .eq("clinic_id", event.clinic_id);
-      if (credentialError) console.error("Registration credential persistence failed", credentialError.message);
+      }).catch((interactionError: unknown) => console.error("CRM registration interaction failed", { category: deliveryError(interactionError) }));
     }
     const notificationKind = notificationKindForStatus(String(row.registration_status));
-    if (notificationKind) {
-      await notifyRegistrationStatus(svc, String(row.registration_id), notificationKind, String(row.checkin_token ?? "")).catch(() => undefined);
+    if (notificationKind && !row.replayed) {
+      await notifyRegistrationStatus(svc, String(row.registration_id), notificationKind, checkinToken).catch(() => undefined);
     }
     return ok({
       registration_id: row.registration_id,
@@ -203,7 +191,7 @@ export async function POST(req: NextRequest) {
       registration_status: row.registration_status,
       payment_status: row.payment_status,
       amount: row.amount,
-      checkin_token: row.checkin_token,
+      checkin_token: checkinToken,
       browser_token: createBrowserBookingToken(event.clinic_id, String(patientRow.patient_id)),
     });
   } catch (error) {
@@ -212,7 +200,9 @@ export async function POST(req: NextRequest) {
 }
 
 function translateRegistrationError(message: string): string {
+  if (message.includes("submission content mismatch")) return "送出識別碼已用於其他內容，請重新開啟報名頁";
+  if (message.includes("session is full")) return "此場次或票種已額滿";
   if (message.includes("membership") || message.includes("discount") || message.includes("benefits")) return "套票或優惠碼無法套用，請確認序號、適用範圍與有效期限";
-  const known = ["請填寫姓名與電話", "找不到可報名的活動", "報名尚未開始", "報名已截止", "找不到可報名的場次", "找不到可選的票種", "此場次已額滿"];
+  const known = ["活動場次已結束", "請填寫姓名與電話", "找不到可報名的活動", "報名尚未開始", "報名已截止", "找不到可報名的場次", "找不到可選的票種", "此場次已額滿"];
   return known.find((item) => message.includes(item)) ?? "此活動目前無法報名,請稍後再試";
 }

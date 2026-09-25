@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { requireNonProvider } from "@/lib/admin";
+import { canViewSensitiveCustomerData, requireNonProvider } from "@/lib/admin";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createScheduledFollowupAction, setScheduledFollowupStatusAction } from "./actions";
 import FollowupComposer from "./FollowupComposer";
+import { deliveryError } from "@/lib/delivery-error";
 
 export const dynamic = "force-dynamic";
 const STATUS: Record<string, string> = { pending: "待處理", processing: "處理中", sent: "已發送", completed: "已完成", failed: "失敗", cancelled: "已取消" };
@@ -11,27 +13,29 @@ const CHANNEL: Record<string, string> = { line: "LINE", email: "Email", phone: "
 function one<T>(value: T | T[] | null): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
 function dateTime(value: string): string { return new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)); }
 
-export default async function FollowupsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+export default async function FollowupsPage({ searchParams }: { searchParams: Promise<{ status?: string; notice?: string }> }) {
   const member = await requireNonProvider();
+  if (!canViewSensitiveCustomerData(member.role)) return <p className="admin-section p-5 text-sm text-slate-500">目前角色不能查看顧客回訪資料。</p>;
   const params = await searchParams;
   const selectedStatus = ["pending", "processing", "sent", "completed", "failed", "cancelled"].includes(params.status ?? "") ? params.status! : "";
   const supabase = await createSupabaseServer();
-  let followupQuery = supabase.from("scheduled_followups").select("id, patient_id, channel, purpose, subject, body, scheduled_for, status, attempt_count, last_error, processed_at, patients(name, phone, email)").eq("clinic_id", member.clinicId).order("scheduled_for", { ascending: false }).limit(200);
-  if (selectedStatus) followupQuery = followupQuery.eq("status", selectedStatus);
-  const [followups, patients] = await Promise.all([followupQuery, supabase.from("patients").select("id, name, phone, email, line_user_id, marketing_opt_in").eq("clinic_id", member.clinicId).eq("active", true).order("name").limit(500)]);
-  if (followups.error || patients.error) throw new Error(followups.error?.message ?? patients.error?.message ?? "讀取回訪資料失敗");
-  const rows = followups.data ?? [];
+  const rows = await fetchAllSupabasePages((from, to) => {
+    let query = supabase.from("scheduled_followups").select("id, patient_id, channel, purpose, subject, body, scheduled_for, status, attempt_count, last_error, processed_at, patients(name, phone, email)").eq("clinic_id", member.clinicId);
+    if (selectedStatus) query = query.eq("status", selectedStatus);
+    return query.order("scheduled_for", { ascending: false }).order("id").range(from, to);
+  }).catch(() => { throw new Error("讀取回訪資料失敗，請重新整理後再試"); });
   const pendingCount = rows.filter((row) => row.status === "pending").length;
   const failedCount = rows.filter((row) => row.status === "failed").length;
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
   const dueToday = rows.filter((row) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(row.scheduled_for)) === today && ["pending", "failed"].includes(row.status)).length;
 
   return <div className="admin-page">
+    {params.notice === "completed-timeline-failed" && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">回訪已標記完成，但顧客互動紀錄未能確認寫入。請勿重新建立或重複完成回訪；請聯絡管理人員核對並補記。</div>}
     <div className="admin-page-header"><div><p className="eyebrow">顧客經營</p><h1 className="admin-page-title">指定日期回訪</h1><p className="admin-page-description">安排單一顧客的電話、人工、LINE 或 Email 回訪；外部渠道未接好時會明確標示失敗，可修正後重試。</p></div><Link href="/admin/crm" className="btn btn-secondary">規則式自動提醒</Link></div>
     <div className="admin-metric-strip grid-cols-3"><div className="admin-metric"><span className="admin-metric-label">待處理</span><strong className="admin-metric-value">{pendingCount}</strong></div><div className="admin-metric"><span className="admin-metric-label">今日到期</span><strong className="admin-metric-value">{dueToday}</strong></div><div className="admin-metric"><span className="admin-metric-label">需要重試</span><strong className={`admin-metric-value ${failedCount ? "text-red-700" : ""}`}>{failedCount}</strong></div></div>
-    <details className="admin-section"><summary className="cursor-pointer px-4 py-3 font-semibold text-slate-800">安排一筆回訪</summary><FollowupComposer action={createScheduledFollowupAction} patients={(patients.data ?? []).map((patient) => ({ id: patient.id, name: patient.name, phone: patient.phone }))} className="border-t border-slate-200" /></details>
+    <details className="admin-section"><summary className="cursor-pointer px-4 py-3 font-semibold text-slate-800">安排一筆回訪</summary><FollowupComposer action={createScheduledFollowupAction} className="border-t border-slate-200" /></details>
     <form className="admin-toolbar"><label className="text-sm"><span className="label">狀態</span><select name="status" defaultValue={selectedStatus} className="input"><option value="">全部</option>{Object.entries(STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><button className="btn btn-secondary" type="submit">套用</button>{selectedStatus && <Link href="/admin/followups" className="btn btn-ghost">清除</Link>}</form>
-    <section className="admin-table-shell"><table className="tbl"><thead><tr><th>日期／顧客</th><th>方式</th><th>內容</th><th>狀態</th><th>操作</th></tr></thead><tbody>{rows.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-400">目前沒有回訪事項</td></tr> : rows.map((row) => { const patient = one(row.patients); return <tr key={row.id}><td><div className="font-medium">{dateTime(row.scheduled_for)}</div><Link href={`/admin/patients/${row.patient_id}`} className="text-xs text-brand-700 hover:underline">{patient?.name ?? "顧客"} · {patient?.phone ?? ""}</Link></td><td>{CHANNEL[row.channel] ?? row.channel}<div className="text-xs text-slate-400">{row.purpose === "marketing" ? "行銷" : "服務關懷"}</div></td><td className="max-w-md"><div className="font-medium">{row.subject || "回訪提醒"}</div><p className="line-clamp-2 text-xs text-slate-500">{row.body}</p>{row.last_error && <p className="mt-1 text-xs text-red-700">{row.last_error}</p>}</td><td><span className={`badge ${row.status === "failed" ? "bg-red-50 text-red-700" : row.status === "sent" || row.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{STATUS[row.status] ?? row.status}</span>{row.attempt_count > 0 && <div className="mt-1 text-xs text-slate-400">嘗試 {row.attempt_count} 次</div>}</td><td><div className="flex flex-wrap gap-1">{["pending", "failed"].includes(row.status) && ["phone", "manual"].includes(row.channel) && <StateForm id={row.id} status="completed" label="完成" />}{row.status === "failed" && <StateForm id={row.id} status="pending" label="重試" />}{["pending", "failed"].includes(row.status) && <StateForm id={row.id} status="cancelled" label="取消" danger />}</div></td></tr>; })}</tbody></table></section>
+    <section className="admin-table-shell"><table className="tbl"><thead><tr><th>日期／顧客</th><th>方式</th><th>內容</th><th>狀態</th><th>操作</th></tr></thead><tbody>{rows.length === 0 ? <tr><td colSpan={5} className="py-10 text-center text-slate-400">目前沒有回訪事項</td></tr> : rows.map((row) => { const patient = one(row.patients); return <tr key={row.id}><td><div className="font-medium">{dateTime(row.scheduled_for)}</div><Link href={`/admin/patients/${row.patient_id}`} className="text-xs text-brand-700 hover:underline">{patient?.name ?? "顧客"} · {patient?.phone ?? ""}</Link></td><td>{CHANNEL[row.channel] ?? row.channel}<div className="text-xs text-slate-400">{row.purpose === "marketing" ? "行銷" : "服務關懷"}</div></td><td className="max-w-md"><div className="font-medium">{row.subject || "回訪提醒"}</div><p className="line-clamp-2 text-xs text-slate-500">{row.body}</p>{row.last_error && <p className="mt-1 text-xs text-red-700">{deliveryError(row.last_error)}</p>}</td><td><span className={`badge ${row.status === "failed" ? "bg-red-50 text-red-700" : row.status === "sent" || row.status === "completed" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{STATUS[row.status] ?? row.status}</span>{row.attempt_count > 0 && <div className="mt-1 text-xs text-slate-400">嘗試 {row.attempt_count} 次</div>}</td><td><div className="flex flex-wrap gap-1">{["pending", "failed"].includes(row.status) && ["phone", "manual"].includes(row.channel) && <StateForm id={row.id} status="completed" label="完成" />}{row.status === "failed" && <StateForm id={row.id} status="pending" label="重試" />}{["pending", "failed"].includes(row.status) && <StateForm id={row.id} status="cancelled" label="取消" danger />}</div></td></tr>; })}</tbody></table></section>
   </div>;
 }
 

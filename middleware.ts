@@ -1,3 +1,4 @@
+import { ACCESS_UNAVAILABLE, readVerifiedUser } from "@/lib/auth-boundary";
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
@@ -30,9 +31,12 @@ export async function middleware(req: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user;
+  try {
+    user = await readVerifiedUser(supabase);
+  } catch {
+    return new NextResponse(ACCESS_UNAVAILABLE, { status: 503, headers: { "Retry-After": "5", "Cache-Control": "no-store" } });
+  }
 
   const path = req.nextUrl.pathname;
   const isLogin = path.startsWith("/admin/login");
@@ -43,8 +47,9 @@ export async function middleware(req: NextRequest) {
   }
   if (isLogin && user) {
     const hasAccessReason = req.nextUrl.searchParams.has("reason");
+    const hasBrandTarget = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.nextUrl.searchParams.get("brand") ?? "");
     const inviteAccepted = req.nextUrl.searchParams.get("invite") === "accepted";
-    if (!hasAccessReason && !inviteAccepted) {
+    if (!hasAccessReason && !inviteAccepted && !hasBrandTarget) {
       // 先交給 /admin 的 server guard 判定品牌或系統工作區，避免只憑 session 猜測權限。
       const url = req.nextUrl.clone();
       url.pathname = "/admin";
@@ -52,7 +57,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(url);
     }
   }
-  // 帶有權限原因或邀請完成狀態時仍顯示獨立登入頁，由頁面安全登出舊 session。
+  // 權限拒絕頁保留既有 session；只有邀請完成頁會登出以重新登入。
   return res;
 }
 

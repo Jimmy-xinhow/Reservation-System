@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { canOperate, getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { CalendarWorkspace } from "./CalendarWorkspace";
 import AppointmentEditor from "../appointments/AppointmentEditor";
@@ -16,8 +18,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const assigned = member.role === "provider" ? await getAssignedDoctorIds(member) : [];
   let query = supabase.from("doctors").select("id, name").eq("clinic_id", member.clinicId).eq("active", true).order("name");
   if (member.role === "provider") query = query.in("id", assigned.length ? assigned : ["00000000-0000-0000-0000-000000000000"]);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
+  const { data, error } = await adminQuery(query);
+  if (error) throw new Error(adminErrorMessage(error));
 
   const modal = params.modal === "new" || params.modal === "reschedule" ? params.modal : null;
   return <>

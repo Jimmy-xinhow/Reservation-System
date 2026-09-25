@@ -1,3 +1,4 @@
+import { rpcFailure } from "@/lib/rpc-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, ok } from "@/lib/http";
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
       p_token: body.token,
       p_user_id: member.user.id,
     });
-    if (error) return fail(error.message, 409);
+    if (error) return rpcFailure(error, "checkin");
     const row = Array.isArray(data) ? data[0] : data;
     return ok(row ?? null);
   } catch (error) {

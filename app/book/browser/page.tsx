@@ -1,10 +1,15 @@
 "use client";
 
+import { customerSubmissionFetch } from "@/lib/customer-submission";
 import Link from "next/link";
+import { CustomerApiError } from "@/lib/customer-api-error";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import { trackFunnelEvent } from "@/lib/funnel-client";
-import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
+import { bookingEntryDate } from "@/lib/liff-entry-state";
+import { bookingDoctorSelection } from "@/lib/booking-selection";
+import { bookingLiffHandoffUrl } from "@/lib/customer-entry";
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemoveMatching } from "@/lib/browser-storage";
 import { Shell as CustomerAppShell } from "../BookingFlowUi";
 
 interface BookingField { key: string; label: string; type: "text" | "textarea" | "date" | "select" | "checkbox" | "consent"; required: boolean; options: string[]; }
@@ -25,9 +30,9 @@ interface Result { appointment_id: string; queue_number: number | null; deposit_
 interface WaitlistResult { waitlist_id: string; position: number }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(scopeUrl(url), init);
+  const response = await customerSubmissionFetch(scopeUrl(url), init);
   const body = (await response.json().catch(() => null)) as { ok?: boolean; data?: T; error?: string } | null;
-  if (!body?.ok) throw new Error(body?.error ?? "伺服器回應異常");
+  if (!response.ok || !body?.ok) throw new CustomerApiError(body?.error ?? "伺服器回應異常", response.status);
   return body.data as T;
 }
 
@@ -102,7 +107,12 @@ export default function BrowserBookingPage() {
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
+  const [availabilityRetry, setAvailabilityRetry] = useState(0);
   const availabilityRequestRef = useRef(0);
+  const submitLock = useRef(false);
+  const paymentLock = useRef(false);
   const maxDate = useMemo(() => todayStr(config?.max_advance_days ?? 30), [config?.max_advance_days]);
 
   useEffect(() => {
@@ -112,15 +122,13 @@ export default function BrowserBookingPage() {
       const source = new URLSearchParams(window.location.search);
       const requestedDoctor = source.get("doctor_id")?.trim() ?? "";
       const requestedService = source.get("service_id")?.trim() ?? "";
-      setDoctorId(
-        value.doctors.some((doctor) => doctor.id === requestedDoctor)
-          ? requestedDoctor
-          : value.doctors.length === 1
-            ? value.doctors[0].id
-            : "",
-      );
-      setServiceId(value.services.some((service) => service.id === requestedService) ? requestedService : value.services[0]?.id ?? "");
-    }).catch((loadError) => setError(loadError instanceof Error ? loadError.message : "載入失敗"));
+      const requestedDate = bookingEntryDate(source, todayStr(), todayStr(value.max_advance_days));
+      if (requestedDate) setDate(requestedDate);
+      if (source.get("visit_type") === "first" || source.get("visit_type") === "return") setVisitType(source.get("visit_type") as "first" | "return");
+      const entryService = value.services.find((service) => service.id === requestedService) ?? value.services[0];
+      setDoctorId(bookingDoctorSelection(entryService?.booking_target ?? "provider_required", requestedDoctor, value.doctors));
+      setServiceId(entryService?.id ?? "");
+    }).catch((loadError) => setError(loadError instanceof TypeError ? "連線失敗，請確認網路後重試" : loadError instanceof Error ? loadError.message : "載入失敗"));
   }, []);
 
   useEffect(() => {
@@ -141,9 +149,9 @@ export default function BrowserBookingPage() {
   const providerRequired = !selectedService || selectedService.booking_target === "provider_required";
 
   useEffect(() => {
-    if (!config) return;
-    if (selectedService && !providerRequired) setDoctorId("");
-    else if (selectedService && providerRequired && !doctorId && config.doctors.length === 1) setDoctorId(config.doctors[0].id);
+    if (!config || !selectedService) return;
+    const nextDoctor = bookingDoctorSelection(selectedService.booking_target, doctorId, config.doctors);
+    if (nextDoctor !== doctorId) setDoctorId(nextDoctor);
   }, [config, selectedService, providerRequired, doctorId]);
 
   useEffect(() => {
@@ -154,8 +162,10 @@ export default function BrowserBookingPage() {
 
   useEffect(() => {
     const requestId = ++availabilityRequestRef.current;
-    if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
     setSlots([]); setSessions([]); setWaitlistSlots([]); setWaitlistSessions([]); setPickedStart(""); setPickedTemplate(""); setJoiningWaitlist(false);
+    setAvailabilityError(null);
+    if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) { setAvailabilityLoading(false); return; }
+    setAvailabilityLoading(true);
     setError(null);
     const params = new URLSearchParams({ date, visit_type: visitType, service_id: serviceId });
     if (doctorId) params.set("doctor_id", doctorId);
@@ -167,19 +177,24 @@ export default function BrowserBookingPage() {
       })
       .catch((loadError) => {
         if (requestId !== availabilityRequestRef.current) return;
-        setError(loadError instanceof Error ? loadError.message : "查詢時段失敗");
+        setAvailabilityError(loadError instanceof TypeError ? "連線失敗，請確認網路後重試" : loadError instanceof Error ? loadError.message : "查詢時段失敗，請重新查詢");
+      })
+      .finally(() => {
+        if (requestId === availabilityRequestRef.current) setAvailabilityLoading(false);
       });
-  }, [config, doctorId, date, visitType, serviceId, providerRequired, selectedAddonIds]);
+  }, [config, doctorId, date, visitType, serviceId, providerRequired, selectedAddonIds, availabilityRetry]);
 
   async function submit() {
-    if (!config || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId) || !date || (!pickedStart && !pickedTemplate) || !name.trim() || !phone.trim() || !birthday || !bookingFieldsReady(selectedService?.booking_fields ?? [], bookingAnswers)) {
-      setError("請填寫姓名、電話、出生年月日，並選擇預約時段與必填資料");
+    if (submitLock.current || availabilityLoading || availabilityError) return;
+    if (!config || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId) || !date || (!pickedStart && !pickedTemplate) || (!token && (!name.trim() || !phone.trim() || !birthday)) || !bookingFieldsReady(selectedService?.booking_fields ?? [], bookingAnswers)) {
+      setError(token ? "請選擇預約時段並填寫必填資料" : "請填寫姓名、電話、出生年月日，並選擇預約時段與必填資料");
       return;
     }
     if (joiningWaitlist && membershipCode.trim()) {
       setError("候補不會預先保留或扣除套票堂數，請先清空套票序號");
       return;
     }
+    submitLock.current = true;
     setLoading(true); setError(null);
     trackFunnelEvent("booking_start", { booking_mode: config.booking_mode });
     try {
@@ -193,8 +208,19 @@ export default function BrowserBookingPage() {
       else setResult(await api<Result>("/api/booking/reserve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }));
       trackFunnelEvent("booking_success", { booking_mode: config.booking_mode, series_count: recurrenceCount });
     } catch (submitError) {
+      submitLock.current = false;
+      if (submitError instanceof CustomerApiError && (submitError.status === 401 || submitError.status === 403) && token) changeCustomer();
       setError(submitError instanceof Error ? submitError.message : "預約失敗");
-    } finally { setLoading(false); }
+      setLoading(false);
+    }
+  }
+
+  function changeCustomer() {
+    if (submitLock.current) return;
+    if (token) safeLocalStorageRemoveMatching([browserTokenKey(), customerTokenKey(), "membership_browser_token"], token);
+    setToken(null);
+    setName(""); setPhone(""); setBirthday(""); setEmail(""); setMembershipCode("");
+    setError(null);
   }
 
   function updateIdentity(setter: (value: string) => void, value: string) {
@@ -204,7 +230,8 @@ export default function BrowserBookingPage() {
   }
 
   async function payDeposit() {
-    if (!result?.appointment_id || !token) return;
+    if (!result?.appointment_id || !token || result.deposit_status !== "pending" || paymentLock.current) return;
+    paymentLock.current = true;
     setPaying(true);
     setPaymentError(null);
     try {
@@ -227,22 +254,24 @@ export default function BrowserBookingPage() {
       document.body.appendChild(form);
       form.submit();
     } catch (error) {
+      paymentLock.current = false;
       setPaymentError(error instanceof Error ? error.message : "付款頁開啟失敗");
       setPaying(false);
     }
   }
 
-  if (result) return <Shell><div className="card space-y-5 p-6 text-center"><div className="text-4xl text-emerald-600">✓</div><h1 className="text-xl font-bold text-slate-900">{result.deposit_status === "pending" ? "預約已建立，待付款" : result.series_count > 1 ? `已建立 ${result.series_count} 週預約` : "預約成功"}</h1><p className="text-sm text-slate-600">{result.start_at ? `${formatDateSession(result.start_at)} ${formatTime(result.start_at)}` : "已完成預約"}</p>{result.queue_number !== null && <p className="text-3xl font-bold text-brand-700">{result.queue_number} 號</p>}{result.addons_amount > 0 && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">本次加購金額 NT${result.addons_amount}</p>}{result.deposit_status === "pending" && <div className="space-y-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800"><p>需繳訂金 NT${result.deposit_amount}；完成付款後才確認名額。</p><button type="button" onClick={() => void payDeposit()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（NT$${result.deposit_amount}）`}</button>{paymentError && <p className="rounded-lg bg-red-50 p-2 text-left text-xs text-red-700">{paymentError}</p>}</div>}<p className="text-xs text-slate-400">請保留此瀏覽器頁面，之後可使用同一裝置查看預約。</p><Link href={scopePageUrl("/book/browser/my")} className="btn btn-primary w-full">查看我的預約</Link><Link href={scopeUrl("/")} className="btn btn-secondary w-full">返回品牌首頁</Link></div></Shell>;
-  if (waitlistResult) return <Shell><div className="card space-y-4 p-6 text-center"><div className="text-4xl text-amber-600">✓</div><h1 className="text-xl font-bold text-slate-900">候補登記完成</h1><p className="text-sm text-slate-600">目前順位：第 {waitlistResult.position} 位；名額釋出後會以 Email 通知。</p><Link href={scopePageUrl("/book/browser/my")} className="btn btn-primary w-full">查看我的候補</Link></div></Shell>;
+  if (result) return <Shell><div className="card space-y-5 p-6 text-center"><div className="text-4xl text-emerald-600">✓</div><h1 className="text-xl font-bold text-slate-900">{result.deposit_status === "pending" ? "預約已建立，待付款" : result.series_count > 1 ? `已建立 ${result.series_count} 週預約` : "預約成功"}</h1><p className="text-sm text-slate-600">{result.start_at ? `${formatDateSession(result.start_at)} ${formatTime(result.start_at)}` : "已完成預約"}</p>{result.queue_number !== null && <p className="text-3xl font-bold text-brand-700">{result.queue_number} 號</p>}{result.addons_amount > 0 && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">本次加購金額 NT${result.addons_amount}</p>}{result.deposit_status === "pending" && <div className="space-y-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-800"><p>需繳訂金 NT${result.deposit_amount}；完成付款後才確認名額。</p><button type="button" onClick={() => void payDeposit()} disabled={paying} className="btn btn-primary w-full">{paying ? "正在前往付款…" : `前往付款（NT$${result.deposit_amount}）`}</button>{paymentError && <p className="rounded-lg bg-red-50 p-2 text-left text-xs text-red-700">{paymentError}</p>}</div>}<p className="text-xs text-slate-400">請保留此瀏覽器頁面，之後可使用同一裝置查看預約。</p><Link href={scopePageUrl("/book/browser/my")} className="btn btn-primary w-full">查看我的預約</Link><Link href={scopePageUrl("/")} className="btn btn-secondary w-full">返回品牌首頁</Link></div></Shell>;
+  if (waitlistResult) return <Shell><div className="card space-y-4 p-6 text-center"><div className="text-4xl text-amber-600">✓</div><h1 className="text-xl font-bold text-slate-900">候補登記完成</h1><p className="text-sm text-slate-600">目前順位：第 {waitlistResult.position} 位。請至「我的候補」查看狀態；名額保留後須在期限內接受。</p><Link href={scopePageUrl("/book/browser/my")} className="btn btn-primary w-full">查看我的候補</Link></div></Shell>;
   if (!config) return <Shell><p className="card p-8 text-center text-sm text-slate-500">{error ?? "載入中…"}</p></Shell>;
+  const lineHandoff = bookingLiffHandoffUrl(new URLSearchParams(typeof window === "undefined" ? "" : window.location.search), { serviceId, doctorId, date, visitType });
   return (
     <Shell>
-      <div className="mb-4 flex items-center justify-between gap-3"><div><div className="eyebrow">一般瀏覽器入口</div><h1 className="text-2xl font-bold text-slate-900">瀏覽器預約</h1><p className="mt-1 text-sm text-slate-500">不使用 LINE 也可完成預約。</p></div><Link href={scopeUrl("/book")} className="text-sm text-brand-700">改用 LINE</Link></div>
-      <div className="card space-y-5 p-5">
-        {token && <p className="rounded-xl bg-brand-50 p-3 text-sm text-brand-800">目前沿用此裝置的預約身分；若修改姓名、電話或出生年月日，送出時會重新驗證新的身分。</p>}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm"><span className="label">姓名</span><input className="input" value={name} onChange={(event) => updateIdentity(setName, event.target.value)} autoComplete="name" /></label><label className="text-sm"><span className="label">電話</span><input className="input" value={phone} onChange={(event) => updateIdentity(setPhone, event.target.value)} inputMode="tel" autoComplete="tel" /></label></div>
+      <div className="mb-4 flex items-center justify-between gap-3"><div><div className="eyebrow">一般瀏覽器入口</div><h1 className="text-2xl font-bold text-slate-900">瀏覽器預約</h1><p className="mt-1 text-sm text-slate-500">不使用 LINE 也可完成預約。</p></div><Link href={lineHandoff} className="text-sm text-brand-700">改用 LINE</Link></div>
+      <fieldset disabled={loading} className="card space-y-5 p-5">
+        {token && <div className="space-y-2 rounded-xl bg-brand-50 p-3 text-sm text-brand-800"><p>沿用目前顧客，選擇新時段即可再次預約。</p><button type="button" className="btn btn-secondary px-3 py-1.5 text-xs" onClick={changeCustomer}>更換顧客</button></div>}
+        {!token && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="text-sm"><span className="label">姓名</span><input className="input" value={name} onChange={(event) => updateIdentity(setName, event.target.value)} autoComplete="name" /></label><label className="text-sm"><span className="label">電話</span><input className="input" value={phone} onChange={(event) => updateIdentity(setPhone, event.target.value)} inputMode="tel" autoComplete="tel" /></label></div>}
         <label className="block text-sm"><span className="label">Email（選填，用於提醒）</span><input type="email" className="input" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="name@example.com" /></label>
-        <label className="block text-sm"><span className="label">出生年月日 *（用來辨識同一位顧客）</span><input type="date" className="input" value={birthday} onChange={(event) => updateIdentity(setBirthday, event.target.value)} required /></label>
+        {!token && <label className="block text-sm"><span className="label">出生年月日 *（用來辨識同一位顧客）</span><input type="date" className="input" value={birthday} onChange={(event) => updateIdentity(setBirthday, event.target.value)} required /></label>}
         <label className="block text-sm"><span className="label">套票序號（選填）</span><input className="input uppercase" value={membershipCode} onChange={(event) => setMembershipCode(event.target.value.toUpperCase())} autoComplete="off" /></label>
         <div><span className="label">預約類型</span><div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => setVisitType("return")} className={`rounded-xl border p-3 text-sm ${visitType === "return" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>再次服務</button><button type="button" onClick={() => setVisitType("first")} className={`rounded-xl border p-3 text-sm ${visitType === "first" ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>首次服務</button></div></div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -253,10 +282,10 @@ export default function BrowserBookingPage() {
         <BookingFields fields={selectedService?.booking_fields ?? []} answers={bookingAnswers} onChange={(key, value) => setBookingAnswers((current) => ({ ...current, [key]: value }))} />
         <ServiceAddons addons={selectedService?.service_addons ?? []} selectedIds={selectedAddonIds} onChange={setSelectedAddonIds} />
         <label className="block text-sm"><span className="label">日期</span><input type="date" className="input" min={todayStr()} max={maxDate} value={date} onChange={(event) => setDate(event.target.value)} /></label>
-        {date && (!providerRequired || !!doctorId) && <div className="space-y-2"><div className="label">可預約時段</div>{config.booking_mode === "time" ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slots.map((slot) => <button type="button" key={slot.slot_start} onClick={() => { setPickedStart(slot.slot_start); setJoiningWaitlist(false); }} className={`rounded-xl border p-3 text-sm ${!joiningWaitlist && pickedStart === slot.slot_start ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatTime(slot.slot_start)}<span className="mt-1 block text-xs text-slate-400">剩 {slot.remaining}</span></button>)}</div> : <div className="grid grid-cols-1 gap-2">{sessions.map((session) => <button type="button" key={session.template_id} onClick={() => { setPickedTemplate(session.template_id); setJoiningWaitlist(false); }} className={`rounded-xl border p-3 text-left text-sm ${!joiningWaitlist && pickedTemplate === session.template_id ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs text-slate-400">剩 {session.remaining}</span></button>)}</div>}{config.booking_mode === "time" && waitlistSlots.length > 0 && <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{waitlistSlots.map((slot) => <button type="button" key={slot.slot_start} onClick={() => { setPickedStart(slot.slot_start); setJoiningWaitlist(true); }} className={`min-h-11 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 ${joiningWaitlist && pickedStart === slot.slot_start ? "ring-2 ring-amber-400" : ""}`}>{formatTime(slot.slot_start)}<span className="block text-xs">加入候補</span></button>)}</div>}{config.booking_mode === "number" && waitlistSessions.length > 0 && <div className="mt-4 space-y-2">{waitlistSessions.map((session) => <button type="button" key={session.template_id} onClick={() => { setPickedTemplate(session.template_id); setJoiningWaitlist(true); }} className={`min-h-11 w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800 ${joiningWaitlist && pickedTemplate === session.template_id ? "ring-2 ring-amber-400" : ""}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs">加入候補</span></button>)}</div>}{(config.booking_mode === "time" ? slots.length + waitlistSlots.length === 0 : sessions.length + waitlistSessions.length === 0) && <p className="text-sm text-slate-400">目前沒有可預約或候補時段。</p>}</div>}
+        {date && (!providerRequired || !!doctorId) && <div className="space-y-2"><div className="label">可預約時段</div>{availabilityLoading && <p role="status" className="text-sm text-slate-500">正在查詢可預約時段…</p>}{availabilityError && <div role="alert" className="space-y-2 text-sm text-red-700"><p>{availabilityError}</p><button type="button" className="btn btn-secondary" onClick={() => setAvailabilityRetry((value) => value + 1)}>重新查詢時段</button></div>}{config.booking_mode === "time" ? <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{slots.map((slot) => <button type="button" key={slot.slot_start} onClick={() => { setPickedStart(slot.slot_start); setJoiningWaitlist(false); }} className={`rounded-xl border p-3 text-sm ${!joiningWaitlist && pickedStart === slot.slot_start ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatTime(slot.slot_start)}<span className="mt-1 block text-xs text-slate-400">剩 {slot.remaining}</span></button>)}</div> : <div className="grid grid-cols-1 gap-2">{sessions.map((session) => <button type="button" key={session.template_id} onClick={() => { setPickedTemplate(session.template_id); setJoiningWaitlist(false); }} className={`rounded-xl border p-3 text-left text-sm ${!joiningWaitlist && pickedTemplate === session.template_id ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs text-slate-400">剩 {session.remaining}</span></button>)}</div>}{config.booking_mode === "time" && waitlistSlots.length > 0 && <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{waitlistSlots.map((slot) => <button type="button" key={slot.slot_start} onClick={() => { setPickedStart(slot.slot_start); setJoiningWaitlist(true); }} className={`min-h-11 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 ${joiningWaitlist && pickedStart === slot.slot_start ? "ring-2 ring-amber-400" : ""}`}>{formatTime(slot.slot_start)}<span className="block text-xs">加入候補</span></button>)}</div>}{config.booking_mode === "number" && waitlistSessions.length > 0 && <div className="mt-4 space-y-2">{waitlistSessions.map((session) => <button type="button" key={session.template_id} onClick={() => { setPickedTemplate(session.template_id); setJoiningWaitlist(true); }} className={`min-h-11 w-full rounded-xl border border-amber-200 bg-amber-50 p-3 text-left text-sm text-amber-800 ${joiningWaitlist && pickedTemplate === session.template_id ? "ring-2 ring-amber-400" : ""}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs">加入候補</span></button>)}</div>}{!availabilityLoading && !availabilityError && (config.booking_mode === "time" ? slots.length + waitlistSlots.length === 0 : sessions.length + waitlistSessions.length === 0) && <p className="text-sm text-slate-400">目前沒有可預約或候補時段。</p>}</div>}
         {(pickedStart || pickedTemplate) && config.recurring_booking_enabled && selectedService && !joiningWaitlist && <label className="block rounded-xl border border-brand-100 bg-brand-50 p-3 text-sm"><span className="label">每週重複預約</span><select className="input" value={recurrenceCount} disabled={config.deposit_enabled} onChange={(event) => setRecurrenceCount(Number(event.target.value))}>{Array.from({ length: config.max_recurring_occurrences }, (_, index) => index + 1).map((count) => <option key={count} value={count}>{count === 1 ? "只預約本次" : `連續 ${count} 週`}</option>)}</select><span className="mt-2 block text-xs text-slate-500">{config.deposit_enabled ? "啟用訂金時，請逐筆完成預約與付款。" : "系統會先確認每一週都有名額，再一次建立全部預約。"}</span></label>}
-        {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button type="button" className="btn btn-primary w-full" disabled={loading} onClick={() => void submit()}>{loading ? "送出中…" : joiningWaitlist ? "確認加入候補" : recurrenceCount > 1 ? `確認建立 ${recurrenceCount} 週預約` : "確認預約"}</button>
-      </div>
+        {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}<button type="button" className="btn btn-primary w-full" disabled={loading || availabilityLoading || !!availabilityError} onClick={() => void submit()}>{loading ? "送出中…" : joiningWaitlist ? "確認加入候補" : recurrenceCount > 1 ? `確認建立 ${recurrenceCount} 週預約` : "確認預約"}</button>
+      </fieldset>
     </Shell>
   );
 }

@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { parsePublicPatientInput } from "@/lib/public-patient-input";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
 import { verifyClinicLiffIdToken } from "@/lib/line-channel";
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     const rate = await checkRateLimit(req, "booking:patient", 10);
     if (!rate.allowed) {
-      const response = fail("請稍後再試", 429);
+      const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
       return response;
     }
@@ -31,13 +32,10 @@ export async function POST(req: NextRequest) {
     } | null;
     if (!body) return fail("請求格式錯誤");
 
-    const name = body.name?.trim();
-    const phone = body.phone?.trim();
-    const birthday = body.birthday?.trim();
-    if (!name) return fail("請填寫姓名");
-    if (!phone) return fail("請填寫電話");
-    if (!birthday || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return fail("請填寫出生年月日");
-    if (!body.idToken) return fail("缺少 LINE 身分驗證");
+    const input = parsePublicPatientInput(body);
+    if (!input.ok) return fail(input.error);
+    const { name, phone, birthday } = input;
+    if (typeof body.idToken !== "string" || !body.idToken.trim()) return fail("缺少 LINE 身分驗證");
 
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);

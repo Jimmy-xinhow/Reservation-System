@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatDateSession, formatTime } from "@/lib/slots";
 import { liffEntryParams } from "@/lib/liff-entry-state";
 import { bookingApi as api } from "./client-api";
 
 export interface MyAppt {
   id: string;
+  patient_id: string;
   start_at: string;
   end_at: string | null;
   queue_number: number | null;
@@ -64,8 +65,13 @@ export default function MyAppointments({
   const [err, setErr] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
 
+  const actionLock = useRef(false);
+  const loadRequest = useRef(0);
+  const [notice, setNotice] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     if (!idToken) return;
+    const request = ++loadRequest.current;
     setErr(null);
     try {
       const data = await api<{
@@ -77,11 +83,12 @@ export default function MyAppointments({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
       });
+      if (request !== loadRequest.current) return;
       setList(data.appointments);
       setWaitlists(data.waitlists ?? []);
       setProgress(data.progress ?? []);
     } catch (error) {
-      setErr(error instanceof Error ? error.message : "查詢失敗");
+      if (request === loadRequest.current) setErr(error instanceof Error ? error.message : "查詢失敗");
     }
   }, [idToken]);
 
@@ -90,7 +97,10 @@ export default function MyAppointments({
   }, [load]);
 
   async function cancel(id: string) {
-    if (!idToken) return;
+    if (!idToken || actionLock.current) return;
+    actionLock.current = true;
+    loadRequest.current += 1;
+    setNotice(null);
     setCancelling(id);
     setErr(null);
     try {
@@ -99,16 +109,22 @@ export default function MyAppointments({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken, appointment_id: id }),
       });
+      setList((current) => current?.filter((item) => item.id !== id) ?? null);
+      setNotice("預約已取消。");
       await load();
     } catch (error) {
       setErr(error instanceof Error ? error.message : "取消失敗");
     } finally {
+      actionLock.current = false;
       setCancelling(null);
     }
   }
 
   async function waitlistAction(id: string, action: "accept" | "cancel", patientId: string) {
-    if (!idToken) return;
+    if (!idToken || actionLock.current) return;
+    actionLock.current = true;
+    loadRequest.current += 1;
+    setNotice(null);
     setCancelling(id);
     setErr(null);
     try {
@@ -117,16 +133,22 @@ export default function MyAppointments({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken, patient_id: patientId, waitlist_id: id, action }),
       });
+      setWaitlists((current) => current.filter((item) => item.id !== id));
+      setNotice(action === "accept" ? "已接受候補名額，請查看預約及訂金狀態。" : "候補已取消。");
       await load();
     } catch (error) {
       setErr(error instanceof Error ? error.message : "候補操作失敗");
     } finally {
+      actionLock.current = false;
       setCancelling(null);
     }
   }
 
   async function payAppointment(appointmentId: string) {
-    if (!idToken) return;
+    if (!idToken || actionLock.current) return;
+    actionLock.current = true;
+    loadRequest.current += 1;
+    setNotice(null);
     setCancelling(appointmentId);
     setErr(null);
     try {
@@ -154,11 +176,13 @@ export default function MyAppointments({
       form.submit();
     } catch (error) {
       setErr(error instanceof Error ? error.message : "付款頁開啟失敗");
+      actionLock.current = false;
       setCancelling(null);
     }
   }
 
   function openReschedule(id: string) {
+    if (actionLock.current) return;
     const source = liffEntryParams(window.location.search);
     const params = new URLSearchParams({ appointment_id: id });
     const clinicSlug = source.get("clinic_slug")?.trim();
@@ -168,16 +192,17 @@ export default function MyAppointments({
     window.location.assign(`/book/reschedule?${params.toString()}`);
   }
 
-  if (err) return <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{err}</p>;
-  if (list === null) return <p className="px-1 text-sm text-slate-400">載入中…</p>;
+  if (list === null && !err) return <p className="px-1 text-sm text-slate-400">載入中…</p>;
 
   return (
     <div className="space-y-4">
+      {notice && <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+      {err && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{err}；請重新整理確認最新狀態。</p>}
       <div className="flex items-center justify-between px-1">
         <div><p className="text-sm font-medium text-slate-700">{progress.length > 0 ? "今日服務進度" : title}</p>{description && progress.length === 0 && <p className="mt-1 text-xs text-slate-500">{description}</p>}</div>
         <button
           type="button"
-          onClick={() => void load()}
+          disabled={cancelling !== null} onClick={() => void load()}
           className="flex items-center gap-1 text-sm text-brand-600 hover:underline"
         >
           <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
@@ -238,11 +263,11 @@ export default function MyAppointments({
                 )}
                 <div className="flex gap-2">
                   {offered && (
-                    <button type="button" disabled={cancelling === item.id} onClick={() => void waitlistAction(item.id, "accept", item.patient_id)} className="btn btn-primary min-h-11 flex-1">
+                    <button type="button" disabled={cancelling !== null} onClick={() => void waitlistAction(item.id, "accept", item.patient_id)} className="btn btn-primary min-h-11 flex-1">
                       {cancelling === item.id ? "處理中…" : "接受名額"}
                     </button>
                   )}
-                  <button type="button" disabled={cancelling === item.id} onClick={() => void waitlistAction(item.id, "cancel", item.patient_id)} className="btn btn-secondary min-h-11 flex-1">
+                  <button type="button" disabled={cancelling !== null} onClick={() => void waitlistAction(item.id, "cancel", item.patient_id)} className="btn btn-secondary min-h-11 flex-1">
                     取消候補
                   </button>
                 </div>
@@ -252,11 +277,11 @@ export default function MyAppointments({
         </section>
       )}
 
-      {list.length === 0 ? (
+      {list === null ? null : list.length === 0 ? (
         <div className="card p-6 text-center text-sm text-slate-400">目前沒有未來的預約。</div>
       ) : (
         <div className="space-y-3">
-          {list.map((appointment) => (
+          {(list ?? []).map((appointment) => (
             <div key={appointment.id} className="card flex flex-col items-stretch justify-between gap-3 p-4 sm:flex-row sm:items-center">
               <div>
                 <div className="font-medium text-slate-900">
@@ -271,19 +296,19 @@ export default function MyAppointments({
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 {appointment.deposit_status === "pending" && (
-                  <button type="button" disabled={cancelling === appointment.id} onClick={() => void payAppointment(appointment.id)} className="btn btn-primary px-3 py-1.5 text-xs">
+                  <button type="button" disabled={cancelling !== null} onClick={() => void payAppointment(appointment.id)} className="btn btn-primary px-3 py-1.5 text-xs">
                     {cancelling === appointment.id ? "處理中…" : `付訂金 $${appointment.deposit_amount}`}
                   </button>
                 )}
                 {appointment.service_id && (
-                  <button type="button" onClick={() => onRebook(appointment)} className="btn btn-secondary px-3 py-1.5 text-xs">
+                  <button type="button" disabled={cancelling !== null} onClick={() => onRebook(appointment)} className="btn btn-secondary px-3 py-1.5 text-xs">
                     再次預約
                   </button>
                 )}
                 <button type="button" onClick={() => openReschedule(appointment.id)} className="btn btn-secondary px-3 py-1.5 text-xs">
                   改期
                 </button>
-                <button type="button" disabled={cancelling === appointment.id} onClick={() => void cancel(appointment.id)} className="btn btn-danger px-3 py-1.5 text-xs">
+                <button type="button" disabled={cancelling !== null} onClick={() => void cancel(appointment.id)} className="btn btn-danger px-3 py-1.5 text-xs">
                   {cancelling === appointment.id ? "取消中…" : "取消"}
                 </button>
               </div>

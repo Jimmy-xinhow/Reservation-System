@@ -29,13 +29,14 @@ const cronRoutes = [
   "/api/cron/richmenu",
   "/api/cron/followups",
   "/api/cron/subscription-freezes",
+  "/api/cron/health",
 ];
 
-async function fetchWithTimeout(path) {
+async function fetchWithTimeout(path, method = "GET") {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    return await fetch(`${baseUrl}${path}`, { redirect: "manual", signal: controller.signal });
+    return await fetch(`${baseUrl}${path}`, { method, redirect: "manual", signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -61,7 +62,7 @@ for (const path of publicRoutes) {
 
 for (const path of cronRoutes) {
   try {
-    const response = await fetchWithTimeout(path);
+    const response = await fetchWithTimeout(path, path === "/api/cron/health" ? "POST" : "GET");
     if (response.status !== 401) {
       failed = true;
       console.error(`[FAIL] ${path} expected HTTP 401, got ${response.status}`);

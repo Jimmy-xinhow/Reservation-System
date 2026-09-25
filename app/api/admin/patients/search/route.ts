@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     .or(orParts.join(","))
     .order("name")
     .limit(10);
-  if (error) return fail(error.message, 500);
+  if (error) return fail("讀取顧客失敗，請重新整理後再試", 500);
 
   const hits: Hit[] = data ?? [];
 
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
       .not("birthday", "is", null)
       .order("name")
       .limit(1000);
-    if (bErr) return fail(bErr.message, 500);
+    if (bErr) return fail("讀取顧客失敗，請重新整理後再試", 500);
 
     const seen = new Set(hits.map((h) => h.id));
     for (const p of (withBday ?? []) as Hit[]) {

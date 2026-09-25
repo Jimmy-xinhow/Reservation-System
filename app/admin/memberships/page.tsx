@@ -1,3 +1,6 @@
+
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { applyMembershipRedemptionSnapshot } from "@/lib/membership-redemption";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { canViewSensitiveCustomerData, requireMember } from "@/lib/admin";
@@ -12,6 +15,7 @@ import {
   toggleMembershipPlanAction,
 } from "./actions";
 import { MembershipPlanDesigner } from "./MembershipPlanDesigner";
+import { MembershipPatientPicker } from "./MembershipPatientPicker";
 import { MembershipManagementTabs } from "@/components/admin/ManagementTabs";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +37,6 @@ interface PlanRow {
   active: boolean;
 }
 interface ServiceRow { id: string; name: string; }
-interface PatientRow { id: string; name: string; phone: string; }
 interface CodeRow {
   id: string;
   code: string;
@@ -71,27 +74,13 @@ export default async function MembershipsPage() {
   if (!(await isAdminModuleEnabled(supabase, clinicId, "memberships"))) return <ModuleDisabled title="會員與套票" />;
   if (!canViewSensitiveCustomerData(role)) return <p className="admin-section p-6 text-sm text-slate-500">目前角色無法查看顧客套票與聯絡資料。</p>;
 
-  const [
-    { data: plans, error: plansError },
-    { data: services, error: servicesError },
-    { data: patients, error: patientsError },
-    { data: codes, error: codesError },
-    { data: memberships, error: membershipsError },
-  ] = await Promise.all([
-    supabase.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id, card_image_url, card_theme, card_accent, redeem_channels, redemption_note, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
-    supabase.from("services").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
-    supabase.from("patients").select("id, name, phone").eq("clinic_id", clinicId).eq("active", true).order("name").limit(500),
-    supabase.from("discount_codes").select("id, code, benefit_type, kind, value, min_amount, used_count, max_uses, recipient_name, recipient_phone, starts_at, ends_at, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
-    supabase.from("patient_memberships").select("id, membership_code, status, credits_total, credits_remaining, expires_at, patients(name, phone), membership_plans(name, redeem_channels)").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(200),
+  const [planRows, serviceRows, codeRows, memberships] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id, card_image_url, card_theme, card_accent, redeem_channels, redemption_note, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }).order("id").range(from, to)) as Promise<PlanRow[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("services").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name").order("id").range(from, to)) as Promise<ServiceRow[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("discount_codes").select("id, code, benefit_type, kind, value, min_amount, used_count, max_uses, recipient_name, recipient_phone, starts_at, ends_at, active").eq("clinic_id", clinicId).order("created_at", { ascending: false }).order("id").range(from, to)) as Promise<CodeRow[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("patient_memberships").select("id, membership_code, status, credits_total, credits_remaining, expires_at, redemption_snapshot, patients(name, phone), membership_plans(name, redeem_channels)").eq("clinic_id", clinicId).order("created_at", { ascending: false }).order("id").range(from, to)),
   ]);
-  const error = plansError ?? servicesError ?? patientsError ?? codesError ?? membershipsError;
-  if (error) throw new Error(error.message);
-
-  const planRows = (plans ?? []) as PlanRow[];
-  const serviceRows = (services ?? []) as ServiceRow[];
-  const patientRows = (patients ?? []) as PatientRow[];
-  const codeRows = (codes ?? []) as CodeRow[];
-  const membershipRows = (memberships ?? []) as unknown as MembershipRow[];
+  const membershipRows = memberships.map(applyMembershipRedemptionSnapshot) as unknown as MembershipRow[];
   const canEdit = role === "owner" || role === "admin";
   const activePlanCount = planRows.filter((plan) => plan.active).length;
   const activeCodeCount = codeRows.filter((code) => code.active).length;
@@ -125,7 +114,7 @@ export default async function MembershipsPage() {
           <section className="admin-section self-start">
             <div className="admin-section-header"><div><h2 className="font-semibold text-slate-900">發放套票</h2><p className="mt-0.5 text-xs text-slate-500">選擇顧客與方案後，系統會產生專屬套票序號。</p></div></div>
             <form action={grantPatientMembershipAction} className="grid gap-3 p-4">
-              <label className="text-sm"><span className="label">顧客</span><select name="patient_id" required className="input" defaultValue=""><option value="" disabled>請選擇顧客</option>{patientRows.map((patient) => <option key={patient.id} value={patient.id}>{patient.name} · {patient.phone}</option>)}</select></label>
+              <MembershipPatientPicker />
               <label className="text-sm"><span className="label">套票方案</span><select name="plan_id" required className="input" defaultValue=""><option value="" disabled>請選擇方案</option>{planRows.filter((plan) => plan.active).map((plan) => <option key={plan.id} value={plan.id}>{plan.name} · {plan.credits_total} 堂</option>)}</select></label>
               <label className="text-sm"><span className="label">發放備註（選填）</span><input name="note" className="input" /></label>
               <SubmitButton className="btn btn-primary">確認發放套票</SubmitButton>

@@ -1,0 +1,11 @@
+{
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "node --check scripts/run-allowlisted-cron.mjs"
+  },
+  "deploy": {
+    "startCommand": "node scripts/run-allowlisted-cron.mjs --jobs=marketing",
+    "cronSchedule": "30 * * * *",
+    "restartPolicyType": "NEVER"
+  }
+}

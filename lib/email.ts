@@ -2,6 +2,7 @@
 // Resend 免費方案每月約 3,000 封。
 
 import "server-only";
+import { providerFetch, providerOperation } from "@/lib/provider-boundary";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase";
@@ -56,10 +57,10 @@ export async function emailConfigForClinic(
   clinicId: string,
   service: SupabaseClient = createServiceClient(),
 ): Promise<EmailConfig | null> {
-  const { data, error } = await service.rpc("get_clinic_email_configuration", {
+  const { data, error } = await providerOperation(() => service.rpc("get_clinic_email_configuration", {
     p_clinic_id: clinicId,
-  });
-  if (error) throw new Error(`Email 憑證讀取失敗: ${error.message}`);
+  }), "品牌憑證讀取失敗");
+  if (error) throw new Error(`Email 憑證讀取失敗`);
   const row = (Array.isArray(data) ? data[0] : null) as
     | { api_key?: unknown; from_address?: unknown }
     | null;
@@ -75,12 +76,12 @@ export async function getEmailCredentialStatus(
   service: SupabaseClient,
   clinicId: string,
 ): Promise<EmailCredentialStatus> {
-  const { data, error } = await service
+  const { data, error } = await providerOperation(() => service
     .from("clinic_email_secret_refs")
     .select("api_key_secret_id, from_address")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(`Email 設定狀態讀取失敗: ${error.message}`);
+    .maybeSingle(), "品牌設定狀態讀取失敗");
+  if (error) throw new Error(`Email 設定狀態讀取失敗`);
   if (data?.api_key_secret_id && typeof data.from_address === "string") {
     return { configured: true, source: "vault", from: data.from_address };
   }
@@ -96,7 +97,7 @@ export async function sendEmail(
   html: string,
 ): Promise<void> {
   if (!cfg.apiKey || !cfg.from) throw new Error("Email 未設定");
-  const res = await fetch("https://api.resend.com/emails", {
+  const res = await providerFetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${cfg.apiKey}`,
@@ -105,7 +106,6 @@ export async function sendEmail(
     body: JSON.stringify({ from: cfg.from, to, subject, html }),
   });
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Email 寄送失敗 (${res.status}): ${detail}`);
+    throw new Error(`Email 寄送失敗 (${res.status})`);
   }
 }

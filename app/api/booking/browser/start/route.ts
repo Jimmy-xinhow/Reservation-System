@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { parsePublicPatientInput } from "@/lib/public-patient-input";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings, ok } from "@/lib/http";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -11,17 +12,15 @@ export const dynamic = "force-dynamic";
 export async function POST(req: NextRequest) {
   const rate = await checkRateLimit(req, "booking:browser-start", 8);
   if (!rate.allowed) {
-    const response = fail("請稍後再試", 429);
+    const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
     return response;
   }
   try {
     const body = (await req.json().catch(() => null)) as { name?: string; phone?: string; birthday?: string } | null;
-    const name = body?.name?.trim() ?? "";
-    const phone = body?.phone?.trim() ?? "";
-    const birthday = body?.birthday?.trim() ?? "";
-    if (!name || !phone || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) return fail("請填寫姓名、電話與出生年月日");
-    if (name.length > 100 || phone.length > 40) return fail("資料長度不正確");
+    const input = parsePublicPatientInput(body);
+    if (!input.ok) return fail(input.error);
+    const { name, phone, birthday } = input;
 
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);

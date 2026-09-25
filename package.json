@@ -9,7 +9,12 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "npm run verify:contracts && node --test scripts/test-prod-ingress-hotfix.mjs",
+    "test": "npm run verify:contracts && npm run test:customer-entry && npm run test:chat-history && npm run test:staff-credentials && npm run test:storage && npm run test:prod-ingress",
+    "test:chat-history": "node --test scripts/test-chat-history-window.mjs",
+    "test:prod-ingress": "node --test scripts/test-prod-ingress-hotfix.mjs",
+    "test:staff-credentials": "node --test scripts/test-brand-staff-credentials.mjs scripts/test-platform-auth-pagination.mjs",
+    "test:storage": "node --test scripts/test-storage-buckets.mjs scripts/test-service-record-photo-consent.mjs",
+    "test:customer-entry": "node --test scripts/test-customer-entry.mjs scripts/test-booking-availability.mjs scripts/test-customer-submission.mjs scripts/test-payment-gateway.mjs scripts/test-payment-receipt-hotfix.mjs scripts/test-rate-limit-prod-hotfix.mjs scripts/test-admin-login-session.mjs scripts/test-api-error-privacy.mjs scripts/test-delivery-error-privacy.mjs scripts/test-admin-crm-ssr.mjs scripts/test-admin-handoff-ssr.mjs scripts/test-admin-platform-overview-ssr.mjs scripts/test-admin-today-ssr.mjs scripts/test-admin-service-record-sources.mjs scripts/test-admin-checkout-sources.mjs scripts/test-admin-merge-targets.mjs scripts/test-admin-service-records-ssr.mjs scripts/test-cron-error-privacy.mjs scripts/test-import-error-privacy.mjs scripts/test-admin-import-ssr.mjs scripts/test-admin-richmenu-ssr.mjs scripts/test-reports.mjs scripts/test-admin-calendar-pagination.mjs scripts/test-cron-runner.mjs scripts/test-cron-monitor.mjs scripts/test-scoped-reminders.mjs scripts/test-scoped-registration-cron.mjs scripts/test-cron-health.mjs scripts/test-cron-health-ingest.mjs scripts/test-notification-uncertainty.mjs scripts/test-delivery-health.mjs scripts/test-operational-uncertainty.mjs scripts/test-admin-log-privacy.mjs scripts/test-auth-boundary.mjs scripts/test-provider-boundary.mjs scripts/test-admin-query-boundary.mjs scripts/test-shared-query-chat.mjs scripts/test-admin-chat-module-boundary.mjs scripts/test-admin-residual-boundary.mjs scripts/test-rpc-client-errors.mjs scripts/test-line-webhook-privacy.mjs scripts/test-line-webhook-ingress.mjs scripts/test-public-error-exits.mjs scripts/test-line-account-link-errors.mjs scripts/test-learning-output.mjs scripts/test-event-booking-output.mjs scripts/test-final-api-boundaries.mjs scripts/test-payment-create-boundary.mjs scripts/test-customer-chat-certainty.mjs scripts/test-public-ssr-state.mjs scripts/test-staff-read-boundary.mjs scripts/test-admin-ssr-projection.mjs scripts/test-admin-shell-accounts.mjs scripts/test-admin-patient-detail-ssr.mjs scripts/test-admin-operations-ssr.mjs scripts/test-legacy-queue-boundary.mjs scripts/test-platform-operations-health.mjs scripts/test-platform-audit-ssr.mjs scripts/test-admin-exceptions-ssr.mjs scripts/test-admin-audit-supply-ssr.mjs scripts/test-purchase-order-tenant-boundary.mjs scripts/test-admin-checkout-ssr.mjs scripts/test-admin-finance-ssr.mjs scripts/test-admin-dashboard-finance-ssr.mjs scripts/test-admin-stock-pages-ssr.mjs scripts/test-admin-commissions-ssr.mjs scripts/test-admin-resources-ssr.mjs scripts/test-admin-membership-levels-ssr.mjs scripts/test-admin-services-ssr.mjs scripts/test-admin-memberships-ssr.mjs scripts/test-admin-events-registrations-ssr.mjs scripts/test-admin-course-content-ssr.mjs scripts/test-admin-customer-workflows-ssr.mjs scripts/test-admin-fitness-ssr.mjs scripts/test-admin-channels-ssr.mjs",
     "test:contracts": "node scripts/verify-contracts.mjs",
     "verify:contracts": "node scripts/verify-contracts.mjs",
     "smoke:public": "node scripts/smoke-public.mjs",
@@ -19,7 +24,7 @@
     "audit:staging-notifications": "node scripts/staging-notification-audit.mjs",
     "audit:staging-browser-identity": "node scripts/staging-browser-identity-audit.mjs",
     "audit:staging-core": "node scripts/staging-core-acceptance.mjs",
-    "audit:staging-role-ui": "playwright test tests/staging-role-ui.spec.mjs --reporter=line",
+    "audit:staging-role-ui": "playwright test tests/staging-role-ui.spec.mjs --reporter=line --retries=0",
     "audit:staging-growth": "node scripts/staging-growth-features-audit.mjs",
     "fixture:staging-roles": "node scripts/staging-role-fixture.mjs",
     "reminders": "node scripts/trigger-reminders.mjs"
@@ -28,7 +33,7 @@
     "node": ">=22"
   },
   "overrides": {
-    "js-yaml": "4.3.1",
+    "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
     "postcss": "8.5.25",
     "sharp": "$sharp"
@@ -46,12 +51,12 @@
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.112.4",
     "luxon": "^3.7.2",
-    "next": "^15.5.22",
+    "next": "^15.5.24",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-is": "^19.1.0",
     "recharts": "^3.10.1",
-    "sharp": "0.35.0"
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
@@ -60,7 +65,7 @@
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^15.5.19",
+    "eslint-config-next": "^15.5.24",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.5.4"
   }

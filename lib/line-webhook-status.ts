@@ -1,3 +1,4 @@
+import { deliveryError } from "@/lib/delivery-error";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
@@ -64,7 +65,7 @@ export async function handleStatusPostback(
     return;
   }
   await notifyAppointmentStatus(svc, appt.id as string, action === "cancel" ? "cancelled" : "confirmed")
-    .catch((notificationError: unknown) => console.error("LINE appointment notification failed", notificationError));
+    .catch((notificationError: unknown) => console.error("LINE appointment notification failed", { category: deliveryError(notificationError) }));
   await recordCrmInteraction(svc, {
     clinicId,
     patientId: appt.patient_id as string,
@@ -73,7 +74,7 @@ export async function handleStatusPostback(
     title: action === "confirm" ? "確認預約" : "取消預約",
     body: action === "confirm" ? "顧客透過 LINE 確認預約" : "顧客透過 LINE 取消預約",
     appointmentId: appt.id as string,
-  }).catch((interactionError: unknown) => console.error("CRM LINE interaction failed", interactionError));
+  }).catch((interactionError: unknown) => console.error("CRM LINE interaction failed", { category: deliveryError(interactionError) }));
   await safeReply(
     replyToken,
     action === "confirm" ? "已收到您的確認，期待為您服務。" : "已為您取消此預約。",

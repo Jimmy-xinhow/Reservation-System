@@ -106,12 +106,14 @@ export interface BrandPageContent {
 }
 
 export interface BrandPageService {
+  href?: string;
   id: string;
   name: string;
   description: string | null;
 }
 
 export interface BrandPageEvent {
+  href?: string;
   id: string;
   slug: string;
   title: string;

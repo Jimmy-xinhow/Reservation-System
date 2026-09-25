@@ -1,7 +1,8 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { hasBrandPermission, requireAdmin, requireOperator } from "@/lib/admin";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { createServiceClient } from "@/lib/supabase";
@@ -26,12 +27,12 @@ export async function setPatientBlockAction(fd: FormData) {
     until.setMonth(until.getMonth() + 1);
     blockedUntil = until.toISOString();
   }
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("patients")
     .update({ blocked_until: blockedUntil })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/patients");
 }
 
@@ -45,12 +46,15 @@ export async function updatePatientBasicAction(fd: FormData) {
   if (!id) throw new Error("缺少顧客");
   if (!name) throw new Error("請填姓名");
   if (!phone) throw new Error("請填電話");
-  const { error } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("patients")
     .update({ name, phone })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId)
+    .select("id")
+    .maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
+  if (!data) throw new Error("找不到目前品牌的顧客");
   revalidatePath(`/admin/patients/${id}`);
   revalidatePath("/admin/patients");
 }
@@ -62,29 +66,29 @@ export async function deletePatientAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   if (!id) throw new Error("缺少顧客");
-  const [{ count: appointmentCount }, { count: recordCount }, { count: interactionCount }, { count: membershipCount }, { count: segmentCount }, { count: discountCount }] = await Promise.all([
+  const [{ count: appointmentCount }, { count: recordCount }, { count: interactionCount }, { count: membershipCount }, { count: segmentCount }, { count: discountCount }] = await adminQuery(Promise.all([
     supabase.from("appointments").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
     supabase.from("patient_records").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
     supabase.from("crm_interactions").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
     supabase.from("patient_memberships").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
     supabase.from("crm_segment_members").select("patient_id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
     supabase.from("discount_redemptions").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("patient_id", id),
-  ]);
+  ]));
   const hasHistory = [appointmentCount, recordCount, interactionCount, membershipCount, segmentCount, discountCount].some((count) => (count ?? 0) > 0);
 
   if (hasHistory) {
-    const { error } = await supabase
+    const { error } = await adminQuery(supabase
       .from("patients")
       .update({ active: false })
       .eq("id", id)
-      .eq("clinic_id", clinicId);
-    if (error) throw new Error(error.message);
+      .eq("clinic_id", clinicId));
+    if (error) throw new Error(adminErrorMessage(error));
   } else {
-    const { error } = await supabase
+    const { error } = await adminQuery(supabase
       .from("patients")
       .delete()
       .eq("id", id)
-      .eq("clinic_id", clinicId);
+      .eq("clinic_id", clinicId));
   if (error) throw new Error("刪除失敗:此顧客可能已有關聯資料。");
   }
   revalidatePath("/admin/patients");
@@ -94,7 +98,7 @@ export async function updatePatientAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
   const id = str(fd, "id");
   if (!id) throw new Error("缺少顧客");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("patients")
     .update({
       tags: str(fd, "tags") || null,
@@ -104,8 +108,8 @@ export async function updatePatientAction(fd: FormData) {
       marketing_opt_in: bool(fd, "marketing_opt_in"),
     })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath(`/admin/patients/${id}`);
   revalidatePath("/admin/patients");
 }
@@ -149,15 +153,15 @@ export async function updatePatientDetailsAction(fd: FormData): Promise<void> {
   if (hasBrandPermission(member, "brand.manage")) {
     const levelId = str(fd, "membership_level_id") || null;
     if (levelId) {
-      const { data: level, error: levelError } = await createServiceClient().from("membership_levels").select("id").eq("id", levelId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle();
-      if (levelError) throw new Error(levelError.message);
+      const { data: level, error: levelError } = await adminQuery(createServiceClient().from("membership_levels").select("id").eq("id", levelId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle());
+      if (levelError) throw new Error(adminErrorMessage(levelError));
       if (!level) throw new Error("會員等級不屬於目前品牌或已停用");
     }
     changes.membership_level_id = levelId;
   }
 
-  const { data, error } = await member.supabase.from("patients").update(changes).eq("id", id).eq("clinic_id", member.clinicId).select("id").maybeSingle();
-  if (error) throw new Error(error.message);
+  const { data, error } = await adminQuery(member.supabase.from("patients").update(changes).eq("id", id).eq("clinic_id", member.clinicId).select("id").maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
   if (!data) throw new Error("找不到目前品牌的顧客");
   revalidatePath("/admin/patients");
   revalidatePath(`/admin/patients/${id}`);
@@ -170,13 +174,13 @@ export async function addPatientRecordAction(fd: FormData) {
   const content = str(fd, "content");
   if (!patientId) throw new Error("缺少顧客");
   if (!content) throw new Error("請填寫病況內容");
-  const { error } = await supabase.from("patient_records").insert({
+  const { error } = await adminQuery(supabase.from("patient_records").insert({
     clinic_id: clinicId,
     patient_id: patientId,
     content,
-  });
-  if (error) throw new Error(error.message);
-  await recordCrmInteraction(supabase, {
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
+  await adminQuery(recordCrmInteraction(supabase, {
     clinicId,
     patientId,
     kind: "note",
@@ -184,7 +188,7 @@ export async function addPatientRecordAction(fd: FormData) {
     title: "新增顧客備註",
     body: content,
     createdBy: user.id,
-  });
+  }));
   revalidatePath(`/admin/patients/${patientId}`);
 }
 export async function deletePatientRecordAction(fd: FormData) {
@@ -192,27 +196,27 @@ export async function deletePatientRecordAction(fd: FormData) {
   const id = str(fd, "id");
   const patientId = str(fd, "patient_id");
   if (!id) throw new Error("缺少紀錄");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("patient_records")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath(`/admin/patients/${patientId}`);
 }
 
-export async function mergePatientAction(fd: FormData): Promise<void> {
+export async function mergePatientAction(fd: FormData): Promise<string> {
   const member = await requireAdmin();
   const sourcePatientId = str(fd, "source_patient_id");
   const targetPatientId = str(fd, "target_patient_id");
   if (str(fd, "confirmed") !== "yes") throw new Error("請先確認要將重複顧客合併到保留資料");
   if (!sourcePatientId || !targetPatientId || sourcePatientId === targetPatientId) throw new Error("請選擇不同的保留顧客");
-  const { data, error } = await createServiceClient().rpc("merge_customers", { p_clinic_id: member.clinicId, p_actor_user_id: member.user.id, p_source_patient_id: sourcePatientId, p_target_patient_id: targetPatientId });
+  const { data, error } = await adminQuery(createServiceClient().rpc("merge_customers", { p_clinic_id: member.clinicId, p_actor_user_id: member.user.id, p_source_patient_id: sourcePatientId, p_target_patient_id: targetPatientId }));
   if (error) {
     if (error.message.includes("different LINE")) throw new Error("兩筆資料綁定不同 LINE 帳號，為避免誤合併已停止操作");
-    throw new Error(error.message);
+    throw new Error(adminErrorMessage(error));
   }
   if (typeof data !== "string") throw new Error("顧客合併失敗");
   revalidatePath("/admin/patients");
-  redirect(`/admin/patients/${encodeURIComponent(data)}`);
+  return data;
 }

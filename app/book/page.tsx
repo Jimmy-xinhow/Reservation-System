@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { closeLiffWindow, createLiffHomeShortcut, useLiff } from "@/lib/useLiff";
+import { createLiffHomeShortcut, useLiff } from "@/lib/useLiff";
 import { formatTime, formatDateSession } from "@/lib/slots";
 import ChatTab from "./ChatTab";
 import { CustomerEntryNav, CustomerHomeView, CustomerLiffView, type CustomerView } from "./CustomerEntry";
@@ -10,12 +10,14 @@ import { trackFunnelEvent } from "@/lib/funnel-client";
 import MyAppointments, { type MyAppt } from "./MyAppointments";
 import { bookingApi as api } from "./client-api";
 import { getBookingFlowState } from "./booking-flow-state";
-import { liffEntryParams } from "@/lib/liff-entry-state";
+import { bookingEntryDate, liffEntryParams } from "@/lib/liff-entry-state";
 import { customerEntryUrl } from "@/lib/customer-entry";
+import { bookingDoctorSelection, bookingPatientSelection } from "@/lib/booking-selection";
 import {
   CalendarButtons,
   Centered,
   Shell,
+  ReturnToLineButton,
   bookingFieldsReady,
   browserFallbackUrl,
 } from "./BookingFlowUi";
@@ -87,6 +89,13 @@ export default function BookPage() {
   const [view, setView] = useState<CustomerView>("home");
   const [taskMode, setTaskMode] = useState(false);
   const trackedViews = useRef(new Set<string>());
+  const rebookRequested = useRef(false);
+  const submitLock = useRef(false);
+  const paymentLock = useRef(false);
+  const rebookPatient = useRef<string | null>(null);
+  const boundRequest = useRef(0);
+  const [rebookNotice, setRebookNotice] = useState<string | null>(null);
+  const [rebookServiceUnavailable, setRebookServiceUnavailable] = useState(false);
 
   // 所有 Rich Menu 都進同一個 LIFF，再由 view 分流；保留舊 tab 參數相容。
   useEffect(() => {
@@ -131,34 +140,46 @@ export default function BookPage() {
 
   // LINE 原生流程已先選好服務／日期時，LIFF 只承接剩餘必要步驟。
   useEffect(() => {
-    if (!config || typeof window === "undefined") return;
+    if (!config || typeof window === "undefined" || rebookRequested.current) return;
     const params = liffEntryParams(window.location.search);
     const requestedService = params.get("service_id")?.trim() ?? "";
     const requestedDoctor = params.get("doctor_id")?.trim() ?? "";
-    const requestedDate = params.get("date")?.trim() ?? "";
+    const requestedDate = bookingEntryDate(params, todayStr(), todayStr(config.max_advance_days));
     if (requestedService && config.services.some((service) => service.id === requestedService)) setServiceId(requestedService);
     if (requestedDoctor && config.doctors.some((doctor) => doctor.id === requestedDoctor)) setDoctorId(requestedDoctor);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(requestedDate) && requestedDate >= todayStr() && requestedDate <= todayStr(config.max_advance_days)) setDate(requestedDate);
+    if (requestedDate) setDate(requestedDate);
+    if (params.get("visit_type") === "first" || params.get("visit_type") === "return") setVisitType(params.get("visit_type") as "first" | "return");
   }, [config]);
 
   // 取得此 LINE 身分已綁定的顧客
-  const loadBound = useCallback(async () => {
+  const loadBound = useCallback(async (signal?: AbortSignal) => {
     if (!idToken) return;
+    const request = ++boundRequest.current;
     try {
       const data = await api<{ patients: BoundPatient[] }>("/api/booking/patients-of-line", {
+        signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ idToken }),
       });
+      if (signal?.aborted || request !== boundRequest.current) return;
+      const requested = rebookPatient.current;
+      rebookPatient.current = null;
       setBound(data.patients);
-      setSelectedPatientId(data.patients[0]?.id ?? "__new__");
+      setSelectedPatientId((current) => bookingPatientSelection(data.patients, current, requested));
+      if (requested !== null && !data.patients.some((patient) => patient.id === requested)) {
+        setRebookNotice("原預約顧客目前無法使用，請重新選擇預約對象及服務。");
+      }
     } catch (e) {
-      setLoadErr(e instanceof Error ? e.message : "讀取綁定失敗");
+      if (!signal?.aborted && request === boundRequest.current) setLoadErr(e instanceof Error ? e.message : "讀取綁定失敗");
     }
   }, [idToken]);
 
   useEffect(() => {
-    if (ready && idToken && view === "booking") loadBound();
+    if (!ready || !idToken || view !== "booking") return;
+    const controller = new AbortController();
+    void loadBound(controller.signal);
+    return () => controller.abort();
   }, [ready, idToken, view, loadBound]);
 
   useEffect(() => {
@@ -178,23 +199,30 @@ export default function BookPage() {
   const selectedService = config?.services.find((service) => service.id === serviceId) ?? null;
   const providerRequired = !selectedService || selectedService.booking_target === "provider_required";
 
-  // 需要指定人員的服務自動帶入唯一人員；資源型服務不強迫選人員。
-  const singleDoctor = config?.doctors.length === 1 ? config.doctors[0] : null;
   useEffect(() => {
-    if (!selectedService) return;
-    if (providerRequired) {
-      if (singleDoctor && doctorId !== singleDoctor.id) setDoctorId(singleDoctor.id);
-    } else if (doctorId) {
-      setDoctorId("");
-    }
+    if (selectedService) setRebookServiceUnavailable(false);
+    if (!config || !serviceId || selectedService) return;
+    setRebookServiceUnavailable(true);
+    setServiceId("");
+    setDoctorId("");
+    setRebookNotice("原服務目前未開放預約，請重新選擇服務。");
+  }, [config, serviceId, selectedService]);
+
+  // 需要指定人員的服務自動帶入唯一人員；資源型服務不強迫選人員。
+  useEffect(() => {
+    if (!selectedService || !config) return;
+    const nextDoctor = bookingDoctorSelection(selectedService.booking_target, doctorId, config.doctors);
+    if (nextDoctor !== doctorId) setDoctorId(nextDoctor);
+  }, [selectedService, config, doctorId]);
+
+  useEffect(() => {
     setBookingAnswers({});
     setSelectedAddonIds([]);
     setRecurrenceCount(1);
-  }, [selectedService, providerRequired, singleDoctor, doctorId]);
+  }, [serviceId]);
 
-  const loadAvailability = useCallback(async () => {
-    if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
-    setAvailLoading(true);
+  const loadAvailability = useCallback(async (signal: AbortSignal) => {
+    setAvailLoading(false);
     setAvailMsg(null);
     setSlots([]);
     setSessions([]);
@@ -203,32 +231,40 @@ export default function BookPage() {
     setPickedStart(null);
     setPickedTemplate(null);
     setJoiningWaitlist(false);
+    if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
+    setAvailLoading(true);
     try {
       if (config.booking_mode === "time") {
         const data = await api<{ slots: Slot[]; waitlist_slots?: Slot[] }>(
           `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, visit_type: visitType, ...(serviceId ? { service_id: serviceId } : {}), ...(selectedAddonIds.length ? { addon_ids: selectedAddonIds.join(",") } : {}) }).toString()}`,
+          { signal },
         );
+        if (signal.aborted) return;
         setSlots(data.slots);
         setWaitlistSlots(data.waitlist_slots ?? []);
         if (data.slots.length === 0) setAvailMsg((data.waitlist_slots ?? []).length > 0 ? "目前時段已額滿，可選擇候補。" : "這天沒有可預約的時段（未開放或已超過可預約時間）");
       } else {
         const data = await api<{ sessions: Session[]; waitlist_sessions?: Session[] }>(
           `/api/booking/availability?${new URLSearchParams({ ...(doctorId ? { doctor_id: doctorId } : {}), date, ...(serviceId ? { service_id: serviceId } : {}), ...(selectedAddonIds.length ? { addon_ids: selectedAddonIds.join(",") } : {}) }).toString()}`,
+          { signal },
         );
+        if (signal.aborted) return;
         setSessions(data.sessions);
         setWaitlistSessions(data.waitlist_sessions ?? []);
         if (data.sessions.length === 0) setAvailMsg((data.waitlist_sessions ?? []).length > 0 ? "目前場次已額滿，可選擇候補。" : "這天沒有可預約的場次（未開放或已超過可預約時間）");
       }
     } catch (e) {
-      setAvailMsg(e instanceof Error ? e.message : "查詢失敗");
+      if (!signal.aborted) setAvailMsg(e instanceof Error ? e.message : "查詢失敗");
     } finally {
-      setAvailLoading(false);
+      if (!signal.aborted) setAvailLoading(false);
     }
   }, [config, doctorId, date, visitType, serviceId, providerRequired, selectedAddonIds]);
 
   useEffect(() => {
-    if (date && (!providerRequired || doctorId)) loadAvailability();
-  }, [doctorId, date, loadAvailability, providerRequired]);
+    const controller = new AbortController();
+    void loadAvailability(controller.signal);
+    return () => controller.abort();
+  }, [loadAvailability]);
 
   const slotPicked = config?.booking_mode === "time" ? !!pickedStart : !!pickedTemplate;
   const addingNew = selectedPatientId === "__new__";
@@ -237,8 +273,8 @@ export default function BookPage() {
     !!selectedBound?.blocked_until && new Date(selectedBound.blocked_until) > new Date();
   const patientReady = addingNew
     ? !!name.trim() && !!phone.trim() && /^\d{4}-\d{2}-\d{2}$/.test(birthday)
-    : !!selectedPatientId && !selectedBlocked;
-  const serviceReady = config ? config.services.length === 0 || !!serviceId : false;
+    : !!selectedBound && !selectedBlocked;
+  const serviceReady = config ? !rebookServiceUnavailable && (config.services.length === 0 || !!selectedService) : false;
   const fieldsReady = bookingFieldsReady(selectedService?.booking_fields ?? [], bookingAnswers);
   const bookingFlow = getBookingFlowState({
     customerLookupComplete: bound !== null,
@@ -254,7 +290,8 @@ export default function BookPage() {
   });
 
   async function handleSubmit() {
-    if (!config || !idToken) return;
+    if (!config || !idToken || !bookingFlow.canSubmit || submitLock.current) return;
+    submitLock.current = true;
     trackFunnelEvent("booking_start", { booking_mode: config.booking_mode, waitlist: joiningWaitlist });
     setSubmitting(true);
     setSubmitErr(null);
@@ -307,14 +344,15 @@ export default function BookPage() {
       }
       loadBound(); // 若剛新增就診者,刷新綁定清單
     } catch (e) {
+      submitLock.current = false;
       setSubmitErr(e instanceof Error ? e.message : "預約失敗");
-    } finally {
       setSubmitting(false);
     }
   }
 
   async function payDeposit() {
-    if (!result?.appointment_id || !idToken) return;
+    if (!result?.appointment_id || !idToken || result.deposit_status !== "pending" || paymentLock.current) return;
+    paymentLock.current = true;
     setPaying(true);
     setPaymentError(null);
     try {
@@ -337,6 +375,7 @@ export default function BookPage() {
       document.body.appendChild(form);
       form.submit();
     } catch (error) {
+      paymentLock.current = false;
       setPaymentError(error instanceof Error ? error.message : "付款頁開啟失敗");
       setPaying(false);
     }
@@ -344,6 +383,10 @@ export default function BookPage() {
 
   // 再預約一筆:回到最初「為自己/為他人」選擇,並清空選擇
   function bookAnother() {
+    submitLock.current = false;
+    setSubmitting(false);
+    setRebookNotice(null);
+    setRebookServiceUnavailable(false);
     setResult(null);
     setWaitlistResult(null);
     setForWhom("");
@@ -388,6 +431,28 @@ export default function BookPage() {
   }
 
   function rebook(appointment: MyAppt) {
+    submitLock.current = false;
+    setSubmitting(false);
+    rebookRequested.current = true;
+    rebookPatient.current = appointment.patient_id;
+    setRebookNotice(null);
+    setRebookServiceUnavailable(false);
+    setBound(null);
+    setSelectedPatientId("");
+    setForWhom("self");
+    setName("");
+    setPhone("");
+    setBirthday("");
+    setEmail("");
+    setPickedStart(null);
+    setPickedTemplate(null);
+    setJoiningWaitlist(false);
+    setBookingAnswers({});
+    setSelectedAddonIds([]);
+    setRecurrenceCount(1);
+    setMembershipCode("");
+    setSubmitErr(null);
+    setPaymentError(null);
     setServiceId(appointment.service_id ?? "");
     setDoctorId(appointment.doctor_id ?? "");
     setVisitType("return");
@@ -403,6 +468,7 @@ export default function BookPage() {
   if (liffError) return <Centered tone="error"><span className="space-y-3"><span className="block">{liffError}</span><Link href={browserFallbackUrl(view)} className="btn btn-secondary inline-flex">改用瀏覽器入口</Link></span></Centered>;
 
   const shellBranding = {
+    inLine: isInClient,
     clinicName: entryConfig.clinic_name,
     logoUrl: entryConfig.brand_logo_url,
     primary: entryConfig.brand_primary_color,
@@ -447,9 +513,9 @@ export default function BookPage() {
             <p className="mt-1 text-sm text-white/85">目前順位：第 {waitlistResult.position} 位</p>
           </div>
           <div className="space-y-3 p-6 text-sm text-slate-600">
-            <p>名額釋出後，系統會依順位暫時保留名額並透過 LINE／Email 通知；請在通知期限內至「我的預約」接受。</p>
+            <p>名額釋出後，系統會依順位暫時保留名額。請至「我的候補」查看狀態，並在顯示的保留期限內接受。</p>
             <button type="button" onClick={() => changeView("appointments")} className="btn btn-primary w-full">查看我的候補</button>
-            {taskMode && isInClient && <button type="button" onClick={() => closeLiffWindow()} className="btn btn-secondary w-full">完成並回到 LINE</button>}
+            {taskMode && isInClient && <ReturnToLineButton className="btn btn-secondary w-full" />}
             <button type="button" onClick={bookAnother} className="btn btn-secondary w-full">登記其他時段</button>
           </div>
         </div>
@@ -517,7 +583,7 @@ export default function BookPage() {
               再預約一筆
             </button>
             {taskMode && isInClient && result.deposit_status !== "pending" && (
-              <button type="button" onClick={() => closeLiffWindow()} className="btn btn-primary w-full">完成並回到 LINE</button>
+              <ReturnToLineButton />
             )}
           </div>
         </div>
@@ -543,7 +609,8 @@ export default function BookPage() {
         />
       ) : (
       <>
-      <div className="space-y-4" data-booking-stage={bookingFlow.stage}>
+      {rebookNotice && <p role="status" className="card mb-4 p-4 text-sm">{rebookNotice}</p>}
+      <fieldset disabled={submitting} className="space-y-4" data-booking-stage={bookingFlow.stage}>
         <BookingCustomerStep
           config={config}
           bound={bound}
@@ -614,7 +681,7 @@ export default function BookPage() {
           <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{submitErr}</p>
         )}
         {bookingFlow.submitBlock === "waitlist_membership_conflict" && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">候補不會預先保留或扣除套票堂數；請先清空套票序號再加入候補。</p>}
-      </div>
+      </fieldset>
 
       {/* 固定底部送出列 */}
       <div className="sticky bottom-0 -mx-4 mt-4 border-t border-slate-200 bg-white/90 p-4 backdrop-blur">

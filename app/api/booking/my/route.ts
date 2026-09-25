@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const [{ data, error }, { data: waitlists, error: waitlistError }] = await Promise.all([
       svc
         .from("appointments")
-        .select("id, start_at, end_at, queue_number, status, doctor_id, service_id, visit_type, deposit_status, deposit_amount, doctors(name), services(name), patients(name)")
+        .select("id, patient_id, start_at, end_at, queue_number, status, doctor_id, service_id, visit_type, deposit_status, deposit_amount, doctors(name), services(name), patients(name)")
         .eq("clinic_id", clinicId)
         .in("patient_id", ids)
         .in("status", ["booked", "confirmed"])

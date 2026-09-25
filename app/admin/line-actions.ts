@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { deliveryError } from "@/lib/delivery-error";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createHash, randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin, requireBrandAdmin } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 import {
   pushMessages,
@@ -66,12 +68,20 @@ function intOr(fd: FormData, key: string, fallback: number): number {
 function redirectRichMenuFailure(userMessage: string, cause?: unknown): never {
   const errorId = randomUUID().slice(0, 8).toUpperCase();
   if (cause) {
-    console.error(`[richmenu:${errorId}]`, cause instanceof Error ? cause.message.slice(0, 500) : cause);
+    console.error(`[richmenu:${errorId}]`, { category: deliveryError(cause) });
   }
   redirect(`/admin/richmenu?err=${encodeURIComponent(userMessage)}&error_id=${errorId}`);
 }
 
 class RichMenuUserError extends Error {}
+
+async function requireEnabledLineAdmin() {
+  const member = await requireAdmin();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "line"))) {
+    throw new Error("此品牌未啟用 LINE 訊息");
+  }
+  return member;
+}
 
 // ── LINE 測試推播 ─────────────────────────────────────────
 export async function sendTestPushAction(fd: FormData) {
@@ -86,13 +96,13 @@ export async function sendTestPushAction(fd: FormData) {
       .select("line_destination")
       .eq("id", clinicId)
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
     const token = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
     await pushMessages(to, [{ type: "text", text: "【品牌】測試推播 ✅ 連線正常。" }], token);
   } catch (e) {
     failed = true;
     const errorId = randomUUID().slice(0, 8).toUpperCase();
-    console.error(`[line-test-push:${errorId}]`, e instanceof Error ? e.message.slice(0, 500) : e);
+    console.error(`[line-test-push:${errorId}]`, { category: deliveryError(e) });
   }
   // redirect() 放在 try/catch 外,避免吞掉其控制流
   redirect(failed ? "/admin/line?test=err" : "/admin/line?test=ok");
@@ -102,7 +112,7 @@ export async function sendTestPushAction(fd: FormData) {
 // ── LINE 自動回覆規則 ─────────────────────────────────────
 const REPLY_ACTIONS = ["text", "booking", "query", "progress", "message"] as const;
 export async function createReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
   if (!keywords) throw new Error("請填關鍵字");
@@ -116,12 +126,12 @@ export async function createReplyAction(fd: FormData) {
     sort: intOr(fd, "sort", 0),
     active: true,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/replies");
 }
 
 export async function updateReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const keywords = str(fd, "keywords");
   const action = str(fd, "action");
@@ -138,12 +148,12 @@ export async function updateReplyAction(fd: FormData) {
     })
     .eq("id", id)
     .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/replies");
 }
 
 export async function toggleReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
   const { error } = await supabase
@@ -151,24 +161,24 @@ export async function toggleReplyAction(fd: FormData) {
     .update({ active: !active })
     .eq("id", id)
     .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/replies");
 }
 
 export async function deleteReplyAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const id = str(fd, "id");
   const { error } = await supabase
     .from("line_auto_replies")
     .delete()
     .eq("id", id)
     .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/replies");
 }
 
 export async function updateLineTextsAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const { error } = await supabase
     .from("clinic_settings")
     .update({
@@ -183,7 +193,7 @@ export async function updateLineTextsAction(fd: FormData) {
       line_menu_link_url: str(fd, "line_menu_link_url") || null,
     })
     .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/replies");
 }
 
@@ -248,7 +258,7 @@ function lineFlexDesignFromForm(fd: FormData): LineFlexDesignConfig {
 }
 
 async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<never> {
-  const { clinicId } = await requireAdmin();
+  const { clinicId } = publish ? await requireEnabledLineAdmin() : await requireAdmin();
   const design = lineFlexDesignFromForm(fd);
   const service = createServiceClient();
   const { data: current, error: readError } = await service
@@ -256,7 +266,7 @@ async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<nev
     .select("line_flex_designs")
     .eq("clinic_id", clinicId)
     .maybeSingle();
-  if (readError) throw new Error(readError.message);
+  if (readError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(readError) + "）");
   const settings = parseLineFlexDesignSettings(current?.line_flex_designs);
   const previous = settings[design.templateKey] ?? {};
   const now = new Date().toISOString();
@@ -272,7 +282,7 @@ async function updateLineFlexDesign(fd: FormData, publish: boolean): Promise<nev
     .eq("clinic_id", clinicId)
     .select("clinic_id")
     .maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   if (!updated) throw new Error("找不到目前品牌的設定資料");
   revalidatePath("/admin/line-templates");
   revalidatePath("/admin/replies");
@@ -308,12 +318,12 @@ export async function saveMessageAction(fd: FormData) {
       .update({ name, kind, data })
       .eq("id", id)
       .eq("clinic_id", clinicId);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   } else {
     const { error } = await supabase
       .from("line_messages")
       .insert({ clinic_id: clinicId, name, kind, data });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   }
   revalidatePath("/admin/messages");
 }
@@ -326,7 +336,7 @@ export async function deleteMessageAction(fd: FormData) {
     .delete()
     .eq("id", id)
     .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/messages");
 }
 
@@ -364,7 +374,7 @@ async function buildAndPublishRichMenu(opts: {
     await setDefaultRichMenu(newId, opts.accessToken);
   } catch (e) {
     try { await deleteRichMenu(newId, opts.accessToken); }
-    catch (cleanupError) { console.error("Failed to remove incomplete Rich Menu", cleanupError); }
+    catch (cleanupError) { console.error("Failed to remove incomplete Rich Menu", { category: deliveryError(cleanupError) }); }
     throw e;
   }
   return newId;
@@ -396,7 +406,7 @@ async function richMenuAvailability(supabase: SupabaseClient, clinicId: string):
   const { data, error } = await supabase.from("clinic_settings")
     .select("public_booking_enabled, events_enabled, public_registration_enabled, memberships_enabled, line_channel_enabled, legacy_progress_enabled")
     .eq("clinic_id", clinicId).maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   if (!data) throw new Error("品牌設定不存在");
   return {
     booking: data.public_booking_enabled === true,
@@ -476,7 +486,7 @@ export async function saveRichMenuAction(fd: FormData) {
 }
 
 export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean; error?: string }> {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const service = createServiceClient();
   const versionId = str(fd, "version_id");
   let errMsg: string | null = null;
@@ -489,7 +499,7 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
       service.from("line_richmenu_versions").select("id, name, layout, chat_bar_text, slots, status").eq("id", versionId).eq("clinic_id", clinicId).maybeSingle(),
       service.from("line_richmenu").select("published_id").eq("clinic_id", clinicId).maybeSingle(),
     ]);
-    if (versionError || cfgError) throw new Error(versionError?.message ?? cfgError?.message);
+    if (versionError || cfgError) throw new Error("選單資料讀取失敗（" + deliveryError(versionError ?? cfgError) + "）");
     if (!version) throw new RichMenuUserError("找不到草稿版本");
     const layout = version.layout as Layout;
     const spec = LAYOUTS[layout];
@@ -521,17 +531,17 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
       .update({ status: "ready", validation_errors: [] })
       .eq("id", versionId)
       .eq("clinic_id", clinicId);
-    if (readyError) throw new Error(readyError.message);
+    if (readyError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(readyError) + "）");
     const { error: validationEventError } = await service
       .from("line_richmenu_publication_events")
       .insert({ clinic_id: clinicId, version_id: versionId, kind: "validated", actor_id: user.id });
-    if (validationEventError) throw new Error(validationEventError.message);
+    if (validationEventError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(validationEventError) + "）");
     const { error: publishingError } = await service
       .from("line_richmenu_versions")
       .update({ status: "publishing" })
       .eq("id", versionId)
       .eq("clinic_id", clinicId);
-    if (publishingError) throw new Error(publishingError.message);
+    if (publishingError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(publishingError) + "）");
     newId = await buildAndPublishRichMenu({
       versionId,
       versionName: String(version.name),
@@ -552,20 +562,20 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
       try {
         if (oldId) await setDefaultRichMenu(oldId, context.accessToken); else await clearDefaultRichMenu(context.accessToken);
       } catch (compensationError) {
-        console.error("Failed to restore previous Rich Menu default", compensationError);
+        console.error("Failed to restore previous Rich Menu default", { category: deliveryError(compensationError) });
       }
       try { await deleteRichMenu(newId, context.accessToken); }
-      catch (cleanupError) { console.error("Failed to remove unrecorded Rich Menu", cleanupError); }
+      catch (cleanupError) { console.error("Failed to remove unrecorded Rich Menu", { category: deliveryError(cleanupError) }); }
       newId = null;
-      throw new Error(recordError.message);
+      throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(recordError) + "）");
     }
   } catch (e) {
-    failureDetail = e instanceof Error ? e.message : "發布失敗";
+    failureDetail = deliveryError(e);
     if (e instanceof RichMenuUserError) {
       errMsg = e.message;
     } else {
       const errorId = randomUUID().slice(0, 8).toUpperCase();
-      console.error(`[richmenu-publish:${errorId}]`, failureDetail.slice(0, 500));
+      console.error(`[richmenu-publish:${errorId}]`, { category: deliveryError(e) });
       errMsg = `目前無法發布選單，請稍後再試。錯誤識別碼：${errorId}`;
     }
     if (versionId) {
@@ -576,10 +586,10 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
           p_version_id: versionId,
           p_error: failureDetail,
         });
-        if (failureRecordError) console.error("Failed to record Rich Menu publication failure", failureRecordError);
+        if (failureRecordError) console.error("Failed to record Rich Menu publication failure", { category: deliveryError(failureRecordError) });
       } catch (auditError) {
         // 保留原始發布錯誤；稽核寫入失敗會由 server log／後續驗收追查。
-        console.error("Failed to record Rich Menu publication failure", auditError);
+        console.error("Failed to record Rich Menu publication failure", { category: deliveryError(auditError) });
       }
     }
   }
@@ -589,7 +599,7 @@ export async function publishRichMenuAction(fd: FormData): Promise<{ ok: boolean
 }
 
 export async function unpublishRichMenuAction() {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const service = createServiceClient();
   const { data: cfg } = await service
     .from("line_richmenu")
@@ -602,13 +612,13 @@ export async function unpublishRichMenuAction() {
   const { error } = await service.rpc("record_line_richmenu_unpublished", { p_clinic_id: clinicId, p_actor_user_id: user.id });
   if (error) {
     if (id) await setDefaultRichMenu(id, context.accessToken);
-    throw new Error(error.message);
+    throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   }
   revalidatePath("/admin/richmenu");
 }
 
 export async function rollbackRichMenuVersionAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const versionId = str(fd, "version_id");
   const service = createServiceClient();
   const [{ data: target }, { data: current }] = await Promise.all([
@@ -626,7 +636,7 @@ export async function rollbackRichMenuVersionAction(fd: FormData) {
   });
   if (error) {
     if (currentLineId) await setDefaultRichMenu(currentLineId, context.accessToken); else await clearDefaultRichMenu(context.accessToken);
-    throw new Error(error.message);
+    throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   }
   revalidatePath("/admin/richmenu");
 }
@@ -648,7 +658,7 @@ export async function cloneRichMenuVersionAction(fd: FormData) {
 }
 
 export async function syncRichMenuAliasAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const aliasId = str(fd, "alias_id");
   const label = str(fd, "label");
   const versionId = str(fd, "version_id");
@@ -704,7 +714,7 @@ export async function syncRichMenuAliasAction(fd: FormData) {
       if (remoteBefore) await updateRichMenuAlias(aliasId, remoteBefore.richMenuId, context.accessToken);
       else await deleteRichMenuAlias(aliasId, context.accessToken);
     } catch (compensationError) {
-      console.error("Failed to restore Rich Menu Alias after database error", compensationError);
+      console.error("Failed to restore Rich Menu Alias after database error", { category: deliveryError(compensationError) });
     }
     redirectRichMenuFailure("選單頁籤暫時無法儲存，LINE 線上設定已嘗試還原。", error);
   }
@@ -713,7 +723,7 @@ export async function syncRichMenuAliasAction(fd: FormData) {
 }
 
 export async function removeRichMenuAliasAction(fd: FormData) {
-  const { clinicId, user } = await requireAdmin();
+  const { clinicId, user } = await requireEnabledLineAdmin();
   const aliasId = str(fd, "alias_id");
   if (!RICH_MENU_ALIAS_ID_PATTERN.test(aliasId)) redirect(`/admin/richmenu?err=${encodeURIComponent("Alias ID 格式錯誤")}`);
   const service = createServiceClient();
@@ -736,7 +746,7 @@ export async function removeRichMenuAliasAction(fd: FormData) {
   if (error) {
     if (remoteBefore) {
       try { await createRichMenuAlias(aliasId, remoteBefore.richMenuId, aliasAccessToken); }
-      catch (compensationError) { console.error("Failed to restore deleted Rich Menu Alias", compensationError); }
+      catch (compensationError) { console.error("Failed to restore deleted Rich Menu Alias", { category: deliveryError(compensationError) }); }
     }
     redirectRichMenuFailure("選單頁籤暫時無法移除，LINE 線上設定已嘗試還原。", error);
   }
@@ -755,7 +765,7 @@ function taipeiLocalDateTime(value: string): string | null {
 }
 
 export async function createRichMenuScheduleAction(fd: FormData) {
-  const { supabase, clinicId, user } = await requireAdmin();
+  const { supabase, clinicId, user } = await requireEnabledLineAdmin();
   const versionId = str(fd, "version_id");
   const startsAt = taipeiLocalDateTime(str(fd, "starts_at"));
   const endsAt = taipeiLocalDateTime(str(fd, "ends_at"));
@@ -774,7 +784,7 @@ export async function createRichMenuScheduleAction(fd: FormData) {
 }
 
 export async function cancelRichMenuScheduleAction(fd: FormData) {
-  const { clinicId, user } = await requireAdmin();
+  const { clinicId, user } = await requireEnabledLineAdmin();
   const scheduleId = str(fd, "schedule_id");
   const { error } = await createServiceClient().rpc("cancel_line_richmenu_schedule", {
     p_clinic_id: clinicId,
@@ -815,7 +825,7 @@ export async function updateLineChannelSettingsAction(fd: FormData) {
     p_liff_id: liffId,
     p_liff_endpoint_path: endpointPath,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/line");
   revalidatePath("/admin/richmenu");
   redirect("/admin/line?saved=1");
@@ -844,7 +854,7 @@ export async function saveLineCredentialsAction(fd: FormData) {
     service.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
     service.from("clinic_line_secret_refs").select("clinic_id").eq("clinic_id", clinicId).maybeSingle(),
   ]);
-  if (channelError || clinicError || existingError) throw new Error(channelError?.message ?? clinicError?.message ?? existingError?.message ?? "LINE 設定狀態讀取失敗");
+  if (channelError || clinicError || existingError) throw new Error("LINE 設定狀態讀取失敗（" + deliveryError(channelError ?? clinicError ?? existingError) + "）");
   if (channel?.connection_mode !== "brand") throw new Error("請先選擇品牌獨立連線並儲存公開識別資料");
   if (!clinic?.line_destination) throw new Error("請先填寫訊息渠道識別碼並儲存連線設定");
   if (!existing && (!accessToken || !channelSecret)) {
@@ -857,7 +867,7 @@ export async function saveLineCredentialsAction(fd: FormData) {
     p_access_token: accessToken || null,
     p_channel_secret: channelSecret || null,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/line");
   revalidatePath("/admin/channels");
   revalidatePath("/admin/richmenu");
@@ -906,16 +916,16 @@ export async function verifyLineChannelSettingsAction() {
       .eq("clinic_id", clinicId)
       .select("clinic_id")
       .maybeSingle();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
     if (!verifiedChannel) throw new Error("找不到此品牌的 LINE 渠道設定，請先儲存後再驗證");
   } catch (error) {
     result = "err";
-    reason = (error instanceof Error ? error.message : "LINE 渠道驗證失敗").slice(0, 500);
+    reason = deliveryError(error);
     const { error: updateError } = await service
       .from("clinic_line_channels")
       .update({ verification_status: "error", verification_error: reason, last_verified_at: verifiedAt })
       .eq("clinic_id", clinicId);
-    if (updateError) reason = `${reason}；狀態寫入失敗：${updateError.message}`.slice(0, 500);
+    if (updateError) reason = `${reason}；狀態寫入失敗：${deliveryError(updateError)}`;
   }
 
   revalidatePath("/admin/line");

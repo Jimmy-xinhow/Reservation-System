@@ -28,6 +28,7 @@ export interface CustomerEntryAvailability {
 export interface CustomerEntryUrlContext {
   baseUrl: string;
   clinicSlug: string | null;
+  clinicId?: string | null;
   liffId: string | null;
   preferLiff?: boolean;
   /** Focused LIFF task parameters such as service/date/event. */
@@ -62,10 +63,67 @@ export function customerEntryUrl(key: CustomerEntryKey, context: CustomerEntryUr
     ? new URL(`https://liff.line.me/${context.liffId}`)
     : new URL(definition.browserPath, context.baseUrl);
   if (context.clinicSlug) url.searchParams.set("clinic_slug", context.clinicSlug);
+  else if (context.clinicId) url.searchParams.set("clinic_id", context.clinicId);
   if (useLiff) url.searchParams.set("view", definition.liffView);
   for (const [key, value] of Object.entries(context.extraParams ?? {})) {
     const normalized = value?.trim();
     if (normalized) url.searchParams.set(key, normalized);
   }
   return url.toString();
+}
+
+/** Website actions use a configured brand LINE entry, with a local browser fallback. */
+export function publicCustomerEntryUrl(
+  key: CustomerEntryKey,
+  context: { clinicSlug: string | null; clinicId: string; enabled: boolean; liffId: string | null; loginChannelId: string | null },
+  extraParams?: Record<string, string>,
+): string {
+  const liffId = context.enabled && context.loginChannelId ? context.liffId : null;
+  const url = new URL(customerEntryUrl(key, {
+    baseUrl: "https://customer-entry.invalid", clinicSlug: context.clinicSlug,
+    clinicId: context.clinicId, liffId, extraParams: { ...extraParams, ...(liffId ? { task: "1" } : {}) },
+  }));
+  return liffId ? url.toString() : `${url.pathname}${url.search}`;
+}
+
+/** Carry only public task context into the browser; never copy LINE identity tokens. */
+export function customerBrowserFallbackUrl(key: CustomerEntryKey, source: URLSearchParams): string {
+  const params = new URLSearchParams();
+  const slug = source.get("clinic_slug")?.trim();
+  const clinicId = source.get("clinic_id")?.trim();
+  if (slug) params.set("clinic_slug", slug);
+  else if (clinicId) params.set("clinic_id", clinicId);
+  const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "rm_version", "rm_slot"];
+  if (key === "booking") keys.push("service_id", "doctor_id", "date", "visit_type");
+  if (key === "events") keys.push("event");
+  for (const name of keys) {
+    const value = source.get(name)?.trim();
+    if (value) params.set(name, value);
+  }
+  if (key === "events") {
+    // On the primary redirect, the top-level access_token belongs to LINE.
+    // Only an invitation inside the original task state may be carried over.
+    let invitation = source.get("access_token")?.trim();
+    if (source.has("liff.state")) {
+      invitation = undefined;
+      try {
+        invitation = new URL(source.get("liff.state") ?? "", "https://customer-entry.invalid").searchParams.get("access_token")?.trim();
+      } catch { /* Invalid state cannot authorize a private event. */ }
+    }
+    if (invitation) params.set("access_token", invitation);
+  }
+  const path = customerEntryDefinition(key).browserPath;
+  return `${path}${params.size ? `?${params.toString()}` : ""}`;
+}
+
+export function bookingLiffHandoffUrl(source: URLSearchParams, selection: { serviceId: string; doctorId: string; date: string; visitType: "first" | "return" }): string {
+  const url = new URL(customerBrowserFallbackUrl("booking", source), "https://customer-entry.invalid");
+  url.pathname = "/book";
+  url.searchParams.set("view", "booking");
+  url.searchParams.set("task", "1");
+  for (const [key, value] of Object.entries({ service_id: selection.serviceId, doctor_id: selection.doctorId, date: selection.date, visit_type: selection.visitType })) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  }
+  return `${url.pathname}${url.search}`;
 }

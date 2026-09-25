@@ -106,12 +106,14 @@ export async function getQueueForDate(
     .eq("date", date);
   if (doctorId) servQ = servQ.eq("doctor_id", doctorId);
 
-  const [{ data: tpls }, { data: excs }, { data: appts }, { data: serv }] = await Promise.all([
-    tplQ,
-    excQ,
-    apptQ,
-    servQ,
-  ]);
+  let results: [Awaited<typeof tplQ>, Awaited<typeof excQ>, Awaited<typeof apptQ>, Awaited<typeof servQ>];
+  try {
+    results = await Promise.all([tplQ, excQ, apptQ, servQ]);
+  } catch {
+    throw new Error("服務進度資料暫時無法確認");
+  }
+  const [{ data: tpls, error: tplsError }, { data: excs, error: excsError }, { data: appts, error: apptsError }, { data: serv, error: servError }] = results;
+  if (tplsError || excsError || apptsError || servError) throw new Error("服務進度資料暫時無法確認");
 
   const sessRows: SessRow[] = [
     ...((tpls ?? []) as SessRow[]),
@@ -304,11 +306,18 @@ export async function getPatientQueueToday(
   lineUserId: string,
   mode: "time" | "number",
 ): Promise<PatientQueueItem[]> {
-  const { data: patients } = await svc
-    .from("patients")
-    .select("id")
-    .eq("clinic_id", clinicId)
-    .eq("line_user_id", lineUserId);
+  let patients: { id: string }[] | null;
+  try {
+    const result = await svc
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("line_user_id", lineUserId);
+    if (result.error) throw new Error("查詢失敗");
+    patients = result.data;
+  } catch {
+    throw new Error("服務進度資料暫時無法確認");
+  }
   const ids = new Set((patients ?? []).map((p) => p.id as string));
   if (ids.size === 0) return [];
 

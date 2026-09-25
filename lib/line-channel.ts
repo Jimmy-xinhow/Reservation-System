@@ -1,4 +1,5 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { verifyLiffIdToken, type VerifiedLineProfile } from "@/lib/line";
@@ -49,7 +50,7 @@ export async function getClinicLineChannelContext(
   service: SupabaseClient,
   clinicId: string,
 ): Promise<ClinicLineChannelContext> {
-  const [clinicResult, settingsResult, channelResult] = await Promise.all([
+  const [clinicResult, settingsResult, channelResult] = await adminQuery(Promise.all([
     service.from("clinics").select("line_destination, slug").eq("id", clinicId).eq("active", true).maybeSingle(),
     service.from("clinic_settings").select("line_channel_enabled").eq("clinic_id", clinicId).maybeSingle(),
     service
@@ -57,10 +58,10 @@ export async function getClinicLineChannelContext(
       .select("connection_mode, login_channel_id, liff_id, liff_endpoint_path, verification_status")
       .eq("clinic_id", clinicId)
       .maybeSingle(),
-  ]);
-  if (clinicResult.error) throw new Error(clinicResult.error.message);
-  if (settingsResult.error) throw new Error(settingsResult.error.message);
-  if (channelResult.error) throw new Error(channelResult.error.message);
+  ]));
+  if (clinicResult.error) throw new Error(adminErrorMessage(clinicResult.error));
+  if (settingsResult.error) throw new Error(adminErrorMessage(settingsResult.error));
+  if (channelResult.error) throw new Error(adminErrorMessage(channelResult.error));
   if (!clinicResult.data) throw new Error("找不到啟用中的品牌");
 
   const clinic = clinicResult.data as ClinicRow;

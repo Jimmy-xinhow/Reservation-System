@@ -28,7 +28,7 @@ function safeMetadata(input: unknown): Record<string, string | number | boolean 
 
 export async function POST(request: NextRequest) {
   const rate = await checkRateLimit(request, "admin:product-events", 80);
-  if (!rate.allowed) return fail("事件過於頻繁", 429);
+  if (!rate.allowed) return fail("事件過於頻繁", rate.unavailable ? 503 : 429);
   try {
     const member = await getOptionalMember();
     if (!member) return fail("請先登入品牌後台", 401);

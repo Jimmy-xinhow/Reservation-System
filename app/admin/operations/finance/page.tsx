@@ -1,3 +1,6 @@
+
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
+import { reportRange } from "@/lib/report-range";
 import Link from "next/link";
 import { requireNonProvider } from "@/lib/admin";
 import { createSupabaseServer } from "@/lib/supabase-server";
@@ -13,30 +16,25 @@ const PAYMENT_METHOD: Record<string, string> = { cash: "現金", card: "刷卡",
 const PURCHASE_STATUS: Record<string, string> = { draft: "草稿", ordered: "已下單", received: "已入庫", cancelled: "已取消" };
 const money = (value: number) => `NT$${Math.round(value).toLocaleString("zh-TW")}`;
 const one = <T,>(value: T | T[] | null): T | null => Array.isArray(value) ? value[0] ?? null : value;
-function validDate(value: string | undefined, fallback: string): string { return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback; }
+function validDate(value: string | undefined, fallback: string): string {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return fallback;
+  const date = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : fallback;
+}
 
 export default async function FinancePage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
   const member = await requireNonProvider();
   const params = await searchParams;
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
-  const from = validDate(params.from, `${today.slice(0, 8)}01`);
-  const to = validDate(params.to, today);
-  const startIso = new Date(`${from}T00:00:00+08:00`).toISOString();
-  const endIso = new Date(`${to}T23:59:59.999+08:00`).toISOString();
+  const range = reportRange(validDate(params.from, `${today.slice(0, 8)}01`), validDate(params.to, today));
+  const { startDate: from, endDate: to, start: startIso, end: endIso } = range;
   const supabase = await createSupabaseServer();
-  const [paymentsResult, ordersResult, purchasesResult, inventoryResult] = await Promise.all([
-    supabase.from("sales_payments").select("amount, method, received_at, sales_orders(order_no)").eq("clinic_id", member.clinicId).gte("received_at", startIso).lte("received_at", endIso).order("received_at", { ascending: false }).limit(500),
-    supabase.from("sales_orders").select("total_amount, paid_amount, status, created_at").eq("clinic_id", member.clinicId).neq("status", "void").gte("created_at", startIso).lte("created_at", endIso),
-    supabase.from("purchase_orders").select("order_no, status, created_at, inventory_suppliers(name), purchase_order_items(quantity, unit_cost)").eq("clinic_id", member.clinicId).neq("status", "cancelled").gte("created_at", startIso).lte("created_at", endIso).order("created_at", { ascending: false }).limit(200),
-    supabase.from("inventory_items").select("name, stock_on_hand, reorder_level, retail_price, unit").eq("clinic_id", member.clinicId).eq("active", true).order("name"),
+  const [payments, orders, purchases, inventory] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("sales_payments").select("amount, method, received_at, sales_orders(order_no)").eq("clinic_id", member.clinicId).gte("received_at", startIso).lte("received_at", endIso).order("received_at", { ascending: false }).order("id", { ascending: false }).range(from, to)) as Promise<SalesPayment[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("sales_orders").select("total_amount, paid_amount, status, created_at").eq("clinic_id", member.clinicId).neq("status", "void").gte("created_at", startIso).lte("created_at", endIso).order("created_at").order("id").range(from, to)) as Promise<SalesOrder[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("purchase_orders").select("order_no, status, created_at, inventory_suppliers:inventory_suppliers!purchase_orders_supplier_id_fkey(name), purchase_order_items:purchase_order_items!purchase_order_items_purchase_order_id_fkey(quantity, unit_cost)").eq("clinic_id", member.clinicId).neq("status", "cancelled").gte("created_at", startIso).lte("created_at", endIso).order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to)) as Promise<PurchaseOrder[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("inventory_items").select("name, stock_on_hand, reorder_level, retail_price, unit").eq("clinic_id", member.clinicId).eq("active", true).order("name").order("id").range(from, to)) as Promise<InventoryItem[]>,
   ]);
-  const error = paymentsResult.error ?? ordersResult.error ?? purchasesResult.error ?? inventoryResult.error;
-  if (error) throw new Error(`讀取財務摘要失敗：${error.message}`);
-
-  const payments = (paymentsResult.data ?? []) as unknown as SalesPayment[];
-  const orders = (ordersResult.data ?? []) as SalesOrder[];
-  const purchases = (purchasesResult.data ?? []) as unknown as PurchaseOrder[];
-  const inventory = (inventoryResult.data ?? []) as InventoryItem[];
   const received = payments.reduce((sum, row) => sum + Number(row.amount), 0);
   const billed = orders.reduce((sum, row) => sum + Number(row.total_amount), 0);
   const outstanding = orders.reduce((sum, row) => sum + Math.max(0, Number(row.total_amount) - Number(row.paid_amount)), 0);

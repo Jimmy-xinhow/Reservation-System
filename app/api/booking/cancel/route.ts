@@ -1,3 +1,4 @@
+import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { ok, fail, getClinicSettings } from "@/lib/http";
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     const rate = await checkRateLimit(req, "booking:cancel", 10);
     if (!rate.allowed) {
-      const response = fail("請稍後再試", 429);
+      const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
       response.headers.set("Retry-After", String(rate.retryAfterSeconds));
       return response;
     }
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
       .from("appointments")
       .select("id, status, clinic_id, patient_id, membership_id, start_at, waitlist_entry_id, patients(line_user_id)")
       .eq("id", body.appointment_id)
+      .eq("clinic_id", clinicId)
       .maybeSingle();
     if (error) return fail(error.message, 500);
     if (!appt || appt.clinic_id !== clinicId) return fail("查無此預約", 404);
@@ -89,7 +91,7 @@ export async function POST(req: NextRequest) {
       p_note: "cancelled appointment",
     });
     if (cancelError) return fail(cancelError.message, 500);
-    await notifyAppointmentStatus(svc, appt.id, "cancelled").catch((notificationError: unknown) => console.error("Appointment cancellation notification failed", notificationError));
+    await notifyAppointmentStatus(svc, appt.id, "cancelled").catch((notificationError: unknown) => console.error("Appointment cancellation notification failed", { category: deliveryError(notificationError) }));
     await recordCrmInteraction(svc, {
       clinicId,
       patientId: appt.patient_id,
@@ -98,7 +100,7 @@ export async function POST(req: NextRequest) {
       title: "取消預約",
       body: "顧客取消預約",
       appointmentId: appt.id,
-    }).catch((interactionError: unknown) => console.error("CRM cancellation interaction failed", interactionError));
+    }).catch((interactionError: unknown) => console.error("CRM cancellation interaction failed", { category: deliveryError(interactionError) }));
 
     return ok({ cancelled: true });
   } catch (e) {

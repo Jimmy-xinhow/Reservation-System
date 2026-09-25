@@ -109,6 +109,7 @@ export function BookingCustomerStep({
           <div>
             <label className="label">預約對象</label>
             <select className="input" value={selectedPatientId} onChange={(event) => onPatientChange(event.target.value)}>
+              <option value="" disabled>請選擇預約對象</option>
               {bound.map((patient) => (
                 <option key={patient.id} value={patient.id}>
                   {patient.name}（{patient.phone}）

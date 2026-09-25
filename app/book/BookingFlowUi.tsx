@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { closeLiffWindow } from "@/lib/useLiff";
 import { googleCalendarUrl, type CalEvent } from "@/lib/calendar";
-import type { CustomerEntryKey as CustomerView } from "@/lib/customer-entry";
+import { customerBrowserFallbackUrl, type CustomerEntryKey as CustomerView } from "@/lib/customer-entry";
 import { liffEntryParams } from "@/lib/liff-entry-state";
 import { DEFAULT_CUSTOMER_APP_CONFIG, type CustomerAppConfig } from "@/lib/brand-page";
 import styles from "./CustomerApp.module.css";
@@ -139,17 +140,18 @@ export interface CustomerAppBranding {
   soft?: string | null;
   ink?: string | null;
   app?: CustomerAppConfig | null;
+  inLine?: boolean;
 }
 
 function safeHex(value: string | null | undefined, fallback: string): string {
   return value && /^#[0-9A-Fa-f]{6}$/.test(value) ? value : fallback;
 }
 
-export function Shell({ children, clinicName, logoUrl, primary, accent, soft, ink, app }: { children: ReactNode } & CustomerAppBranding) {
+export function Shell({ children, clinicName, logoUrl, primary, accent, soft, ink, app, inLine = false }: { children: ReactNode } & CustomerAppBranding) {
   const [resolvedBranding, setResolvedBranding] = useState<CustomerAppBranding>({});
   useEffect(() => {
     if ((logoUrl || primary) && app) return;
-    const source = new URLSearchParams(window.location.search);
+    const source = liffEntryParams(window.location.search);
     const scope = new URLSearchParams();
     const clinicSlug = source.get("clinic_slug")?.trim();
     const clinicId = source.get("clinic_id")?.trim();
@@ -220,12 +222,20 @@ export function Shell({ children, clinicName, logoUrl, primary, accent, soft, in
               <span className={styles.brandSubtitle}>{displayedApp.headerSubtitle}</span>
             </span>
           </div>
-          <span className={styles.secureState}>LINE 安全連線</span>
+          <span className={styles.secureState} data-in-line={inLine}>{inLine ? "LINE 內開啟" : "線上服務"}</span>
         </header>
         <div className={styles.appContent}>{children}</div>
       </div>
     </main>
   );
+}
+
+export function ReturnToLineButton({ className = "btn btn-primary w-full" }: { className?: string }) {
+  const [attempted, setAttempted] = useState(false);
+  return <div className="space-y-2">
+    <button type="button" className={className} onClick={() => { setAttempted(true); closeLiffWindow(); }}>完成並回到 LINE</button>
+    {attempted && <p role="status" className="text-sm text-slate-500">若此頁仍未關閉，請使用 LINE 右上角的關閉按鈕。您也可以繼續查看紀錄，無須重新送出。</p>}
+  </div>;
 }
 
 export function SectionTitle({ n, title, done }: { n: number; title: string; done?: boolean }) {
@@ -310,25 +320,6 @@ export function Centered({ children, tone }: { children: ReactNode; tone?: "erro
 }
 
 export function browserFallbackUrl(view: CustomerView): string {
-  const path = view === "booking"
-    ? "/book/browser"
-    : view === "events"
-      ? "/register"
-      : view === "membership"
-        ? "/membership"
-        : view === "home" || view === "brand" || view === "support"
-          ? "/"
-          : "/my";
-  if (typeof window === "undefined") return path;
-  const source = liffEntryParams(window.location.search);
-  const params = new URLSearchParams();
-  const slug = source.get("clinic_slug")?.trim();
-  const clinicId = source.get("clinic_id")?.trim();
-  if (slug) params.set("clinic_slug", slug);
-  else if (clinicId) params.set("clinic_id", clinicId);
-  for (const key of ["utm_source", "rm_version", "rm_slot"] as const) {
-    const value = source.get(key)?.trim();
-    if (value) params.set(key, value);
-  }
-  return `${path}${params.toString() ? `?${params.toString()}` : ""}`;
+  const source = typeof window === "undefined" ? new URLSearchParams() : liffEntryParams(window.location.search);
+  return customerBrowserFallbackUrl(view, source);
 }

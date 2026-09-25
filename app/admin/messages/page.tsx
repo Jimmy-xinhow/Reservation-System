@@ -5,8 +5,7 @@ import MessageComposer from "./MessageComposer";
 import type { MsgKind, MsgData } from "@/lib/lineMessage";
 import { requireAdmin } from "@/lib/admin";
 import { SubmitButton } from "@/components/SubmitButton";
-import { isAdminModuleEnabled } from "@/lib/admin-modules";
-import { ModuleDisabled } from "@/components/ModuleDisabled";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +30,11 @@ export default async function MessagesPage({
   const { clinicId } = await requireAdmin();
   const { edit } = await searchParams;
   const supabase = await createSupabaseServer();
-  if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return <ModuleDisabled title="訊息模板" />;
-  const { data } = await supabase
-    .from("line_messages")
-    .select("id, name, kind, data")
-    .eq("clinic_id", clinicId)
-    .order("created_at", { ascending: false });
+  const [{ data, error }, { data: settings, error: settingsError }] = await adminQuery(Promise.all([
+    supabase.from("line_messages").select("id, name, kind, data").eq("clinic_id", clinicId).order("created_at", { ascending: false }),
+    supabase.from("clinic_settings").select("line_channel_enabled").eq("clinic_id", clinicId).maybeSingle(),
+  ]));
+  if (error || settingsError || !settings) throw new Error(adminErrorMessage(error ?? settingsError ?? "品牌設定不存在"));
   const messages = (data ?? []) as Msg[];
   const editing = edit ? messages.find((m) => m.id === edit) ?? null : null;
 
@@ -44,8 +42,9 @@ export default async function MessagesPage({
     <div className="admin-page">
       <div className="admin-page-header">
         <div><p className="eyebrow">LINE 顧客互動</p><h1 className="admin-page-title">自訂訊息素材</h1><p className="admin-page-description">製作文字、圖文卡或多頁訊息；右側會同步顯示顧客在 LINE 中看到的內容。</p></div>
-        <Link href="/admin/replies" className="btn btn-secondary">設定自動回覆</Link>
+        <Link href={settings.line_channel_enabled ? "/admin/replies" : "/admin/line#channel-settings"} className="btn btn-secondary">{settings.line_channel_enabled ? "設定自動回覆" : "設定 LINE 連線"}</Link>
       </div>
+      {!settings.line_channel_enabled && <p role="status" className="border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-sm text-amber-900">此品牌尚未啟用 LINE。訊息素材可以先建立與修改；實際發送仍需到 <Link href="/admin/line#channel-settings" className="font-semibold underline">LINE 官方帳號連線</Link> 啟用並完成檢查。</p>}
 
       <MessageComposer key={editing?.id ?? "new"} initial={editing} saveAction={saveMessageAction} />
       {editing && (

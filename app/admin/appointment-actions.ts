@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { deliveryError } from "@/lib/delivery-error";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireOperator, requireStatusOperator } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import { getQueueForDate } from "@/lib/queue";
+import { isLegacyProgressEnabled } from "@/lib/legacy-progress";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 
@@ -44,7 +46,7 @@ export async function setStatusAction(fd: FormData) {
       p_actor_user_id: user.id,
       p_note: "cancelled by operator",
     });
-    if (cancelError) throw new Error(cancelError.message);
+    if (cancelError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(cancelError) + "）");
     if (typeof cancelled !== "string") throw new Error("預約取消失敗");
     revalidatePath("/admin");
     revalidatePath("/admin/calendar");
@@ -59,12 +61,12 @@ export async function setStatusAction(fd: FormData) {
     .in("status", ["booked", "confirmed"])
     .select("id")
     .maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   if (!changed) throw new Error("查無預約或沒有此預約的操作權限");
 
   if (status === "confirmed") {
     await notifyAppointmentStatus(createServiceClient(), id, "confirmed").catch((notificationError: unknown) => {
-      console.error("Appointment confirmation notification failed", notificationError);
+      console.error("Appointment confirmation notification failed", { category: deliveryError(notificationError) });
     });
   }
 
@@ -105,6 +107,7 @@ export async function setStatusAction(fd: FormData) {
 // op: next_online / next_offline / auto / prev_online / prev_offline / reset
 export async function advanceServingAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
+  if (!(await isLegacyProgressEnabled(supabase, clinicId))) throw new Error("此品牌目前未啟用現場叫號");
   const doctorId = str(fd, "doctor_id");
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
@@ -120,7 +123,7 @@ export async function advanceServingAction(fd: FormData) {
     .eq("clinic_id", clinicId)
     .eq("active", true)
     .maybeSingle();
-  if (doctorError) throw new Error(doctorError.message);
+  if (doctorError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(doctorError) + "）");
   if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
   if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
 
@@ -185,7 +188,7 @@ export async function advanceServingAction(fd: FormData) {
     },
     { onConflict: "clinic_id,doctor_id,date,session_key" },
   );
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
 
   // 叫下一位時,把「剛才那位」(前一個目前號)自動標記為完成
   if (lastKind === "online" && online > prevOnline && prevOnline > 0) {
@@ -207,13 +210,21 @@ async function completeServed(
   stream: "online" | "offline",
   seq: number,
 ) {
-  const { data: cs } = await supabase
-    .from("clinic_settings")
-    .select("booking_mode")
-    .eq("clinic_id", clinicId)
-    .maybeSingle();
-  const mode = (cs?.booking_mode as "time" | "number") ?? "time";
-  const sessions = await getQueueForDate(supabase, clinicId, date, mode);
+  let sessions: Awaited<ReturnType<typeof getQueueForDate>>;
+  try {
+    const { data: cs, error: settingsError } = await supabase
+      .from("clinic_settings")
+      .select("booking_mode")
+      .eq("clinic_id", clinicId)
+      .maybeSingle();
+    if (settingsError || !cs) throw new Error("設定載入失敗");
+    const mode = cs.booking_mode === "number" ? "number" : "time";
+    sessions = await getQueueForDate(supabase, clinicId, date, mode);
+  } catch {
+    // 叫號已寫入；不要回報可安全重試的失敗，以免再次前進一號。
+    console.error("Legacy queue completion lookup failed after serving number was updated", { category: "queue_completion_lookup_failed" });
+    return;
+  }
   const sess = sessions.find((s) => s.key === sessionKey);
   if (!sess) return;
   const list = stream === "online" ? sess.online : sess.offline;
@@ -232,6 +243,7 @@ async function completeServed(
 // 設定自動穿插:每 N 個線上插 1 個現場(0=關閉自動)
 export async function setQueueAutoAction(fd: FormData) {
   const { supabase, clinicId } = await requireOperator();
+  if (!(await isLegacyProgressEnabled(supabase, clinicId))) throw new Error("此品牌目前未啟用現場叫號");
   const doctorId = str(fd, "doctor_id");
   const date = str(fd, "date");
   const sessionKey = str(fd, "session_key");
@@ -243,7 +255,7 @@ export async function setQueueAutoAction(fd: FormData) {
     .eq("clinic_id", clinicId)
     .eq("active", true)
     .maybeSingle();
-  if (doctorError) throw new Error(doctorError.message);
+  if (doctorError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(doctorError) + "）");
   if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
   if (!doctorId || !date || !sessionKey) throw new Error("參數錯誤");
   const autoEvery = Math.max(0, intOr(fd, "auto_every", 0));
@@ -259,7 +271,7 @@ export async function setQueueAutoAction(fd: FormData) {
     },
     { onConflict: "clinic_id,doctor_id,date,session_key" },
   );
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin/queue");
 }
 
@@ -270,8 +282,8 @@ export async function cancelAppointmentAction(fd: FormData) {
   if (!id) throw new Error("缺少 id");
   const { data: current } = await supabase.from("appointments").select("patient_id").eq("id", id).eq("clinic_id", clinicId).maybeSingle();
   const { error } = await createServiceClient().rpc("cancel_appointment", { p_clinic_id: clinicId, p_appointment_id: id, p_note: "cancelled appointment" });
-  if (error) throw new Error(error.message);
-  await notifyAppointmentStatus(createServiceClient(), id, "cancelled").catch((notificationError: unknown) => console.error("Appointment cancellation notification failed", notificationError));
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
+  await notifyAppointmentStatus(createServiceClient(), id, "cancelled").catch((notificationError: unknown) => console.error("Appointment cancellation notification failed", { category: deliveryError(notificationError) }));
   if (current?.patient_id) {
     await recordCrmInteraction(supabase, {
       clinicId,
@@ -298,7 +310,7 @@ export async function cancelAppointmentWaitlistAction(fd: FormData) {
     p_actor_user_id: user.id,
     p_note: "cancelled by operator",
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin");
   revalidatePath("/admin/dashboard");
 }
@@ -315,7 +327,7 @@ export async function setDepositAction(fd: FormData) {
     .update({ deposit_status })
     .eq("id", id)
     .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   revalidatePath("/admin");
 }
 
@@ -329,7 +341,7 @@ async function getOrCreatePatient(clinicId: string, name: string, phone: string,
     p_birthday: birthday || null,
     p_line_user_id: null,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.patient_id) throw new Error("建立顧客失敗");
   return row.patient_id as string;
@@ -358,7 +370,7 @@ async function book(opts: {
       .eq("clinic_id", opts.clinicId)
       .eq("active", true)
       .maybeSingle();
-    if (serviceError) throw new Error(serviceError.message);
+    if (serviceError) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(serviceError) + "）");
     if (!service) throw new Error("服務不存在或已停用");
     selectedServiceId = String(service.id);
     selectedServiceTarget = service.booking_target as "provider_required" | "provider_optional" | "resource_only";
@@ -387,7 +399,7 @@ async function book(opts: {
           p_is_self_pay: opts.isSelfPay,
           p_booking_answers: {},
         });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
     apptId = data as string;
   } else {
     if (!opts.templateId || !opts.date) throw new Error("缺少服務場次或日期");
@@ -412,7 +424,7 @@ async function book(opts: {
           p_is_self_pay: opts.isSelfPay,
           p_booking_answers: {},
         });
-    if (error) throw new Error(error.message);
+    if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
     const row = Array.isArray(data) ? data[0] : data;
     apptId = (row?.appointment_id as string) ?? null;
   }
@@ -429,7 +441,7 @@ async function book(opts: {
         p_appointment_id: apptId,
         p_note: "admin booking metadata binding failed",
       });
-      throw new Error(bindingError.message);
+      throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(bindingError) + "）");
     }
   }
   if (!apptId) throw new Error("建立預約失敗");
@@ -509,9 +521,9 @@ export async function rescheduleAppointmentAction(fd: FormData) {
     p_date: str(fd, "date") || null,
   });
   if (rescheduleError || typeof newAppointmentId !== "string") {
-    throw new Error(rescheduleError?.message ?? "改期失敗");
+    throw new Error("改期失敗，請重新確認預約狀態（" + deliveryError(rescheduleError) + "）");
   }
-  await notifyAppointmentStatus(createServiceClient(), newAppointmentId, "rescheduled").catch((notificationError: unknown) => console.error("Appointment reschedule notification failed", notificationError));
+  await notifyAppointmentStatus(createServiceClient(), newAppointmentId, "rescheduled").catch((notificationError: unknown) => console.error("Appointment reschedule notification failed", { category: deliveryError(notificationError) }));
   await recordCrmInteraction(supabase, {
     clinicId,
     patientId: old.patient_id,

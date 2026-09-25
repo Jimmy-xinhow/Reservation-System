@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { createHash, randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
@@ -20,7 +22,7 @@ export async function createDocumentTemplateAction(fd: FormData): Promise<void> 
   const kind = text(fd, "kind");
   const body = text(fd, "body");
   if (!name || !body || !["consent", "waiver", "intake"].includes(kind)) throw new Error("請填寫完整範本內容");
-  const { error } = await createServiceClient().from("document_templates").insert({
+  const { error } = await adminQuery(createServiceClient().from("document_templates").insert({
     clinic_id: member.clinicId,
     name: name.slice(0, 160),
     kind,
@@ -28,8 +30,8 @@ export async function createDocumentTemplateAction(fd: FormData): Promise<void> 
     version: 1,
     active: true,
     created_by: member.user.id,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/documents");
 }
 
@@ -39,14 +41,14 @@ export async function issueDocumentRequestAction(fd: FormData): Promise<void> {
   const patientId = text(fd, "patient_id");
   const templateId = text(fd, "template_id");
   const expiresInDays = Math.max(1, Math.min(30, Number.parseInt(text(fd, "expires_in_days"), 10) || 7));
-  const [{ data: patient }, { data: template }] = await Promise.all([
+  const [{ data: patient }, { data: template }] = await adminQuery(Promise.all([
     service.from("patients").select("id").eq("id", patientId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle(),
     service.from("document_templates").select("id,body,version").eq("id", templateId).eq("clinic_id", member.clinicId).eq("active", true).maybeSingle(),
-  ]);
+  ]));
   if (!patient || !template) throw new Error("顧客或文件範本不屬於目前品牌");
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + expiresInDays * 86_400_000).toISOString();
-  const { data, error } = await service.from("customer_document_requests").insert({
+  const { data, error } = await adminQuery(service.from("customer_document_requests").insert({
     clinic_id: member.clinicId,
     patient_id: patientId,
     template_id: templateId,
@@ -56,15 +58,15 @@ export async function issueDocumentRequestAction(fd: FormData): Promise<void> {
     expires_at: expiresAt,
     status: "pending",
     created_by: member.user.id,
-  }).select("id").single();
-  if (error) throw new Error(error.message);
+  }).select("id").single());
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/documents");
   redirect(`/admin/documents?request_id=${encodeURIComponent(data.id)}&sign_token=${encodeURIComponent(token)}`);
 }
 
 export async function cancelDocumentRequestAction(fd: FormData): Promise<void> {
   const member = await requireOperator();
-  const { error } = await createServiceClient().from("customer_document_requests").update({ status: "cancelled" }).eq("id", text(fd, "id")).eq("clinic_id", member.clinicId).eq("status", "pending");
-  if (error) throw new Error(error.message);
+  const { error } = await adminQuery(createServiceClient().from("customer_document_requests").update({ status: "cancelled" }).eq("id", text(fd, "id")).eq("clinic_id", member.clinicId).eq("status", "pending"));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/documents");
 }

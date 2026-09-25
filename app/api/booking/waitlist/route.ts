@@ -30,7 +30,7 @@ interface Body {
 export async function POST(req: NextRequest) {
   const rate = await checkRateLimit(req, "booking:waitlist", 20);
   if (!rate.allowed) {
-    const response = fail("請稍後再試", 429);
+    const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
     return response;
   }

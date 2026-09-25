@@ -1,11 +1,14 @@
+import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { getClinicSettings } from "@/lib/http";
+import { fail, getClinicSettings } from "@/lib/http";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { formatDateTime } from "@/lib/slots";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readCronSelections } from "@/lib/cron-scope";
+import { cronScopeDenied } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,21 +60,35 @@ function chunked<T>(values: T[], size: number): T[][] {
   return chunks;
 }
 
-export async function GET(req: NextRequest) {
+interface MarketingScope { clinicId: string; automationIds: string[]; patientIds: string[]; }
+
+export async function POST(req: NextRequest) {
+  const scope = await readCronSelections(req, ["automation_ids", "patient_ids"]);
+  if (scope instanceof Response) return scope;
+  return runMarketing(req, { clinicId: scope.clinicId, automationIds: scope.selections.automation_ids, patientIds: scope.selections.patient_ids });
+}
+
+export async function GET(req: NextRequest) { return runMarketing(req); }
+
+async function runMarketing(req: NextRequest, scope?: MarketingScope) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
     return new Response("unauthorized", { status: 401 });
   }
+  const denied = cronScopeDenied(scope?.clinicId);
+  if (denied) return denied;
 
   try {
     const svc = createServiceClient();
-    const { data: clinics, error: clinicListError } = await svc.from("clinics").select("id").eq("active", true);
+    let clinicQuery = svc.from("clinics").select("id").eq("active", true);
+    if (scope) clinicQuery = clinicQuery.eq("id", scope.clinicId);
+    const { data: clinics, error: clinicListError } = await clinicQuery;
     if (clinicListError) throw new Error(clinicListError.message);
     const summary = { scanned: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0, automations: 0 };
     const errors: string[] = [];
     for (const clinic of clinics ?? []) {
       try {
-        const result = await runClinic(svc, clinic.id as string);
+        const result = await runClinic(svc, clinic.id as string, scope);
         summary.scanned += result.scanned;
         summary.sent += result.sent;
         summary.failed += result.failed;
@@ -79,26 +96,25 @@ export async function GET(req: NextRequest) {
         summary.duplicate += result.duplicate;
         summary.automations += result.automations;
       } catch (error) {
-        errors.push(`${clinic.id}: ${error instanceof Error ? error.message : "執行失敗"}`);
+        errors.push(`${clinic.id}: ${deliveryError(error)}`);
       }
     }
-    return Response.json({ ok: errors.length === 0, ...summary, errors });
+    return Response.json({ ok: errors.length === 0 && summary.failed === 0, ...summary, errors });
   } catch (error) {
-    return Response.json(
-      { ok: false, error: error instanceof Error ? error.message : "行銷自動化執行失敗" },
-      { status: 500 },
-    );
+    return fail(error instanceof Error ? error.message : "行銷自動化執行失敗", 500);
   }
 }
 
-async function runClinic(svc: SupabaseClient, clinicId: string): Promise<{ scanned: number; sent: number; failed: number; skipped: number; duplicate: number; automations: number }> {
+async function runClinic(svc: SupabaseClient, clinicId: string, scope?: MarketingScope): Promise<{ scanned: number; sent: number; failed: number; skipped: number; duplicate: number; automations: number }> {
   const settings = await getClinicSettings(svc, clinicId);
   if (!settings) throw new Error("找不到品牌設定");
   if (!settings.crm_automation_enabled) {
     return { scanned: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0, automations: 0 };
   }
+  let automationQuery = svc.from("crm_automations").select("id, name, trigger_type, segment_id, channel, delay_minutes, trigger_days, cooldown_days, subject, body, active").eq("clinic_id", clinicId).eq("active", true).is("archived_at", null).order("created_at", { ascending: true });
+  if (scope) automationQuery = automationQuery.in("id", scope.automationIds);
   const [{ data: automations, error: automationError }, { data: clinic, error: clinicError }] = await Promise.all([
-    svc.from("crm_automations").select("id, name, trigger_type, segment_id, channel, delay_minutes, trigger_days, cooldown_days, subject, body, active").eq("clinic_id", clinicId).eq("active", true).order("created_at", { ascending: true }),
+    automationQuery,
     svc.from("clinics").select("name, line_destination").eq("id", clinicId).maybeSingle(),
   ]);
   if (automationError) throw new Error(automationError.message);
@@ -126,6 +142,7 @@ async function runClinic(svc: SupabaseClient, clinicId: string): Promise<{ scann
         clinicId,
         lineAccessToken,
         lineAccessError,
+        scope?.patientIds,
       );
       summary.scanned += result.scanned;
     } catch (error) {
@@ -145,8 +162,9 @@ async function runAutomation(
   clinicId: string,
   lineAccessToken: string | null,
   lineAccessError: string | null,
+  selectedPatientIds?: string[],
 ): Promise<{ scanned: number }> {
-  const targetIds = await resolveTargetIds(svc, automation.segment_id, clinicId);
+  const targetIds = await resolveTargetIds(svc, automation.segment_id, clinicId, selectedPatientIds);
   if (targetIds.length === 0) return { scanned: 0 };
 
   const candidates = await getCandidates(svc, automation, targetIds, clinicId);
@@ -216,16 +234,22 @@ async function runAutomation(
         title: automation.name,
         body: rendered,
         appointmentId: candidate.appointment?.id ?? null,
-      }).catch((error: unknown) => console.error("CRM campaign interaction failed", error));
+      }).catch((error: unknown) => console.error("CRM campaign interaction failed", { category: deliveryError(error) }));
     } catch (error) {
-      await markDelivery(svc, claim, "failed", error instanceof Error ? error.message : "投遞失敗");
+      // Preserve pending/sent; an uncertain delivery must not become retryable.
+      console.error("Marketing delivery unconfirmed", { category: deliveryError(error) });
       summary.failed += 1;
     }
   }
   return { scanned: candidates.length };
 }
 
-async function resolveTargetIds(svc: SupabaseClient, segmentId: string | null, clinicId: string): Promise<string[]> {
+async function resolveTargetIds(svc: SupabaseClient, segmentId: string | null, clinicId: string, selectedPatientIds?: string[]): Promise<string[]> {
+  if (selectedPatientIds) {
+    const { data, error } = await svc.rpc("resolve_crm_targets_for_patients", { p_clinic_id: clinicId, p_segment_id: segmentId, p_patient_ids: selectedPatientIds });
+    if (error) throw new Error(error.message);
+    return (data ?? []) as string[];
+  }
   if (segmentId) {
     const { error: refreshError } = await svc.rpc("refresh_crm_segment", { p_clinic_id: clinicId, p_segment_id: segmentId });
     if (refreshError) throw new Error(refreshError.message);
@@ -390,7 +414,7 @@ async function markDelivery(
 ): Promise<void> {
   const { error: updateError } = await svc
     .from("crm_delivery_logs")
-    .update({ status, error, sent_at: status === "sent" ? new Date().toISOString() : null })
+    .update({ status, error: status === "failed" ? deliveryError(error) : error, sent_at: status === "sent" ? new Date().toISOString() : null })
     .eq("id", id);
   if (updateError) throw new Error(updateError.message);
 }

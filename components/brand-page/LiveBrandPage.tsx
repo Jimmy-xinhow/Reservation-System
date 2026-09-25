@@ -83,14 +83,14 @@ function offersFor(brand: PublicBrandPageData, mode: PageMode): PublicOffer[] {
     id: event.id,
     title: event.title,
     description: eventMeta(event),
-    href: eventHref(brand, event.slug),
+    href: event.href ?? eventHref(brand, event.slug),
     kind: "event",
   }));
   const services: PublicOffer[] = brand.services.map((service) => ({
     id: service.id,
     title: service.name,
     description: service.description ?? (mode === "beauty" ? "查看療程說明、服務人員與可約時間" : "查看內容與可預約時段"),
-    href: brand.links.booking ?? brand.links.primary,
+    href: service.href ?? brand.links.booking ?? brand.links.primary,
     kind: "service",
   }));
   const combined = mode === "education" ? [...events, ...services] : [...services, ...events];

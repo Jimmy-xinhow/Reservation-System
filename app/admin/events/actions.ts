@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -30,7 +32,7 @@ export async function createEventAction(fd: FormData): Promise<void> {
   if (!['public', 'private'].includes(accessMode)) throw new Error("活動公開模式不正確");
   if (openAt && closeAt && new Date(closeAt) <= new Date(openAt)) throw new Error("報名截止時間必須晚於開放時間");
   const privateToken = accessMode === "private" ? randomBytes(24).toString("hex") : null;
-  const { data: eventRow, error } = await supabase.from("events").insert({
+  const { data: eventRow, error } = await adminQuery(supabase.from("events").insert({
     clinic_id: clinicId,
     title: title.slice(0, 160),
     slug,
@@ -43,16 +45,16 @@ export async function createEventAction(fd: FormData): Promise<void> {
     terms_version: 1,
     terms_text: text(fd, "terms_text") || null,
     created_by: user.id,
-  }).select("id").single();
+  }).select("id").single());
   const event = eventRow as { id: string } | null;
-  if (error || !event) throw new Error(error?.message ?? "建立活動失敗");
-  const { error: formError } = await supabase.from("registration_forms").insert({
+  if (error || !event) throw new Error((error ? adminErrorMessage(error) : undefined) ?? "建立活動失敗");
+  const { error: formError } = await adminQuery(supabase.from("registration_forms").insert({
     clinic_id: clinicId,
     event_id: event.id,
     version: 1,
     status: "published",
-  });
-  if (formError) throw new Error(formError.message);
+  }));
+  if (formError) throw new Error(adminErrorMessage(formError));
   revalidatePath("/admin/events");
   if (privateToken) redirect(`/admin/events?private_event=${encodeURIComponent(event.id)}&private_token=${encodeURIComponent(privateToken)}`);
 }
@@ -61,11 +63,11 @@ export async function regeneratePrivateEventLinkAction(fd: FormData): Promise<vo
   const { supabase, clinicId } = await requireAdmin();
   const eventId = text(fd, "id");
   if (!eventId) throw new Error("找不到活動");
-  const { data: event } = await supabase.from("events").select("id, access_mode").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle();
+  const { data: event } = await adminQuery(supabase.from("events").select("id, access_mode").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle());
   if (!event || event.access_mode !== "private") throw new Error("只有私密活動可以重新產生連結");
   const token = randomBytes(24).toString("hex");
-  const { error } = await supabase.from("events").update({ access_token_hash: createHash("sha256").update(token).digest("hex") }).eq("id", eventId).eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  const { error } = await adminQuery(supabase.from("events").update({ access_token_hash: createHash("sha256").update(token).digest("hex") }).eq("id", eventId).eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/events");
   redirect(`/admin/events?private_event=${encodeURIComponent(eventId)}&private_token=${encodeURIComponent(token)}`);
 }
@@ -75,8 +77,8 @@ export async function setEventStatusAction(fd: FormData): Promise<void> {
   const id = text(fd, "id");
   const status = text(fd, "status");
   if (!id || !["draft", "published", "archived"].includes(status)) throw new Error("活動狀態不正確");
-  const { error } = await supabase.from("events").update({ status }).eq("id", id).eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+  const { error } = await adminQuery(supabase.from("events").update({ status }).eq("id", id).eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/events");
 }
 
@@ -88,9 +90,9 @@ export async function createEventSessionAction(fd: FormData): Promise<void> {
   const end = localTaipeiIso(text(fd, "end_at"));
   const capacity = integer(fd, "capacity", 1);
   if (!eventId || !name || capacity < 1 || new Date(end) <= new Date(start)) throw new Error("場次資料不正確");
-  const { data: event } = await supabase.from("events").select("id").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle();
+  const { data: event } = await adminQuery(supabase.from("events").select("id").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle());
   if (!event) throw new Error("找不到活動");
-  const { error } = await supabase.from("event_sessions").insert({
+  const { error } = await adminQuery(supabase.from("event_sessions").insert({
     clinic_id: clinicId,
     event_id: eventId,
     name: name.slice(0, 120),
@@ -99,8 +101,8 @@ export async function createEventSessionAction(fd: FormData): Promise<void> {
     venue: text(fd, "venue") || null,
     capacity,
     waitlist_enabled: fd.get("waitlist_enabled") === "on",
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/events");
 }
 
@@ -116,13 +118,13 @@ export async function createTicketTypeAction(fd: FormData): Promise<void> {
   const membershipPlanId = text(fd, "membership_plan_id") || null;
   if (saleStartAt && saleEndAt && new Date(saleEndAt) <= new Date(saleStartAt)) throw new Error("票種銷售期間不正確");
   if (!eventId || !name || price < 0 || (capacity !== null && capacity < 1)) throw new Error("票種資料不正確");
-  const { data: event } = await supabase.from("events").select("id").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle();
+  const { data: event } = await adminQuery(supabase.from("events").select("id").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle());
   if (!event) throw new Error("找不到活動");
   if (membershipPlanId) {
-    const { data: plan } = await supabase.from("membership_plans").select("id").eq("id", membershipPlanId).eq("clinic_id", clinicId).eq("active", true).maybeSingle();
+    const { data: plan } = await adminQuery(supabase.from("membership_plans").select("id").eq("id", membershipPlanId).eq("clinic_id", clinicId).eq("active", true).maybeSingle());
     if (!plan) throw new Error("套票方案不存在或已停用");
   }
-  const { error } = await supabase.from("event_ticket_types").insert({
+  const { error } = await adminQuery(supabase.from("event_ticket_types").insert({
     clinic_id: clinicId,
     event_id: eventId,
     name: name.slice(0, 100),
@@ -132,8 +134,8 @@ export async function createTicketTypeAction(fd: FormData): Promise<void> {
     sale_end_at: saleEndAt,
     membership_plan_id: membershipPlanId,
     active: true,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/events");
 }
 
@@ -148,9 +150,9 @@ export async function addRegistrationFieldAction(fd: FormData): Promise<void> {
   if (!eventId || !fieldKey || !label || !["text", "textarea", "date", "select", "checkbox"].includes(fieldType)) throw new Error("表單欄位資料不正確");
   if (fieldType === "select" && options.length === 0) throw new Error("選單欄位至少要有一個選項");
 
-  const { data: event } = await supabase.from("events").select("id").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle();
+  const { data: event } = await adminQuery(supabase.from("events").select("id").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle());
   if (!event) throw new Error("找不到活動");
-  const { data: oldForm } = await supabase
+  const { data: oldForm } = await adminQuery(supabase
     .from("registration_forms")
     .select("id, version")
     .eq("event_id", eventId)
@@ -158,24 +160,24 @@ export async function addRegistrationFieldAction(fd: FormData): Promise<void> {
     .eq("status", "published")
     .order("version", { ascending: false })
     .limit(1)
-    .maybeSingle();
+    .maybeSingle());
   const nextVersion = (oldForm?.version ?? 0) + 1;
-  const { data: newForm, error: formError } = await supabase
+  const { data: newForm, error: formError } = await adminQuery(supabase
     .from("registration_forms")
     .insert({ clinic_id: clinicId, event_id: eventId, version: nextVersion, status: "published" })
     .select("id")
-    .single();
-  if (formError || !newForm) throw new Error(formError?.message ?? "建立表單版本失敗");
+    .single());
+  if (formError || !newForm) throw new Error((formError ? adminErrorMessage(formError) : undefined) ?? "建立表單版本失敗");
 
   if (oldForm) {
-    const { data: oldFields } = await supabase.from("registration_form_fields").select("field_key, label, field_type, required, options, sort_order").eq("form_id", oldForm.id).eq("clinic_id", clinicId).order("sort_order");
+    const { data: oldFields } = await adminQuery(supabase.from("registration_form_fields").select("field_key, label, field_type, required, options, sort_order").eq("form_id", oldForm.id).eq("clinic_id", clinicId).order("sort_order"));
     if (oldFields && oldFields.length > 0) {
-      const { error: copyError } = await supabase.from("registration_form_fields").insert(oldFields.map((field) => ({ ...field, clinic_id: clinicId, form_id: newForm.id })));
-      if (copyError) throw new Error(copyError.message);
+      const { error: copyError } = await adminQuery(supabase.from("registration_form_fields").insert(oldFields.map((field) => ({ ...field, clinic_id: clinicId, form_id: newForm.id }))));
+      if (copyError) throw new Error(adminErrorMessage(copyError));
     }
-    await supabase.from("registration_forms").update({ status: "archived" }).eq("id", oldForm.id).eq("clinic_id", clinicId);
+    await adminQuery(supabase.from("registration_forms").update({ status: "archived" }).eq("id", oldForm.id).eq("clinic_id", clinicId));
   }
-  const { error: fieldError } = await supabase.from("registration_form_fields").insert({
+  const { error: fieldError } = await adminQuery(supabase.from("registration_form_fields").insert({
     clinic_id: clinicId,
     form_id: newForm.id,
     field_key: fieldKey,
@@ -184,7 +186,7 @@ export async function addRegistrationFieldAction(fd: FormData): Promise<void> {
     required,
     options,
     sort_order: oldForm ? 1000 : 0,
-  });
-  if (fieldError) throw new Error(fieldError.message);
+  }));
+  if (fieldError) throw new Error(adminErrorMessage(fieldError));
   revalidatePath("/admin/events");
 }

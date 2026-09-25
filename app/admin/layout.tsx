@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { getOptionalMember } from "@/lib/admin";
 import { getOptionalPlatformAdmin } from "@/lib/platform";
 import { platformAccessLabel } from "@/lib/platform-roles";
@@ -51,12 +53,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
   if (!member) return <>{children}</>;
 
-  const { data: moduleSettings, error: moduleSettingsError } = await member.supabase
+  const { data: moduleSettings, error: moduleSettingsError } = await adminQuery(member.supabase
     .from("clinic_settings")
     .select("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, legacy_progress_enabled, beauty_operations_enabled")
     .eq("clinic_id", member.clinicId)
-    .maybeSingle();
-  if (moduleSettingsError) throw new Error(moduleSettingsError.message);
+    .maybeSingle());
+  if (moduleSettingsError) throw new Error(adminErrorMessage(moduleSettingsError.message));
   const modules = {
     events: moduleSettings?.events_enabled === true,
     memberships: moduleSettings?.memberships_enabled === true,
@@ -69,7 +71,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="admin-shell admin-shell-brand min-h-screen">
       <AdminProductTelemetry />
-      <AdminNav role={member.role} isPlatformAdmin={Boolean(platformAdmin)} platformAccessType={platformAdmin?.accessType} platformPermissions={platformAdmin?.permissions} hasBrandContext modules={modules} />
+      <AdminNav role={member.role} brandAccessType={member.accessType} isPlatformAdmin={Boolean(platformAdmin)} platformAccessType={platformAdmin?.accessType} platformPermissions={platformAdmin?.permissions} hasBrandContext modules={modules} />
       <div className="min-h-screen lg:pl-56">
         <header className="admin-topbar">
           <div className="admin-topbar-inner flex-wrap sm:flex-nowrap">
