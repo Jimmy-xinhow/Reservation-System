@@ -18,6 +18,20 @@ interface ChatMsg {
   body: string;
   created_at: string;
 }
+interface ChatMessagePage {
+  messages: ChatMsg[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+function mergeMessages(existing: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
+  const byId = new Map(existing.map((message) => [message.id, message]));
+  for (const message of incoming) byId.set(message.id, message);
+  return [...byId.values()].sort((a, b) => {
+    const timeDifference = Date.parse(a.created_at) - Date.parse(b.created_at);
+    return timeDifference || a.id.localeCompare(b.id);
+  });
+}
 
 async function getJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -44,11 +58,16 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
   const [threads, setThreads] = useState<ChatThread[]>(initialThreads);
   const [active, setActive] = useState<string | null>(initialThreads[0]?.lineUserId ?? null);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const lastCount = useRef(0);
+  const lastNewestId = useRef<string | null>(null);
+  const activeRef = useRef(active);
+  const olderLoadedRef = useRef(false);
 
   const refreshThreads = useCallback(async () => {
     try {
@@ -60,14 +79,40 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
 
   const loadMessages = useCallback(async (uid: string) => {
     try {
-      const data = await getJSON<{ messages: ChatMsg[] }>(
+      const data = await getJSON<ChatMessagePage>(
         `/api/admin/chat?type=messages&u=${encodeURIComponent(uid)}`,
       );
-      setMessages(data.messages);
+      if (activeRef.current !== uid) return;
+      setMessages((current) => mergeMessages(current, data.messages));
+      if (!olderLoadedRef.current) {
+        setOlderCursor(data.nextCursor);
+        setHasOlder(data.hasMore);
+      }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "載入失敗");
+      if (activeRef.current === uid) setErr(e instanceof Error ? e.message : "載入失敗");
     }
   }, []);
+
+  async function loadOlder() {
+    if (!active || !hasOlder || !olderCursor || loadingOlder) return;
+    const uid = active;
+    setLoadingOlder(true);
+    setErr(null);
+    try {
+      const data = await getJSON<ChatMessagePage>(
+        `/api/admin/chat?type=messages&u=${encodeURIComponent(uid)}&before=${encodeURIComponent(olderCursor)}`,
+      );
+      if (activeRef.current !== uid) return;
+      setMessages((current) => mergeMessages(current, data.messages));
+      olderLoadedRef.current = true;
+      setOlderCursor(data.nextCursor);
+      setHasOlder(data.hasMore);
+    } catch (e) {
+      if (activeRef.current === uid) setErr(e instanceof Error ? e.message : "載入更早訊息失敗");
+    } finally {
+      if (activeRef.current === uid) setLoadingOlder(false);
+    }
+  }
 
   useEffect(() => {
     const t = setInterval(refreshThreads, 5000);
@@ -82,8 +127,9 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
   }, [active, loadMessages]);
 
   useEffect(() => {
-    if (messages.length !== lastCount.current) {
-      lastCount.current = messages.length;
+    const newestId = messages.at(-1)?.id ?? null;
+    if (newestId !== lastNewestId.current) {
+      lastNewestId.current = newestId;
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
@@ -109,9 +155,14 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lineUserId: active, body }),
       });
-      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string; data?: { notice?: string } } | null;
+      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string; data?: { messageId?: string; notice?: string } } | null;
       explicitlyRejected = json?.ok === false;
       if (!json?.ok) throw new Error(json?.error ?? "無法確認送出結果，請先核對對話，勿重複送出。");
+      const committedId = json.data?.messageId;
+      if (committedId) {
+        setMessages((current) => current.map((message) => message.id === optimistic.id
+          ? { ...message, id: committedId } : message));
+      }
       await loadMessages(active); // 用真實資料取代樂觀訊息
       refreshThreads();
       if (json.data?.notice) setErr(json.data.notice);
@@ -126,9 +177,14 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
   }
 
   function openThread(uid: string) {
+    activeRef.current = uid;
+    olderLoadedRef.current = false;
     setActive(uid);
     setMessages([]);
-    lastCount.current = 0;
+    setOlderCursor(null);
+    setHasOlder(false);
+    setLoadingOlder(false);
+    lastNewestId.current = null;
     setThreads((ts) => ts.map((t) => (t.lineUserId === uid ? { ...t, unread: 0 } : t)));
   }
 
@@ -242,6 +298,14 @@ export default function ChatConsole({ initialThreads }: { initialThreads: ChatTh
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4" style={{ height: "50vh" }}>
+              {hasOlder && (
+                <div className="text-center">
+                  <button type="button" onClick={loadOlder} disabled={loadingOlder}
+                    className="text-xs font-medium text-brand-600 hover:underline disabled:opacity-50">
+                    {loadingOlder ? "載入中…" : "載入更早訊息"}
+                  </button>
+                </div>
+              )}
               {messages.map((m) => {
                 const staff = m.sender === "staff";
                 return (

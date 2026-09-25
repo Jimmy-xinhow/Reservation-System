@@ -42,7 +42,13 @@ export async function GET(req: NextRequest) {
     if (type === "unread") return ok({ count: await unreadCount(supabase, clinicId) });
     if (type === "messages") {
       const u = req.nextUrl.searchParams.get("u") ?? "";
-      return ok({ messages: await getThreadMessages(supabase, clinicId, u) });
+      const before = req.nextUrl.searchParams.get("before");
+      try {
+        return ok(await getThreadMessages(supabase, clinicId, u, before));
+      } catch (error) {
+        if (error instanceof Error && error.message === "訊息游標無效") return fail("訊息游標無效", 400);
+        throw error;
+      }
     }
     return ok({ threads: await buildThreads(supabase, clinicId) });
   } catch (e) {

@@ -19,6 +19,36 @@ export interface ChatMsg {
   created_at: string;
 }
 
+export interface ChatMessagePage {
+  messages: ChatMsg[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
+const CHAT_PAGE_SIZE = 500;
+
+function decodeChatCursor(cursor: string): { createdAt: string; id: string } {
+  if (cursor.length > 160 || !/^[A-Za-z0-9_-]+$/.test(cursor)) throw new Error("訊息游標無效");
+  try {
+    const value: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (!value || typeof value !== "object") throw new Error();
+    const row = value as Record<string, unknown>;
+    const createdAt = row.createdAt;
+    const id = row.id;
+    if (typeof createdAt !== "string" || typeof id !== "string"
+      || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)$/.test(createdAt)
+      || Number.isNaN(Date.parse(createdAt))
+      || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) throw new Error();
+    return { createdAt, id };
+  } catch {
+    throw new Error("訊息游標無效");
+  }
+}
+
+function encodeChatCursor(row: { created_at: string; id: string }): string {
+  return Buffer.from(JSON.stringify({ createdAt: row.created_at, id: row.id })).toString("base64url");
+}
+
 /** 對話串列表:依 line_user_id 聚合最近訊息、未讀數,並帶入顧客姓名。 */
 export async function buildThreads(
   supabase: SupabaseClient,
@@ -114,27 +144,44 @@ export async function getThreadMessages(
   supabase: SupabaseClient,
   clinicId: string,
   lineUserId: string,
-): Promise<ChatMsg[]> {
-  if (!lineUserId) return [];
-  const { data, error } = await adminQuery(supabase
+  before?: string | null,
+): Promise<ChatMessagePage> {
+  if (!lineUserId) return { messages: [], hasMore: false, nextCursor: null };
+  const cursor = before ? decodeChatCursor(before) : null;
+  let query = supabase
     .from("chat_messages")
-    .select("id, sender, body, created_at")
+    .select("id, sender, body, created_at, read_by_staff")
     .eq("clinic_id", clinicId)
     .eq("line_user_id", lineUserId)
-    .order("created_at", { ascending: true })
-    .limit(500));
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(CHAT_PAGE_SIZE + 1);
+  if (cursor) query = query.or(`created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`);
+  const { data, error } = await adminQuery(query);
 
   if (error) throw new Error(adminErrorMessage(error));
-  const { error: readError } = await adminQuery(supabase
-    .from("chat_messages")
-    .update({ read_by_staff: true })
-    .eq("clinic_id", clinicId)
-    .eq("line_user_id", lineUserId)
-    .eq("sender", "patient")
-    .eq("read_by_staff", false));
-
-  if (readError) throw new Error(adminErrorMessage(readError));
-  return (data ?? []) as ChatMsg[];
+  const newestFirst = (data ?? []).slice(0, CHAT_PAGE_SIZE);
+  const unreadIds = newestFirst.filter((row) => row.sender === "patient" && row.read_by_staff === false)
+    .map((row) => row.id as string);
+  for (let start = 0; start < unreadIds.length; start += 100) {
+    const { error: readError } = await adminQuery(supabase
+      .from("chat_messages")
+      .update({ read_by_staff: true })
+      .eq("clinic_id", clinicId)
+      .eq("line_user_id", lineUserId)
+      .eq("sender", "patient")
+      .eq("read_by_staff", false)
+      .in("id", unreadIds.slice(start, start + 100)));
+    if (readError) throw new Error(adminErrorMessage(readError));
+  }
+  const oldest = newestFirst.at(-1);
+  return {
+    messages: newestFirst.reverse().map((row) => ({ id: row.id as string,
+      sender: row.sender as "patient" | "staff", body: row.body as string,
+      created_at: row.created_at as string })),
+    hasMore: (data ?? []).length > CHAT_PAGE_SIZE,
+    nextCursor: oldest && (data ?? []).length > CHAT_PAGE_SIZE ? encodeChatCursor(oldest) : null,
+  };
 }
 
 /** 尚未被服務人員讀取的顧客訊息數。查詢失敗時不冒充零未讀。 */
