@@ -45,7 +45,7 @@ for(const [path,name,values]of actions)for(const mode of ['returned','thrown'])t
 
 const empty={data:[],error:null,count:0};
 for(const mode of ['returned','thrown'])for(const [label,params,successResults]of [
-['list',{},[empty]],['search',{q:'test'},[empty]],['birthday',{q:'0101'},[empty,empty]],['segment',{segment_id:'segment'},[empty]],['counts',{},[empty,{data:[{id:'patient'}],error:null,count:1}]],
+['list',{},[empty]],['search',{q:'test'},[empty]],['birthday',{q:'0101'},[empty]],['segment',{segment_id:'segment'},[empty]],['counts',{},[empty,{data:[{id:'patient'}],error:null,count:1}]],
 ])test('patient '+label+': later '+mode+' failure is not zero results',async()=>{const h=harness('app/admin/patients/page.tsx',{mode,successResults});await assert.rejects(h.api.default({searchParams:Promise.resolve(params)}),safe);assert.ok(h.awaits()>successResults.length);});
 for(const mode of ['returned','thrown'])test('dashboard: '+mode+' patient count failure is not zero',async()=>{const successResults=[{data:{events_enabled:false,crm_automation_enabled:false,line_channel_enabled:false},error:null},...Array(10).fill(empty)];const h=harness('app/admin/dashboard/page.tsx',{mode,successResults});await assert.rejects(h.api.default({searchParams:Promise.resolve({})}),safe);assert.ok(h.awaits()>11);});
 for(const mode of ['returned','thrown'])for(const [path,name,values,successResults]of [
