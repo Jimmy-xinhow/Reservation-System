@@ -398,8 +398,9 @@ vercel.json               (僅 Vercel 用;Railway 不讀)
 92. `supabase/migrations/202609250001_patient_record_tenant_links.sql`
 93. `supabase/migrations/202609250002_chat_thread_summary.sql`
 94. `supabase/migrations/202609250003_appointment_registration_patient_tenant_links.sql`
+95. `supabase/migrations/202609250004_membership_patient_tenant_link.sql`
 
-上述 94 步包含前 8 支舊版 SQL 與 86 支時間戳 migration；CLI `db push` 只管理後 86 支。每次升級先對照實際 `migration list`／dry-run 與可回復備份，不能把 staging 已套用狀態當成正式環境已套用。`202609250003` 在 staging 已完成首跑、重跑與跨品牌拒絕；正式環境尚未套用，詳見 [G3-03 關聯驗證](docs/g3-03-appointment-registration-patient-tenant-fk-2026-09-25.md)。完整 Auth／Vault／Storage 還原仍待獨立環境，不能用 public schema 備份代替。
+上述 95 步包含前 8 支舊版 SQL 與 87 支時間戳 migration；CLI `db push` 只管理後 87 支。每次升級先對照實際 `migration list`／dry-run 與可回復備份，不能把 staging 已套用狀態當成正式環境已套用。`202609250003` 在 staging 已完成首跑、重跑與跨品牌拒絕；正式環境尚未套用，詳見 [G3-03 關聯驗證](docs/g3-03-appointment-registration-patient-tenant-fk-2026-09-25.md)。`202609250004` 修補會員對外品牌顧客的關聯，是否套用以 migration 歷史及驗證報告為準。完整 Auth／Vault／Storage 還原仍待獨立環境，不能用 public schema 備份代替。
 
 `202609200003` 新增 service-role 專用的品牌／指定回訪原子領取。單次維運使用 `POST /api/cron/followups`，Bearer `CRON_SECRET`，JSON 為 `{ "clinic_id": "品牌 UUID", "followup_ids": ["回訪 UUID"] }`；只處理該品牌、指定 ID、已到期且 pending 的 LINE／Email 回訪。空值、不合法或重複 ID 回 400，不回退全域。正常 GET 排程維持原行為。此入口可能真正發訊，僅能指定已授權的收件資料；不會替未知送達的 processing 紀錄自動重送。新環境須先套 migration 再部署 route；既有環境以該環境的 migration list 與部署 SHA 判定，不沿用本文件的舊狀態註記。
 

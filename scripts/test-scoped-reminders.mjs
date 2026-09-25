@@ -5,12 +5,12 @@ import vm from 'node:vm';
 import ts from 'typescript';
 const clinic='11111111-1111-4111-8111-111111111111',foreign='22222222-2222-4222-8222-222222222222';
 const own='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',other='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',unselected='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-function fixture(name,{inactive=false,fail=false,dbError=false}={}){
+function fixture(name,{inactive=false,fail=false,dbError=false,mislinked=false}={}){
  const writes=[],claims=[],sent=[];let calls=0;
  const source={clinics:[{id:clinic,active:!inactive,name:'Synthetic',line_destination:null},{id:foreign,active:true}],appointments:[],patient_memberships:[]};
  for(const [id,clinic_id] of [[own,clinic],[other,foreign],[unselected,clinic]]){
   source.appointments.push({id,clinic_id,status:'booked',start_at:new Date(Date.now()+3600000).toISOString(),patients:{name:'Synthetic',line_user_id:fail?'synthetic-line':null,email:null}});
-  source.patient_memberships.push({id,clinic_id,status:'active',patient_id:id,credits_remaining:1,expires_at:null,patients:{name:'Synthetic',line_user_id:null,email:null}});
+  source.patient_memberships.push({id,clinic_id,status:'active',patient_id:id,credits_remaining:1,expires_at:null,patients:{clinic_id:mislinked&&id===own?foreign:clinic_id,name:'Synthetic',line_user_id:null,email:null}});
  }
  function query(table){let filters=[],action=null;
   const q={select:()=>q,eq:(k,v)=>{filters.push(r=>r[k]===v);return q;},in:(k,v)=>{filters.push(r=>v.includes(r[k]));return q;},gt:(k,v)=>{filters.push(r=>r[k]>v);return q;},lte:(k,v)=>{filters.push(r=>r[k]<=v);return q;},order:()=>q,limit:()=>q,insert:v=>{action=['insert',v];return q;},update:v=>{action=['update',v];return q;},maybeSingle:async()=>{const r=await q;return {...r,data:r.data?.[0]??null};},then:(resolve,reject)=>Promise.resolve().then(()=>{
@@ -37,6 +37,15 @@ function fixture(name,{inactive=false,fail=false,dbError=false}={}){
  }
  return {...load(`app/api/cron/${name}/route.ts`),writes,claims,sent,calls:()=>calls};
 }
+test('membership reminder refuses a brand row linked to another brand customer',async()=>{
+ const f=fixture('membership',{mislinked:true});
+ const body=await(await f.POST(request({clinic_id:clinic,membership_ids:[own]}))).json();
+ assert.equal(body.ok,false);
+ assert.equal(body.candidates,0);
+ assert.equal(f.writes.length,0);
+ assert.equal(f.sent.length,0);
+ assert.equal(body.errors.length,1);
+});
 const request=(body,token='secret')=>({headers:new Headers({authorization:'Bearer '+token}),json:async()=>body});
 for(const [name,key] of [['reminders','appointment_ids'],['membership','membership_ids']]){
  test(name+' rejects auth before JSON or DB',async()=>{const f=fixture(name);assert.equal((await f.POST({...request({},'bad'),json:()=>{throw Error('read body');}})).status,401);assert.equal(f.calls(),0);});
