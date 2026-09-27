@@ -50,7 +50,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
   const clinicSlug = typeof params.clinic_slug === "string" ? params.clinic_slug : null;
   const clinicIdParam = typeof params.clinic_id === "string" ? params.clinic_id : null;
   const requestHeaders = await headers();
-  const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const requestHost = requestHeaders.get("host");
   if (!clinicSlug && !clinicIdParam && isPlatformHost(requestHost)) return <MarketingHome />;
 
   let clinicId: string | null = null;

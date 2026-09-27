@@ -18,7 +18,7 @@ export default async function QueueBoard({ searchParams }: { searchParams?: Prom
     const clinicId = await resolvePublicClinicIdFromScope(svc, {
       clinicSlug: typeof params.clinic_slug === "string" ? params.clinic_slug : null,
       clinicId: typeof params.clinic_id === "string" ? params.clinic_id : null,
-      host: requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host"),
+      host: requestHeaders.get("host"),
     });
     if (!clinicId) return <Centered message="尚未設定公開品牌" />;
     const { data: settings, error: settingsError } = await svc

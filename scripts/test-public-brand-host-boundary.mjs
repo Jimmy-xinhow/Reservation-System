@@ -1,0 +1,68 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import fs from "node:fs";
+import vm from "node:vm";
+import ts from "typescript";
+import * as jsx from "react/jsx-runtime";
+
+const publicHost = "reservation-system-staging-staging.up.railway.app";
+const spoofedHost = "attacker.example";
+
+function load(file, dependencies) {
+  const exports = {};
+  const source = ts.transpileModule(fs.readFileSync(file, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  }).outputText;
+  vm.runInNewContext(source, {
+    exports,
+    require: name => {
+      if (name in dependencies) return dependencies[name];
+      throw new Error(`Unexpected dependency: ${name}`);
+    },
+    process: { env: { APP_URL: `https://${publicHost}` } },
+  });
+  return exports;
+}
+
+function forwardedHeaders(host = publicHost) {
+  return { get(name) {
+    if (name === "host") return host;
+    if (name === "x-forwarded-host") return spoofedHost;
+    return null;
+  } };
+}
+
+test("homepage brand lookup uses request Host, not a forwarded host", async () => {
+  let scope;
+  const page = load("app/page.tsx", {
+    "react/jsx-runtime": jsx,
+    "next/link": { default: () => null },
+    "@/components/Brand": { Brand: () => null },
+    "@/lib/supabase": { createServiceClient: () => ({}) },
+    "next/headers": { headers: async () => forwardedHeaders() },
+    "@/lib/public-brand": { resolvePublicClinicIdFromScope: async (_db, value) => { scope = value; return null; } },
+    "@/components/FunnelTracker": { FunnelTracker: () => null },
+    "@/components/MarketingHome": { MarketingHome: () => null },
+    "@/components/showcase/IndustryShowcase": { IndustryShowcase: () => null },
+    "@/lib/public-brand-page": { loadPublicBrandPage: async () => null },
+    "@/lib/line-channel": { getClinicLineChannelContext: async () => null },
+    "@/lib/customer-entry": { publicCustomerEntryUrl: () => null },
+  });
+  await page.default({ searchParams: Promise.resolve({ clinic_slug: "fixture-brand" }) });
+  assert.equal(scope.host, publicHost);
+});
+
+test("legacy public board uses request Host, not a forwarded host", async () => {
+  let scope;
+  const page = load("app/q/page.tsx", {
+    "react/jsx-runtime": jsx,
+    "@/lib/supabase": { createServiceClient: () => ({}) },
+    "@/lib/queue": { taipeiToday: () => "2026-09-27", getQueueForDate: async () => [] },
+    "next/headers": { headers: async () => forwardedHeaders() },
+    "@/lib/public-brand": { resolvePublicClinicIdFromScope: async (_db, value) => { scope = value; return null; } },
+    "@/components/Brand": { Brand: () => null },
+    "@/components/AutoRefresh": { AutoRefresh: () => null },
+  });
+  await page.default({ searchParams: Promise.resolve({ clinic_slug: "fixture-brand" }) });
+  assert.equal(scope.host, publicHost);
+});
