@@ -1,4 +1,3 @@
-import { headers } from "next/headers";
 import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { deliveryError } from "@/lib/delivery-error";
 import Link from "next/link";
@@ -8,6 +7,7 @@ import { requireAdmin } from "@/lib/admin";
 import { saveLineCredentialsAction, sendTestPushAction, updateLineChannelSettingsAction, verifyLineChannelSettingsAction } from "../line-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createServiceClient } from "@/lib/supabase";
+import { publicRequestOrigin } from "@/lib/public-origin";
 import ChannelMessagePreview from "@/app/admin/_components/ChannelMessagePreview";
 
 export const dynamic = "force-dynamic";
@@ -21,10 +21,7 @@ export default async function LinePage({
   const { clinicId, accessType } = await requireAdmin();
   const { test, saved, verified, credentials } = await searchParams;
 
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "your-app.up.railway.app";
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  const base = `${proto}://${host}`;
+  const base = publicRequestOrigin();
   const supabase = await adminQuery(Promise.resolve().then(() => createSupabaseServer()));
   const service = await adminQuery(Promise.resolve().then(() => createServiceClient()));
   const [{ data: clinic, error: clinicError }, { data: settings, error: settingsError }, { data: channel, error: channelError }] = await adminQuery(Promise.all([

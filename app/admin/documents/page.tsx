@@ -2,9 +2,9 @@
 import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { PatientPicker } from "@/components/admin/PatientPicker";
-import { headers } from "next/headers";
 import { canViewSensitiveCustomerData, requireNonProvider } from "@/lib/admin";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { publicRequestOrigin } from "@/lib/public-origin";
 import { SubmitButton } from "@/components/SubmitButton";
 import { cancelDocumentRequestAction, createDocumentTemplateAction, issueDocumentRequestAction } from "./actions";
 
@@ -25,10 +25,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
     adminQuery(supabase.from("customer_document_requests").select("id,status,expires_at,signer_name,signed_at,created_at,patients(name,phone),document_templates(name,kind,version)").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).order("id").limit(100)),
   ]);
   if (requestsResult.error) throw new Error(adminErrorMessage(requestsResult.error));
-  const headerStore = await headers();
-  const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "";
-  const protocol = headerStore.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
-  const signUrl = params.sign_token && host ? `${protocol}://${host}/sign/${encodeURIComponent(params.sign_token)}` : null;
+  const signUrl = params.sign_token ? `${publicRequestOrigin()}/sign/${encodeURIComponent(params.sign_token)}` : null;
 
   return <div className="admin-page">
     <div className="admin-page-header"><div><p className="eyebrow">營運中心</p><h1 className="admin-page-title">同意書與電子簽署</h1><p className="admin-page-description">建立版本化範本，發出限時簽署連結，並保存當時內容與簽署時間。</p></div></div>
