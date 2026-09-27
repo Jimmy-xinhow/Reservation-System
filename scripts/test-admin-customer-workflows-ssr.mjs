@@ -70,6 +70,7 @@ function fixture({ role = 'owner', deny = false, failTable = '' } = {}) {
     '@/lib/supabase-server': { createSupabaseServer: async () => client },
     '@/lib/supabase-pagination': pagination,
     '@/lib/admin-query': queryBoundary,
+    '@/lib/public-origin': { publicRequestOrigin: () => 'https://trusted.example' },
     '@/components/admin/PatientPicker': { PatientPicker },
     '@/components/SubmitButton': { SubmitButton },
   };
