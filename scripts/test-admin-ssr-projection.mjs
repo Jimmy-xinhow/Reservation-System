@@ -38,6 +38,7 @@ function fixture(page, accessType = 'brand_admin', denied = false, section = 'br
     '@/lib/email': {getEmailCredentialStatus: async () => ({configured: true, source: 'vault', from: 'sender@fixture.invalid', ...extra})},
     '@/lib/payment': {getPaymentSecretStatus: async () => ({configured: true, source: 'vault', ...extra})},
     '@/lib/line-channel': {getClinicLineChannelContext: async () => ({enabled: true, liffId: 'public-liff', verificationStatus: 'ready', ...extra})},
+    '@/lib/public-origin': {publicRequestOrigin: () => 'https://trusted.example'},
     '@/lib/line': {lineAccessTokenForDestination: async () => secret, getLineCredentialStatus: async () => ({configured: true, source: 'vault', ...extra}), getBotInfo: async token => {assert.equal(token, secret); return {displayName: 'Fixture Bot', ...extra};}, getQuota: async () => ({type: 'limited', value: 200, ...extra}), getQuotaConsumption: async () => 20},
   };
   deps['@/lib/error-category'] = load('lib/error-category.ts', deps);
