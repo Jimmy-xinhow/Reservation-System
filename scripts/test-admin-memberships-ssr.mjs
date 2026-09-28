@@ -180,3 +180,41 @@ test('patient search API hides database errors in both ordinary and birthday que
     assert.ok(calls.every(call => call.table === 'patients' && call.filters.some(([column, value]) => column === 'clinic_id' && value === clinicId)));
   }
 });
+
+test('booking patient birthday search finds a matching customer after 1,000 others', async () => {
+  const patients = Array.from({ length: 1001 }, (_, index) => ({
+    id: `patient-${index}`,
+    clinic_id: clinicId,
+    name: `顧客 ${String(index).padStart(4, '0')}`,
+    phone: `09${String(index).padStart(8, '0')}`,
+    birthday: index === 1000 ? '1990-03-08' : '1990-01-01',
+    birthday_mmdd: index === 1000 ? '0308' : '0101',
+    active: true,
+  }));
+  const client = { from() {
+    const filters = [];
+    let ordinarySearch = false;
+    let limit = 1000;
+    const query = new Proxy({}, { get(_target, key) {
+      if (key === 'then') return (resolve, reject) => {
+        let data = ordinarySearch ? [] : patients;
+        for (const [column, value] of filters) data = data.filter(row => row[column] === value);
+        return Promise.resolve({ data: data.slice(0, limit), error: null }).then(resolve, reject);
+      };
+      return (...args) => {
+        if (key === 'eq') filters.push(args);
+        if (key === 'or') ordinarySearch = true;
+        if (key === 'limit') limit = args[0];
+        return query;
+      };
+    } });
+    return query;
+  } };
+  const route = load('app/api/admin/patients/search/route.ts', {
+    '@/lib/admin': { requireMember: async () => ({ supabase: client, clinicId, role: 'owner' }), canViewSensitiveCustomerData: () => true },
+    '@/lib/http': { ok: data => ({ ok: true, data }), fail: (message, status) => ({ ok: false, message, status }) },
+  });
+  const result = await route.GET({ nextUrl: { searchParams: new URL('https://example.test?q=0308').searchParams } });
+  assert.equal(result.ok, true);
+  assert.deepEqual(Array.from(result.data.patients, patient => patient.id), ['patient-1000']);
+});
