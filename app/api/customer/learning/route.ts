@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 interface LearningRequest { browser_token?: string; action?: "complete"|"uncomplete"|"submit_assessment"; unit_id?: string; answer_index?: number; submission_text?: string; }
-interface RegistrationRow { id:string;event_id:string;status:string;payment_status:string;created_at:string;events:{title:string}|{title:string}[]|null; }
+interface RegistrationRow { id:string;event_id:string;status:string;payment_status:string;created_at:string;events:{clinic_id:string;title:string}|{clinic_id:string;title:string}[]|null; }
 interface UnitRow { id:string;event_id:string;title:string;summary:string|null;unit_type:"video"|"link"|"download"|"text"|"quiz"|"assignment";content_url:string|null;body:string|null;access_rule:"registered"|"paid"|"attended";release_mode:"immediate"|"days_after_registration"|"after_previous";release_days:number;sort_order:number; }
 interface AssessmentRow { id:string;unit_id:string;kind:"quiz"|"assignment";prompt:string;options:unknown;correct_option?:number|null;passing_score:number; }
 interface SubmissionRow { unit_id:string;status:"submitted"|"passed"|"revision";score:number|null;feedback:string|null;submission_text:string|null;submitted_at:string; }
@@ -29,8 +29,12 @@ export async function POST(request:NextRequest){
     const body=await request.json().catch(()=>null) as LearningRequest|null;const service=createServiceClient();const clinicId=await resolvePublicClinicId(request,service);if(!clinicId)return fail("找不到品牌入口",404);
     const identity=body?.browser_token?.trim()?verifyBrowserBookingToken(body.browser_token.trim()):null;if(!identity)return fail("顧客身分已過期，請重新驗證",401);if(identity.clinicId!==clinicId)return fail("品牌入口不相符",403);
     const {data:patient,error:patientError}=await service.from("patients").select("id,name").eq("id",identity.patientId).eq("clinic_id",clinicId).eq("active",true).maybeSingle();if(patientError)throw new Error(patientError.message);if(!patient)return fail("找不到顧客資料",404);
-    const {data:registrationData,error:registrationError}=await service.from("registrations").select("id,event_id,status,payment_status,created_at,events(title)").eq("clinic_id",clinicId).eq("patient_id",patient.id).in("status",["pending","confirmed","attended"]);if(registrationError)throw new Error(registrationError.message);
-    const registrations=(registrationData??[]) as unknown as RegistrationRow[];const eventIds=[...new Set(registrations.map(item=>item.event_id))];if(eventIds.length===0)return ok({patient,courses:[]});
+    const {data:registrationData,error:registrationError}=await service.from("registrations").select("id,event_id,status,payment_status,created_at,events(clinic_id,title)").eq("clinic_id",clinicId).eq("patient_id",patient.id).in("status",["pending","confirmed","attended"]);if(registrationError)throw new Error(registrationError.message);
+    const registrations=((registrationData??[]) as unknown as RegistrationRow[]).filter(item=>{
+      const event=Array.isArray(item.events)?item.events[0]:item.events;
+      return event?.clinic_id===clinicId;
+    });
+    const eventIds=[...new Set(registrations.map(item=>item.event_id))];if(eventIds.length===0)return ok({patient,courses:[]});
     const {data:unitsData,error:unitsError}=await service.from("course_units").select("id,event_id,title,summary,unit_type,content_url,body,access_rule,release_mode,release_days,sort_order").eq("clinic_id",clinicId).eq("active",true).in("event_id",eventIds).order("sort_order").order("created_at");if(unitsError)throw new Error(unitsError.message);
     const units=(unitsData??[]) as UnitRow[];
     const loadProgress=async()=>{const {data,error}=units.length>0?await service.from("course_unit_progress").select("unit_id,registration_id,completed_at").eq("clinic_id",clinicId).eq("patient_id",patient.id).in("unit_id",units.map(item=>item.id)):{data:[],error:null};if(error)throw new Error(error.message);return data??[];};
