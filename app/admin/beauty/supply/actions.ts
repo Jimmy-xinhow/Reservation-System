@@ -5,6 +5,7 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireOperator } from "@/lib/admin";
+import { assertBeautyOperationsEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 
 function text(fd: FormData, key: string): string { return String(fd.get(key) ?? "").trim(); }
@@ -12,13 +13,13 @@ function number(fd: FormData, key: string): number { const value = Number(text(f
 function refresh(): void { revalidatePath("/admin/beauty/supply"); revalidatePath("/admin/beauty"); revalidatePath("/admin/operations/finance"); revalidatePath("/admin/dashboard"); }
 
 export async function createSupplierAction(fd: FormData): Promise<void> {
-  const member = await requireAdmin(); const name = text(fd, "name"); if (!name) throw new Error("請填供應商名稱");
+  const member = await requireAdmin(); await assertBeautyOperationsEnabled(member); const name = text(fd, "name"); if (!name) throw new Error("請填供應商名稱");
   const { error } = await adminQuery(createServiceClient().from("inventory_suppliers").insert({ clinic_id: member.clinicId, name: name.slice(0,160), contact_name: text(fd,"contact_name").slice(0,100)||null, phone: text(fd,"phone").slice(0,40)||null, email: text(fd,"email").slice(0,160)||null, note: text(fd,"note").slice(0,500)||null, active: true }));
   if (error) throw new Error(adminErrorMessage(error)); refresh();
 }
 
 export async function createPurchaseOrderAction(fd: FormData): Promise<void> {
-  const member = await requireOperator(); const service=createServiceClient(); const supplierId=text(fd,"supplier_id"); const itemId=text(fd,"item_id"); const quantity=number(fd,"quantity"); const cost=Math.round(number(fd,"unit_cost"));
+  const member = await requireOperator(); await assertBeautyOperationsEnabled(member); const service=createServiceClient(); const supplierId=text(fd,"supplier_id"); const itemId=text(fd,"item_id"); const quantity=number(fd,"quantity"); const cost=Math.round(number(fd,"unit_cost"));
   if (!supplierId||!itemId||quantity<=0||cost<0) throw new Error("採購資料不完整");
   const [{data:supplier},{data:item}] = await adminQuery(Promise.all([service.from("inventory_suppliers").select("id").eq("id",supplierId).eq("clinic_id",member.clinicId).eq("active",true).maybeSingle(),service.from("inventory_items").select("id").eq("id",itemId).eq("clinic_id",member.clinicId).eq("active",true).maybeSingle()]));
   if(!supplier||!item) throw new Error("供應商或品項不屬於目前品牌");
@@ -31,6 +32,7 @@ export async function createPurchaseOrderAction(fd: FormData): Promise<void> {
 
 export async function addPurchaseOrderItemAction(fd: FormData): Promise<void> {
   const member=await requireOperator();
+  await assertBeautyOperationsEnabled(member);
   const quantity=number(fd,"quantity");
   const cost=Math.round(number(fd,"unit_cost"));
   const orderId=text(fd,"order_id");
@@ -49,15 +51,15 @@ export async function addPurchaseOrderItemAction(fd: FormData): Promise<void> {
 }
 
 export async function setPurchaseOrderOrderedAction(fd: FormData): Promise<void> {
-  const member=await requireOperator();const {error}=await adminQuery(createServiceClient().from("purchase_orders").update({status:"ordered",ordered_at:new Date().toISOString()}).eq("id",text(fd,"id")).eq("clinic_id",member.clinicId).eq("status","draft"));if(error)throw new Error(adminErrorMessage(error));refresh();
+  const member=await requireOperator();await assertBeautyOperationsEnabled(member);const {error}=await adminQuery(createServiceClient().from("purchase_orders").update({status:"ordered",ordered_at:new Date().toISOString()}).eq("id",text(fd,"id")).eq("clinic_id",member.clinicId).eq("status","draft"));if(error)throw new Error(adminErrorMessage(error));refresh();
 }
 
 export async function receivePurchaseOrderAction(fd: FormData): Promise<void> {
-  const member=await requireOperator();const {error}=await adminQuery(createServiceClient().rpc("receive_purchase_order",{p_clinic_id:member.clinicId,p_actor_user_id:member.user.id,p_purchase_order_id:text(fd,"id")}));if(error)throw new Error(adminErrorMessage(error));refresh();
+  const member=await requireOperator();await assertBeautyOperationsEnabled(member);const {error}=await adminQuery(createServiceClient().rpc("receive_purchase_order",{p_clinic_id:member.clinicId,p_actor_user_id:member.user.id,p_purchase_order_id:text(fd,"id")}));if(error)throw new Error(adminErrorMessage(error));refresh();
 }
 
 export async function finalizeStocktakeAction(fd: FormData): Promise<void> {
-  const member=await requireOperator();const counts:Array<{item_id:string;actual_quantity:number}>=[];
+  const member=await requireOperator();await assertBeautyOperationsEnabled(member);const counts:Array<{item_id:string;actual_quantity:number}>=[];
   for(const [key,value] of fd.entries()){if(!key.startsWith("count:"))continue;const actual=Number(String(value));if(!Number.isFinite(actual)||actual<0)throw new Error("盤點數量不可小於 0");counts.push({item_id:key.slice(6),actual_quantity:actual});}
   const {error}=await adminQuery(createServiceClient().rpc("finalize_inventory_stocktake",{p_clinic_id:member.clinicId,p_actor_user_id:member.user.id,p_note:text(fd,"note")||null,p_counts:counts}));if(error)throw new Error(adminErrorMessage(error));refresh();
 }

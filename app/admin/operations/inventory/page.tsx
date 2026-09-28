@@ -4,6 +4,8 @@ import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireNonProvider } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { formatDateTime } from "@/lib/slots";
 import { createServiceClient } from "@/lib/supabase";
 import { createInventoryItemAction, recordInventoryMovementAction } from "../../beauty/actions";
@@ -22,7 +24,9 @@ const twd = new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD",
 const PAGE_SIZE = 50;
 
 export default async function InventoryOperationsPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
-  const { clinicId } = await requireNonProvider();
+  const member = await requireNonProvider();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) return <ModuleDisabled title="服務營運與庫存" />;
+  const { clinicId } = member;
   const service = createServiceClient();
   const [params, inventory, movementsResult] = await adminQuery(Promise.all([
     searchParams,

@@ -2,6 +2,8 @@
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireNonProvider } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { createServiceClient } from "@/lib/supabase";
 import { saveCommissionRuleAction } from "../../beauty/actions";
 
@@ -15,7 +17,9 @@ interface RuleRow { id: string; doctor_id: string; service_id: string | null; am
 const twd = new Intl.NumberFormat("zh-TW", { style: "currency", currency: "TWD", maximumFractionDigits: 0 });
 
 export default async function CommissionOperationsPage() {
-  const { clinicId } = await requireNonProvider();
+  const member = await requireNonProvider();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) return <ModuleDisabled title="服務營運與庫存" />;
+  const { clinicId } = member;
   const service = createServiceClient();
   const monthParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit" }).formatToParts(new Date());
   const year = monthParts.find((part) => part.type === "year")?.value;

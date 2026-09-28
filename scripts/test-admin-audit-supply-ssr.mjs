@@ -22,7 +22,7 @@ function load(file, deps) {
   return exports.default;
 }
 
-function fixture({ data = {}, failedTable, rejectTable, failSecondPageTable, deny = false } = {}) {
+function fixture({ data = {}, failedTable, rejectTable, failSecondPageTable, deny = false, enabled = true } = {}) {
   const queries = [];
   let serverClients = 0;
   const supabase = { from(table) {
@@ -54,6 +54,8 @@ function fixture({ data = {}, failedTable, rejectTable, failSecondPageTable, den
   } };
   const deps = {
     'react/jsx-runtime': jsx,
+    '@/lib/admin-modules': { isAdminModuleEnabled: async () => enabled },
+    '@/components/ModuleDisabled': { ModuleDisabled: () => null },
     'next/link': { default: ({ href, children }) => jsx.jsx('a', { href, children }) },
     '@/lib/admin-query': { adminQuery: async value => {
       try { return await value; } catch { throw Error(safeError); }
@@ -154,6 +156,14 @@ test('supply page projects only fields needed by rendered purchase and stocktake
   assert.equal(f.queries.find(query => query.table === 'inventory_suppliers').projection, 'id,name');
   assert.equal(f.queries.find(query => query.table === 'inventory_items').projection, 'id,name,sku,unit,stock_on_hand');
   assert.ok(!f.queries.find(query => query.table === 'purchase_orders').projection.includes('note'));
+});
+
+test('disabled supply page does not query inventory or purchases', async () => {
+  const f = fixture({ data: supplyData(), enabled: false });
+  const page = load('app/admin/beauty/supply/page.tsx', f.deps);
+  await page({ searchParams: Promise.resolve({}) });
+  assert.equal(f.queries.length, 0);
+  assert.equal(f.serverClients(), 0);
 });
 
 test('supply page query errors fail closed before purchase forms render', async () => {

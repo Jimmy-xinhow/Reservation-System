@@ -15,7 +15,7 @@ function harness(file,{mode='returned',message=canary,code='XX000',data=null}={}
   'next/headers':{cookies:async()=>({set:()=>{throw Error('Unexpected cookie write');}}),headers:async()=>new Headers()},
   '@/lib/admin':new Proxy({hasBrandPermission:()=>true,canOperate:()=>true,canViewSensitiveCustomerData:()=>true},{get:(t,k)=>k in t?t[k]:async()=>member}),
   '@/lib/platform':{requireSystemPermission:async()=>member},'@/lib/supabase':{createServiceClient:()=>service},'@/lib/supabase-server':{createSupabaseServer:async()=>service},
-  '@/lib/admin-modules':{isAdminModuleEnabled:async()=>true},
+  '@/lib/admin-modules':{isAdminModuleEnabled:async()=>true,assertBeautyOperationsEnabled:async()=>{}},
  };
  const api=compile(file,n=>n in deps?deps[n]:{});
  return{api,calls,refreshes,awaits:()=>awaits};

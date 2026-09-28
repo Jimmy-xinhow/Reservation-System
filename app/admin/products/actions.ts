@@ -4,6 +4,7 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin";
+import { assertBeautyOperationsEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 
 function text(fd: FormData, key: string): string {
@@ -49,6 +50,7 @@ function friendlyError(message: string): string {
 
 export async function createProductAction(fd: FormData): Promise<void> {
   const member = await requireAdmin();
+  await assertBeautyOperationsEnabled(member);
   const values = productValues(fd);
   const stock = nonNegativeNumber(fd, "stock_on_hand", "初始庫存");
   const { error } = await adminQuery(createServiceClient().from("inventory_items").insert({
@@ -63,6 +65,7 @@ export async function createProductAction(fd: FormData): Promise<void> {
 
 export async function updateProductAction(fd: FormData): Promise<void> {
   const member = await requireAdmin();
+  await assertBeautyOperationsEnabled(member);
   const id = text(fd, "id");
   if (!id) throw new Error("缺少要修改的商品");
   const { data, error } = await adminQuery(createServiceClient()
@@ -79,6 +82,7 @@ export async function updateProductAction(fd: FormData): Promise<void> {
 
 export async function toggleProductAction(fd: FormData): Promise<void> {
   const member = await requireAdmin();
+  await assertBeautyOperationsEnabled(member);
   const id = text(fd, "id");
   const active = text(fd, "active") === "true";
   if (!id) throw new Error("缺少要調整的商品");
@@ -96,6 +100,7 @@ export async function toggleProductAction(fd: FormData): Promise<void> {
 
 export async function recordProductMovementAction(fd: FormData): Promise<void> {
   const member = await requireAdmin();
+  await assertBeautyOperationsEnabled(member);
   const id = text(fd, "item_id");
   const kind = text(fd, "kind");
   const quantity = Number(text(fd, "quantity"));

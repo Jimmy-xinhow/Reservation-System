@@ -21,7 +21,7 @@ function load(file, deps) {
   return exports;
 }
 
-function fixture({ failTable, failFrom = 1000, deny = false } = {}) {
+function fixture({ failTable, failFrom = 1000, deny = false, beautyEnabled = true } = {}) {
   const calls = [];
   const now = new Date().toISOString();
   const yesterday = new Date(Date.now() - 86400000).toISOString();
@@ -88,6 +88,7 @@ function fixture({ failTable, failFrom = 1000, deny = false } = {}) {
   const reportRange = load('lib/report-range.ts', {}).reportRange;
   const deps = {
     'react/jsx-runtime': jsx,
+    '@/lib/admin-modules': { isAdminModuleEnabled: async () => beautyEnabled },
     'next/link': { default: ({ href, children }) => jsx.jsx('a', { href, children }) },
     '@/lib/admin-query': { adminQuery, adminErrorMessage: () => safeError },
     '@/lib/supabase-pagination': { fetchAllSupabasePages },
@@ -136,4 +137,13 @@ test('checkout role denial precedes all tenant queries', async () => {
   const f = fixture({ deny: true });
   await assert.rejects(() => f.page({ searchParams: Promise.resolve({}) }), /DENIED/);
   assert.equal(f.calls.length, 0);
+});
+
+test('checkout keeps core sales but omits disabled product catalog', async () => {
+  const f = fixture({ beautyEnabled: false });
+  const html = renderToStaticMarkup(await f.page({ searchParams: Promise.resolve({ order_id: f.orders[0].id }) }));
+  assert.match(html, /結帳中心/);
+  assert.match(html, /商品選單 0/);
+  assert.ok(!html.includes('href="/admin/products"'));
+  assert.equal(f.calls.filter(call => call.table === 'inventory_items').length, 0);
 });

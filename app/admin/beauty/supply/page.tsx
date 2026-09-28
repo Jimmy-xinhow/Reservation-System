@@ -3,6 +3,8 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import Link from "next/link";
 import { requireNonProvider } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { SubmitButton } from "@/components/SubmitButton";
 import { addPurchaseOrderItemAction, createPurchaseOrderAction, createSupplierAction, finalizeStocktakeAction, receivePurchaseOrderAction, setPurchaseOrderOrderedAction } from "./actions";
@@ -14,7 +16,9 @@ const STATUS:Record<string,string>={draft:"草稿",ordered:"已下單",received:
 const STOCKTAKE_PAGE_SIZE=50;
 
 export default async function SupplyPage({searchParams}:{searchParams:Promise<{order_id?:string;page?:string}>}){
-  const member=await requireNonProvider();const params=await searchParams;const supabase=await createSupabaseServer();
+  const member=await requireNonProvider();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) return <ModuleDisabled title="服務營運與庫存" />;
+  const params=await searchParams;const supabase=await createSupabaseServer();
   const [suppliers,items,orders,stocktakes]=await adminQuery(Promise.all([
     supabase.from("inventory_suppliers").select("id,name").eq("clinic_id",member.clinicId).eq("active",true).order("name"),
     fetchAllSupabasePages((from,to)=>supabase.from("inventory_items").select("id,name,sku,unit,stock_on_hand").eq("clinic_id",member.clinicId).eq("active",true).order("name").order("id").range(from,to)),

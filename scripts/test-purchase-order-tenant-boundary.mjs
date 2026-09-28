@@ -8,7 +8,7 @@ const source = ts.transpileModule(fs.readFileSync('app/admin/beauty/supply/actio
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 
-function fixture({ order, item, orderError = null, itemError = null }) {
+function fixture({ order, item, orderError = null, itemError = null, enabled = true }) {
   const calls = [];
   const queries = {
     purchase_orders: { data: order, error: orderError },
@@ -30,6 +30,7 @@ function fixture({ order, item, orderError = null, itemError = null }) {
   let refreshed = 0;
   const exports = {};
   const deps = {
+    '@/lib/admin-modules': { assertBeautyOperationsEnabled: async () => { if (!enabled) throw Error('此品牌尚未啟用服務營運與庫存'); } },
     '@/lib/admin-query': { adminQuery: async value => value, adminErrorMessage: () => '安全查詢失敗' },
     '@/lib/admin': { requireOperator: async () => ({ clinicId: 'brand-a' }) },
     '@/lib/supabase': { createServiceClient: () => service },
@@ -56,6 +57,12 @@ test('purchase order line accepts an active item in a draft order of the current
   for (const call of f.calls.filter(call => !call.inserted)) {
     assert.ok(call.filters.some(([key, value]) => key === 'clinic_id' && value === 'brand-a'));
   }
+});
+
+test('disabled supply module rejects direct purchase action before any write', async () => {
+  const f = fixture({ order: { id: 'order-a', status: 'draft' }, item: { id: 'item-a' }, enabled: false });
+  await assert.rejects(f.action, /尚未啟用服務營運與庫存/);
+  assert.equal(f.calls.length, 0);
 });
 
 test('purchase order line rejects foreign order, foreign item, non-draft order and query failures before insert', async () => {

@@ -3,6 +3,8 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createProductAction, recordProductMovementAction, toggleProductAction, updateProductAction } from "./actions";
 
@@ -37,6 +39,7 @@ const PAGE_SIZE = 50;
 
 export default async function ProductsPage({ searchParams }: { searchParams: Promise<{ edit?: string; page?: string }> }) {
   const member = await requireAdmin();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) return <ModuleDisabled title="服務營運與庫存" />;
   const params = await searchParams;
   const [products, { data: movementData, error: movementError }] = await adminQuery(Promise.all([
     fetchAllSupabasePages((from, to) => member.supabase.from("inventory_items").select("id, sku, name, unit, stock_on_hand, reorder_level, retail_price, active").eq("clinic_id", member.clinicId).order("active", { ascending: false }).order("name").order("id").range(from, to)) as Promise<Product[]>,

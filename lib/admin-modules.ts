@@ -32,3 +32,9 @@ export async function isAdminModuleEnabled(
   if (module === "beauty") return settings.beauty_operations_enabled;
   return settings.line_channel_enabled;
 }
+
+export async function assertBeautyOperationsEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) {
+    throw new Error("此品牌尚未啟用服務營運與庫存");
+  }
+}

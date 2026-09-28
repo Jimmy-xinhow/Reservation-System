@@ -5,6 +5,7 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireOperator } from "@/lib/admin";
+import { assertBeautyOperationsEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 
 function text(fd: FormData, key: string): string {
@@ -128,6 +129,7 @@ export async function addCatalogSalesItemAction(fd: FormData): Promise<void> {
   const orderId = text(fd, "order_id");
   const catalog = parseScopedValue(text(fd, "catalog_item"));
   if (!["service", "product", "package"].includes(catalog.kind)) throw new Error("銷售品項類型不正確");
+  if (catalog.kind === "product") await assertBeautyOperationsEnabled(member);
   const { error } = await adminQuery(createServiceClient().rpc("add_sales_order_item", {
     p_clinic_id: member.clinicId,
     p_actor_user_id: member.user.id,

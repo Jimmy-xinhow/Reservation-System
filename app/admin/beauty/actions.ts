@@ -4,13 +4,16 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireOperator } from "@/lib/admin";
+import { assertBeautyOperationsEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 
 function text(fd: FormData, key: string): string { return String(fd.get(key) ?? "").trim(); }
 function numberValue(fd: FormData, key: string): number { const value = Number(text(fd, key)); return Number.isFinite(value) ? value : 0; }
 
 export async function createTreatmentRecordAction(fd: FormData): Promise<string> {
-  const { clinicId, user } = await requireOperator();
+  const member = await requireOperator();
+  await assertBeautyOperationsEnabled(member);
+  const { clinicId, user } = member;
   const sourceKey = text(fd, "source_key");
   const [sourceKind, sourceId] = sourceKey.split(":", 2);
   const treatmentName = text(fd, "treatment_name");
@@ -49,7 +52,9 @@ export async function createTreatmentRecordAction(fd: FormData): Promise<string>
 }
 
 export async function createInventoryItemAction(fd: FormData): Promise<void> {
-  const { clinicId } = await requireAdmin();
+  const member = await requireAdmin();
+  await assertBeautyOperationsEnabled(member);
+  const { clinicId } = member;
   const name = text(fd, "name");
   const sku = text(fd, "sku").toUpperCase();
   const stock = Math.max(0, numberValue(fd, "stock_on_hand"));
@@ -62,7 +67,9 @@ export async function createInventoryItemAction(fd: FormData): Promise<void> {
 }
 
 export async function recordInventoryMovementAction(fd: FormData): Promise<void> {
-  const { clinicId, user } = await requireOperator();
+  const member = await requireOperator();
+  await assertBeautyOperationsEnabled(member);
+  const { clinicId, user } = member;
   const kind = text(fd, "kind");
   const quantity = numberValue(fd, "quantity");
   if (!["stock_in", "use", "sale", "waste"].includes(kind) || quantity <= 0) throw new Error("庫存異動資料不正確");
@@ -72,7 +79,9 @@ export async function recordInventoryMovementAction(fd: FormData): Promise<void>
 }
 
 export async function saveCommissionRuleAction(fd: FormData): Promise<void> {
-  const { clinicId } = await requireAdmin();
+  const member = await requireAdmin();
+  await assertBeautyOperationsEnabled(member);
+  const { clinicId } = member;
   const doctorId = text(fd, "doctor_id");
   const serviceId = text(fd, "service_id") || null;
   const amount = Math.max(0, Math.round(numberValue(fd, "amount_per_service")));

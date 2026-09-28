@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { getOptionalMember, hasBrandPermission } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { adminQuery } from "@/lib/admin-query";
 import { ok, fail } from "@/lib/http";
 import { formatDateTime } from "@/lib/slots";
@@ -22,6 +23,11 @@ export async function GET(req: NextRequest) {
   if (!member) return fail("請先登入品牌後台", 401);
   if (!hasBrandPermission(member, "operations.manage") && !hasBrandPermission(member, "brand.manage")) {
     return fail("目前帳號沒有日常營運權限", 403);
+  }
+  try {
+    if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) return fail("此品牌尚未啟用服務營運與庫存", 403);
+  } catch {
+    return fail("暫時無法確認品牌功能設定，請重新載入後再試", 500);
   }
 
   const params = req.nextUrl.searchParams;

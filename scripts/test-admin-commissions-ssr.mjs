@@ -83,6 +83,8 @@ function makeFixture({ failSecondPage = false, deny = false } = {}) {
   };
   const page = loadModule('app/admin/operations/commissions/page.tsx', {
     'react/jsx-runtime': jsx,
+    '@/lib/admin-modules': { isAdminModuleEnabled: async () => true },
+    '@/components/ModuleDisabled': { ModuleDisabled: () => null },
     '@/lib/supabase-pagination': pagination,
     '@/components/SubmitButton': { SubmitButton: ({ children }) => jsx.jsx('button', { children }) },
     '@/lib/admin': { requireNonProvider: async () => { if (deny) throw Error('DENIED'); return { clinicId: brand }; } },

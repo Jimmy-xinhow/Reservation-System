@@ -80,6 +80,8 @@ function fixture(file, { failSecondPage = false, failMovement = false, deny = fa
   const member = { clinicId: 'brand-a', supabase: db };
   const deps = {
     'react/jsx-runtime': jsx,
+    '@/lib/admin-modules': { isAdminModuleEnabled: async () => true },
+    '@/components/ModuleDisabled': { ModuleDisabled: () => null },
     '@/lib/admin-query': { adminQuery, adminErrorMessage: () => safeError },
     '@/lib/supabase-pagination': { fetchAllSupabasePages },
     'next/link': { default: ({ href, children }) => jsx.jsx('a', { href, children }) },

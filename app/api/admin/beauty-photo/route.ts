@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { randomBytes } from "node:crypto";
 import { requireOperator } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
@@ -16,8 +17,16 @@ function matchesImageSignature(data: Buffer, type: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
-  let clinicId = "";
-  try { ({ clinicId } = await requireOperator()); } catch { return Response.json({ ok: false, error: "未授權" }, { status: 401 }); }
+  let member;
+  try { member = await requireOperator(); } catch { return Response.json({ ok: false, error: "未授權" }, { status: 401 }); }
+  const { clinicId } = member;
+  try {
+    if (!(await isAdminModuleEnabled(member.supabase, clinicId, "beauty"))) {
+      return Response.json({ ok: false, error: "此品牌尚未啟用服務營運與庫存" }, { status: 403 });
+    }
+  } catch {
+    return Response.json({ ok: false, error: "暫時無法確認品牌功能設定" }, { status: 500 });
+  }
   const form = await request.formData().catch(() => null);
   const file = form?.get("file");
   const recordId = String(form?.get("record_id") ?? "").trim();

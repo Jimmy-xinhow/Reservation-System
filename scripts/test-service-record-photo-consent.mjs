@@ -16,6 +16,7 @@ function loadRoute(service) {
     require(name) {
       if (name === 'node:crypto') return { randomBytes: () => Buffer.alloc(16, 1) };
       if (name === '@/lib/admin') return { requireOperator: async () => ({ clinicId: 'brand-a' }) };
+      if (name === '@/lib/admin-modules') return { isAdminModuleEnabled: async () => true };
       if (name === '@/lib/supabase') return { createServiceClient: () => service };
       throw new Error(`Unexpected dependency: ${name}`);
     },

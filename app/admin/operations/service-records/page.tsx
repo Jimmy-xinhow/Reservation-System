@@ -1,6 +1,8 @@
 
 import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { requireNonProvider } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { formatDateTime } from "@/lib/slots";
 import { createServiceClient } from "@/lib/supabase";
 import { createTreatmentRecordAction } from "../../beauty/actions";
@@ -58,6 +60,7 @@ function safePhotoPath(path: string, clinicId: string, recordId: string): boolea
 
 export default async function ServiceRecordsPage() {
   const member = await requireNonProvider();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) return <ModuleDisabled title="服務營運與庫存" />;
   const service = createServiceClient();
   const [appointmentsResult, registrationsResult, recordsResult, settingsResult] = await adminQuery(Promise.all([
     service.from("appointments").select("id, clinic_id, patient_id, start_at, status, patients(id,clinic_id,name), services(name)").eq("clinic_id", member.clinicId).neq("status", "cancelled").order("start_at", { ascending: false }).order("id", { ascending: false }).limit(30),

@@ -4,6 +4,7 @@ import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { reportRange } from "@/lib/report-range";
 import Link from "next/link";
 import { hasBrandPermission, requireNonProvider } from "@/lib/admin";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { SubmitButton } from "@/components/SubmitButton";
 import { recordSalesPaymentAction, updateSalesOrderItemAction } from "./actions";
 import { AddSalesItemPanel } from "./AddSalesItemPanel";
@@ -31,7 +32,8 @@ function sourceLabel(order: SalesOrder): string { return order.appointment_id ? 
 
 export default async function CheckoutPage({ searchParams }: { searchParams: Promise<{ order_id?: string; page?: string; modal?: string; appointment_id?: string; registration_id?: string }> }) {
   const member = await requireNonProvider();
-  const canManageProducts = hasBrandPermission(member, "brand.manage");
+  const beautyEnabled = await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty");
+  const canManageProducts = beautyEnabled && hasBrandPermission(member, "brand.manage");
   const params = await searchParams;
   const supabase = member.supabase;
   const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
@@ -40,7 +42,7 @@ export default async function CheckoutPage({ searchParams }: { searchParams: Pro
     fetchAllSupabasePages((from, to) => supabase.from("sales_orders").select("id, status, total_amount, paid_amount").eq("clinic_id", member.clinicId).order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("sales_payments").select("id, amount, received_at").eq("clinic_id", member.clinicId).gte("received_at", todayRange.start).lte("received_at", todayRange.end).order("received_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("services").select("id, name, price").eq("clinic_id", member.clinicId).eq("active", true).order("name").order("id").range(from, to)),
-    fetchAllSupabasePages((from, to) => supabase.from("inventory_items").select("id, name, retail_price, stock_on_hand, unit").eq("clinic_id", member.clinicId).eq("active", true).order("name").order("id").range(from, to)),
+    beautyEnabled ? fetchAllSupabasePages((from, to) => supabase.from("inventory_items").select("id, name, retail_price, stock_on_hand, unit").eq("clinic_id", member.clinicId).eq("active", true).order("name").order("id").range(from, to)) : Promise.resolve([] as Array<{ id: string; name: string; retail_price: number; stock_on_hand: number; unit: string }>),
     fetchAllSupabasePages((from, to) => supabase.from("membership_plans").select("id, name, price").eq("clinic_id", member.clinicId).eq("active", true).order("name").order("id").range(from, to)),
   ]));
   const requestedPage = Number(params.page);

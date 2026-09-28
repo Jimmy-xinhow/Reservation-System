@@ -23,7 +23,7 @@ function loadRoute(dependencies) {
   return exports.GET;
 }
 
-function fixture({ member = { clinicId }, allowed = true, failure } = {}) {
+function fixture({ member = { clinicId }, allowed = true, enabled = true, failure } = {}) {
   const calls = [];
   let serviceCalls = 0;
   const rows = {
@@ -69,6 +69,7 @@ function fixture({ member = { clinicId }, allowed = true, failure } = {}) {
   }
   const GET = loadRoute({
     '@/lib/admin': { getOptionalMember: async () => member, hasBrandPermission: () => allowed },
+    '@/lib/admin-modules': { isAdminModuleEnabled: async () => enabled },
     '@/lib/admin-query': { adminQuery: value => value },
     '@/lib/http': {
       ok: data => Response.json({ ok: true, data }),
@@ -128,6 +129,13 @@ test('session and role rejection happen before service-role client creation', as
     assert.equal(result.status, options.member === null ? 401 : 403);
     assert.equal(h.serviceCalls(), 0);
   }
+});
+
+test('disabled service operations reject source search before service-role queries', async () => {
+  const h = fixture({ enabled: false });
+  const result = await h.request('?q=%E6%AD%B7%E5%8F%B2');
+  assert.equal(result.status, 403);
+  assert.equal(h.serviceCalls(), 0);
 });
 
 test('invalid query and database errors do not expose provider text', async () => {
