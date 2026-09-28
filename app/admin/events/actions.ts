@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createHash, randomBytes } from "node:crypto";
 import { requireAdmin } from "@/lib/admin";
+import { assertEventsEnabled } from "@/lib/admin-modules";
 
 function text(fd: FormData, key: string): string {
   return String(fd.get(key) ?? "").trim();
@@ -23,6 +24,7 @@ function localTaipeiIso(value: string): string {
 
 export async function createEventAction(fd: FormData): Promise<void> {
   const { supabase, clinicId, user } = await requireAdmin();
+  await assertEventsEnabled({ supabase, clinicId });
   const title = text(fd, "title");
   const slug = text(fd, "slug").toLowerCase().replace(/[^a-z0-9\u4e00-\u9fff-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
   const accessMode = text(fd, "access_mode") || "public";
@@ -61,6 +63,7 @@ export async function createEventAction(fd: FormData): Promise<void> {
 
 export async function regeneratePrivateEventLinkAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertEventsEnabled({ supabase, clinicId });
   const eventId = text(fd, "id");
   if (!eventId) throw new Error("找不到活動");
   const { data: event } = await adminQuery(supabase.from("events").select("id, access_mode").eq("id", eventId).eq("clinic_id", clinicId).maybeSingle());
@@ -74,6 +77,7 @@ export async function regeneratePrivateEventLinkAction(fd: FormData): Promise<vo
 
 export async function setEventStatusAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertEventsEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   const status = text(fd, "status");
   if (!id || !["draft", "published", "archived"].includes(status)) throw new Error("活動狀態不正確");
@@ -84,6 +88,7 @@ export async function setEventStatusAction(fd: FormData): Promise<void> {
 
 export async function createEventSessionAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertEventsEnabled({ supabase, clinicId });
   const eventId = text(fd, "event_id");
   const name = text(fd, "name");
   const start = localTaipeiIso(text(fd, "start_at"));
@@ -108,6 +113,7 @@ export async function createEventSessionAction(fd: FormData): Promise<void> {
 
 export async function createTicketTypeAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertEventsEnabled({ supabase, clinicId });
   const eventId = text(fd, "event_id");
   const name = text(fd, "name");
   const price = integer(fd, "price", 0);
@@ -141,6 +147,7 @@ export async function createTicketTypeAction(fd: FormData): Promise<void> {
 
 export async function addRegistrationFieldAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertEventsEnabled({ supabase, clinicId });
   const eventId = text(fd, "event_id");
   const fieldKey = text(fd, "field_key").toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
   const label = text(fd, "label");

@@ -4,6 +4,7 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireOperator } from "@/lib/admin";
+import { assertMembershipsEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 
 function text(fd: FormData, key: string): string {
@@ -23,6 +24,7 @@ function refresh(): void {
 
 export async function saveMembershipPlanAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const planId = text(fd, "plan_id") || null;
   const name = text(fd, "name");
   const description = text(fd, "description") || null;
@@ -58,7 +60,8 @@ export async function saveMembershipPlanAction(fd: FormData): Promise<void> {
 }
 
 export async function redeemPatientMembershipAction(fd: FormData): Promise<void> {
-  const { clinicId, user } = await requireOperator();
+  const { supabase, clinicId, user } = await requireOperator();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const membershipId = text(fd, "membership_id");
   const channel = text(fd, "channel");
   if (!membershipId || !["product", "course", "offline"].includes(channel)) throw new Error("請選擇套票與兌換用途");
@@ -69,6 +72,7 @@ export async function redeemPatientMembershipAction(fd: FormData): Promise<void>
 
 export async function toggleMembershipPlanAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   const active = text(fd, "active") === "true";
   if (!id) throw new Error("缺少套票方案 ID");
@@ -78,7 +82,8 @@ export async function toggleMembershipPlanAction(fd: FormData): Promise<void> {
 }
 
 export async function grantPatientMembershipAction(fd: FormData): Promise<void> {
-  const { clinicId, user } = await requireOperator();
+  const { supabase, clinicId, user } = await requireOperator();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const patientId = text(fd, "patient_id");
   const planId = text(fd, "plan_id");
   if (!patientId || !planId) throw new Error("請選擇顧客與套票方案");
@@ -90,6 +95,7 @@ export async function grantPatientMembershipAction(fd: FormData): Promise<void> 
 
 export async function createDiscountCodeAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const code = text(fd, "code").toUpperCase().replace(/[^A-Z0-9_-]/g, "");
   const benefitType = text(fd, "benefit_type");
   const kind = text(fd, "kind");
@@ -111,6 +117,7 @@ export async function createDiscountCodeAction(fd: FormData): Promise<void> {
 
 export async function toggleDiscountCodeAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   const active = text(fd, "active") === "true";
   if (!id) throw new Error("缺少優惠碼 ID");
@@ -120,7 +127,8 @@ export async function toggleDiscountCodeAction(fd: FormData): Promise<void> {
 }
 
 export async function createMembershipLevelAction(fd: FormData): Promise<void> {
-  const { clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const code = text(fd, "code").toLowerCase().replace(/[^a-z0-9_-]/g, "");
   const name = text(fd, "name");
   const sortOrder = Math.max(0, integer(fd, "sort_order", 0));
@@ -133,7 +141,8 @@ export async function createMembershipLevelAction(fd: FormData): Promise<void> {
 }
 
 export async function toggleMembershipLevelAction(fd: FormData): Promise<void> {
-  const { clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   const active = text(fd, "active") === "true";
   const { error } = await adminQuery(createServiceClient().from("membership_levels").update({ active: !active }).eq("id", id).eq("clinic_id", clinicId));
@@ -142,7 +151,8 @@ export async function toggleMembershipLevelAction(fd: FormData): Promise<void> {
 }
 
 export async function saveMembershipPlanLevelPriceAction(fd: FormData): Promise<void> {
-  const { clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const planId = text(fd, "plan_id");
   const levelId = text(fd, "level_id");
   const price = Math.max(0, integer(fd, "price", 0));
@@ -159,7 +169,8 @@ export async function saveMembershipPlanLevelPriceAction(fd: FormData): Promise<
 }
 
 export async function assignPatientMembershipLevelAction(fd: FormData): Promise<void> {
-  const { clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
+  await assertMembershipsEnabled({ supabase, clinicId });
   const patientId = text(fd, "patient_id");
   const levelId = text(fd, "level_id") || null;
   if (!patientId) throw new Error("缺少顧客資料");

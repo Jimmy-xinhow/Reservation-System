@@ -39,6 +39,18 @@ export async function assertBeautyOperationsEnabled(member: { supabase: Supabase
   }
 }
 
+export async function assertEventsEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) {
+    throw new Error("此品牌尚未啟用活動與報名");
+  }
+}
+
+export async function assertMembershipsEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "memberships"))) {
+    throw new Error("此品牌尚未啟用會員與套票");
+  }
+}
+
 export async function assertCrmAutomationEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
   if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "crm"))) {
     throw new Error("此品牌尚未啟用顧客回訪與自動提醒");
