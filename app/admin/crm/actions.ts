@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { errorCategory } from "@/lib/error-category";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin";
+import { assertCrmAutomationEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
 import {
   AUTOMATION_TRIGGER_TYPES,
@@ -31,6 +32,7 @@ function refreshCrm(): void {
 
 export async function createSegmentAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const name = text(fd, "name");
   const description = text(fd, "description") || null;
   const ruleType = text(fd, "rule_type") as SegmentRuleType;
@@ -67,7 +69,8 @@ export async function createSegmentAction(fd: FormData): Promise<void> {
 }
 
 export async function refreshSegmentAction(fd: FormData): Promise<void> {
-  const { clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   if (!id) throw new Error("缺少分眾 ID");
   let refreshFailed = false;
@@ -97,6 +100,7 @@ async function crmQuery<T extends { error: unknown }>(query: PromiseLike<T>): Pr
 
 export async function toggleSegmentAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   const activeValue = text(fd, "active");
   if (!["true", "false"].includes(activeValue)) throw new Error("啟用狀態不正確");
@@ -114,6 +118,7 @@ export async function toggleSegmentAction(fd: FormData): Promise<void> {
 
 export async function deleteSegmentAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   if (!id) throw new Error("缺少分眾 ID");
   const { data: changed } = await crmQuery(supabase
@@ -127,6 +132,7 @@ export async function deleteSegmentAction(fd: FormData): Promise<void> {
 
 export async function createAutomationAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const name = text(fd, "name");
   const triggerType = text(fd, "trigger_type") as AutomationTriggerType;
   const segmentId = text(fd, "segment_id") || null;
@@ -170,6 +176,7 @@ export async function createAutomationAction(fd: FormData): Promise<void> {
 
 export async function updateAutomationAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   const name = text(fd, "name");
   const triggerType = text(fd, "trigger_type") as AutomationTriggerType;
@@ -220,6 +227,7 @@ export async function updateAutomationAction(fd: FormData): Promise<void> {
 
 export async function toggleAutomationAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   const activeValue = text(fd, "active");
   if (!["true", "false"].includes(activeValue)) throw new Error("啟用狀態不正確");
@@ -238,6 +246,7 @@ export async function toggleAutomationAction(fd: FormData): Promise<void> {
 
 export async function deleteAutomationAction(fd: FormData): Promise<void> {
   const { supabase, clinicId } = await requireAdmin();
+  await assertCrmAutomationEnabled({ supabase, clinicId });
   const id = text(fd, "id");
   if (!id) throw new Error("缺少自動化 ID");
   const { data: changed } = await crmQuery(supabase

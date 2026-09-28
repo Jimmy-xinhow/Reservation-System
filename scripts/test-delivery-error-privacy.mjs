@@ -249,7 +249,7 @@ for(const mode of ['error','throw'])test(`channel page ${mode} query is safe`,as
  await assert.rejects(renderChannels(mode),e=>e.message==='讀取渠道測試失敗，請重新整理後再試');
 });
 const crmDomain=await compile(read('lib/crm.ts'));
-const segmentDeps=['requireAdmin','createServiceClient','SEGMENT_RULE_TYPES','validateSegmentValue','refreshCrm','redirect','console','errorCategory'];
+const segmentDeps=['requireAdmin','assertCrmAutomationEnabled','createServiceClient','SEGMENT_RULE_TYPES','validateSegmentValue','refreshCrm','redirect','console','errorCategory'];
 const createSegmentFactory=await extractedFactory('app/admin/crm/actions.ts',['text','createSegmentAction'],segmentDeps);
 const refreshSegmentFactory=await extractedFactory('app/admin/crm/actions.ts',['text','refreshSegmentAction'],segmentDeps);
 async function segmentHarness(kind,mode){
@@ -264,7 +264,7 @@ async function segmentHarness(kind,mode){
    }})};
   }};
  }};
- const deps={...crmDomain,requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {clinicId:'brand',supabase};},createServiceClient:()=>{if(mode==='client')throw new Error(privateError);return {rpc:async(name,args)=>{calls.push({name,args});if(mode==='refreshThrows')throw new Error(privateError);return {error:mode==='refreshError'?{message:privateError}:null};}};},refreshCrm:()=>effects.push('refresh'),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');},console:{error:(...args)=>logs.push(args)},errorCategory};
+ const deps={...crmDomain,requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {clinicId:'brand',supabase};},assertCrmAutomationEnabled:async()=>{if(mode==='disabled')throw Error('此品牌尚未啟用顧客回訪與自動提醒');},createServiceClient:()=>{if(mode==='client')throw new Error(privateError);return {rpc:async(name,args)=>{calls.push({name,args});if(mode==='refreshThrows')throw new Error(privateError);return {error:mode==='refreshError'?{message:privateError}:null};}};},refreshCrm:()=>effects.push('refresh'),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');},console:{error:(...args)=>logs.push(args)},errorCategory};
  const fd=new FormData();fd.set('id','segment');fd.set('name','Synthetic segment');fd.set('rule_type','tag_contains');fd.set('rule_value',mode==='invalid'?'':'test');
  let error;try{await (kind==='create'?createSegmentFactory:refreshSegmentFactory)(deps)(fd);}catch(e){error=e;}
  assert(!JSON.stringify(logs).includes('secret-token'));assert(!JSON.stringify(logs).includes('test@example.invalid'));
@@ -287,6 +287,9 @@ test('segment retry success replaces warning URL and never creates another segme
 });
 for(const kind of ['create','refresh'])test(`segment ${kind} auth rejection has no writes`,async()=>{
  const r=await segmentHarness(kind,'auth');assert.equal(r.error.message,'AUTH_REDIRECT');assert.deepEqual(r.writes,[]);assert.deepEqual(r.calls,[]);assert.deepEqual(r.logs,[]);
+});
+for(const kind of ['create','refresh'])test(`segment ${kind} disabled CRM rejects an old form before storage`,async()=>{
+ const r=await segmentHarness(kind,'disabled');assert.match(r.error.message,/尚未啟用/);assert.deepEqual(r.writes,[]);assert.deepEqual(r.calls,[]);
 });
 test('segment rule validation stops before insert',async()=>{
  const r=await segmentHarness('create','invalid');assert.match(r.error.message,/分眾條件/);assert.deepEqual(r.writes,[]);
@@ -341,7 +344,7 @@ test('CRM error boundary explains unavailable statistics without exposing upstre
  assert.match(html,/不代表顧客或投遞數為零/);assert.match(html,/避免重複/);assert.match(html,/test-digest/);assert(!html.includes('secret-token'));
 });
 const settingsActions=['toggleSegmentAction','deleteSegmentAction','createAutomationAction','updateAutomationAction','toggleAutomationAction','deleteAutomationAction'];
-const settingsFactories=Object.fromEntries(await Promise.all(settingsActions.map(async name=>[name,await extractedFactory('app/admin/crm/actions.ts',['text','integer','crmQuery',name],['requireAdmin','refreshCrm','errorCategory','console','AUTOMATION_TRIGGER_TYPES','validateAutomationBody'])])));
+const settingsFactories=Object.fromEntries(await Promise.all(settingsActions.map(async name=>[name,await extractedFactory('app/admin/crm/actions.ts',['text','integer','crmQuery',name],['requireAdmin','assertCrmAutomationEnabled','refreshCrm','errorCategory','console','AUTOMATION_TRIGGER_TYPES','validateAutomationBody'])])));
 async function settingsHarness(name,mode){
  const queries=[],effects=[],logs=[];
  const supabase={from:table=>{
@@ -354,7 +357,7 @@ async function settingsHarness(name,mode){
    return Promise.resolve({data:missing?null:{id:'target'},error}).then(resolve,reject);
   }};return q;
  }};
- const run=settingsFactories[name]({...crmDomain,requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {supabase,clinicId:'brand'};},refreshCrm:()=>effects.push('refresh'),errorCategory,console:{error:(...args)=>logs.push(args)}});
+ const run=settingsFactories[name]({...crmDomain,requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {supabase,clinicId:'brand'};},assertCrmAutomationEnabled:async()=>{if(mode==='disabled')throw Error('此品牌尚未啟用顧客回訪與自動提醒');},refreshCrm:()=>effects.push('refresh'),errorCategory,console:{error:(...args)=>logs.push(args)}});
  const fd=new FormData();for(const [key,value] of Object.entries({id:'target',active:mode==='invalid'?'bad':'true',name:'Synthetic automation',trigger_type:'birthday',channel:'line',body:'Synthetic only',segment_id:mode?.startsWith('lookup')?'segment':''}))fd.set(key,value);
  let error;try{await run(fd);}catch(e){error=e;}
  assert(!JSON.stringify(logs).includes('secret-token'));assert(!error?.message.includes('secret-token'));
@@ -374,6 +377,9 @@ for(const name of settingsActions){
  });
  test(`${name} auth rejection never queries DB`,async()=>{
   const r=await settingsHarness(name,'auth');assert.equal(r.error.message,'AUTH_REDIRECT');assert.deepEqual(r.queries,[]);assert.deepEqual(r.logs,[]);
+ });
+ test(`${name} disabled CRM rejects a stale form before storage`,async()=>{
+  const r=await settingsHarness(name,'disabled');assert.match(r.error.message,/尚未啟用/);assert.deepEqual(r.queries,[]);assert.deepEqual(r.effects,[]);
  });
 }
 for(const name of ['createAutomationAction','updateAutomationAction']){
