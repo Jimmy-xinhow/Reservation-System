@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, ok, rateLimitResponse } from "@/lib/http";
 import { resolvePublicClinicId } from "@/lib/public-brand";
+import { publicClinicRelation } from "@/lib/public-relation-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,14 +27,18 @@ export async function POST(request: NextRequest) {
     const clinicId = await resolvePublicClinicId(request, service);
     if (!clinicId) return fail("找不到品牌入口", 404);
     const { data, error } = await service.from("registrations")
-      .select("registration_no, status, payment_status, amount, name, created_at, events(title), event_sessions(name, start_at, end_at)")
+      .select("registration_no, status, payment_status, amount, name, created_at, events(clinic_id,title), event_sessions(clinic_id,name,start_at,end_at)")
       .eq("clinic_id", clinicId)
       .eq("registration_no", registrationNo)
       .eq("phone", phone)
       .maybeSingle();
     if (error) return fail(error.message, 500);
     if (!data) return fail("找不到符合的報名資料，請確認編號與電話", 404);
-    const response = ok(data);
+    const response = ok({
+      ...data,
+      events: publicClinicRelation(data.events, clinicId),
+      event_sessions: publicClinicRelation(data.event_sessions, clinicId),
+    });
     response.headers.set("Cache-Control", "no-store");
     return response;
   } catch (error) {

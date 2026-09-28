@@ -317,7 +317,7 @@ export function create(c) {
   const ast = ts.createSourceFile("route.ts", code, ts.ScriptTarget.Latest, true);
   const functions = ast.statements.filter(ts.isFunctionDeclaration).map((node) => node.getText(ast).replace(/^export /, "")).join("\n");
   const compiled = ts.transpileModule(`export function create(c) {
-    const { rateLimitResponse, fail, ok, createServiceClient, resolvePublicClinicId } = c;
+    const { rateLimitResponse, fail, ok, createServiceClient, resolvePublicClinicId, publicClinicRelation } = c;
     ${functions} return { GET, POST };
   }`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } });
   const { create } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputText).toString("base64")}`);
@@ -326,14 +326,14 @@ export function create(c) {
     const query = { select() { return this; }, eq(key, value) { filters.push([key, value]); return this; }, async maybeSingle() { return { data: result, error: null }; } };
     const routes = create({ rateLimitResponse: async () => null,
       fail: (error, status = 400) => ({ error, status, headers: new Headers() }), ok: (data) => ({ data, headers: new Headers() }),
-      createServiceClient: () => ({ from: () => query }), resolvePublicClinicId: async () => "brand-a",
+      createServiceClient: () => ({ from: () => query }), resolvePublicClinicId: async () => "brand-a", publicClinicRelation: () => null,
     });
     const get = await routes.GET(); assert.equal(get.status, 405); assert.equal(get.headers.get("Allow"), "POST"); assert.equal(filters.length, 0);
     const invalid = await routes.POST({ json: async () => ({ registration_no: 123, phone: ["0912345678"] }) });
     assert.equal(invalid.status, 400); assert.equal(filters.length, 0);
     const response = await routes.POST({ json: async () => ({ registration_no: " r001 ", phone: " 0912345678 " }) });
     assert.deepEqual(filters, [["clinic_id", "brand-a"], ["registration_no", "R001"], ["phone", "0912345678"]]);
-    assert.equal(response.headers.get("Cache-Control"), "no-store"); assert.deepEqual(response.data, result);
+    assert.equal(response.headers.get("Cache-Control"), "no-store"); assert.deepEqual(response.data, { ...result, events: null, event_sessions: null });
   });
 }
 
