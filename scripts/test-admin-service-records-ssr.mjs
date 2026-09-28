@@ -7,22 +7,28 @@ import React from 'react';
 import * as jsx from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-function fixture({ photoMode = 'ok', denied = false, crossTenantRecord = false, foreignPhotoPath = false } = {}) {
+function fixture({ photoMode = 'ok', denied = false, crossTenantRecord = false, foreignPhotoPath = false, crossTenantService = false, crossTenantEvent = false, crossTenantSession = false } = {}) {
   const calls = [];
   const signedPaths = [];
   let serviceCalls = 0;
   const appointments = Array.from({ length: 35 }, (_, index) => ({
     id: `appointment-${index}`, clinic_id: 'fixture-brand', patient_id: `patient-${index}`, start_at: new Date(Date.UTC(2026, 8, 30, 0, 0) - index * 86400000).toISOString(),
-    status: 'booked', patients: { id: `patient-${index}`, clinic_id: 'fixture-brand', name: index === 34 ? '超過近期清單的顧客' : `近期顧客${index}` }, services: { name: '服務' },
+    status: 'booked', patients: { id: `patient-${index}`, clinic_id: 'fixture-brand', name: index === 34 ? '超過近期清單的顧客' : `近期顧客${index}` }, services: { clinic_id: 'fixture-brand', name: '服務' },
   }));
+  if (crossTenantService) appointments[0].services = { clinic_id: 'foreign-brand', name: '外品牌服務標記' };
   appointments.push({ ...appointments[0], id: 'foreign-appointment', clinic_id: 'foreign-brand', patients: { id: 'patient-0', clinic_id: 'foreign-brand', name: '外品牌顧客' } });
+  const registrations = crossTenantEvent || crossTenantSession ? [{
+    id: 'registration-1', clinic_id: 'fixture-brand', patient_id: 'patient-0', created_at: '2026-09-24T00:00:00Z', status: 'confirmed',
+    patients: appointments[0].patients, events: { clinic_id: crossTenantEvent ? 'foreign-brand' : 'fixture-brand', title: crossTenantEvent ? '外品牌課程標記' : crossTenantSession ? null : '本品牌課程' },
+    event_sessions: { clinic_id: crossTenantSession ? 'foreign-brand' : 'fixture-brand', name: crossTenantSession ? '外品牌場次標記' : '本品牌場次', start_at: '2026-09-30T02:00:00Z' },
+  }] : [];
   const record = { id: 'record-1', clinic_id: 'fixture-brand', patient_id: 'patient-0', appointment_id: 'appointment-0', registration_id: null,
     treatment_name: '服務紀錄', assessment: null, content: '內容', aftercare: null,
     private_photo_paths: ['fixture-brand/record-1/11111111111111111111111111111111.jpg', ...(foreignPhotoPath ? ['foreign-brand/foreign-record/22222222222222222222222222222222.jpg'] : [])], created_at: '2026-09-24T00:00:00Z',
     patients: appointments[0].patients, appointments: appointments[0], registrations: null };
   const rows = {
     appointments,
-    registrations: [],
+    registrations,
     patient_records: [record, ...(crossTenantRecord ? [{ ...record, id: 'foreign-record', patient_id: 'foreign-patient',
       content: '外品牌紀錄內容', private_photo_paths: ['foreign-brand/private.jpg'],
       patients: { id: 'foreign-patient', clinic_id: 'foreign-brand', name: '外品牌顧客姓名' } }] : [])],
@@ -87,6 +93,22 @@ test('foreign patient link is hidden before the private photo is signed', async 
   assert(!html.includes('外品牌紀錄內容'));
   assert.match(html, /最近 1 筆服務／課程紀錄/);
 });
+
+test('foreign service relation cannot enter source options or a private record label', async () => {
+  const h = fixture({ crossTenantService: true });
+  const html = await h.render();
+  assert(!html.includes('外品牌服務標記'));
+  assert.match(html, /最近 0 筆服務／課程紀錄/);
+});
+
+for (const kind of ['crossTenantEvent', 'crossTenantSession']) {
+  test(`foreign ${kind} relation cannot enter source options`, async () => {
+    const h = fixture({ [kind]: true });
+    const html = await h.render();
+    assert(!html.includes('外品牌課程標記'));
+    assert(!html.includes('外品牌場次標記'));
+  });
+}
 
 test('same-tenant record cannot sign or render a foreign storage path', async () => {
   const h = fixture({ foreignPhotoPath: true });

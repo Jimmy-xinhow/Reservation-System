@@ -29,17 +29,20 @@ function fixture({ member = { clinicId }, allowed = true, enabled = true, failur
   const rows = {
     appointments: Array.from({ length: 35 }, (_, i) => ({
       id: `appointment-${i}`, clinic_id: clinicId, start_at: `2026-09-${String(30 - (i % 30)).padStart(2, '0')}T02:00:00Z`,
-      status: 'done', patients: { clinic_id: clinicId, name: i === 34 ? '歷史顧客' : `近期顧客${i}`, phone: i === 34 ? '0999000000' : '0911111111' }, services: { name: '服務' },
+      status: 'done', patients: { clinic_id: clinicId, name: i === 34 ? '歷史顧客' : `近期顧客${i}`, phone: i === 34 ? '0999000000' : '0911111111' }, services: { clinic_id: clinicId, name: '服務' },
     })),
     registrations: Array.from({ length: 35 }, (_, i) => ({
       id: `registration-${i}`, clinic_id: clinicId, patient_id: `patient-${i}`, created_at: `2026-09-${String(30 - (i % 30)).padStart(2, '0')}T02:00:00Z`,
-      status: 'confirmed', patients: { clinic_id: clinicId, name: i === 34 ? '歷史學員' : `近期學員${i}`, phone: i === 34 ? '0988000000' : '0922222222' }, events: { title: '課程' }, event_sessions: null,
+      status: 'confirmed', patients: { clinic_id: clinicId, name: i === 34 ? '歷史學員' : `近期學員${i}`, phone: i === 34 ? '0988000000' : '0922222222' }, events: { clinic_id: clinicId, title: '課程' }, event_sessions: { clinic_id: clinicId, name: '場次', start_at: '2026-09-30T02:00:00Z' },
     })),
   };
   for (const table of Object.keys(rows)) {
     rows[table].push({ ...rows[table][0], id: `foreign-${table}`, clinic_id: 'foreign-brand', patients: { clinic_id: 'foreign-brand', name: '外品牌客戶', phone: '0977000000' } });
     rows[table].push({ ...rows[table][0], id: `mislinked-${table}`, patients: { clinic_id: 'foreign-brand', name: '錯連外品牌客戶', phone: '0966000000' } });
   }
+  rows.appointments.splice(1, 0, { ...rows.appointments[0], id: 'mislinked-service', services: { clinic_id: 'foreign-brand', name: '外品牌服務' } });
+  rows.registrations.splice(1, 0, { ...rows.registrations[0], id: 'mislinked-event', events: { clinic_id: 'foreign-brand', title: '外品牌課程' } });
+  rows.registrations.splice(2, 0, { ...rows.registrations[0], id: 'mislinked-session', event_sessions: { clinic_id: 'foreign-brand', name: '外品牌場次', start_at: '2026-09-30T02:00:00Z' } });
 
   function from(table) {
     const call = { table, filters: [], search: null, range: null };
@@ -106,14 +109,28 @@ test('service-role source joins never expose a foreign-brand patient even if the
     const result = await h.request(search);
     assert.equal(result.status, 200);
     assert(!JSON.stringify(result.body).includes('錯連外品牌客戶'));
-    assert(!JSON.stringify(result.body).includes('mislinked-'));
+    assert(!JSON.stringify(result.body).includes('mislinked-appointments'));
+    assert(!JSON.stringify(result.body).includes('mislinked-registrations'));
   }
+});
+
+test('service-role source joins never expose foreign-brand service, event, or session names', async () => {
+  const h = fixture();
+  const result = await h.request();
+  assert.equal(result.status, 200);
+  const body = JSON.stringify(result.body);
+  for (const forbidden of ['外品牌服務', '外品牌課程', '外品牌場次', 'mislinked-service', 'mislinked-event', 'mislinked-session']) {
+    assert(!body.includes(forbidden), forbidden);
+  }
+  assert(body.includes('appointment-0'));
+  assert(body.includes('registration-0'));
+  assert.equal(result.body.data.hasMore, true);
 });
 
 test('page two exposes the older item without a 30-item ceiling', async () => {
   const h = fixture();
   const first = await h.request();
-  assert.equal(first.body.data.sources.length, 60);
+  assert.equal(first.body.data.sources.length, 59);
   assert.equal(first.body.data.hasMore, true);
   const second = await h.request('?page=1');
   assert.equal(second.status, 200);

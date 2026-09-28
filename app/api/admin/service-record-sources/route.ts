@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 const PAGE_SIZE = 30;
 type Relation<T> = T | T[] | null;
 type Person = { name: string; clinic_id: string };
-type Appointment = { id: string; start_at: string; status: string; patients: Relation<Person>; services: Relation<{ name: string }> };
-type Registration = { id: string; created_at: string; status: string; patients: Relation<Person>; events: Relation<{ title: string }>; event_sessions: Relation<{ name: string; start_at: string }> };
+type Appointment = { id: string; start_at: string; status: string; patients: Relation<Person>; services: Relation<{ clinic_id: string; name: string }> };
+type Registration = { id: string; created_at: string; status: string; patients: Relation<Person>; events: Relation<{ clinic_id: string; title: string }>; event_sessions: Relation<{ clinic_id: string; name: string; start_at: string }> };
 function one<T>(value: Relation<T>): T | null { return Array.isArray(value) ? value[0] ?? null : value; }
 
 export async function GET(req: NextRequest) {
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
     const appointmentQuery = () => {
       const patient = q ? "patients!inner(name,clinic_id)" : "patients(name,clinic_id)";
       let query = service.from("appointments")
-        .select(`id, start_at, status, ${patient}, services(name)`)
+        .select(`id, start_at, status, ${patient}, services(clinic_id,name)`)
         .eq("clinic_id", member.clinicId)
         .neq("status", "cancelled");
       if (q) query = query.or(`name.ilike.%${q}%,phone.ilike.%${q}%`, { referencedTable: "patients" });
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     const registrationQuery = () => {
       const patient = q ? "patients!inner(name,clinic_id)" : "patients(name,clinic_id)";
       let query = service.from("registrations")
-        .select(`id, created_at, status, ${patient}, events(title), event_sessions(name,start_at)`)
+        .select(`id, created_at, status, ${patient}, events(clinic_id,title), event_sessions(clinic_id,name,start_at)`)
         .eq("clinic_id", member.clinicId)
         .not("patient_id", "is", null)
         .not("status", "in", "(cancelled,waitlisted)");
@@ -70,12 +70,15 @@ export async function GET(req: NextRequest) {
     if (appointmentResult.error || registrationResult.error || !Array.isArray(appointmentResult.data) || !Array.isArray(registrationResult.data)) {
       return fail("讀取服務來源失敗，請重新載入後再試", 500);
     }
-    // Service-role joins bypass RLS: discard a source if its linked patient
-    // is absent or belongs to another brand, including while old data is repaired.
+    // Service-role joins bypass RLS: reject every mismatched relation before
+    // building labels, including legacy records created before tenant guards.
     const appointments = (appointmentResult.data as unknown as Appointment[])
-      .filter(item => one(item.patients)?.clinic_id === member.clinicId);
+      .filter(item => one(item.patients)?.clinic_id === member.clinicId
+        && (!one(item.services) || one(item.services)?.clinic_id === member.clinicId));
     const registrations = (registrationResult.data as unknown as Registration[])
-      .filter(item => one(item.patients)?.clinic_id === member.clinicId);
+      .filter(item => one(item.patients)?.clinic_id === member.clinicId
+        && one(item.events)?.clinic_id === member.clinicId
+        && one(item.event_sessions)?.clinic_id === member.clinicId);
     const sources = [
       ...appointments.slice(0, PAGE_SIZE).map(item => ({
         id: item.id, kind: "appointment" as const,
@@ -87,7 +90,9 @@ export async function GET(req: NextRequest) {
           label: `${formatDateTime(session?.start_at ?? item.created_at)}｜${one(item.patients)?.name ?? "學員"}｜${one(item.events)?.title ?? session?.name ?? "課程／活動"}` };
       }),
     ];
-    return ok({ sources, hasMore: appointments.length > PAGE_SIZE || registrations.length > PAGE_SIZE });
+    // A rejected legacy relation still occupied a fetched row, so derive
+    // pagination from the raw page to keep older valid sources reachable.
+    return ok({ sources, hasMore: appointmentResult.data.length > PAGE_SIZE || registrationResult.data.length > PAGE_SIZE });
   } catch {
     return fail("讀取服務來源失敗，請重新載入後再試", 500);
   }
