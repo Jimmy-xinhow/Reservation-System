@@ -38,3 +38,9 @@ export async function assertBeautyOperationsEnabled(member: { supabase: Supabase
     throw new Error("此品牌尚未啟用服務營運與庫存");
   }
 }
+
+export async function assertCrmAutomationEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "crm"))) {
+    throw new Error("此品牌尚未啟用顧客回訪與自動提醒");
+  }
+}

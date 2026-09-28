@@ -44,7 +44,7 @@ async function runFollowups(options={}) {
    if(options.finishThrows)throw new Error(privateError);
    return {error:options.finishError?{message:privateError}:null};
   },
-  from:table=>{const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='patients'?{active:options.active??true,marketing_opt_in:options.optIn??true,line_user_id:'synthetic',email:'test@example.invalid'}:table==='clinics'?{name:'brand'}:{email_enabled:true},error:null})};return q;}
+  from:table=>{const q={select:()=>q,eq:()=>q,update:body=>{events.push(['pause',body]);return q;},maybeSingle:async()=>({data:table==='patients'?{active:options.active??true,marketing_opt_in:options.optIn??true,line_user_id:'synthetic',email:'test@example.invalid'}:table==='clinics'?{name:'brand'}:table==='scheduled_followups'?{id:'one'}:{email_enabled:true,crm_automation_enabled:!options.crmDisabled},error:null})};return q;}
  };
  const send=async()=>{events.push(['send']);if(options.sendThrows)throw new Error(privateError);};
  const run=followupFactory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response,console:{error:(...args)=>logs.push(args)},fail:()=>{throw new Error('unexpected outer failure');},cronScopeDenied:()=>null,lineAccessTokenForDestination:async()=>'synthetic',pushMessages:send,emailConfigForClinic:async()=>({}),sendEmail:send,recordCrmInteraction:async()=>{events.push(['crm']);if(options.crmThrows)throw new Error(privateError);}});
@@ -70,6 +70,16 @@ test('followup ambiguous send exception stays unconfirmed without finalizer',asy
 for(const options of [{active:false},{optIn:false}])test(`followup pre-send rejection ${JSON.stringify(options)}`,async()=>{
  const {body,events}=await runFollowups(options);assert.equal(body.failed,1);assert.equal(body.unconfirmed,0);assert.equal(events.length,1);assert.equal(events[0][1].p_status,'failed');
 });
+test('CRM disabled after claim pauses followup without contacting a provider',async()=>{
+ const {body,events}=await runFollowups({crmDisabled:true});
+ assert.equal(body.paused,1);assert.equal(body.sent,0);assert.equal(body.failed,0);
+ assert.deepEqual(events.map(event=>event[0]),['pause']);
+});
+test('CRM disabled rejects a stale followup creation form before storage',async()=>{
+ const factory=await extractedFactory('app/admin/followups/actions.ts',['createScheduledFollowupAction'],['requireOperator','assertCrmAutomationEnabled','createServiceClient']);
+ const run=factory({requireOperator:async()=>({clinicId:'brand'}),assertCrmAutomationEnabled:async()=>{throw Error('此品牌尚未啟用顧客回訪與自動提醒');},createServiceClient:()=>{throw Error('storage must not be reached');}});
+ await assert.rejects(run(new FormData()),/尚未啟用/);
+});
 for(const failure of ['finishError','finishThrows'])test(`followup failure-state ${failure} is counted and batch continues`,async()=>{
  const jobs=['one','two'].map(id=>({id,clinic_id:'brand',patient_id:'patient',purpose:'marketing',channel:'line'}));
  const {body,events}=await runFollowups({active:false,[failure]:true,jobs});assert.equal(body.claimed,2);assert.equal(body.failed,2);assert.equal(body.status_write_failed,2);assert.equal(events.length,2);
@@ -79,7 +89,7 @@ test('followup CRM error does not stop later deliveries',async()=>{
  const {body}=await runFollowups({crmThrows:true,jobs});assert.equal(body.sent,2);assert.equal(body.crm_failed,2);
 });
 
-const actionFactory=await extractedFactory('app/admin/followups/actions.ts',['storageError','storage','text','setScheduledFollowupStatusAction'],['requireOperator','createServiceClient','recordCrmInteraction','refresh','redirect','console','deliveryError']);
+const actionFactory=await extractedFactory('app/admin/followups/actions.ts',['storageError','storage','text','setScheduledFollowupStatusAction'],['requireOperator','createServiceClient','recordCrmInteraction','refresh','redirect','console','deliveryError','assertCrmAutomationEnabled']);
 async function actionHarness(currentStatus,actualStatus,nextStatus,options={}){
  const effects=[],filters=[],logs=[];let state=actualStatus;
  const service={from:()=>{let updating=false,patch;const q={select:()=>q,eq:(key,value)=>{if(updating)filters.push([key,value]);return q;},update:body=>{updating=true;patch=body;return q;},maybeSingle:async()=>{
@@ -91,7 +101,7 @@ async function actionHarness(currentStatus,actualStatus,nextStatus,options={}){
   if(filters.some(([key,value])=>key==='status'&&value!==state))return {data:null,error:null};
   state=patch.status;effects.push('write');return {data:{id:'one'},error:null};
  }};return q;}};
- const run=actionFactory({requireOperator:async()=>({clinicId:'brand',user:{id:'operator'}}),createServiceClient:()=>service,recordCrmInteraction:async()=>{effects.push('crm');if(options.crmThrows)throw new Error(privateError);},refresh:()=>effects.push('refresh'),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');},console:{error:(...args)=>logs.push(args)},deliveryError});
+ const run=actionFactory({requireOperator:async()=>({clinicId:'brand',user:{id:'operator'}}),assertCrmAutomationEnabled:async()=>{if(options.crmDisabled)throw Error('此品牌尚未啟用顧客回訪與自動提醒');},createServiceClient:()=>service,recordCrmInteraction:async()=>{effects.push('crm');if(options.crmThrows)throw new Error(privateError);},refresh:()=>effects.push('refresh'),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');},console:{error:(...args)=>logs.push(args)},deliveryError});
  const fd=new FormData();fd.set('id','one');fd.set('status',nextStatus);
  let error;try{await run(fd);}catch(e){error=e;}
  return {state,effects,filters,error,logs};
@@ -104,6 +114,10 @@ for(const [before,after] of [['pending','completed'],['failed','pending']])test(
 });
 for(const status of ['sent','processing'])test(`followup ${status} cannot be retried`,async()=>{
  const result=await actionHarness(status,status,'pending');assert.match(result.error.message,/目前狀態/);assert.deepEqual(result.effects,[]);
+});
+test('disabled CRM rejects a stale followup status form before storage',async()=>{
+ const result=await actionHarness('pending','pending','completed',{crmDisabled:true});
+ assert.match(result.error.message,/尚未啟用/);assert.deepEqual(result.effects,[]);assert.deepEqual(result.filters,[]);
 });
 for(const [path,name,table] of [
  ['lib/appointment-notifications.ts','finishNotification','appointment_notification_logs'],
@@ -159,11 +173,11 @@ async function componentFactory(path,dependencies,name){
  const {outputText}=ts.transpileModule(`export function factory(deps){const {${dependencies.join(',')}}=deps;${body};return ${name};}`,{fileName:'test.tsx',compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022,jsx:ts.JsxEmit.React}});
  return (await import('data:text/javascript;base64,'+Buffer.from(outputText).toString('base64'))).factory;
 }
-const pageFactory=await componentFactory('app/admin/followups/page.tsx',['React','Link','requireNonProvider','canViewSensitiveCustomerData','fetchAllSupabasePages','createSupabaseServer','SubmitButton','FollowupComposer','createScheduledFollowupAction','setScheduledFollowupStatusAction','deliveryError'],'FollowupsPage');
+const pageFactory=await componentFactory('app/admin/followups/page.tsx',['React','Link','requireNonProvider','canViewSensitiveCustomerData','fetchAllSupabasePages','createSupabaseServer','SubmitButton','FollowupComposer','createScheduledFollowupAction','setScheduledFollowupStatusAction','deliveryError','isAdminModuleEnabled','ModuleDisabled'],'FollowupsPage');
 async function renderFollowups(notice,mode,storedError){
  const from=table=>{const q={select:()=>q,eq:()=>q,order:()=>q,range:()=>q,then:(resolve,reject)=>mode==='throw'?Promise.reject(new Error(privateError)).then(resolve,reject):Promise.resolve({data:table==='scheduled_followups'&&storedError?[{id:'followup',patient_id:'patient',channel:'line',purpose:'service',subject:'Test',body:'Approved body',scheduled_for:'2026-09-23T00:00:00Z',status:'failed',attempt_count:1,last_error:storedError,patients:{name:'Fixture',phone:'0900000000'}}]:[],error:mode==='error'?{message:privateError}:null}).then(resolve,reject)};return q;};
  const fetchAllSupabasePages=async callback=>{const result=await callback(0,999);if(result.error)throw Error('讀取失敗');return result.data??[];};
- const Page=pageFactory({React,Link:({children,href})=>React.createElement('a',{href},children),requireNonProvider:async()=>({clinicId:'brand',role:'owner'}),canViewSensitiveCustomerData:()=>true,fetchAllSupabasePages,createSupabaseServer:async()=>({from}),SubmitButton:()=>null,FollowupComposer:()=>null,createScheduledFollowupAction:()=>{},setScheduledFollowupStatusAction:()=>{},deliveryError});
+ const Page=pageFactory({React,Link:({children,href})=>React.createElement('a',{href},children),requireNonProvider:async()=>({clinicId:'brand',role:'owner'}),isAdminModuleEnabled:async()=>true,ModuleDisabled:()=>null,canViewSensitiveCustomerData:()=>true,fetchAllSupabasePages,createSupabaseServer:async()=>({from}),SubmitButton:()=>null,FollowupComposer:()=>null,createScheduledFollowupAction:()=>{},setScheduledFollowupStatusAction:()=>{},deliveryError});
  return renderToStaticMarkup(await Page({searchParams:Promise.resolve({notice})}));
 }
 test('followup page classifies a historical raw provider error before rendering',async()=>{

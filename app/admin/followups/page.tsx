@@ -6,6 +6,8 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { createScheduledFollowupAction, setScheduledFollowupStatusAction } from "./actions";
 import FollowupComposer from "./FollowupComposer";
 import { deliveryError } from "@/lib/delivery-error";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
 
 export const dynamic = "force-dynamic";
 const STATUS: Record<string, string> = { pending: "待處理", processing: "處理中", sent: "已發送", completed: "已完成", failed: "失敗", cancelled: "已取消" };
@@ -15,6 +17,7 @@ function dateTime(value: string): string { return new Intl.DateTimeFormat("zh-TW
 
 export default async function FollowupsPage({ searchParams }: { searchParams: Promise<{ status?: string; notice?: string }> }) {
   const member = await requireNonProvider();
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "crm"))) return <ModuleDisabled title="顧客回訪與自動提醒" />;
   if (!canViewSensitiveCustomerData(member.role)) return <p className="admin-section p-5 text-sm text-slate-500">目前角色不能查看顧客回訪資料。</p>;
   const params = await searchParams;
   const selectedStatus = ["pending", "processing", "sent", "completed", "failed", "cancelled"].includes(params.status ?? "") ? params.status! : "";

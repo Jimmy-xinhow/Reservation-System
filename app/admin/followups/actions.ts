@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { requireOperator } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
+import { assertCrmAutomationEnabled } from "@/lib/admin-modules";
 
 function storageError(error: unknown): Error {
   console.error("Followup storage failed", { category: deliveryError(error) });
@@ -26,6 +27,7 @@ function parseTaipeiDateTimeLocal(value: string): Date {
 
 export async function createScheduledFollowupAction(fd: FormData): Promise<void> {
   const member = await requireOperator();
+  await assertCrmAutomationEnabled(member);
   const patientId = text(fd, "patient_id");
   const channel = text(fd, "channel");
   const purpose = text(fd, "purpose");
@@ -46,6 +48,7 @@ export async function createScheduledFollowupAction(fd: FormData): Promise<void>
 
 export async function setScheduledFollowupStatusAction(fd: FormData): Promise<void> {
   const member = await requireOperator();
+  await assertCrmAutomationEnabled(member);
   const id = text(fd, "id");
   const status = text(fd, "status");
   if (!["completed", "cancelled", "pending"].includes(status)) throw new Error("回訪狀態不正確");

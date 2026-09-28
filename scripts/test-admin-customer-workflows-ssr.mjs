@@ -27,7 +27,7 @@ const PatientPicker = () => jsx.jsx('span', { children: '搜尋顧客後選擇' 
 const SubmitButton = ({ children, disabled }) => jsx.jsx('button', { disabled, children });
 const Link = ({ children, href }) => jsx.jsx('a', { href, children });
 
-function fixture({ role = 'owner', deny = false, failTable = '' } = {}) {
+function fixture({ role = 'owner', deny = false, failTable = '', crmEnabled = true } = {}) {
   const calls = [];
   const patients = Array.from({ length: 1001 }, (_, i) => ({ id: `patient-${i}`, name: `顧客 ${i}`, phone: '0912345678' }));
   const wallets = patients.map((patient, i) => ({ id: `wallet-${i}`, clinic_id: clinicId, balance: 1, lifetime_credit: 1, lifetime_debit: 0, updated_at: '2026-09-23', patients: patient }));
@@ -76,7 +76,7 @@ function fixture({ role = 'owner', deny = false, failTable = '' } = {}) {
   };
   const customer = load('app/admin/customer-value/page.tsx', { ...common, './actions': { adjustPointsAction: () => {}, adjustWalletAction: () => {}, createPatientSubscriptionAction: () => {}, createSubscriptionPlanAction: () => {}, setPatientSubscriptionStatusAction: () => {}, toggleSubscriptionPlanAction: () => {} }, '@/components/admin/ManagementTabs': { MembershipManagementTabs: () => null } });
   const documents = load('app/admin/documents/page.tsx', { ...common, 'next/headers': { headers: async () => new Headers({ host: 'example.test' }) }, './actions': { cancelDocumentRequestAction: () => {}, createDocumentTemplateAction: () => {}, issueDocumentRequestAction: () => {} } });
-  const followupPage = load('app/admin/followups/page.tsx', { ...common, './actions': { createScheduledFollowupAction: () => {}, setScheduledFollowupStatusAction: () => {} }, './FollowupComposer': { default: () => jsx.jsx('p', { children: '搜尋顧客後選擇' }) }, '@/lib/delivery-error': { deliveryError: () => '安全錯誤類別' } });
+  const followupPage = load('app/admin/followups/page.tsx', { ...common, './actions': { createScheduledFollowupAction: () => {}, setScheduledFollowupStatusAction: () => {} }, './FollowupComposer': { default: () => jsx.jsx('p', { children: '搜尋顧客後選擇' }) }, '@/lib/delivery-error': { deliveryError: () => '安全錯誤類別' }, '@/lib/admin-modules': { isAdminModuleEnabled: async () => crmEnabled }, '@/components/ModuleDisabled': { ModuleDisabled: () => jsx.jsx('p', { children: '模組未啟用' }) } });
   return { customer, documents, followupPage, calls };
 }
 
@@ -136,6 +136,13 @@ for (const table of ['document_templates', 'customer_document_requests']) {
 test('followups fail closed when second page fails', async () => {
   const f = fixture({ failTable: 'scheduled_followups' });
   await assert.rejects(() => f.followupPage.default({ searchParams: Promise.resolve({}) }), /讀取回訪資料失敗/);
+});
+
+test('disabled CRM followup page never reads or renders customer followups', async () => {
+  const f = fixture({ crmEnabled: false });
+  const html = renderToStaticMarkup(await f.followupPage.default({ searchParams: Promise.resolve({}) }));
+  assert.match(html, /模組未啟用/);
+  assert.equal(paged(f.calls, 'scheduled_followups').length, 0);
 });
 
 test('staff without customer-data permission and denied roles do not query private tables', async () => {

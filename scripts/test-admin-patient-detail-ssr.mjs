@@ -16,7 +16,7 @@ function load(path, deps) {
   return exports;
 }
 
-function harness({fault = '', thrown = false, denied = false, permitted = true, manager = true, missing = false, factoryFault = false, storedFollowupError = null} = {}) {
+function harness({fault = '', thrown = false, denied = false, permitted = true, manager = true, missing = false, factoryFault = false, storedFollowupError = null, crmEnabled = true} = {}) {
   const queries = [], boundary = [];
   const redirect = Error('NEXT_REDIRECT');
   let factories = 0;
@@ -54,6 +54,7 @@ function harness({fault = '', thrown = false, denied = false, permitted = true, 
     },
     '@/lib/supabase-server': {createSupabaseServer: async () => {factories++; if (factoryFault) throw Error(canary); return service;}},
     '@/lib/slots': {formatDateTime: value => String(value)},
+    '@/lib/admin-modules': {isAdminModuleEnabled: async () => crmEnabled},
     '@/components/SubmitButton': {SubmitButton: component('SubmitButton')},
     '../../followups/FollowupComposer': {default: component('FollowupComposer')},
     './MergePatientForm': {default: component('MergePatientForm')},
@@ -109,6 +110,14 @@ test('patient detail classifies a historical raw followup error before rendering
   const html = await harness({storedFollowupError: 'fetch failed phone=0912345678 Authorization=Bearer private-token'}).run();
   assert.ok(!html.includes('private-token'));
   assert.match(html, /delivery_error:connection/);
+});
+test('disabled CRM does not offer followup creation or history in patient detail', async () => {
+  const h = harness({crmEnabled: false, storedFollowupError: 'existing'});
+  const html = await h.run();
+  assert.equal(h.boundary.filter(item => item.name === 'FollowupComposer').length, 0);
+  assert.ok(!html.includes('最近回訪'));
+  assert.ok(!html.includes('待回訪</span>'));
+  assert.equal(h.queries.filter(query => query.table === 'scheduled_followups').length, 0);
 });
 for (const fault of ['patients', 'appointments', 'patient_records', 'crm_interactions', 'customer_wallets', 'loyalty_accounts', 'patient_subscriptions', 'scheduled_followups']) {
   for (const thrown of [false, true]) test(`${fault} ${thrown ? 'throw' : 'returned error'} cannot appear as empty customer data`, async () => {

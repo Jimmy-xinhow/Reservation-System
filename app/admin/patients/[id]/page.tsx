@@ -15,6 +15,7 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { createScheduledFollowupAction, setScheduledFollowupStatusAction } from "../../followups/actions";
 import FollowupComposer from "../../followups/FollowupComposer";
 import MergePatientForm from "./MergePatientForm";
+import { isAdminModuleEnabled } from "@/lib/admin-modules";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +75,7 @@ export default async function PatientDetailPage({
     return <p className="card p-6 text-sm text-slate-500">目前角色沒有查看完整顧客資料的權限。</p>;
   }
   const supabase = await adminQuery(Promise.resolve().then(() => createSupabaseServer()));
+  const crmEnabled = await isAdminModuleEnabled(supabase, clinicId, "crm");
 
   const { data, error: patientError } = await adminQuery(supabase
     .from("patients")
@@ -118,7 +120,9 @@ export default async function PatientDetailPage({
     supabase.from("customer_wallets").select("balance, lifetime_credit, lifetime_debit").eq("clinic_id", clinicId).eq("patient_id", id).maybeSingle(),
     supabase.from("loyalty_accounts").select("points_balance, lifetime_earned, lifetime_redeemed").eq("clinic_id", clinicId).eq("patient_id", id).maybeSingle(),
     supabase.from("patient_subscriptions").select("id, status, current_period_end, subscription_plans(name)").eq("clinic_id", clinicId).eq("patient_id", id).in("status", ["active", "paused", "past_due"]).order("created_at", { ascending: false }),
-    supabase.from("scheduled_followups").select("id, channel, body, scheduled_for, status, last_error").eq("clinic_id", clinicId).eq("patient_id", id).order("scheduled_for", { ascending: false }).limit(20),
+    crmEnabled
+      ? supabase.from("scheduled_followups").select("id, channel, body, scheduled_for, status, last_error").eq("clinic_id", clinicId).eq("patient_id", id).order("scheduled_for", { ascending: false }).limit(20)
+      : Promise.resolve({ data: [] as Followup[], error: null }),
   ]));
   const queryError = [apptResult.error, recResult.error, interactionResult.error, walletResult.error, pointResult.error, subscriptionResult.error, followupResult.error].find(Boolean);
   if (queryError) throw new Error(adminErrorMessage(queryError));
@@ -158,15 +162,15 @@ export default async function PatientDetailPage({
         <div className="admin-metric"><span className="admin-metric-label">儲值餘額</span><strong className="admin-metric-value">NT${Number(walletData?.balance ?? 0).toLocaleString("zh-TW")}</strong></div>
         <div className="admin-metric"><span className="admin-metric-label">點數餘額</span><strong className="admin-metric-value">{Number(pointData?.points_balance ?? 0).toLocaleString("zh-TW")}</strong></div>
         <div className="admin-metric"><span className="admin-metric-label">有效訂閱</span><strong className="admin-metric-value">{subscriptions.length}</strong></div>
-        <div className="admin-metric"><span className="admin-metric-label">待回訪</span><strong className="admin-metric-value">{followups.filter((item) => item.status === "pending" || item.status === "failed").length}</strong></div>
+        {crmEnabled && <div className="admin-metric"><span className="admin-metric-label">待回訪</span><strong className="admin-metric-value">{followups.filter((item) => item.status === "pending" || item.status === "failed").length}</strong></div>}
       </section>
 
       {subscriptions.length > 0 && <section className="admin-section p-4"><div className="flex items-center justify-between"><h2 className="font-semibold text-slate-900">目前訂閱</h2><Link href="/admin/customer-value" className="text-xs font-medium text-brand-700 hover:underline">管理顧客資產</Link></div><div className="mt-3 divide-y divide-slate-100">{subscriptions.map((subscription) => <div key={subscription.id} className="flex items-center justify-between py-2 text-sm"><span>{one(subscription.subscription_plans)?.name ?? "訂閱方案"}</span><span className="text-slate-500">{subscription.status === "active" ? "有效" : subscription.status === "paused" ? "暫停" : "待處理"} · 至 {new Date(subscription.current_period_end).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}</span></div>)}</div></section>}
 
-      <section className="grid gap-5 lg:grid-cols-2">
+      {crmEnabled && <section className="grid gap-5 lg:grid-cols-2">
         <FollowupComposer action={createScheduledFollowupAction} fixedPatient={{ id: p.id, name: p.name, phone: p.phone }} className="admin-section" compact />
         <section className="admin-section p-4"><div className="flex items-center justify-between"><h2 className="font-semibold text-slate-900">最近回訪</h2><Link href="/admin/followups" className="text-xs font-medium text-brand-700 hover:underline">查看全部</Link></div>{followups.length === 0 ? <p className="mt-4 text-sm text-slate-400">尚未安排回訪</p> : <div className="mt-3 divide-y divide-slate-100">{followups.slice(0, 6).map((followup) => <div key={followup.id} className="py-2 text-sm"><div className="flex items-center justify-between gap-2"><span>{formatDateTime(followup.scheduled_for)} · {followup.channel.toUpperCase()}</span><span className="text-xs text-slate-500">{followup.status === "pending" ? "待處理" : followup.status === "failed" ? "失敗" : followup.status === "completed" ? "已完成" : followup.status === "sent" ? "已發送" : "已取消"}</span></div><p className="mt-1 line-clamp-2 text-xs text-slate-500">{followup.body}</p>{followup.last_error && <p className="mt-1 text-xs text-red-700">{deliveryError(followup.last_error)}</p>}{["pending", "failed"].includes(followup.status) && ["phone", "manual"].includes(followup.channel) && <form action={setScheduledFollowupStatusAction} className="mt-1"><input type="hidden" name="id" value={followup.id} /><input type="hidden" name="status" value="completed" /><SubmitButton className="admin-inline-action">標記完成</SubmitButton></form>}</div>)}</div>}</section>
-      </section>
+      </section>}
 
       {hasBrandPermission(member, "brand.manage") && <details className="admin-section"><summary className="cursor-pointer px-4 py-3 font-semibold text-red-800">合併重複顧客資料</summary><MergePatientForm sourcePatientId={p.id} sourceName={p.name} sourcePhone={p.phone} /></details>}
 
