@@ -154,6 +154,7 @@ try {
     memberships_enabled: true,
     crm_automation_enabled: true,
     line_channel_enabled: true,
+    beauty_operations_enabled: true,
   }, { onConflict: "clinic_id" }));
   await must("create brand identities", service.from("clinic_members").insert([
   {
