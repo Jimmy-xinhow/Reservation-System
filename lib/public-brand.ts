@@ -78,9 +78,9 @@ export async function resolvePublicClinicId(req: NextRequest, supabase: Supabase
   return resolvePublicClinicIdFromScope(supabase, {
     clinicSlug: req.nextUrl.searchParams.get("clinic_slug"),
     clinicId: req.nextUrl.searchParams.get("clinic_id"),
-    // nextUrl keeps the request authority normalized by Next.js across local,
-    // Vercel and Railway adapters. Do not trust a client-supplied forwarded
-    // host as a tenant selector.
-    host: req.nextUrl.host || req.headers.get("host"),
+    // Railway can expose its internal localhost authority in nextUrl. The
+    // request Host is the public authority used by the edge; never select a
+    // tenant from client-supplied forwarded-host headers.
+    host: req.headers.get("host") || req.nextUrl.host,
   });
 }

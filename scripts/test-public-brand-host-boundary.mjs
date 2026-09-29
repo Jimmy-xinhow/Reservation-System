@@ -66,3 +66,35 @@ test("legacy public board uses request Host, not a forwarded host", async () => 
   await page.default({ searchParams: Promise.resolve({ clinic_slug: "fixture-brand" }) });
   assert.equal(scope.host, publicHost);
 });
+
+test("public API uses the edge Host when Railway nextUrl is localhost", async () => {
+  const brand = load("lib/public-brand.ts", { "server-only": {} });
+  const qaHost = "booking-qa.laihowke.com";
+  const qaId = "34d483fb-c103-401a-8316-ecb39f9a811e";
+  const queried = [];
+  const db = { from(table) {
+    queried.push(table);
+    const filters = {};
+    const query = {
+      select: () => query,
+      eq: (key, value) => { filters[key] = value; return query; },
+      not: () => query,
+      maybeSingle: async () => ({
+        data: table === "clinic_domains"
+          ? (filters.hostname === qaHost ? { clinic_id: qaId } : null)
+          : (filters.id === qaId ? { id: qaId } : null),
+        error: null,
+      }),
+    };
+    return query;
+  } };
+  const request = (host, slug = null) => ({
+    nextUrl: { host: "localhost:8080", searchParams: new URLSearchParams(slug ? { clinic_slug: slug } : {}) },
+    headers: { get: name => name === "host" ? host : name === "x-forwarded-host" ? "attacker.example" : null },
+  });
+
+  assert.equal(await brand.resolvePublicClinicId(request(qaHost), db), qaId);
+  assert.equal(await brand.resolvePublicClinicId(request("unverified.example", "qa-line-openroom-20260929"), db), null);
+  assert.equal(await brand.resolvePublicClinicId(request(qaHost, "demo-course"), db), null);
+  assert.ok(queried.includes("clinic_domains"));
+});
