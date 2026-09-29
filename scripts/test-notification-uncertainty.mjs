@@ -19,9 +19,9 @@ for (const domain of ['appointment', 'registration']) {
       test(`${domain}/${channel}: ${failure} cannot turn uncertain delivery into retryable failure`, async () => {
         let state = 'sending';
         const writes = [], logs = [], sends = [];
-        const row = { id: 'item', clinic_id: 'brand', status: 'confirmed', name: 'Synthetic', clinic_name: 'Synthetic', start_at: new Date().toISOString(), email_enabled: channel === 'email', email: channel === 'email' ? 'synthetic@example.invalid' : null, line_user_id: channel === 'line' ? 'synthetic' : null, patient_email: channel === 'email' ? 'synthetic@example.invalid' : null, patient_line_user_id: channel === 'line' ? 'synthetic' : null };
+        const row = { id: 'item', clinic_id: 'brand', status: 'confirmed', name: 'Synthetic', clinic_name: 'Synthetic', start_at: new Date().toISOString(), email_enabled: channel === 'email', line_channel_enabled: channel === 'line', email: channel === 'email' ? 'synthetic@example.invalid' : null, line_user_id: channel === 'line' ? 'synthetic' : null, patient_email: channel === 'email' ? 'synthetic@example.invalid' : null, patient_line_user_id: channel === 'line' ? 'synthetic' : null };
         const svc = { from: table => {
-          const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: table === 'registrations' ? row : table === 'clinic_settings' ? { email_enabled: channel === 'email' } : {}, error: null }) };
+          const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: table === 'registrations' ? row : table === 'clinic_settings' ? { email_enabled: channel === 'email', line_channel_enabled: channel === 'line' } : {}, error: null }) };
           return q;
         } };
         const send = async () => { sends.push(channel); if (failure === 'provider') throw Error('secret private-provider-response'); };
@@ -71,4 +71,33 @@ for (const domain of ['appointment', 'registration']) {
       });
     }
   }
+}
+
+for (const domain of ['appointment', 'registration']) {
+  test(`${domain}: disabled LINE skips delivery while Email still sends`, async () => {
+    const effects = [];
+    const row = { id: 'item', clinic_id: 'brand', status: 'confirmed', name: 'Synthetic', clinic_name: 'Synthetic',
+      line_user_id: 'synthetic-line', patient_line_user_id: 'synthetic-line', line_channel_enabled: false,
+      email: 'synthetic@example.invalid', patient_email: 'synthetic@example.invalid', email_enabled: true };
+    const svc = { from: table => {
+      const query = { select: () => query, eq: () => query, maybeSingle: async () => ({
+        data: table === 'registrations' ? row : table === 'clinic_settings' ? { line_channel_enabled: false, email_enabled: true } : {}, error: null,
+      }) };
+      return query;
+    } };
+    const fn = await extract(`lib/${domain}-notifications.ts`, domain === 'appointment' ? 'notifyAppointmentStatus' : 'notifyRegistrationStatus', {
+      loadAppointment: async () => row, buildMessage: () => ({ subject: 'test', html: 'test' }),
+      claimNotification: async (...args) => { effects.push(`claim:${args.at(-1)}`); return 'claim'; },
+      finishNotification: async (_svc, _id, status) => effects.push(`finish:${status}`),
+      recordSkippedNotification: async (...args) => effects.push(`skip:${args.at(-2)}`),
+      emailConfigForClinic: async () => ({}), sendEmail: async () => effects.push('email'),
+      getClinicLineChannelContext: async () => { throw Error('disabled LINE context must not be read'); },
+      lineAccessTokenForDestination: async () => { throw Error('disabled LINE token must not be read'); },
+      pushMessages: async () => { throw Error('disabled LINE must not send'); },
+      publicRegistrationPaymentUrl: () => '/', decryptRegistrationToken: () => null,
+    });
+    const result = await fn(svc, 'item', 'confirmed');
+    assert.deepEqual(result, { sent: 1, failed: 0, skipped: 1 });
+    assert.deepEqual(effects, ['skip:line', 'claim:email', 'email', 'finish:sent']);
+  });
 }

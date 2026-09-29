@@ -31,6 +31,7 @@ interface AppointmentRecord {
   doctor_name: string;
   service_name: string | null;
   email_enabled: boolean;
+  line_channel_enabled: boolean;
   line_flex_designs: unknown;
 }
 
@@ -68,7 +69,7 @@ export async function notifyAppointmentStatus(
   const result: NotificationResult = { sent: 0, failed: 0, skipped: 0 };
   const message = buildMessage(appointment, kind);
 
-  if (appointment.patient_line_user_id) {
+  if (appointment.patient_line_user_id && appointment.line_channel_enabled) {
     const claim = await claimNotification(svc, appointment, kind, "line");
     if (claim) {
       let deliveryAttempted = false;
@@ -108,7 +109,8 @@ export async function notifyAppointmentStatus(
       result.skipped += 1;
     }
   } else {
-    await recordSkippedNotification(svc, appointment.clinic_id, appointment.id, kind, "line", "顧客尚未綁定 LINE");
+    await recordSkippedNotification(svc, appointment.clinic_id, appointment.id, kind, "line",
+      appointment.patient_line_user_id ? "品牌未啟用 LINE" : "顧客尚未綁定 LINE");
     result.skipped += 1;
   }
 
@@ -249,7 +251,7 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
   const rowClinicId = String((data as { clinic_id: string }).clinic_id);
   const { data: settings, error: settingsError } = await svc
     .from("clinic_settings")
-    .select("email_enabled, line_flex_designs")
+    .select("email_enabled, line_channel_enabled, line_flex_designs")
     .eq("clinic_id", rowClinicId)
     .maybeSingle();
   if (settingsError) throw new Error(settingsError.message);
@@ -292,6 +294,7 @@ async function loadAppointment(svc: SupabaseClient, appointmentId: string): Prom
     doctor_name: doctor?.name ?? "由品牌安排",
     service_name: service?.name ?? null,
     email_enabled: settings?.email_enabled === true,
+    line_channel_enabled: settings?.line_channel_enabled === true,
     line_flex_designs: settings?.line_flex_designs ?? {},
   };
 }

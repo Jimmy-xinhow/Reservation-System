@@ -126,7 +126,7 @@ async function runClinic(svc: SupabaseClient, clinicId: string, scope?: Marketin
     try {
       let lineAccessToken: string | null = null;
       let lineAccessError: string | null = null;
-      if (automation.channel === "line") {
+      if (automation.channel === "line" && settings.line_channel_enabled) {
         try {
           lineAccessToken = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
         } catch (error) {
@@ -156,7 +156,7 @@ async function runClinic(svc: SupabaseClient, clinicId: string, scope?: Marketin
 async function runAutomation(
   svc: SupabaseClient,
   automation: AutomationRow,
-  settings: { email_enabled: boolean },
+  settings: { email_enabled: boolean; line_channel_enabled: boolean },
   clinicName: string,
   summary: { sent: number; failed: number; skipped: number; duplicate: number },
   clinicId: string,
@@ -191,6 +191,11 @@ async function runAutomation(
     }
     if (patient.blocked_until && new Date(patient.blocked_until).getTime() > Date.now()) {
       await markDelivery(svc, claim, "skipped", "顧客目前被封鎖");
+      summary.skipped += 1;
+      continue;
+    }
+    if (automation.channel === "line" && !settings.line_channel_enabled) {
+      await markDelivery(svc, claim, "skipped", "品牌未啟用 LINE");
       summary.skipped += 1;
       continue;
     }

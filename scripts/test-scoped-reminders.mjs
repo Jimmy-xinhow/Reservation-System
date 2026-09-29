@@ -26,7 +26,7 @@ function fixture(name,{inactive=false,fail=false,dbError=false,mislinked=false}=
    if(key==='@/lib/cron-scope')return load('lib/cron-scope.ts');
    if(key==='@/lib/cron-allowlist')return load('lib/cron-allowlist.ts');
    if(key==='@/lib/supabase')return {createServiceClient:()=>{calls++;return svc;}};
-   if(key==='@/lib/http')return {getClinicSettings:async()=>({booking_mode:'time',email_enabled:false}),fail:()=>Response.json({ok:false},{status:500})};
+   if(key==='@/lib/http')return {getClinicSettings:async()=>({booking_mode:'time',email_enabled:false,line_channel_enabled:true}),fail:()=>Response.json({ok:false},{status:500})};
    if(key==='@/lib/email')return {emailConfigForClinic:async()=>null,sendEmail:async()=>sent.push('email')};
    if(key==='@/lib/line')return {lineAccessTokenForDestination:async()=>null,pushMessages:async()=>sent.push('line')};
    if(key==='@/lib/line-channel')return {getClinicLineChannelContext:async()=>({clinicSlug:'synthetic'})};

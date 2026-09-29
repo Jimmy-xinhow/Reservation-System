@@ -65,7 +65,7 @@ export async function notifyRegistrationStatus(
     svc.from("clinics").select("name, slug, line_destination").eq("id", row.clinic_id).maybeSingle(),
     svc.from("events").select("title").eq("id", row.event_id).eq("clinic_id", row.clinic_id).maybeSingle(),
     svc.from("event_sessions").select("name, start_at, venue").eq("id", row.session_id).eq("clinic_id", row.clinic_id).maybeSingle(),
-    svc.from("clinic_settings").select("email_enabled, line_flex_designs").eq("clinic_id", row.clinic_id).maybeSingle(),
+    svc.from("clinic_settings").select("email_enabled, line_channel_enabled, line_flex_designs").eq("clinic_id", row.clinic_id).maybeSingle(),
   ]);
   if (clinicError || eventError || sessionError || settingsError) {
     throw new Error(clinicError?.message ?? eventError?.message ?? sessionError?.message ?? settingsError?.message ?? "讀取報名通知資料失敗");
@@ -75,7 +75,7 @@ export async function notifyRegistrationStatus(
   const paymentUrl = kind === "pending" ? publicRegistrationPaymentUrl(row, clinic?.slug as string | null | undefined) : null;
   const message = buildMessage({ row, clinicName: clinic?.name ?? "", eventTitle: event?.title ?? "活動", sessionName: session?.name ?? "", startAt: session?.start_at ?? null, venue: session?.venue ?? null, kind, checkinToken: checkinToken ?? decryptRegistrationToken(row.checkin_token_encrypted), paymentUrl });
 
-  if (row.line_user_id) {
+  if (row.line_user_id && settings?.line_channel_enabled === true) {
     const claim = await claimNotification(svc, row.clinic_id, row.id, kind, "line");
     if (claim) {
       let deliveryAttempted = false;
@@ -121,7 +121,8 @@ export async function notifyRegistrationStatus(
       result.skipped += 1;
     }
   } else {
-    await recordSkippedNotification(svc, row.clinic_id, row.id, kind, "line", "顧客尚未綁定 LINE");
+    await recordSkippedNotification(svc, row.clinic_id, row.id, kind, "line",
+      row.line_user_id ? "品牌未啟用 LINE" : "顧客尚未綁定 LINE");
     result.skipped += 1;
   }
 

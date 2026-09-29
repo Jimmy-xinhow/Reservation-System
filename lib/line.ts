@@ -75,6 +75,16 @@ export async function lineCredentialsForDestination(
       source: "environment",
     };
   }
+  if (destination) {
+    const { data: clinic, error: clinicError } = await providerOperation(() => service.from("clinics")
+      .select("id").eq("line_destination", destination).eq("active", true).maybeSingle(), "品牌渠道讀取失敗");
+    if (clinicError) throw new Error("品牌渠道讀取失敗");
+    if (!clinic) throw new Error("LINE destination 未對應啟用品牌");
+    const { data: channel, error: channelError } = await providerOperation(() => service.from("clinic_line_channels")
+      .select("connection_mode").eq("clinic_id", clinic.id).maybeSingle(), "品牌渠道讀取失敗");
+    if (channelError) throw new Error("品牌渠道讀取失敗");
+    if (channel?.connection_mode === "brand") throw new Error("品牌獨立 LINE 渠道尚未設定專屬憑證");
+  }
   return {
     accessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
     channelSecret: process.env.LINE_CHANNEL_SECRET,
@@ -107,6 +117,13 @@ export async function getLineCredentialStatus(
   if (error) throw new Error(`LINE 設定狀態讀取失敗`);
   if (data?.access_token_secret_id && data?.channel_secret_secret_id) {
     return { configured: true, source: "vault" };
+  }
+
+  if (!credentialMapsConfigured()) {
+    const { data: channel, error: channelError } = await providerOperation(() => service.from("clinic_line_channels")
+      .select("connection_mode").eq("clinic_id", clinicId).maybeSingle(), "品牌設定狀態讀取失敗");
+    if (channelError) throw new Error("品牌設定狀態讀取失敗");
+    if (channel?.connection_mode === "brand") return { configured: false, source: null };
   }
 
   const environment = credentialMapsConfigured()

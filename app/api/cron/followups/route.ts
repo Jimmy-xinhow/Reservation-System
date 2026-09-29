@@ -55,11 +55,11 @@ async function runFollowups(req: NextRequest, scope?: FollowupScope) {
         const [{ data: patient, error: patientError }, { data: clinic, error: clinicError }, { data: settings, error: settingsError }] = await Promise.all([
           service.from("patients").select("name, line_user_id, email, marketing_opt_in, active").eq("id", followup.patient_id).eq("clinic_id", followup.clinic_id).maybeSingle(),
           service.from("clinics").select("name, line_destination").eq("id", followup.clinic_id).maybeSingle(),
-          service.from("clinic_settings").select("email_enabled, crm_automation_enabled").eq("clinic_id", followup.clinic_id).maybeSingle(),
+          service.from("clinic_settings").select("email_enabled, line_channel_enabled, crm_automation_enabled").eq("clinic_id", followup.clinic_id).maybeSingle(),
         ]);
         if (patientError || clinicError || settingsError) throw new Error(patientError?.message ?? clinicError?.message ?? settingsError?.message ?? "讀取回訪資料失敗");
         if (!settings) throw new Error("品牌設定不存在");
-        if (!settings.crm_automation_enabled) {
+        if (!settings.crm_automation_enabled || (followup.channel === "line" && !settings.line_channel_enabled)) {
           const { data: paused, error: pauseError } = await service.from("scheduled_followups")
             .update({ status: "pending" })
             .eq("id", followup.id).eq("clinic_id", followup.clinic_id).eq("status", "processing")

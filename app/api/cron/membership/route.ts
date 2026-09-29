@@ -96,7 +96,7 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow, membershipI
   }
   const result = { candidates: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0 };
   let lineToken: string | null = null; let lineTokenError: string | null = null;
-  if (rows.some((row) => Boolean(one(row.patients)?.line_user_id))) {
+  if (settings.line_channel_enabled && rows.some((row) => Boolean(one(row.patients)?.line_user_id))) {
     try { lineToken = await lineAccessTokenForDestination(clinic.line_destination ?? undefined); }
     catch (error) { lineTokenError = error instanceof Error ? error.message : "LINE access token unavailable"; }
   }
@@ -115,6 +115,7 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow, membershipI
       const claim = await claimNotification(service, row, notice.kind, channel, notice.windowKey);
       if (claim === "duplicate") { result.duplicate += 1; continue; }
       if (!claim) continue;
+      if (channel === "line" && !settings.line_channel_enabled) { await finishNotification(service, claim, "skipped", "brand LINE channel is disabled"); result.skipped += 1; continue; }
       if (channel === "line" && !patient?.line_user_id) { await finishNotification(service, claim, "skipped", "customer has no LINE identity"); result.skipped += 1; continue; }
       if (channel === "line" && !lineToken) { await finishNotification(service, claim, "failed", lineTokenError ?? "LINE access token unavailable"); result.failed += 1; continue; }
       if (channel === "email" && (!patient?.email || !emailConfig)) { await finishNotification(service, claim, "skipped", "customer email or email provider unavailable"); result.skipped += 1; continue; }

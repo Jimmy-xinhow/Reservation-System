@@ -5,9 +5,9 @@ import ts from 'typescript';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
 const secret='CANARY_NAME 0912345678 canary@example.invalid Bearer CANARY_TOKEN';
-function load(file,fetch,deps={}) {
+function load(file,fetch,deps={},env={}) {
  const exports={};
- vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,fetch,Error,Buffer,URLSearchParams,process:{env:{}},require:n=>{
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,fetch,Error,Buffer,URLSearchParams,process:{env},require:n=>{
   if(n==='server-only')return{};
   if(n==='node:crypto')return{default:crypto};
   if(n==='@/lib/supabase')return{createServiceClient:()=>{throw Error('Unexpected DB call');}};
@@ -77,11 +77,52 @@ for(const [file,name,args] of [
 ])for(const mode of ['returned','thrown','empty','configured'])test(`${name}: Vault ${mode}`,async()=>{
  const row=file==='line'?{access_token:'secret',channel_secret:'secret',access_token_secret_id:'id',channel_secret_secret_id:'id'}:{api_key:'secret',from_address:'from@example.invalid',api_key_secret_id:'id'};
  const query={select:()=>query,eq:()=>query,maybeSingle:()=>query,then:(resolve,reject)=>mode==='thrown'?Promise.reject(Error(secret)).then(resolve,reject):Promise.resolve({data:mode==='empty'?null:name.includes('Status')?row:[row],error:mode==='returned'?{message:secret}:null}).then(resolve,reject)};
- const service={rpc:()=>query,from:()=>query};const fetch=()=>{throw Error('Unexpected HTTP');};
+ const service={rpc:()=>query,from:table=>table==='clinics'?{select:()=>service.from('clinics'),eq:()=>service.from('clinics'),maybeSingle:async()=>({data:{id:'clinic'},error:null})}:table==='clinic_line_channels'?{select:()=>service.from('clinic_line_channels'),eq:()=>service.from('clinic_line_channels'),maybeSingle:async()=>({data:{connection_mode:'shared'},error:null})}:query};const fetch=()=>{throw Error('Unexpected HTTP');};
  const boundary=load('lib/provider-boundary.ts',fetch);const api=load(`lib/${file}.ts`,fetch,{'@/lib/provider-boundary':boundary});
  const invoke=()=>api[name](...(name.includes('Status')?[service,'clinic','dest']:[...args,service]));
  if(mode==='returned'||mode==='thrown')await assert.rejects(invoke(),safe);
  else{const value=await invoke();if(name.includes('Status'))assert.equal(value.configured,mode==='configured');else if(mode==='configured')assert.equal(value.apiKey??value.accessToken,'secret');else if(file==='email')assert.equal(value,null);else assert.equal(value.source,'environment');}
+});
+test('independent LINE channel never falls back to platform credentials', async () => {
+ const fetch=()=>{throw Error('Unexpected HTTP');};
+ const boundary=load('lib/provider-boundary.ts',fetch);
+ const api=load('lib/line.ts',fetch,{'@/lib/provider-boundary':boundary},
+  {LINE_CHANNEL_ACCESS_TOKEN:'platform-token',LINE_CHANNEL_SECRET:'platform-secret'});
+ const service={rpc:async()=>({data:[],error:null}),from:table=>{
+  const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='clinics'?{id:'clinic'}:
+   table==='clinic_line_channels'?{connection_mode:'brand'}:null,error:null})};return q;
+ }};
+ await assert.rejects(api.lineCredentialsForDestination('Ubrand',service),/專屬憑證/);
+ assert.equal((await api.getLineCredentialStatus(service,'clinic','Ubrand')).configured,false);
+});
+test('shared LINE channel retains its existing platform credential fallback', async () => {
+ const fetch=()=>{throw Error('Unexpected HTTP');};
+ const boundary=load('lib/provider-boundary.ts',fetch);
+ const api=load('lib/line.ts',fetch,{'@/lib/provider-boundary':boundary},
+  {LINE_CHANNEL_ACCESS_TOKEN:'platform-token',LINE_CHANNEL_SECRET:'platform-secret'});
+ const service={rpc:async()=>({data:[],error:null}),from:table=>{
+  const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='clinics'?{id:'clinic'}:
+   table==='clinic_line_channels'?{connection_mode:'shared'}:null,error:null})};return q;
+ }};
+ const credentials=await api.lineCredentialsForDestination('Ushared',service);
+ assert.equal(credentials.accessToken,'platform-token');assert.equal(credentials.channelSecret,'platform-secret');
+ assert.equal((await api.getLineCredentialStatus(service,'clinic','Ushared')).configured,true);
+});
+test('destination-keyed legacy credentials remain available to independent LINE brands', async () => {
+ const fetch=()=>{throw Error('Unexpected HTTP');};
+ const boundary=load('lib/provider-boundary.ts',fetch);
+ const api=load('lib/line.ts',fetch,{'@/lib/provider-boundary':boundary},{
+  LINE_CHANNEL_ACCESS_TOKEN:'platform-token',LINE_CHANNEL_SECRET:'platform-secret',
+  LINE_CHANNEL_ACCESS_TOKENS_JSON:JSON.stringify({Ubrand:'brand-token'}),
+  LINE_CHANNEL_SECRETS_JSON:JSON.stringify({Ubrand:'brand-secret'}),
+ });
+ const service={rpc:async()=>({data:[],error:null}),from:table=>{
+  const q={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:table==='clinic_line_secret_refs'?null:
+   {connection_mode:'brand'},error:null})};return q;
+ }};
+ const credentials=await api.lineCredentialsForDestination('Ubrand',service);
+ assert.equal(credentials.accessToken,'brand-token');assert.equal(credentials.channelSecret,'brand-secret');
+ assert.equal((await api.getLineCredentialStatus(service,'clinic','Ubrand')).configured,true);
 });
 for(const name of ['verifyLiffIdToken','getWebhookEndpointInfo','createRichMenu','getLineUserProfile','issueLineAccountLinkToken'])test(`${name}: null success payload fails safely`,async()=>{
  const entry=cases.find(c=>c[0]===name);const fetch=async()=>({ok:true,status:200,json:async()=>null});const boundary=load('lib/provider-boundary.ts',fetch);const api=load('lib/line.ts',fetch,{'@/lib/provider-boundary':boundary});await assert.rejects(api[name](...entry[1]),e=>{safe(e);assert.doesNotMatch(e.message,/Cannot read/);return true;});

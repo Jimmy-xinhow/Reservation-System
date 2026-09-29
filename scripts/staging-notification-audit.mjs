@@ -118,6 +118,7 @@ try {
   clinicId = clinic.id;
   await must("configure notification features", service.from("clinic_settings").update({
     booking_mode: "time",
+    line_channel_enabled: true,
     email_enabled: false,
     crm_automation_enabled: true,
   }).eq("clinic_id", clinicId));

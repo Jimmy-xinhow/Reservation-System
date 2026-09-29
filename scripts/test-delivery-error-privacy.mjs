@@ -44,7 +44,7 @@ async function runFollowups(options={}) {
    if(options.finishThrows)throw new Error(privateError);
    return {error:options.finishError?{message:privateError}:null};
   },
-  from:table=>{const q={select:()=>q,eq:()=>q,update:body=>{events.push(['pause',body]);return q;},maybeSingle:async()=>({data:table==='patients'?{active:options.active??true,marketing_opt_in:options.optIn??true,line_user_id:'synthetic',email:'test@example.invalid'}:table==='clinics'?{name:'brand'}:table==='scheduled_followups'?{id:'one'}:{email_enabled:true,crm_automation_enabled:!options.crmDisabled},error:null})};return q;}
+  from:table=>{const q={select:()=>q,eq:()=>q,update:body=>{events.push(['pause',body]);return q;},maybeSingle:async()=>({data:table==='patients'?{active:options.active??true,marketing_opt_in:options.optIn??true,line_user_id:'synthetic',email:'test@example.invalid'}:table==='clinics'?{name:'brand'}:table==='scheduled_followups'?{id:'one'}:{email_enabled:true,line_channel_enabled:!options.lineDisabled,crm_automation_enabled:!options.crmDisabled},error:null})};return q;}
  };
  const send=async()=>{events.push(['send']);if(options.sendThrows)throw new Error(privateError);};
  const run=followupFactory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response,console:{error:(...args)=>logs.push(args)},fail:()=>{throw new Error('unexpected outer failure');},cronScopeDenied:()=>null,lineAccessTokenForDestination:async()=>'synthetic',pushMessages:send,emailConfigForClinic:async()=>({}),sendEmail:send,recordCrmInteraction:async()=>{events.push(['crm']);if(options.crmThrows)throw new Error(privateError);}});
@@ -72,6 +72,11 @@ for(const options of [{active:false},{optIn:false}])test(`followup pre-send reje
 });
 test('CRM disabled after claim pauses followup without contacting a provider',async()=>{
  const {body,events}=await runFollowups({crmDisabled:true});
+ assert.equal(body.paused,1);assert.equal(body.sent,0);assert.equal(body.failed,0);
+ assert.deepEqual(events.map(event=>event[0]),['pause']);
+});
+test('LINE disabled after claim pauses LINE followup without contacting a provider',async()=>{
+ const {body,events}=await runFollowups({lineDisabled:true});
  assert.equal(body.paused,1);assert.equal(body.sent,0);assert.equal(body.failed,0);
  assert.deepEqual(events.map(event=>event[0]),['pause']);
 });

@@ -94,7 +94,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string, appointm
   const rows = (appts ?? []) as unknown as ApptRow[];
   let lineAccessToken: string | null = null;
   let lineAccessError: string | null = null;
-  if (rows.some((appointment) => Boolean(appointment.patients?.line_user_id))) {
+  if (settings.line_channel_enabled && rows.some((appointment) => Boolean(appointment.patients?.line_user_id))) {
     try {
       lineAccessToken = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
     } catch (error) {
@@ -110,7 +110,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string, appointm
   let line = 0;
   let lineFailed = 0;
   for (const appointment of rows) {
-    if (!appointment.patients?.line_user_id) continue;
+    if (!settings.line_channel_enabled || !appointment.patients?.line_user_id) continue;
     const claim = await claimReminder(svc, appointment.id, "line");
     if (!claim) continue;
     if (!lineAccessToken) {
