@@ -123,6 +123,8 @@ node scripts/audit-storage-buckets.mjs --project-ref=<Supabase project ref>
 | `PLATFORM_ADMIN_USER_IDS` | 平台總後台 bootstrap 管理員 UUID（逗號分隔；僅 server environment） |
 | `CRON_SECRET` | Vercel／Railway Cron 呼叫提醒、報名逾時、行銷與 Rich Menu 排程 endpoint 的密鑰(長亂數) |
 | `CRON_HEALTH_ENABLED` | Railway worker 專用；`1` 代表每項工作後以 `CRON_SECRET` 回寫不含顧客資料的執行結果。須先套用 `cron_job_runs` migration 並部署 `/api/cron/health`；未設定時沿用既有 worker 行為 |
+| `CRON_ALERT_ENABLED` | Web 與獨立健康監測 worker 均設 `1` 才送告警；先套用 `202609300002`。未設定時維持原唯讀監測，不宣稱 Email 告警通過 |
+| `CRON_ALERT_CLINIC_ID` / `CRON_ALERT_TO_EMAIL` | 只設在 Web；前者指定已有 Vault Resend 寄件憑證的品牌 UUID，後者是平台操作人員收件 Email。監測 worker 不持有 Resend 金鑰或收件人資料 |
 | `CRON_ALLOWED_CLINIC_IDS` | Web 與隔離 worker 必須設定相同的品牌 UUID 清單；設定後七支全域 GET 排程拒絕執行，POST 只接受清單內品牌。空值、重複或不合法 UUID 會 fail closed；排程健康頁改查 scoped 執行紀錄 |
 | `REMINDER_HOURS_BEFORE` | 預約前幾小時發提醒(預設 24) |
 | `MEMBERSHIP_LOW_BALANCE_THRESHOLD` | 會員餘額提醒門檻（預設 1 堂） |

@@ -65,6 +65,8 @@ staging 實查僅有 Web service，cronSchedule／nextCronRunAt 皆為 null。�
 
 `GET /api/cron/health` 是供獨立監測用的只讀查詢，先驗 `CRON_SECRET`，再依平台健康頁相同的七類全域工作和各自期限判斷。七類都新鮮且成功才回 HTTP 200；缺紀錄、失敗、逾時或時間異常回 503，只輸出工作名稱與固定狀態，不回傳顧客、品牌或密鑰。DB 讀取故障也回 503。`scripts/monitor-cron-health.mjs` 以 `APP_URL` 與 `CRON_SECRET` 呼叫，對 503、401、無效回應及連線錯誤均非零退出，日誌不輸出回應原文。`deploy/cron/health-monitor.json` 是每五分鐘執行的獨立 Railway service 候選設定，worker 不需 Supabase service-role、LINE 或 Email 密鑰。真正建立持續服務前，須確認全域七類 worker、告警收件端與 [Railway Cron](https://docs.railway.com/cron-jobs)／[Webhooks](https://docs.railway.com/observability/webhooks) 設定；目前只讀監測程式不等於告警已送達。
 
+告警候選先在資料庫套 `202609300002_cron_alert_delivery.sql`，在 Web 設 `CRON_ALERT_ENABLED=1`、`CRON_ALERT_CLINIC_ID`（有已驗證 Resend 寄件者的品牌）、`CRON_ALERT_TO_EMAIL`；再在獨立健康監測 worker 設 `CRON_ALERT_ENABLED=1`。監測器仍只持有 `APP_URL`／`CRON_SECRET`，會把健康觀察送到已授權的 `POST /api/cron/health/alerts`；Web 重新讀取七類心跳，資料庫按每項作業的故障→恢復轉換建唯一投遞，使用同一事件 ID 作 Resend Idempotency-Key。Resend 422 明確拒收會停在待人工修正狀態；連線結果未知時保留租約與同一 key，超出 24 小時去重視窗後轉人工待查，不自動重寄。只在隔離 staging 實際收件、去重和復原均成立後，才能把 G3-06 記為已驗證。Web 或 DB 無法回應時，這條經 Web 的渠道無法保證通知，仍需獨立基礎設施告警。
+
 ### 工作失敗處理
 
 1. 找 `cron_run` 的執行時間與 status，再看同次七個 `cron_job` 的 job、status、http_status、duration_ms。

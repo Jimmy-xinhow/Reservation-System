@@ -44,6 +44,18 @@ try {
     record('invalid_result', { http_status: response.status });
     process.exit(1);
   }
+  if (process.env.CRON_ALERT_ENABLED === '1') {
+    const alertResponse = await fetch(new URL('/api/cron/health/alerts', target), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${secret}` },
+      signal: AbortSignal.timeout(10_000),
+      redirect: 'error',
+    });
+    if (alertResponse.status !== 200) {
+      record('alert_failed', { http_status: alertResponse.status });
+      process.exit(1);
+    }
+  }
   const unhealthy = rows.filter(row => row.state !== 'healthy');
   record(unhealthy.length ? 'unhealthy' : 'healthy', {
     jobs: rows.length,

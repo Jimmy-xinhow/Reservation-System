@@ -107,6 +107,7 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
+  options: { idempotencyKey?: string; signal?: AbortSignal } = {},
 ): Promise<void> {
   if (!cfg.apiKey || !cfg.from) throw new Error("Email 未設定");
   const res = await providerFetch("https://api.resend.com/emails", {
@@ -114,8 +115,10 @@ export async function sendEmail(
     headers: {
       Authorization: `Bearer ${cfg.apiKey}`,
       "Content-Type": "application/json",
+      ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
     },
     body: JSON.stringify({ from: cfg.from, to, subject, html }),
+    signal: options.signal,
   });
   if (!res.ok) {
     // Resend's validation_error response is a definite rejection. A transport

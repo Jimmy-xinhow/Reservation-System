@@ -14,10 +14,15 @@ const response = (state = 'healthy') => ({
   jobs: jobs.map((job, index) => ({ job, state: index === 0 ? state : 'healthy' })),
 });
 
-async function exercise(status, body, envOverride = {}) {
+async function exercise(status, body, envOverride = {}, alertStatus = 200) {
   const seen = [];
   const server = createServer((req, res) => {
     seen.push({ method: req.method, path: req.url, authorized: req.headers.authorization === `Bearer ${secret}` });
+    if (req.url === '/api/cron/health/alerts') {
+      res.writeHead(alertStatus, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: alertStatus === 200 }));
+      return;
+    }
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(typeof body === 'string' ? body : JSON.stringify(body));
   });
@@ -70,4 +75,22 @@ test('monitor rejects missing configuration before any request', async () => {
   assert.equal(result.code, 1);
   assert.equal(result.record.status, 'configuration_failed');
   assert.equal(result.seen.length, 0);
+});
+
+test('enabled monitor submits unhealthy observation to alert delivery before exit', async () => {
+  const result = await exercise(503, response('failed'), { CRON_ALERT_ENABLED: '1' });
+  assert.equal(result.code, 1);
+  assert.equal(result.record.status, 'unhealthy');
+  assert.deepEqual(result.seen, [
+    { method: 'GET', path: '/api/cron/health', authorized: true },
+    { method: 'POST', path: '/api/cron/health/alerts', authorized: true },
+  ]);
+});
+
+test('alert delivery failure is not reported as healthy', async () => {
+  const result = await exercise(200, response(), { CRON_ALERT_ENABLED: '1' }, 503);
+  assert.equal(result.code, 1);
+  assert.equal(result.record.status, 'alert_failed');
+  assert.equal(result.record.http_status, 503);
+  assert(!result.stdout.includes(secret));
 });

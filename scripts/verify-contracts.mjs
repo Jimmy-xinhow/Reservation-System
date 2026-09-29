@@ -272,7 +272,8 @@ invariant(
     read("supabase/migrations/202609240001_payment_payload_column_privileges.sql")
       .includes("from public, anon, authenticated;") &&
     schema.includes("notify pgrst, 'reload schema';\ncommit;\n\n-- Keep confirmed Resend 422 rejections") &&
-    schema.trimEnd().endsWith(read("supabase/migrations/202609300001_email_provider_definite_rejection.sql").replace(/\r\n/g, "\n").trim()),
+    schema.includes(read("supabase/migrations/202609300001_email_provider_definite_rejection.sql").replace(/\r\n/g, "\n").trim()) &&
+    schema.trimEnd().endsWith(read("supabase/migrations/202609300002_cron_alert_delivery.sql").replace(/\r\n/g, "\n").trim()),
 );
 
 invariant(
