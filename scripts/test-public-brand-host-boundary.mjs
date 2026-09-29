@@ -8,7 +8,7 @@ import * as jsx from "react/jsx-runtime";
 const publicHost = "reservation-system-staging-staging.up.railway.app";
 const spoofedHost = "attacker.example";
 
-function load(file, dependencies) {
+function load(file, dependencies, environment = {}) {
   const exports = {};
   const source = ts.transpileModule(fs.readFileSync(file, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
@@ -19,7 +19,7 @@ function load(file, dependencies) {
       if (name in dependencies) return dependencies[name];
       throw new Error(`Unexpected dependency: ${name}`);
     },
-    process: { env: { APP_URL: `https://${publicHost}` } },
+    process: { env: { APP_URL: `https://${publicHost}`, ...environment } },
   });
   return exports;
 }
@@ -50,6 +50,27 @@ test("homepage brand lookup uses request Host, not a forwarded host", async () =
   });
   await page.default({ searchParams: Promise.resolve({ clinic_slug: "fixture-brand" }) });
   assert.equal(scope.host, publicHost);
+});
+
+test("homepage resolves a tenant custom domain even when Railway advertises it as its public domain", async () => {
+  const qaHost = "booking-qa.laihowke.com";
+  let scope;
+  const page = load("app/page.tsx", {
+    "react/jsx-runtime": jsx,
+    "next/link": { default: () => null },
+    "@/components/Brand": { Brand: () => null },
+    "@/lib/supabase": { createServiceClient: () => ({}) },
+    "next/headers": { headers: async () => forwardedHeaders(qaHost) },
+    "@/lib/public-brand": { resolvePublicClinicIdFromScope: async (_db, value) => { scope = value; return null; } },
+    "@/components/FunnelTracker": { FunnelTracker: () => null },
+    "@/components/MarketingHome": { MarketingHome: () => null },
+    "@/components/showcase/IndustryShowcase": { IndustryShowcase: () => null },
+    "@/lib/public-brand-page": { loadPublicBrandPage: async () => null },
+    "@/lib/line-channel": { getClinicLineChannelContext: async () => null },
+    "@/lib/customer-entry": { publicCustomerEntryUrl: () => null },
+  }, { RAILWAY_PUBLIC_DOMAIN: qaHost });
+  await page.default({ searchParams: Promise.resolve({}) });
+  assert.equal(scope.host, qaHost);
 });
 
 test("legacy public board uses request Host, not a forwarded host", async () => {

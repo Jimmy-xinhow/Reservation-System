@@ -38,7 +38,9 @@ async function getClinic(clinicId: string | null): Promise<ClinicInfo | null> {
 function isPlatformHost(host: string | null): boolean {
   const normalized = (host ?? "").split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
   if (!normalized || ["localhost", "127.0.0.1", "[::1]"].includes(normalized)) return true;
-  const configuredHosts = [process.env.PUBLIC_PLATFORM_HOSTS, process.env.RAILWAY_PUBLIC_DOMAIN, process.env.VERCEL_URL]
+  // Railway may assign a tenant custom domain here; only explicit platform
+  // hosts and deployment-owned hostnames should bypass brand resolution.
+  const configuredHosts = [process.env.PUBLIC_PLATFORM_HOSTS, process.env.VERCEL_URL]
     .flatMap((value) => (value ?? "").split(","))
     .map((value) => value.trim().toLowerCase().replace(/:\d+$/, ""))
     .filter(Boolean);
