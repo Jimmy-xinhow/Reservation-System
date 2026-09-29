@@ -392,6 +392,19 @@ function buildMessage(appointment: AppointmentRecord, kind: AppointmentNotificat
   return { text, subject, html };
 }
 
+/** Reuse the exact normal notification content for an operator-approved email redrive. */
+export async function appointmentEmailContent(
+  svc: SupabaseClient,
+  clinicId: string,
+  appointmentId: string,
+  kind: AppointmentNotificationKind,
+): Promise<{ subject: string; html: string }> {
+  const appointment = await loadAppointment(svc, appointmentId);
+  if (!appointment || appointment.clinic_id !== clinicId) throw new Error("找不到目前品牌的預約");
+  const { subject, html } = buildMessage(appointment, kind);
+  return { subject, html };
+}
+
 function formatAppointmentDate(value: string): string {
   return new Intl.DateTimeFormat("zh-TW", {
     timeZone: "Asia/Taipei",

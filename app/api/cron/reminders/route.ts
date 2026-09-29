@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings } from "@/lib/http";
 import { lineAccessTokenForDestination, pushMessages, type LineMessage } from "@/lib/line";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
+import { buildReminderHtml } from "@/lib/reminder-email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
@@ -177,19 +178,6 @@ async function finishReminder(
   if (error) throw new Error(error.message);
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => {
-    const entities: Record<string, string> = {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    };
-    return entities[char] ?? char;
-  });
-}
-
 function buildReminderFlex(a: ApptRow, mode: "time" | "number", clinicName: string | null, manageUrl: string, lineFlexDesigns: unknown): LineMessage {
   const doctor = a.doctors?.name ?? "由品牌安排";
   const when =
@@ -207,36 +195,4 @@ function buildReminderFlex(a: ApptRow, mode: "time" | "number", clinicName: stri
     cancelPostbackData: `action=cancel&id=${a.id}`,
     design: lineFlexDesignForDelivery(lineFlexDesigns, "appointment_reminder", process.env.APP_URL?.trim() || "http://localhost:3000"),
   });
-}
-
-function buildReminderHtml(a: ApptRow, mode: "time" | "number", clinicName: string | null): string {
-  const safe: ApptRow = {
-    ...a,
-    doctors: a.doctors ? { name: escapeHtml(a.doctors.name) } : null,
-    patients: a.patients
-      ? { ...a.patients, name: escapeHtml(a.patients.name) }
-      : null,
-  };
-  return buildReminderHtmlUnsafe(safe, mode, clinicName);
-}
-
-function buildReminderHtmlUnsafe(a: ApptRow, mode: "time" | "number", clinicName: string | null): string {
-  const doctor = a.doctors?.name ?? "服務提供者";
-  const patient = a.patients?.name ?? "";
-  const when =
-    mode === "time"
-      ? formatDateTime(a.start_at)
-      : `${formatDateSession(a.start_at)} 第 ${a.queue_number ?? "?"} 號`;
-  const displayName = escapeHtml(clinicName?.trim() || "預約與報名平台");
-  return `
-    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:16px">
-      <h2 style="color:#1d4ed8;margin:0 0 12px">預約提醒</h2>
-      <p style="font-size:18px;font-weight:bold;margin:0 0 8px">${when}</p>
-      <p style="color:#555;margin:0 0 4px">服務提供者:${doctor}</p>
-      ${patient ? `<p style="color:#555;margin:0 0 4px">顧客:${patient}</p>` : ""}
-      <p style="color:#888;margin:12px 0 0;font-size:14px">
-        無法前來請務必提前取消。累計三次未提前取消而未出席,將暫停一個月線上預約資格。
-      </p>
-      <p style="color:#aaa;margin:16px 0 0;font-size:12px">${displayName}</p>
-    </div>`;
 }

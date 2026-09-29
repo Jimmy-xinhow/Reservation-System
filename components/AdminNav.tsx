@@ -67,6 +67,7 @@ const GROUPS: Group[] = [
     items: [
       { href: "/admin/calendar", label: "預約日曆", icon: "calendar" },
       { href: "/admin", label: "預約列表", icon: "list", exact: true },
+      { href: "/admin/notifications", label: "Email 失敗補送", icon: "message" },
       { href: "/admin/checkout", label: "結帳中心", icon: "membership" },
       { href: "/admin/queue", label: "舊版服務進度", icon: "queue", module: "legacy" },
     ],
