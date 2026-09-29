@@ -230,6 +230,7 @@ export default async function LinePage({
             <option value="shared">使用平台共用連線（建議先選這個）</option>
             <option value="brand">使用品牌自己的 LINE Developers 渠道</option>
           </select>
+          <p className="help-text">首次使用品牌自己的官方帳號，可先儲存下方 LINE 登入渠道與 LIFF ID，再於「品牌自己的 LINE 授權資料」貼上兩組憑證；系統會自動取得訊息渠道識別碼並切換連線。</p>
         </div>
         <details className="technical-details" open={channel?.connection_mode === "brand" || channel?.verification_status !== "ready"}>
           <summary>進階技術設定：LINE 識別碼</summary>
@@ -237,7 +238,7 @@ export default async function LinePage({
             <div>
               <label className="label">訊息渠道識別碼（destination）</label>
               <input name="line_destination" className="input font-mono" defaultValue={clinic?.line_destination ?? ""} placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
-              <p className="help-text">用來判斷訊息屬於哪個品牌，可從 LINE 的 Webhook 驗證資料取得。</p>
+              <p className="help-text">用來判斷訊息屬於哪個品牌。首次接線可留空，由下方的訊息授權碼自動取得。</p>
             </div>
             <div>
               <label className="label">LINE 登入渠道編號（Channel ID）</label>
@@ -273,7 +274,7 @@ export default async function LinePage({
           <div>
             <h2 className="font-semibold text-slate-900">品牌自己的 LINE 授權資料</h2>
             <p className="help-text max-w-3xl">
-              選擇「品牌自己的 LINE Developers 渠道」時，由品牌管理者在這裡貼上授權資料，不需要再請平台人員修改部署環境。送出後會加密保管，之後不會顯示原始內容。
+              品牌管理者在這裡貼上授權資料，系統會向 LINE 確認官方帳號並自動完成首次接線，不需要先查 destination。送出後會加密保管，之後不會顯示原始內容。
             </p>
           </div>
           <span className={`badge ${credentialStatus.configured ? "bg-accent-500/10 text-accent-600" : "bg-amber-50 text-amber-700"}`}>
@@ -285,7 +286,7 @@ export default async function LinePage({
           </span>
         </div>
         <fieldset
-          disabled={!canManageCredentials || channel?.connection_mode !== "brand" || !clinic?.line_destination}
+          disabled={!canManageCredentials || !channel?.login_channel_id || !channel?.liff_id}
           className="grid gap-4 disabled:opacity-60 sm:grid-cols-2"
         >
           <div>
@@ -316,12 +317,12 @@ export default async function LinePage({
             <p className="help-text">用來確認收到的訊息確實來自 LINE，避免偽造請求。</p>
           </div>
           <div className="sm:col-span-2">
-            <SubmitButton className="btn btn-primary">安全儲存 LINE 授權資料</SubmitButton>
+            <SubmitButton className="btn btn-primary">{channel?.connection_mode === "brand" && clinic?.line_destination ? "安全儲存 LINE 授權資料" : "驗證官方帳號並安全儲存"}</SubmitButton>
           </div>
         </fieldset>
         {!canManageCredentials && <p className="text-sm text-amber-700">只有品牌管理者可以更新授權資料。</p>}
-        {channel?.connection_mode !== "brand" && <p className="text-sm text-slate-600">目前使用平台共用連線；若品牌有自己的 LINE 渠道，請先在上一區改為品牌獨立連線並儲存。</p>}
-        {channel?.connection_mode === "brand" && !clinic?.line_destination && <p className="text-sm text-amber-700">請先在上一區填寫訊息渠道識別碼並儲存，再貼上授權資料。</p>}
+        {(!channel?.login_channel_id || !channel?.liff_id) && <p className="text-sm text-amber-700">請先在上一區儲存 LINE 登入渠道編號與 LIFF ID。</p>}
+        {channel?.connection_mode !== "brand" && channel?.login_channel_id && channel?.liff_id && <p className="text-sm text-slate-600">目前使用平台共用連線；首次貼上此官方帳號的 access token 與 channel secret 後，系統會自動取得 destination 並切換品牌獨立連線。</p>}
         </div>
       </form>
       </section>

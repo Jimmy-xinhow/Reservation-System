@@ -833,7 +833,7 @@ export async function updateLineChannelSettingsAction(fd: FormData) {
 
 /** 品牌管理者單向更新 LINE 憑證；密文只寫入 Supabase Vault，不回傳前端。 */
 export async function saveLineCredentialsAction(fd: FormData) {
-  const { clinicId, user } = await requireBrandAdmin();
+  const { supabase, clinicId, user } = await requireBrandAdmin();
   const accessToken = str(fd, "line_access_token");
   const channelSecret = str(fd, "line_channel_secret");
   if (!accessToken && !channelSecret) throw new Error("請至少填寫一項要更新的 LINE 憑證");
@@ -849,16 +849,61 @@ export async function saveLineCredentialsAction(fd: FormData) {
     { data: channel, error: channelError },
     { data: clinic, error: clinicError },
     { data: existing, error: existingError },
+    { data: settings, error: settingsError },
   ] = await Promise.all([
-    service.from("clinic_line_channels").select("connection_mode").eq("clinic_id", clinicId).maybeSingle(),
+    service.from("clinic_line_channels").select("connection_mode, login_channel_id, liff_id, liff_endpoint_path").eq("clinic_id", clinicId).maybeSingle(),
     service.from("clinics").select("line_destination").eq("id", clinicId).maybeSingle(),
     service.from("clinic_line_secret_refs").select("clinic_id").eq("clinic_id", clinicId).maybeSingle(),
+    service.from("clinic_settings").select("line_channel_enabled").eq("clinic_id", clinicId).maybeSingle(),
   ]);
-  if (channelError || clinicError || existingError) throw new Error("LINE 設定狀態讀取失敗（" + deliveryError(channelError ?? clinicError ?? existingError) + "）");
-  if (channel?.connection_mode !== "brand") throw new Error("請先選擇品牌獨立連線並儲存公開識別資料");
-  if (!clinic?.line_destination) throw new Error("請先填寫訊息渠道識別碼並儲存連線設定");
-  if (!existing && (!accessToken || !channelSecret)) {
-    throw new Error("第一次設定時，訊息授權碼與渠道驗證密鑰都必須填寫");
+  if (channelError || clinicError || existingError || settingsError || !channel || !clinic || !settings) throw new Error("LINE 設定狀態讀取失敗（" + deliveryError(channelError ?? clinicError ?? existingError ?? settingsError) + "）");
+  // LINE 後台通常只顯示 @ 開頭的 Bot basic ID；Webhook destination 是
+  // GET /v2/bot/info 的 userId。首次接線由 server 向 LINE 取得，避免店家
+  // 必須先接收 webhook 或查資料庫才能找出這個識別碼。
+  const setupRequired = channel.connection_mode !== "brand" || !clinic?.line_destination;
+  if ((setupRequired || !existing) && (!accessToken || !channelSecret)) {
+    throw new Error("首次連接或切換官方帳號時，訊息授權碼與渠道驗證密鑰都必須填寫");
+  }
+  let verifiedDestination: string | null = null;
+  if (accessToken) {
+    let bot: Awaited<ReturnType<typeof getBotInfo>>;
+    try {
+      bot = await getBotInfo(accessToken);
+    } catch {
+      throw new Error("無法以這組訊息授權碼連接 LINE，請確認使用的是此官方帳號的 Channel access token");
+    }
+    if (!/^U[A-Za-z0-9_-]{8,100}$/.test(bot.userId)) throw new Error("LINE 回傳的 Bot 識別碼格式不正確");
+    if (clinic?.line_destination && clinic.line_destination !== bot.userId) {
+      throw new Error("此授權碼屬於另一個 LINE 官方帳號；若要更換帳號，請先核對上方訊息渠道識別碼");
+    }
+    const { data: otherClinic, error: ownerError } = await service
+      .from("clinics")
+      .select("id")
+      .eq("line_destination", bot.userId)
+      .neq("id", clinicId)
+      .maybeSingle();
+    if (ownerError) throw new Error("LINE 品牌歸屬檢查失敗（" + deliveryError(ownerError) + "）");
+    if (otherClinic) throw new Error("這個 LINE 官方帳號已連接其他品牌，請先確認品牌歸屬");
+    verifiedDestination = bot.userId;
+
+    if (setupRequired) {
+      if (!channel.login_channel_id || !channel.liff_id) {
+        throw new Error("請先在上方儲存 LINE 登入渠道編號與 LIFF ID");
+      }
+      const { error: setupError } = await supabase.rpc("update_clinic_line_channel", {
+        p_clinic_id: clinicId,
+        p_actor_user_id: user.id,
+        p_enabled: false,
+        p_connection_mode: "brand",
+        p_destination: bot.userId,
+        p_login_channel_id: channel.login_channel_id,
+        p_liff_id: channel.liff_id,
+        p_liff_endpoint_path: channel.liff_endpoint_path || "/book",
+      });
+      if (setupError) throw new Error("LINE 品牌連線設定失敗（" + deliveryError(setupError) + "）");
+    }
+  } else if (setupRequired) {
+    throw new Error("首次連接品牌官方帳號時，請同時貼上訊息授權碼與渠道驗證密鑰");
   }
 
   const { error } = await service.rpc("save_clinic_line_credentials", {
@@ -868,6 +913,19 @@ export async function saveLineCredentialsAction(fd: FormData) {
     p_channel_secret: channelSecret || null,
   });
   if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
+  if (setupRequired && verifiedDestination) {
+    const { error: enableError } = await supabase.rpc("update_clinic_line_channel", {
+      p_clinic_id: clinicId,
+      p_actor_user_id: user.id,
+      p_enabled: true,
+      p_connection_mode: "brand",
+      p_destination: verifiedDestination,
+      p_login_channel_id: channel.login_channel_id,
+      p_liff_id: channel.liff_id,
+      p_liff_endpoint_path: channel.liff_endpoint_path || "/book",
+    });
+    if (enableError) throw new Error("LINE 授權資料已保管，但顧客入口尚未啟用；請回到連線設定確認（" + deliveryError(enableError) + "）");
+  }
   revalidatePath("/admin/line");
   revalidatePath("/admin/channels");
   revalidatePath("/admin/richmenu");
