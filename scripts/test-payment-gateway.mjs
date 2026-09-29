@@ -178,6 +178,17 @@ test("notify and browser return routes use the same verified MPG event; POST ret
   delete globalThis.__g203Events;
 });
 
+test("NewebPay notify rejects a bad signature as a client error without processing a payment", async () => {
+  globalThis.__g203Events = [];
+  const notify = await routeModule("../app/api/payment/newebpay/notify/route.ts");
+  const request = { formData: async () => new URLSearchParams({ ...signed(payload), TradeSha: "BAD" }) };
+  const response = await notify.POST(request);
+  assert.equal(response.status, 400);
+  assert.equal(await response.text(), "SIGNATURE_ERROR");
+  assert.deepEqual(globalThis.__g203Events, []);
+  delete globalThis.__g203Events;
+});
+
 test("ECPay signed SimulatePaid delivery probes never change payment state via either route", async () => {
   globalThis.__g203Events = [];
   const fields = { MerchantID: settings.merchant_id, MerchantTradeNo: "REG_TEST1234", TradeNo: "12345", RtnCode: "1", TradeAmt: "100", SimulatePaid: "1" };

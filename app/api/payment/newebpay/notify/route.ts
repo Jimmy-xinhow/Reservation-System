@@ -20,8 +20,15 @@ export async function POST(req: NextRequest) {
     const svc = createServiceClient();
     const settings = await getPaymentSettingsByMerchant(svc, "newebpay", merchantId);
     if (!settings) return response("SIGNATURE_ERROR", 400);
-    const payload = decryptAndVerifyNewebpay(fields, settings);
-    const { merchantOrderNo, tradeNo, eventKey, success, amount } = parseNewebpayPaymentResult(payload, settings.merchant_id);
+    let payload: Record<string, unknown>;
+    let verified: ReturnType<typeof parseNewebpayPaymentResult>;
+    try {
+      payload = decryptAndVerifyNewebpay(fields, settings);
+      verified = parseNewebpayPaymentResult(payload, settings.merchant_id);
+    } catch {
+      return response("SIGNATURE_ERROR", 400);
+    }
+    const { merchantOrderNo, tradeNo, eventKey, success, amount } = verified;
     const result = await processPaymentWebhook(svc, {
       provider: "newebpay",
       clinicId: settings.clinic_id,
