@@ -12,6 +12,10 @@ import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/regis
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { findPaymentOrderByMerchant } from "@/lib/payment-order-lookup";
+import { resolvePublicClinicId } from "@/lib/public-brand";
+import { verifiedPaymentCustomerOrigin } from "@/lib/payment-public-origin";
+import { queryPaidNewebpayOrder } from "@/lib/newebpay-query";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +31,19 @@ function validOrder(value: string | null): string | null {
   return value && /^[A-Za-z0-9_-]{8,64}$/.test(value) ? value : null;
 }
 
-function resultBaseUrl(req: NextRequest): string {
+async function resultBaseUrl(req: NextRequest): Promise<string> {
+  // The browser return can arrive on a brand domain. Resolve its tenant from
+  // the edge Host and the brand slug before using it as a redirect target.
+  try {
+    const service = createServiceClient();
+    const clinicId = await resolvePublicClinicId(req, service);
+    if (clinicId) {
+      const brandOrigin = await verifiedPaymentCustomerOrigin(req, service, clinicId);
+      if (brandOrigin) return brandOrigin;
+    }
+  } catch {
+    // Keep the platform origin when the brand domain cannot be verified.
+  }
   const configured = process.env.APP_URL?.trim();
   if (!configured) return req.nextUrl.origin;
   try {
@@ -39,9 +55,10 @@ function resultBaseUrl(req: NextRequest): string {
   }
 }
 
-function resultRedirect(req: NextRequest, order: string, provider: Provider, state: string, clinicSlug: string | null): NextResponse {
-  // Railway 會把應用程式內部 request URL 顯示成 localhost:8080；結果頁必須使用公開 APP_URL。
-  const url = new URL("/payment/result", resultBaseUrl(req));
+async function resultRedirect(req: NextRequest, order: string, provider: Provider, state: string, clinicSlug: string | null): Promise<NextResponse> {
+  // Railway may show localhost internally; only the configured platform origin
+  // or a verified domain for this brand can receive the result page.
+  const url = new URL("/payment/result", await resultBaseUrl(req));
   url.searchParams.set("order", order);
   url.searchParams.set("provider", provider);
   url.searchParams.set("state", state);
@@ -62,6 +79,43 @@ async function notifyAppointmentForPayment(svc: SupabaseClient, clinicId: string
   if (!order?.appointment_id) return;
   const kind = order.status === "paid" ? "confirmed" : order.status === "failed" ? "cancelled" : null;
   if (kind) await notifyAppointmentStatus(svc, String(order.appointment_id), kind);
+}
+
+function isCbcDecodeFailure(error: unknown): boolean {
+  const code = error && typeof error === "object" && "code" in error ? error.code : null;
+  return code === "ERR_OSSL_BAD_DECRYPT" || code === "ERR_OSSL_WRONG_FINAL_BLOCK_LENGTH";
+}
+
+async function recoverNewebpayBrowserReturn(
+  req: NextRequest,
+  svc: SupabaseClient,
+  settings: NonNullable<Awaited<ReturnType<typeof getPaymentSettingsByMerchant>>>,
+  merchantOrderNo: string,
+): Promise<boolean> {
+  const order = await findPaymentOrderByMerchant(svc, settings.clinic_id, "newebpay", merchantOrderNo);
+  if (!order) return false;
+  if (order.status === "paid") return true;
+  if (!["pending", "expired"].includes(order.status)) return false;
+  const rate = await checkRateLimit(req, "payment:newebpay-return-query", 5);
+  if (!rate.allowed) return false;
+  const verified = await queryPaidNewebpayOrder(settings, merchantOrderNo, Number(order.amount));
+  if (!verified) return false;
+  const processed = await processPaymentWebhook(svc, {
+    provider: "newebpay",
+    clinicId: settings.clinic_id,
+    merchantOrderNo,
+    providerTransactionNo: verified.tradeNo,
+    eventKey: `${merchantOrderNo}:${verified.tradeNo}:QUERY_RECONCILE`,
+    success: true,
+    amount: Number(order.amount),
+    payload: verified.payload,
+  });
+  if (!processed.accepted) return false;
+  if (processed.changed) {
+    await notifyRegistrationForPayment(svc, settings.clinic_id, "newebpay", merchantOrderNo).catch(() => undefined);
+    await notifyAppointmentForPayment(svc, settings.clinic_id, "newebpay", merchantOrderNo).catch(() => undefined);
+  }
+  return true;
 }
 
 async function processReturnFields(req: NextRequest, fields: Record<string, string>, provider: Provider): Promise<NextResponse> {
@@ -95,7 +149,18 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
   const merchantId = fields.MerchantID ?? "";
   const settings = await getPaymentSettingsByMerchant(svc, "newebpay", merchantId);
   if (!settings) return orderFromQuery ? resultRedirect(req, orderFromQuery, provider, "error", clinicSlug) : new NextResponse("付款回傳驗證失敗", { status: 400 });
-  const payload = decryptAndVerifyNewebpay(fields, settings);
+  let payload: Record<string, unknown>;
+  try {
+    payload = decryptAndVerifyNewebpay(fields, settings);
+  } catch (error) {
+    // The original Notify remains rejected. A browser return with a matching
+    // order may recover only through the official signed single-order query.
+    if (isCbcDecodeFailure(error) && orderFromQuery &&
+        await recoverNewebpayBrowserReturn(req, svc, settings, orderFromQuery)) {
+      return resultRedirect(req, orderFromQuery, provider, "returned", clinicSlug);
+    }
+    throw error;
+  }
   const { merchantOrderNo, tradeNo, eventKey, success, amount } = parseNewebpayPaymentResult(payload, settings.merchant_id);
   await processPaymentWebhook(svc, {
     provider,

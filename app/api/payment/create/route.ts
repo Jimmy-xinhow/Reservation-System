@@ -15,6 +15,7 @@ import {
   type PaymentSettings,
 } from "@/lib/payment";
 import { addMerchantOrderToHistory } from "@/lib/payment-order-lookup";
+import { verifiedPaymentCustomerOrigin } from "@/lib/payment-public-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,14 +66,15 @@ async function formForOrder(
   settings: PaymentSettings,
   order: { merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; membership_plan_id: string | null; return_path: string },
   baseUrl: string,
+  customerOrigin: string,
   clinicSlug: string | null,
 ) {
   const isRegistration = Boolean(order.registration_id);
   const returnQuery = new URLSearchParams({ order: order.merchant_order_no, provider: settings.provider });
   if (clinicSlug) returnQuery.set("clinic_slug", clinicSlug);
-  const returnUrl = `${baseUrl}/api/payment/return?${returnQuery.toString()}`;
+  const returnUrl = `${customerOrigin}/api/payment/return?${returnQuery.toString()}`;
   const notifyUrl = `${baseUrl}/api/payment/${settings.provider}/notify`;
-  const clientBackUrl = `${baseUrl}${order.return_path}`;
+  const clientBackUrl = `${customerOrigin}${order.return_path}`;
   const args = {
     settings,
     merchantOrderNo: order.merchant_order_no,
@@ -360,10 +362,13 @@ export async function POST(req: NextRequest) {
 
     const { data: clinic, error: clinicError } = await svc.from("clinics").select("slug").eq("id", clinicId).maybeSingle();
     if (clinicError) throw new Error(clinicError.message);
+    const platformOrigin = requestBaseUrl(req);
+    const customerOrigin = await verifiedPaymentCustomerOrigin(req, svc, clinicId) ?? platformOrigin;
     const form = await formForOrder(
       settings,
       { ...order, return_path: order.return_path || returnPath },
-      requestBaseUrl(req),
+      platformOrigin,
+      customerOrigin,
       (clinic?.slug as string | null | undefined) ?? null,
     );
     return ok({ order_id: order.id, provider: settings.provider, form });

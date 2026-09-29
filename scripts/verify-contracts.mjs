@@ -1182,12 +1182,14 @@ invariant(
     !read("app/admin/settings/page.tsx").includes('defaultValue={emailCredentialStatus.api'),
 );
 invariant(
-  "ECPay callbacks verify empty response fields and redirect to the public app origin",
+  "ECPay callbacks verify empty response fields and redirect only to the public app or verified brand origin",
   paymentLib.includes('.filter(([key]) => key.toLowerCase() !== "checkmacvalue")') &&
     !paymentLib.includes('key.toLowerCase() !== "checkmacvalue" && value !== ""') &&
-    paymentReturnApi.includes("function resultBaseUrl") &&
+    paymentReturnApi.includes("async function resultBaseUrl") &&
     paymentReturnApi.includes("process.env.APP_URL") &&
-    paymentReturnApi.includes('new URL("/payment/result", resultBaseUrl(req))'),
+    paymentReturnApi.includes("verifiedPaymentCustomerOrigin") &&
+    paymentReturnApi.includes("resolvePublicClinicId") &&
+    paymentReturnApi.includes('new URL("/payment/result", await resultBaseUrl(req))'),
 );
 invariant(
   "public cancellation and payment creation are rate limited",

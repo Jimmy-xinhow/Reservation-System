@@ -164,7 +164,11 @@ async function routeModule(path) {
     export const createServiceClient=()=>({});
     export const getPaymentSettingsByMerchant=async()=>(${JSON.stringify(settings)});
     export const processPaymentWebhook=async(_db,event)=>{globalThis.__g203Events.push(event);return {changed:false,accepted:event.success,duplicate:false}};
-    export const findPaymentOrderByMerchant=async()=>null;
+    export const findPaymentOrderByMerchant=async()=>globalThis.__g203RecoveryOrder??null;
+    export const resolvePublicClinicId=async()=>globalThis.__g203BrandId??null;
+    export const verifiedPaymentCustomerOrigin=async()=>globalThis.__g203BrandOrigin??null;
+    export const checkRateLimit=async()=>({allowed:true});
+    export const queryPaidNewebpayOrder=async()=>{globalThis.__g203QueryCalls=(globalThis.__g203QueryCalls??0)+1;return globalThis.__g203QueryResult??null};
     export const notifyRegistrationStatus=async()=>{};
     export const notifyAppointmentStatus=async()=>{};
     export const notificationKindForStatus=()=>null;`;
@@ -193,6 +197,48 @@ test("notify and browser return routes use the same verified MPG event; POST ret
   assert.deepEqual(globalThis.__g203Events[0], globalThis.__g203Events[1]);
   assert.equal(globalThis.__g203Events[0].success, true);
   delete globalThis.__g203Events;
+});
+
+test("gateway browser return keeps a verified brand domain despite Railway's internal localhost URL", async () => {
+  globalThis.__g203BrandId = "brand-a";
+  globalThis.__g203BrandOrigin = "https://booking-qa.laihowke.com";
+  try {
+    const returned = await routeModule("../app/api/payment/return/route.ts");
+    const response = await returned.GET({
+      nextUrl: new URL("http://localhost:8080/api/payment/return?provider=newebpay&order=REG_TEST1234&clinic_slug=test-brand"),
+    });
+    assert.equal(response.status, 303);
+    assert.equal(new URL(response.headers.get("location")).host, "booking-qa.laihowke.com");
+  } finally {
+    delete globalThis.__g203BrandId;
+    delete globalThis.__g203BrandOrigin;
+  }
+});
+
+test("CBC decode failure can recover only one matching order through a verified official query", async () => {
+  globalThis.__g203Events = [];
+  globalThis.__g203QueryCalls = 0;
+  globalThis.__g203RecoveryOrder = { status: "pending", amount: 100 };
+  globalThis.__g203QueryResult = { tradeNo: "1234567890", payload: { Status: "SUCCESS" } };
+  try {
+    const returned = await routeModule("../app/api/payment/return/route.ts");
+    const TradeInfo = "00".repeat(16);
+    const TradeSha = createHash("sha256").update(`HashKey=${settings.hash_key}&${TradeInfo}&HashIV=${settings.hash_iv}`).digest("hex").toUpperCase();
+    const request = (sha) => ({
+      nextUrl: new URL("https://example.test/api/payment/return?provider=newebpay&order=REG_TEST1234&clinic_slug=test-brand"),
+      formData: async () => new URLSearchParams({ MerchantID: settings.merchant_id, TradeInfo, TradeSha: sha }),
+    });
+    const response = await returned.POST(request(TradeSha));
+    assert.equal(response.status, 303);
+    assert.equal(new URL(response.headers.get("location")).searchParams.get("state"), "returned");
+    assert.equal(globalThis.__g203QueryCalls, 1);
+    assert.equal(globalThis.__g203Events[0].eventKey, "REG_TEST1234:1234567890:QUERY_RECONCILE");
+    const tampered = await returned.POST(request("BAD"));
+    assert.equal(new URL(tampered.headers.get("location")).searchParams.get("state"), "error");
+    assert.equal(globalThis.__g203QueryCalls, 1);
+  } finally {
+    for (const key of ["__g203Events", "__g203QueryCalls", "__g203RecoveryOrder", "__g203QueryResult"]) delete globalThis[key];
+  }
 });
 
 test("Notify rejection diagnostics expose only the encryption mode and structural flags", async () => {
