@@ -20,7 +20,7 @@ const payload = { Status: "SUCCESS", Message: "test", Result: { MerchantID: "TES
 function signed(value) {
   const cipher = createCipheriv("aes-256-cbc", Buffer.from(settings.hash_key), Buffer.from(settings.hash_iv));
   const TradeInfo = Buffer.concat([cipher.update(JSON.stringify(value)), cipher.final()]).toString("hex");
-  const TradeSha = createHash("sha256").update(`HashKey=${settings.hash_key}&TradeInfo=${TradeInfo}&HashIV=${settings.hash_iv}`).digest("hex").toUpperCase();
+  const TradeSha = createHash("sha256").update(`HashKey=${settings.hash_key}&${TradeInfo}&HashIV=${settings.hash_iv}`).digest("hex").toUpperCase();
   return { MerchantID: settings.merchant_id, TradeInfo, TradeSha };
 }
 const parse = value => payment.parseNewebpayPaymentResult(value, settings.merchant_id);
@@ -107,6 +107,23 @@ test("Vault failure cannot silently fall back to environment payment credentials
 test("MPG signed JSON nested Result succeeds without undocumented ResultCode", () => {
   const decoded = payment.decryptAndVerifyNewebpay(signed(payload), settings);
   assert.deepEqual(parse(decoded), { merchantOrderNo: "REG_TEST1234", tradeNo: "1234567890", amount: 100, success: true, eventKey: "REG_TEST1234:1234567890:SUCCESS" });
+});
+test("MPG request SHA follows official bare-ciphertext formula, and the old labeled form is rejected", () => {
+  const args = { settings, merchantOrderNo: "REG_TEST1234", amount: 100, itemName: "測試", returnUrl: "https://example.test/return", notifyUrl: "https://example.test/notify", clientBackUrl: "https://example.test/back" };
+  const { fields } = payment.createNewebpayForm(args);
+  const officialSha = createHash("sha256")
+    .update(`HashKey=${settings.hash_key}&${fields.TradeInfo}&HashIV=${settings.hash_iv}`)
+    .digest("hex").toUpperCase();
+  const formerSha = createHash("sha256")
+    .update(`HashKey=${settings.hash_key}&TradeInfo=${fields.TradeInfo}&HashIV=${settings.hash_iv}`)
+    .digest("hex").toUpperCase();
+  assert.equal(fields.TradeSha, officialSha);
+  assert.notEqual(fields.TradeSha, formerSha);
+  const response = signed(payload);
+  const formerResponseSha = createHash("sha256")
+    .update(`HashKey=${settings.hash_key}&TradeInfo=${response.TradeInfo}&HashIV=${settings.hash_iv}`)
+    .digest("hex").toUpperCase();
+  assert.throws(() => payment.decryptAndVerifyNewebpay({ ...response, TradeSha: formerResponseSha }, settings));
 });
 test("MPG failure uses signed Status; unsigned outer Status cannot mark paid", () => {
   const fields = { ...signed({ ...payload, Status: "CREDITCARD_DECLINED" }), Status: "SUCCESS" };

@@ -259,7 +259,7 @@ export function createNewebpayForm(args: {
   }).toString();
   const encrypted = encryptNewebpay(tradeInfo, args.settings.hash_key, args.settings.hash_iv);
   const tradeSha = createHash("sha256")
-    .update(`HashKey=${args.settings.hash_key}&TradeInfo=${encrypted}&HashIV=${args.settings.hash_iv}`)
+    .update(`HashKey=${args.settings.hash_key}&${encrypted}&HashIV=${args.settings.hash_iv}`)
     .digest("hex")
     .toUpperCase();
   return {
@@ -274,7 +274,7 @@ export function decryptAndVerifyNewebpay(
 ): Record<string, unknown> {
   if (!settings.hash_key || !settings.hash_iv || !fields.TradeInfo || !fields.TradeSha) throw new Error("藍新回呼缺少驗證欄位");
   const expected = createHash("sha256")
-    .update(`HashKey=${settings.hash_key}&TradeInfo=${fields.TradeInfo}&HashIV=${settings.hash_iv}`)
+    .update(`HashKey=${settings.hash_key}&${fields.TradeInfo}&HashIV=${settings.hash_iv}`)
     .digest("hex")
     .toUpperCase();
   if (!safeCompare(fields.TradeSha, expected)) throw new Error("藍新 TradeSha 驗證失敗");
