@@ -18,7 +18,20 @@ function verificationFailureReason(error: unknown): string {
   if (error.message === "藍新回呼缺少驗證欄位") return "missing_fields";
   if (error.message === "藍新 TradeSha 驗證失敗") return "sha_mismatch";
   if (error instanceof SyntaxError) return "payload_not_json";
+  const code = (error as Error & { code?: unknown }).code;
+  if (code === "ERR_OSSL_BAD_DECRYPT") return "cbc_bad_padding";
+  if (code === "ERR_OSSL_WRONG_FINAL_BLOCK_LENGTH") return "cbc_invalid_block";
   return "decode_error";
+}
+
+function verificationEnvelope(fields: Record<string, string>) {
+  const tradeInfo = fields.TradeInfo ?? "";
+  return {
+    encryptType: fields.EncryptType === "1" ? "gcm" : fields.EncryptType === "0" ? "cbc" :
+      fields.EncryptType === undefined ? "omitted" : "unexpected",
+    ciphertextHex: tradeInfo.length > 0 && tradeInfo.length % 2 === 0 && /^[0-9a-f]+$/i.test(tradeInfo),
+    cbcBlockAligned: tradeInfo.length > 0 && tradeInfo.length % 32 === 0,
+  };
 }
 
 function parsingFailureReason(error: unknown): string {
@@ -47,7 +60,11 @@ export async function POST(req: NextRequest) {
     try {
       payload = decryptAndVerifyNewebpay(fields, settings);
     } catch (error) {
-      console.warn("NewebPay notify rejected", { phase: "verify", reason: verificationFailureReason(error) });
+      console.warn("NewebPay notify rejected", {
+        phase: "verify",
+        reason: verificationFailureReason(error),
+        ...verificationEnvelope(fields),
+      });
       return response("SIGNATURE_ERROR", 400);
     }
     try {

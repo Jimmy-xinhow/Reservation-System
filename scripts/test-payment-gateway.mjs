@@ -195,6 +195,30 @@ test("notify and browser return routes use the same verified MPG event; POST ret
   delete globalThis.__g203Events;
 });
 
+test("Notify rejection diagnostics expose only the encryption mode and structural flags", async () => {
+  const notify = await routeModule("../app/api/payment/newebpay/notify/route.ts");
+  const TradeInfo = "00".repeat(16);
+  const TradeSha = createHash("sha256").update(`HashKey=${settings.hash_key}&${TradeInfo}&HashIV=${settings.hash_iv}`).digest("hex").toUpperCase();
+  const fields = { MerchantID: settings.merchant_id, TradeInfo, TradeSha, EncryptType: "1" };
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const response = await notify.POST({ formData: async () => new URLSearchParams(fields) });
+    assert.equal(response.status, 400);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0][0], "NewebPay notify rejected");
+    assert.deepEqual({ phase: warnings[0][1].phase, encryptType: warnings[0][1].encryptType,
+      ciphertextHex: warnings[0][1].ciphertextHex, cbcBlockAligned: warnings[0][1].cbcBlockAligned },
+      { phase: "verify", encryptType: "gcm", ciphertextHex: true, cbcBlockAligned: true });
+    assert(!JSON.stringify(warnings).includes(TradeInfo));
+    assert(!JSON.stringify(warnings).includes(TradeSha));
+    assert(!JSON.stringify(warnings).includes(settings.hash_key));
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test("NewebPay notify rejects a bad signature as a client error without processing a payment", async () => {
   globalThis.__g203Events = [];
   const notify = await routeModule("../app/api/payment/newebpay/notify/route.ts");
