@@ -211,6 +211,8 @@ Railway **不會** 讀 `vercel.json`。`npm run reminders` 是人工全域執行
 
 共享 staging 可用單一獨立背景服務：其 `RAILWAY_DOCKERFILE_PATH` 設為 `deploy/cron/Dockerfile.allowlisted`，容器執行 `scripts/start-allowlisted-worker.mjs`，每輪七類工作完成後等待五分鐘再啟動下一輪，絕不重疊。worker 的 `CRON_ALLOWED_CLINIC_IDS` 只列明確授權的 DEMO；Web 至少列同一清單。staging gate 另保留固定、執行前必須不存在的 QA ID `7e26a360-9717-4fec-842f-0328e9813c77` 在 **Web 清單**，worker 不包含此 ID，避免與驗收夾具競爭。worker 另引用 Web 的 `CRON_SECRET`、`NEXT_PUBLIC_SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`APP_URL`，並設 `CRON_HEALTH_ENABLED=1`。此背景服務沒有 Railway Cron Schedule，也不需公開網域；仍需外部漏跑／失敗告警與實際收件驗證。
 
+漏跑告警隔離演練時，僅 staging 的白名單 worker 可暫設 `CRON_WORKER_JOBS` 為原七類的有序子集；未設定時照常執行全部七類，錯誤、重複或亂序清單會在執行前停止。演練前先用 `--plan-only` 確認被略過類別沒有待辦，且其他六類持續執行；恢復時移除該變數並核對七類健康與恢復通知。正式環境不設定此變數。
+
 | worker 設定檔 | UTC 排程 | 工作／台北時間 |
 |---|---|---|
 | frequent.json | `*/5 * * * *` | 指定回訪、報名／付款逾時、Rich Menu；每五分鐘 |

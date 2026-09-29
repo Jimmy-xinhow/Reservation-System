@@ -4,9 +4,23 @@ import {createServer} from 'node:http';
 import {spawn} from 'node:child_process';
 import {readFileSync,readdirSync} from 'node:fs';
 import {assessCronHealth} from './check-cron-health.mjs';
+import {CRON_WORKER_JOBS,cronWorkerSelection} from './cron-worker-selection.mjs';
 const jobs=['reminders','marketing','membership','followups','registration','richmenu','subscription-freezes'];
 const secret='synthetic-cron-secret';
 const privateText='private@example.invalid Bearer hidden-provider-token';
+
+test('worker defaults to all seven jobs and accepts an ordered subset without richmenu',()=>{
+ assert.deepEqual(cronWorkerSelection(undefined),{jobs:CRON_WORKER_JOBS,runnerArgs:[]});
+ assert.deepEqual(cronWorkerSelection(''),{jobs:CRON_WORKER_JOBS,runnerArgs:[]});
+ const selected=CRON_WORKER_JOBS.filter(job=>job!=='richmenu');
+ assert.deepEqual(cronWorkerSelection(selected.join(',')),{jobs:selected,runnerArgs:[`--jobs=${selected.join(',')}`]});
+});
+
+test('worker rejects unknown, repeated, empty, and reordered job selections',()=>{
+ for(const raw of ['unknown','richmenu,richmenu','registration,marketing',',richmenu','richmenu,']){
+  assert.throws(()=>cronWorkerSelection(raw),/invalid_job_selection/);
+ }
+});
 test('Railway groups cover every Vercel job once at the same cadence without crash retries',()=>{
  const expected=JSON.parse(readFileSync('vercel.json','utf8')).crons;
  const actual=[];

@@ -3,6 +3,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
-COPY scripts/run-allowlisted-cron.mjs scripts/start-allowlisted-worker.mjs ./scripts/
+COPY scripts/run-allowlisted-cron.mjs scripts/start-allowlisted-worker.mjs scripts/cron-worker-selection.mjs ./scripts/
 USER node
 CMD ["node", "scripts/start-allowlisted-worker.mjs"]
