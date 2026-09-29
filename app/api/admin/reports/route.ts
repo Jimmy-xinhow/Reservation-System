@@ -15,15 +15,21 @@ export async function GET(req: NextRequest) {
   try {
     const range = reportRange(req.nextUrl.searchParams.get("from"), req.nextUrl.searchParams.get("to"));
     const { startDate: start, endDate: end, start: startIso, end: endIso } = range;
+    const includePii = canViewSensitiveCustomerData(member.role);
     const [appointments, registrations, salesPayments, payments, deliveries, waitlist] = await Promise.all([
-      fetchAllSupabasePages((from, to) => member.supabase.from("appointments").select("id, start_at, status, source, membership_id, patients(name, phone), doctors(name), services(name)").eq("clinic_id", member.clinicId).gte("start_at", startIso).lte("start_at", endIso).order("start_at").order("id").range(from, to)),
-      fetchAllSupabasePages((from, to) => member.supabase.from("registrations").select("id, created_at, registration_no, status, payment_status, amount, discount_amount, membership_id, name, phone, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", member.clinicId).gte("created_at", startIso).lte("created_at", endIso).order("created_at").order("id").range(from, to)),
-      fetchAllSupabasePages((from, to) => member.supabase.from("sales_payments").select("id, received_at, method, amount, reference, sales_orders(order_no, patients(name, phone))").eq("clinic_id", member.clinicId).gte("received_at", startIso).lte("received_at", endIso).order("received_at").order("id").range(from, to)),
+      fetchAllSupabasePages((from, to) => member.supabase.from("appointments").select(includePii
+        ? "id, start_at, status, source, membership_id, patients(name, phone), doctors(name), services(name)"
+        : "id, start_at, status, source, membership_id, doctors(name), services(name)").eq("clinic_id", member.clinicId).gte("start_at", startIso).lte("start_at", endIso).order("start_at").order("id").range(from, to)),
+      fetchAllSupabasePages((from, to) => member.supabase.from("registrations").select(includePii
+        ? "id, created_at, registration_no, status, payment_status, amount, discount_amount, membership_id, name, phone, events(title), event_sessions(name), event_ticket_types(name)"
+        : "id, created_at, registration_no, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", member.clinicId).gte("created_at", startIso).lte("created_at", endIso).order("created_at").order("id").range(from, to)),
+      fetchAllSupabasePages((from, to) => member.supabase.from("sales_payments").select(includePii
+        ? "id, received_at, method, amount, reference, sales_orders(order_no, patients(name, phone))"
+        : "id, received_at, method, amount, reference, sales_orders(order_no)").eq("clinic_id", member.clinicId).gte("received_at", startIso).lte("received_at", endIso).order("received_at").order("id").range(from, to)),
       fetchAllSupabasePages((from, to) => member.supabase.from("payment_orders").select("id, merchant_order_no, created_at, status, amount").eq("clinic_id", member.clinicId).gte("created_at", startIso).lte("created_at", endIso).order("created_at").order("id").range(from, to)),
       fetchAllSupabasePages((from, to) => member.supabase.from("crm_delivery_logs").select("id, created_at, status").eq("clinic_id", member.clinicId).gte("created_at", startIso).lte("created_at", endIso).order("created_at").order("id").range(from, to)),
       fetchAllSupabasePages((from, to) => member.supabase.from("waitlist_entries").select("id, created_at, status").eq("clinic_id", member.clinicId).gte("created_at", startIso).lte("created_at", endIso).order("created_at").order("id").range(from, to)),
     ]);
-    const includePii = canViewSensitiveCustomerData(member.role);
     const appointmentRows = (appointments ?? []) as unknown as Array<{ id: string; start_at: string; status: string; source: string | null; membership_id: string | null; patients: { name: string; phone: string } | { name: string; phone: string }[] | null; doctors: { name: string } | { name: string }[] | null; services: { name: string } | { name: string }[] | null }>;
     const registrationRows = (registrations ?? []) as unknown as Array<{ registration_no: string; created_at: string; status: string; payment_status: string; amount: number; discount_amount: number; membership_id: string | null; name: string; phone: string; events: { title: string } | { title: string }[] | null; event_sessions: { name: string } | { name: string }[] | null; event_ticket_types: { name: string } | { name: string }[] | null }>;
     const salesPaymentRows = (salesPayments ?? []) as unknown as Array<{ id: string; received_at: string; method: string; amount: number; reference: string | null; sales_orders: { order_no: string; patients: { name: string; phone: string } | { name: string; phone: string }[] | null } | Array<{ order_no: string; patients: { name: string; phone: string } | { name: string; phone: string }[] | null }> | null }>;
