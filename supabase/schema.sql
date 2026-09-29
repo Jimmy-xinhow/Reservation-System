@@ -12494,6 +12494,7 @@ declare order_status text; begin
 end; $$;
 drop trigger if exists trg_purchase_order_item_draft on public.purchase_order_items;
 create trigger trg_purchase_order_item_draft before insert on public.purchase_order_items for each row execute function public.assert_purchase_order_item_draft();
+revoke all on function public.assert_purchase_order_item_draft() from public, anon, authenticated, service_role;
 notify pgrst, 'reload schema';
 commit;
 
