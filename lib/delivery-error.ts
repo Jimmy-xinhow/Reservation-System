@@ -8,6 +8,7 @@ const safeReasons = new Set([
 const safeCategories = new Set([
   "delivery_error:configuration", "delivery_error:database",
   "delivery_error:connection", "delivery_error:internal",
+  "delivery_error:provider_rejected",
 ]);
 
 export function deliveryError(error: unknown): string {

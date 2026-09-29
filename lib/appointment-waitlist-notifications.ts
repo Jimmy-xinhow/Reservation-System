@@ -3,7 +3,7 @@ import { deliveryError } from "@/lib/delivery-error";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { buildWaitlistStatusFlex } from "@/lib/line-ui-templates";
@@ -122,7 +122,7 @@ export async function processAppointmentWaitlistNotificationQueue(
       const message = error instanceof Error ? error.message : "waitlist notification failed";
       console.error("Appointment waitlist notification failed", { logId: row.log_id, clinicId: row.clinic_id, category: deliveryError(message) });
       // Only failures before the provider call are safe to retry.
-      if (!deliveryAttempted) await finish(service, row.log_id, "failed", message).catch(() => undefined);
+      if (!deliveryAttempted || isEmailProviderRejected(error)) await finish(service, row.log_id, "failed", message).catch(() => undefined);
       summary.failed += 1;
     }
   }

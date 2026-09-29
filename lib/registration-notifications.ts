@@ -3,7 +3,7 @@ import { deliveryError } from "@/lib/delivery-error";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { formatAmount, formatEventDate } from "@/lib/registration";
 import { decryptRegistrationToken } from "@/lib/registration-credentials";
@@ -138,7 +138,7 @@ export async function notifyRegistrationStatus(
         result.sent += 1;
       } catch (error) {
         // A lost provider/DB acknowledgement must never make delivery retryable.
-        if (!deliveryAttempted) await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "Email 通知失敗");
+        if (!deliveryAttempted || isEmailProviderRejected(error)) await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "Email 通知失敗");
         else console.error("Notification delivery unconfirmed", { category: deliveryError(error) });
         result.failed += 1;
       }
@@ -236,14 +236,14 @@ async function claimNotification(
 
   const { data: existing, error: existingError } = await svc
     .from("registration_notification_logs")
-    .select("id, status, attempt_count, updated_at")
+    .select("id, status, attempt_count, error, updated_at")
     .eq("clinic_id", clinicId)
     .eq("registration_id", registrationId)
     .eq("kind", kind)
     .eq("channel", channel)
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
-  if (!existing || existing.status === "sent") return null;
+  if (!existing || existing.status === "sent" || (existing.status === "failed" && existing.error === "delivery_error:provider_rejected")) return null;
   // Time passing cannot prove that the provider rejected a previous attempt.
   // Throw so the queue keeps its event pending and the worker reports failure.
   if (existing.status === "sending") throw new Error("notification_delivery_unconfirmed");

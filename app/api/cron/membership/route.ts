@@ -2,7 +2,7 @@ import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings } from "@/lib/http";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readCronRecordScope, type CronRecordScope } from "@/lib/cron-scope";
@@ -126,7 +126,11 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow, membershipI
         if (channel === "line") await pushMessages(patient!.line_user_id!, [{ type: "text", text: body }], lineToken!);
         else await sendEmail(emailConfig!, patient!.email!, notice.kind === "low_balance" ? "會員堂數提醒" : "會員期限提醒", `<div style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(body)}</div>`);
         await finishNotification(service, claim, "sent"); result.sent += 1;
-      } catch (sendError) { console.error("Membership delivery unconfirmed", { category: deliveryError(sendError) }); result.failed += 1; }
+      } catch (sendError) {
+        if (channel === "email" && isEmailProviderRejected(sendError)) await finishNotification(service, claim, "failed", sendError.message);
+        else console.error("Membership delivery unconfirmed", { category: deliveryError(sendError) });
+        result.failed += 1;
+      }
     }
   }
   return result;

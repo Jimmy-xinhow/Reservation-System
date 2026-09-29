@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings } from "@/lib/http";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { formatDateTime } from "@/lib/slots";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -241,8 +241,11 @@ async function runAutomation(
         appointmentId: candidate.appointment?.id ?? null,
       }).catch((error: unknown) => console.error("CRM campaign interaction failed", { category: deliveryError(error) }));
     } catch (error) {
-      // Preserve pending/sent; an uncertain delivery must not become retryable.
-      console.error("Marketing delivery unconfirmed", { category: deliveryError(error) });
+      // Keep ambiguous deliveries reserved; a 422 was rejected before delivery.
+      if (automation.channel === "email" && isEmailProviderRejected(error)) {
+        await markDelivery(svc, claim, "failed", error.message);
+      }
+      console.error("Marketing delivery failed", { category: deliveryError(error) });
       summary.failed += 1;
     }
   }

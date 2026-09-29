@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings } from "@/lib/http";
 import { lineAccessTokenForDestination, pushMessages, type LineMessage } from "@/lib/line";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
@@ -145,7 +145,8 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string, appointm
       } catch (error) {
         const message = error instanceof Error ? error.message : "Email reminder failed";
         console.error("Reminder Email delivery failed", { clinicId, appointmentId: appointment.id, category: deliveryError(message) });
-        // Preserve sending: provider acceptance or its DB acknowledgement may be lost.
+        // A 422 is a definite rejection; all other delivery outcomes remain uncertain.
+        if (isEmailProviderRejected(error)) await finishReminder(svc, claim, "failed", error.message);
         emailFailed += 1;
       }
     }

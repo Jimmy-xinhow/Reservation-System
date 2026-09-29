@@ -15,7 +15,7 @@ async function extract(path, name, dependencies) {
 for (const domain of ['appointment', 'registration']) {
   const path = `lib/${domain}-notifications.ts`;
   for (const channel of ['line', 'email']) {
-    for (const failure of ['none', 'provider', 'write', 'lost_ack', 'pre_send']) {
+    for (const failure of ['none', 'provider', 'write', 'lost_ack', 'pre_send', ...(channel === 'email' ? ['rejected'] : [])]) {
       test(`${domain}/${channel}: ${failure} cannot turn uncertain delivery into retryable failure`, async () => {
         let state = 'sending';
         const writes = [], logs = [], sends = [];
@@ -24,7 +24,7 @@ for (const domain of ['appointment', 'registration']) {
           const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: table === 'registrations' ? row : table === 'clinic_settings' ? { email_enabled: channel === 'email', line_channel_enabled: channel === 'line' } : {}, error: null }) };
           return q;
         } };
-        const send = async () => { sends.push(channel); if (failure === 'provider') throw Error('secret private-provider-response'); };
+        const send = async () => { sends.push(channel); if (failure === 'provider') throw Error('secret private-provider-response'); if (failure === 'rejected') throw Error('delivery_error:provider_rejected'); };
         const fn = await extract(path, domain === 'appointment' ? 'notifyAppointmentStatus' : 'notifyRegistrationStatus', {
           loadAppointment: async () => row, claimNotification: async () => 'claim',
           finishNotification: async (_svc, _id, status) => {
@@ -36,7 +36,7 @@ for (const domain of ['appointment', 'registration']) {
           recordSkippedNotification: async () => {}, buildMessage: () => ({ subject: 'test', html: 'test' }),
           getClinicLineChannelContext: async () => { if (failure === 'pre_send') throw Error('secret config-error'); return {}; },
           lineAccessTokenForDestination: async () => 'test', customerEntryUrl: () => '/',
-          pushMessages: send, sendEmail: send, emailConfigForClinic: async () => ({}),
+          pushMessages: send, sendEmail: send, isEmailProviderRejected: error => error?.message === 'delivery_error:provider_rejected', emailConfigForClinic: async () => ({}),
           buildAppointmentStatusFlex: () => ({}), buildRegistrationStatusFlex: () => ({}),
           lineFlexDesignForDelivery: () => ({}), formatAppointmentDate: () => '', formatEventDate: () => '', formatAmount: () => '',
           publicRegistrationPaymentUrl: () => '/', decryptRegistrationToken: () => null,
@@ -47,6 +47,8 @@ for (const domain of ['appointment', 'registration']) {
           assert.equal(result.sent, 1); assert.equal(state, 'sent');
         } else if (failure === 'pre_send') {
           assert.equal(state, 'failed'); assert.equal(sends.length, 0); assert.deepEqual(writes, ['failed']);
+        } else if (failure === 'rejected') {
+          assert.equal(result.failed, 1); assert.equal(state, 'failed'); assert.equal(sends.length, 1); assert.deepEqual(writes, ['failed']);
         } else {
           assert.equal(result.failed, 1); assert.equal(result.sent, 0); assert.equal(sends.length, 1);
           assert.equal(state, failure === 'lost_ack' ? 'sent' : 'sending');

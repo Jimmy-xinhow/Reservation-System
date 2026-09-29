@@ -14,13 +14,13 @@ async function extract(path, name, dependencies) {
 
 for (const job of ['reminders', 'marketing', 'membership', 'waitlist']) {
   for (const channel of ['line', 'email']) {
-    for (const failure of ['none', 'provider', 'write', 'lost_ack']) {
+    for (const failure of ['none', 'provider', 'write', 'lost_ack', ...(channel === 'email' ? ['rejected'] : [])]) {
       test(`${job}/${channel}/${failure}: uncertain outcomes never become retryable`, async () => {
         const writes = [], logs = []; let sent = 0, state = job === 'reminders' ? 'sending' : job === 'marketing' ? 'pending' : 'claimed';
         const patient = { clinic_id: 'brand', name: 'synthetic', active: true, marketing_opt_in: true, line_user_id: channel === 'line' ? 'synthetic' : null, email: channel === 'email' ? 'synthetic@example.invalid' : null };
         const row = { id: 'item', log_id: 'claim', clinic_id: 'brand', patient_id: 'patient', patients: patient, credits_remaining: 1, expires_at: null, kind: 'joined', channel, ...patient, email_enabled: true };
         const svc = { from: table => { const q = { select: () => q, eq: () => q, in: () => q, gt: () => q, lte: () => q, order: () => q, limit: () => q, maybeSingle: async () => ({ data: {}, error: null }), then: (resolve, reject) => Promise.resolve({ data: [row], error: null }).then(resolve, reject) }; return q; }, rpc: async () => ({ data: [row], error: null }) };
-        const send = async () => { sent++; if (failure === 'provider') throw Error('secret provider'); };
+        const send = async () => { sent++; if (failure === 'provider') throw Error('secret provider'); if (failure === 'rejected') throw Error('delivery_error:provider_rejected'); };
         const finish = async (_svc, _id, status) => {
           if (status === 'skipped') return;
           writes.push(status); if (failure === 'write') throw Error('secret DB'); state = status;
@@ -29,7 +29,7 @@ for (const job of ['reminders', 'marketing', 'membership', 'waitlist']) {
         const deps = { getClinicSettings: async () => ({ booking_mode: 'time', email_enabled: true, line_channel_enabled: true }),
           lineAccessTokenForDestination: async () => 'synthetic', emailConfigForClinic: async () => ({}),
           getClinicLineChannelContext: async () => ({ enabled: true }), customerEntryUrl: () => '/',
-          pushMessages: send, sendEmail: send, claimReminder: async () => 'claim', finishReminder: finish,
+          pushMessages: send, sendEmail: send, isEmailProviderRejected: error => error?.message === 'delivery_error:provider_rejected', claimReminder: async () => 'claim', finishReminder: finish,
           claimNotification: async () => 'claim', finishNotification: finish, finish,
           claimDelivery: async () => 'claim', markDelivery: finish, resolveTargetIds: async () => ['patient'],
           getCandidates: async () => [{ patient }], hasRecentDelivery: async () => false,
@@ -44,8 +44,8 @@ for (const job of ['reminders', 'marketing', 'membership', 'waitlist']) {
         if (job === 'marketing') { result = { sent: 0, failed: 0, skipped: 0, duplicate: 0 }; await fn(svc, { channel, trigger_type: 'birthday' }, { email_enabled: true, line_channel_enabled: true }, 'brand', result, 'brand', 'token', null); }
         else result = await fn(svc, job === 'membership' ? { id: 'brand' } : job === 'waitlist' ? 50 : 'brand');
         assert.equal(sent, 1);
-        assert(!writes.includes('failed'));
-        assert.equal(state, failure === 'none' || failure === 'lost_ack' ? 'sent' : job === 'reminders' ? 'sending' : job === 'marketing' ? 'pending' : 'claimed');
+        assert.equal(writes.includes('failed'), failure === 'rejected');
+        assert.equal(state, failure === 'rejected' ? 'failed' : failure === 'none' || failure === 'lost_ack' ? 'sent' : job === 'reminders' ? 'sending' : job === 'marketing' ? 'pending' : 'claimed');
         const failures = result.failed ?? (result.lineFailed + result.emailFailed);
         assert.equal(failures, failure === 'none' ? 0 : 1);
         assert(!JSON.stringify(logs).includes('secret'));

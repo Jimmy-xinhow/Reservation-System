@@ -18,6 +18,18 @@ export interface EmailCredentialStatus {
   from: string | null;
 }
 
+/** Resend rejected the request before accepting an email for delivery. */
+export class EmailProviderRejectedError extends Error {
+  constructor() {
+    super("delivery_error:provider_rejected");
+    this.name = "EmailProviderRejectedError";
+  }
+}
+
+export function isEmailProviderRejected(error: unknown): error is EmailProviderRejectedError {
+  return error instanceof EmailProviderRejectedError;
+}
+
 function envMap(name: "RESEND_API_KEYS_JSON" | "RESEND_EMAIL_FROM_JSON"): Record<string, string> {
   const raw = process.env[name];
   if (!raw) return {};
@@ -106,6 +118,9 @@ export async function sendEmail(
     body: JSON.stringify({ from: cfg.from, to, subject, html }),
   });
   if (!res.ok) {
+    // Resend's validation_error response is a definite rejection. A transport
+    // failure or server error may have accepted the email, so keep those uncertain.
+    if (res.status === 422) throw new EmailProviderRejectedError();
     throw new Error(`Email 寄送失敗 (${res.status})`);
   }
 }

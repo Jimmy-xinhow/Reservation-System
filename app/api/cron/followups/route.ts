@@ -2,7 +2,7 @@ import { fail } from "@/lib/http";
 import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { cronScopeDenied } from "@/lib/cron-allowlist";
@@ -95,7 +95,7 @@ async function runFollowups(req: NextRequest, scope?: FollowupScope) {
         if (persisted) {
           // Delivery is already committed. A timeline failure must not enable resend.
           summary.crm_failed += 1;
-        } else if (deliveryAttempted) {
+        } else if (deliveryAttempted && !isEmailProviderRejected(sendError)) {
           // Provider acceptance or a lost DB acknowledgement can be ambiguous.
           // Transport errors can also hide provider acceptance. Keep processing/sent
           // for investigation instead of making an uncertain delivery retryable.

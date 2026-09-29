@@ -255,7 +255,7 @@ invariant(
 );
 
 invariant(
-  "consolidated schema preserves booking replay and ends with payment payload privileges",
+  "consolidated schema preserves booking replay and ends with the latest migration",
   !migrationWaitlistCapacityFix.includes("憿遛") &&
     migrationWaitlistCapacityFix.includes("v_error like '%額滿%'") &&
     migrationTwoLevelAdminPermissions.includes("system_admin") &&
@@ -271,7 +271,8 @@ invariant(
       schema.lastIndexOf("-- Final replay of migration 202608130009") &&
     read("supabase/migrations/202609240001_payment_payload_column_privileges.sql")
       .includes("from public, anon, authenticated;") &&
-    schema.trimEnd().endsWith("notify pgrst, 'reload schema';\ncommit;"),
+    schema.includes("notify pgrst, 'reload schema';\ncommit;\n\n-- Keep confirmed Resend 422 rejections") &&
+    schema.trimEnd().endsWith(read("supabase/migrations/202609300001_email_provider_definite_rejection.sql").replace(/\r\n/g, "\n").trim()),
 );
 
 invariant(
