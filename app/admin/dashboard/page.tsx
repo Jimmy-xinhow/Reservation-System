@@ -318,7 +318,8 @@ function BrandSetupGuide({ items }: { items: SetupItem[] }) {
         <span className="badge shrink-0 bg-white text-brand-700">已完成 {completed} 項 · 查看清單</span>
       </summary>
       <div className="border-t border-brand-100 px-5 pb-5 pt-4">
-        <p className="mb-4 text-sm leading-6 text-slate-600">依序處理尚未完成的項目；「需確認」代表可先使用部分功能，但正式上線前仍要測試。</p>
+        <p className="mb-4 text-sm leading-6 text-slate-600">依序處理尚未完成的項目；「需確認」代表可先使用部分功能，但正式上線前仍要測試。若希望平台代設，可先填寫需求表。</p>
+        <Link href="/admin/setup-request" className="btn btn-secondary mb-4">填表請平台協助設定 →</Link>
         <div className="admin-setup-list border-y border-slate-200">{items.map((item, index) => <Link key={item.label} href={item.href} className="admin-setup-row" data-status={item.status}><span className="admin-setup-row-number">{item.status === "done" ? "✓" : index + 1}</span><strong>{item.label.replace(/^\d+\.\s*/, "")}</strong><p>{item.reason}</p><span className="admin-setup-row-state">{item.status === "done" ? "已完成" : item.status === "warning" ? "需確認" : "尚未完成"} →</span></Link>)}</div>
       </div>
       </details>

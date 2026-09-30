@@ -111,6 +111,7 @@ export default async function PlatformPage({ searchParams }: { searchParams?: Pr
         {hasSystemPermission(platform, "operations.view") && <QuickLink href="/admin/platform/operations" eyebrow="運作狀態" title="檢查系統健康" description="查看通知、金流與部署能力。" />}
         {hasSystemPermission(platform, "reports.view") && <QuickLink href="/admin/platform/reports" eyebrow="使用概況" title="查看跨品牌報表" description="比較品牌活躍度與使用量。" />}
         {hasSystemPermission(platform, "audit.view") && <QuickLink href="/admin/platform/audit" eyebrow="操作追蹤" title="查看系統稽核" description="追蹤跨品牌狀態異動。" />}
+        {canManageBrands && <QuickLink href="/admin/platform/setup-requests" eyebrow="品牌交付" title="處理代設定需求" description="查看店家填寫的服務、時段與入口需求。" />}
       </section>}
 
       {activeSection === "create" && canManageBrands && <form action={createPlatformBrandAction} className="platform-panel space-y-5 p-5">

@@ -274,7 +274,9 @@ invariant(
     schema.includes("notify pgrst, 'reload schema';\ncommit;\n\n-- Keep confirmed Resend 422 rejections") &&
     schema.includes(read("supabase/migrations/202609300001_email_provider_definite_rejection.sql").replace(/\r\n/g, "\n").trim()) &&
     schema.includes(read("supabase/migrations/202609300002_cron_alert_delivery.sql").replace(/\r\n/g, "\n").trim()) &&
-    schema.trimEnd().endsWith(read("supabase/migrations/202609300003_rejected_email_redrive.sql").replace(/\r\n/g, "\n").trim()),
+    schema.includes(read("supabase/migrations/202609300003_rejected_email_redrive.sql").replace(/\r\n/g, "\n").trim()) &&
+    schema.trimEnd().endsWith(read("supabase/migrations/202609300004_brand_setup_requests.sql")
+      .replace(/\r\n/g, "\n").trim()),
 );
 
 invariant(

@@ -126,6 +126,7 @@ const GROUPS: Group[] = [
     label: "設定中心",
     adminOnly: true,
     items: [
+      { href: "/admin/setup-request", label: "請我們協助設定", icon: "settings" },
       { href: "/admin/settings", label: "品牌與規則", icon: "settings", exact: true },
       { href: "/admin/settings/add-ons", label: "擴充功能規劃", icon: "settings" },
       { href: "/admin/import", label: "資料匯入", icon: "list" },
@@ -140,6 +141,7 @@ const GROUPS: Group[] = [
     platformOnly: true,
     items: [
       { href: "/admin/platform", label: "系統總覽", icon: "dashboard", exact: true, systemPermission: "platform.overview" },
+      { href: "/admin/platform/setup-requests", label: "品牌代設定需求", icon: "list", systemPermission: "brands.manage" },
       { href: "/admin/platform/admins", label: "系統人員與權限", icon: "users", systemAdminOnly: true },
       { href: "/admin/platform/operations", label: "系統運作狀態", icon: "schedule", systemPermission: "operations.view" },
       { href: "/admin/platform/reports", label: "跨品牌報表", icon: "report", systemPermission: "reports.view" },
