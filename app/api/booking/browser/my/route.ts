@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("找不到目前品牌", 500);
+    if (!clinicId) return fail("找不到目前品牌", 404);
     if (identity.clinicId !== clinicId) return fail("預約品牌不一致", 403);
 
     const todayStartIso = new Date(`${taipeiToday()}T00:00:00+08:00`).toISOString();

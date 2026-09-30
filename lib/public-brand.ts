@@ -30,20 +30,20 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
   const configuredClinicId = process.env.NEXT_PUBLIC_CLINIC_ID?.trim() || "";
   if (host && !isSharedHost(host)) {
     const { data: domain, error: domainError } = await supabase.from("clinic_domains").select("clinic_id, verified_at").eq("hostname", host).eq("active", true).not("verified_at", "is", null).maybeSingle();
-    if (domainError) return null;
+    if (domainError) throw new Error("公開品牌網域查詢失敗");
     if (domain?.clinic_id) {
       const { data: clinic, error: clinicError } = await supabase.from("clinics").select("id").eq("id", domain.clinic_id).eq("active", true).maybeSingle();
-      if (clinicError) return null;
+      if (clinicError) throw new Error("公開品牌資料查詢失敗");
       const hostClinicId = (clinic?.id as string | undefined) ?? null;
       if (!hostClinicId) return null;
       const { data: slugClinic, error: slugError } = slug
         ? await supabase.from("clinics").select("id").eq("slug", slug).eq("active", true).maybeSingle()
         : { data: null, error: null };
-      if (slugError) return null;
+      if (slugError) throw new Error("公開品牌代號查詢失敗");
       const { data: idClinic, error: idError } = clinicId
         ? await supabase.from("clinics").select("id").eq("id", clinicId).eq("active", true).maybeSingle()
         : { data: null, error: null };
-      if (idError) return null;
+      if (idError) throw new Error("公開品牌識別查詢失敗");
       if ((slug && slugClinic?.id !== hostClinicId) || (clinicId && idClinic?.id !== hostClinicId)) return null;
       return hostClinicId;
     }
@@ -52,11 +52,11 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
   const { data: slugClinic, error: slugError } = slug
     ? await supabase.from("clinics").select("id").eq("slug", slug).eq("active", true).maybeSingle()
     : { data: null, error: null };
-  if (slugError) return null;
+  if (slugError) throw new Error("公開品牌代號查詢失敗");
   const { data: idClinic, error: idError } = clinicId
     ? await supabase.from("clinics").select("id").eq("id", clinicId).eq("active", true).maybeSingle()
     : { data: null, error: null };
-  if (idError) return null;
+  if (idError) throw new Error("公開品牌識別查詢失敗");
   if (slug && clinicId && slugClinic?.id !== idClinic?.id) return null;
   if (slug) return (slugClinic?.id as string | undefined) ?? null;
   if (clinicId && clinicId !== configuredClinicId) return null;
@@ -70,7 +70,7 @@ export async function resolvePublicClinicIdFromScope(supabase: SupabaseClient, s
     .eq("id", configuredClinicId)
     .eq("active", true)
     .maybeSingle();
-  if (configuredClinicError) return null;
+  if (configuredClinicError) throw new Error("預設公開品牌查詢失敗");
   return (configuredClinic?.id as string | undefined) ?? null;
 }
 

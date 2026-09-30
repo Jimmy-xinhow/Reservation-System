@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     const svc = createServiceClient();
     if (body.registration_id) {
       const publicClinicId = await resolvePublicClinicId(req, svc);
-      if (!publicClinicId) return fail("缺少品牌設定", 500);
+      if (!publicClinicId) return fail("缺少品牌設定", 404);
       const customerIdentity = !body.checkin_token && body.browser_token ? verifyBrowserBookingToken(body.browser_token) : null;
       if (!body.checkin_token && (!customerIdentity || customerIdentity.clinicId !== publicClinicId)) return fail("缺少付款憑證", 401);
       let registrationQuery = svc
@@ -166,7 +166,7 @@ export async function POST(req: NextRequest) {
     } else if (body.membership_plan_id) {
       if (!body.browser_token) return fail("缺少會員身分憑證");
       const publicClinicId = await resolvePublicClinicId(req, svc);
-      if (!publicClinicId) return fail("缺少品牌設定", 500);
+      if (!publicClinicId) return fail("缺少品牌設定", 404);
       const { data: membershipSettings, error: membershipSettingsError } = await svc
         .from("clinic_settings")
         .select("memberships_enabled")
@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
       appointmentId = body.appointment_id ?? null;
       if (body.idToken || body.browser_token) {
         clinicId = (await resolvePublicClinicId(req, svc)) ?? "";
-        if (!clinicId) return fail("缺少品牌設定", 500);
+        if (!clinicId) return fail("缺少品牌設定", 404);
         let lineUserId: string | null = null;
         let browserPatientId: string | null = null;
         if (body.idToken) {

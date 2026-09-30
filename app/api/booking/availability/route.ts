@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   try {
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
+    if (!clinicId) return fail("缺少品牌設定", 404);
     const sp = req.nextUrl.searchParams;
     const doctorId = sp.get("doctor_id")?.trim() || null;
     const serviceId = sp.get("service_id")?.trim() || null;

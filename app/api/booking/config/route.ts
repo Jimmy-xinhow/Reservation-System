@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
+    if (!clinicId) return fail("缺少品牌設定", 404);
 
     const settings = await getClinicSettings(svc, clinicId);
     if (settings && !settings.public_booking_enabled) return fail("目前暫停線上預約", 403);

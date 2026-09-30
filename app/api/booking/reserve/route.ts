@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
 
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
+    if (!clinicId) return fail("缺少品牌設定", 404);
 
     // 驗 LINE 身分，並綁定目前品牌的 LINE Login Channel。
     let lineUserId: string | null = null;

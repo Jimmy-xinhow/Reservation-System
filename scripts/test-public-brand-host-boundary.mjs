@@ -119,3 +119,35 @@ test("public API uses the edge Host when Railway nextUrl is localhost", async ()
   assert.equal(await brand.resolvePublicClinicId(request(qaHost, "demo-course"), db), null);
   assert.ok(queried.includes("clinic_domains"));
 });
+
+test("brand mismatch is a missing tenant while a database failure remains an error", async () => {
+  const brand = load("lib/public-brand.ts", { "server-only": {} });
+  const query = {
+    select: () => query,
+    eq: () => query,
+    not: () => query,
+    maybeSingle: async () => ({ data: null, error: { code: "08006" } }),
+  };
+  const db = { from: () => query };
+  await assert.rejects(
+    brand.resolvePublicClinicIdFromScope(db, { host: "booking-qa.laihowke.com" }),
+    /公開品牌網域查詢失敗/,
+  );
+
+  const routeDependencies = {
+    "@/lib/supabase": { createServiceClient: () => db },
+    "@/lib/http": {
+      ok: data => ({ status: 200, data }),
+      fail: (_message, status) => ({ status }),
+      getClinicSettings: async () => null,
+      rateLimitResponse: async () => null,
+    },
+    "@/lib/public-brand": { resolvePublicClinicId: async () => null },
+    "@/lib/line-channel": { getClinicLineChannelContext: async () => null },
+  };
+  const missing = load("app/api/booking/config/route.ts", routeDependencies);
+  assert.equal((await missing.GET({})).status, 404);
+  routeDependencies["@/lib/public-brand"].resolvePublicClinicId = async () => { throw new Error("database unavailable"); };
+  const unavailable = load("app/api/booking/config/route.ts", routeDependencies);
+  assert.equal((await unavailable.GET({})).status, 500);
+});

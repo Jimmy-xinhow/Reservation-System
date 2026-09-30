@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   try {
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
+    if (!clinicId) return fail("缺少品牌設定", 404);
     const { data: settings, error: settingsError } = await svc
       .from("clinic_settings")
       .select("events_enabled, public_registration_enabled")

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
+    if (!clinicId) return fail("缺少品牌設定", 404);
 
     let lineUserId: string;
     try {

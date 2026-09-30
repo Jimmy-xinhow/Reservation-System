@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
 
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("尚未設定公開品牌", 500);
+    if (!clinicId) return fail("尚未設定公開品牌", 404);
 
     let lineUserId: string | null = null;
     if (body.idToken) {
