@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { customerEntryUrl } from "@/lib/customer-entry";
 import { issueLineAccountLinkToken, replyMessages, type LineMessage } from "@/lib/line";
-import { getLineCustomerIdentity } from "@/lib/line-customer-identity";
+import { ensureLineCustomerIdentity, getLineCustomerIdentity } from "@/lib/line-customer-identity";
 import { clearLineCustomerSession, getLineCustomerSession, saveLineCustomerSession } from "@/lib/line-session";
 import { isClinicOpenNow } from "@/lib/queue";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
@@ -802,6 +802,11 @@ export async function replyBrandInfo(replyToken: string, context: LineCustomerJo
 
 export async function startLineSupport(replyToken: string, lineUserId: string | undefined, context: LineCustomerJourneyContext): Promise<void> {
   if (!lineUserId) throw new Error("無法取得 LINE 身分");
+  await ensureLineCustomerIdentity(context.service, {
+    clinicId: context.clinicId,
+    lineUserId,
+    lineAccessToken: context.lineAccessToken,
+  });
   await saveLineCustomerSession(context.service, context.clinicId, lineUserId, { intent: "support", step: "waiting_message", context: {} }, 30);
   await replyMessages(replyToken, [brandedCard(context, {
     altText: `${context.clinicName}｜LINE 客服已連線`,
@@ -831,6 +836,13 @@ export async function handleLineSupportText(replyToken: string, lineUserId: stri
   if (!lineUserId) return false;
   const session = await getLineCustomerSession(context.service, context.clinicId, lineUserId);
   if (session?.intent !== "support") return false;
+  if (!(await getLineCustomerIdentity(context.service, context.clinicId, lineUserId))) {
+    await ensureLineCustomerIdentity(context.service, {
+      clinicId: context.clinicId,
+      lineUserId,
+      lineAccessToken: context.lineAccessToken,
+    });
+  }
   const { data: blocked } = await context.service.from("chat_blocks").select("line_user_id").eq("clinic_id", context.clinicId).eq("line_user_id", lineUserId).maybeSingle();
   if (!blocked) {
     const { error } = await context.service.from("chat_messages").insert({ clinic_id: context.clinicId, line_user_id: lineUserId, sender: "patient", body });

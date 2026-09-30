@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
-function actionWithPatient(patientState, calls, moduleEnabled = true, destination = 'own-destination') {
+function actionWithPatient(patientState, calls, moduleEnabled = true, destination = 'own-destination', verifiedIdentity = true) {
   let table = '';
   const query = {
     select: () => query,
@@ -27,6 +27,12 @@ function actionWithPatient(patientState, calls, moduleEnabled = true, destinatio
     'node:crypto': awaitImportCrypto(),
     '@/lib/admin': { requireAdmin: async () => ({ supabase, clinicId: 'own-brand' }) },
     '@/lib/admin-modules': { isAdminModuleEnabled: async () => moduleEnabled },
+    '@/lib/supabase': { createServiceClient: () => ({}) },
+    '@/lib/line-customer-identity': { getLineCustomerIdentity: async (_svc, brand, to) => {
+      calls.identityChecks.push([brand, to]);
+      if (verifiedIdentity === 'error') throw new Error('private identity detail');
+      return verifiedIdentity ? { patientId: 'own-patient' } : null;
+    } },
     '@/lib/delivery-error': { deliveryError: () => 'safe-category' },
     '@/lib/line': {
       lineAccessTokenForDestination: async () => 'own-brand-token',
@@ -51,7 +57,7 @@ function recipient(value) {
 }
 
 test('foreign LINE recipient cannot receive a brand test push', async () => {
-  const calls = { filters: [], pushed: [] };
+  const calls = { filters: [], pushed: [], identityChecks: [] };
   const action = actionWithPatient(false, calls);
   await assert.rejects(action(recipient('foreign-line-user')), /redirect:\/admin\/line\?test=err$/);
   assert.deepEqual(calls.pushed, []);
@@ -63,28 +69,43 @@ test('foreign LINE recipient cannot receive a brand test push', async () => {
 });
 
 test('active patient in the current brand can receive a test push', async () => {
-  const calls = { filters: [], pushed: [] };
+  const calls = { filters: [], pushed: [], identityChecks: [] };
   const action = actionWithPatient(true, calls);
   await assert.rejects(action(recipient('own-line-user')), /redirect:\/admin\/line\?test=ok$/);
   assert.deepEqual(calls.pushed, ['own-line-user']);
+  assert.deepEqual(calls.identityChecks, [['own-brand', 'own-line-user']]);
+});
+
+test('an editable local patient row cannot authorize push without verified LINE identity', async () => {
+  const calls = { filters: [], pushed: [], identityChecks: [] };
+  const action = actionWithPatient(true, calls, true, 'own-destination', false);
+  await assert.rejects(action(recipient('forged-line-user')), /redirect:\/admin\/line\?test=err$/);
+  assert.deepEqual(calls.pushed, []);
+});
+
+test('identity lookup failure fails closed before LINE push', async () => {
+  const calls = { filters: [], pushed: [], identityChecks: [] };
+  const action = actionWithPatient(true, calls, true, 'own-destination', 'error');
+  await assert.rejects(action(recipient('own-line-user')), /redirect:\/admin\/line\?test=err$/);
+  assert.deepEqual(calls.pushed, []);
 });
 
 test('recipient lookup failure fails closed before LINE push', async () => {
-  const calls = { filters: [], pushed: [] };
+  const calls = { filters: [], pushed: [], identityChecks: [] };
   const action = actionWithPatient('error', calls);
   await assert.rejects(action(recipient('any-line-user')), /redirect:\/admin\/line\?test=err$/);
   assert.deepEqual(calls.pushed, []);
 });
 
 test('disabled LINE module cannot send a test push', async () => {
-  const calls = { filters: [], pushed: [] };
+  const calls = { filters: [], pushed: [], identityChecks: [] };
   const action = actionWithPatient(true, calls, false);
   await assert.rejects(action(recipient('own-line-user')), /此品牌未啟用 LINE 訊息/);
   assert.deepEqual(calls.pushed, []);
 });
 
 test('missing brand destination cannot use the legacy global LINE token', async () => {
-  const calls = { filters: [], pushed: [] };
+  const calls = { filters: [], pushed: [], identityChecks: [] };
   const action = actionWithPatient(true, calls, true, null);
   await assert.rejects(action(recipient('own-line-user')), /redirect:\/admin\/line\?test=err$/);
   assert.deepEqual(calls.pushed, []);

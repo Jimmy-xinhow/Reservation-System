@@ -15,6 +15,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { getLineCustomerIdentity } from "@/lib/line-customer-identity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +88,11 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (threadError) throw threadError;
     if (!thread) return fail("找不到此品牌的對話", 404);
+    // The staff role can write chat rows under RLS. Only the service-role
+    // identity ledger proves this LINE user interacted with this brand.
+    const service = createServiceClient();
+    const identity = await getLineCustomerIdentity(service, clinicId, payload.lineUserId);
+    if (!identity) return fail("找不到此品牌的 LINE 身分", 404);
     if (payload.action === "block") {
       await setChatBlock(supabase, clinicId, payload.lineUserId, true);
       return ok({ blocked: true });
@@ -101,7 +107,6 @@ export async function POST(req: NextRequest) {
     let providerAccepted = false;
     let notice: string | undefined;
     try {
-      const service = createServiceClient();
       const lineContext = await getClinicLineChannelContext(service, clinicId);
       if (!lineContext.enabled) throw new Error("此品牌尚未啟用 LINE 客服");
       const accessToken = await lineAccessTokenForDestination(lineContext.destination ?? undefined);

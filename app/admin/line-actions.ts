@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdmin, requireBrandAdmin } from "@/lib/admin";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
 import { createServiceClient } from "@/lib/supabase";
+import { getLineCustomerIdentity } from "@/lib/line-customer-identity";
 import {
   pushMessages,
   lineAccessTokenForDestination,
@@ -101,6 +102,10 @@ export async function sendTestPushAction(fd: FormData) {
       .maybeSingle();
     if (patientError) throw patientError;
     if (!patient) throw new Error("此 LINE 帳號不是本品牌的有效顧客");
+    // Patient rows are editable by brand staff. Require a server-only identity
+    // created from a verified LIFF token or signed LINE webhook as well.
+    const identity = await getLineCustomerIdentity(createServiceClient(), clinicId, to);
+    if (!identity) throw new Error("此 LINE 帳號尚未在本品牌完成驗證");
     const { data: clinic, error } = await supabase
       .from("clinics")
       .select("line_destination")
