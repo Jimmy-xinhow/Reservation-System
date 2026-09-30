@@ -117,8 +117,12 @@ test('finance date controls reject impossible dates and normalize reversed bound
   const bad = fixture();
   await bad.page({ searchParams: Promise.resolve({ from: '2026-09-31', to: '2026-09-30' }) });
   const badPayment = bad.calls.find(call => call.table === 'sales_payments');
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date());
+  const monthStart = new Date(`${today.slice(0, 8)}01T00:00:00+08:00`).toISOString();
+  const invalidFromStart = monthStart <= '2026-09-30T15:59:59.999Z'
+    ? monthStart : '2026-09-29T16:00:00.000Z';
   assert.equal(badPayment.filters.find(([name, column]) => name === 'gte' && column === 'received_at')[2],
-    '2026-08-31T16:00:00.000Z');
+    invalidFromStart);
 
   const reverse = fixture();
   await reverse.page({ searchParams: Promise.resolve({ from: '2026-09-30', to: '2026-09-01' }) });

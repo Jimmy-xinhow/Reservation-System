@@ -27,7 +27,8 @@ function fixture({ failTable, failFrom = 1000, returnedErrorTable, additionalDat
   settings = {}, setupData = {}, headCounts = {}, attendanceSettings = { click_enabled: false, qr_enabled: false },
   chatThreads = [], throwChat = false, role = 'staff', financialRows = 1005 } = {}) {
   const calls = [];
-  const at = '2026-09-22T12:00:00.000Z';
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date());
+  const at = new Date(`${today}T12:00:00+08:00`).toISOString();
   const rows = (row) => Array.from({ length: financialRows }, (_, index) => ({ id: `row-${index}`, clinic_id: 'brand-a', ...row }));
   const data = {
     sales_payments: [...rows({ amount: 1, received_at: at }), { clinic_id: 'brand-b', amount: 999999, received_at: at }],
