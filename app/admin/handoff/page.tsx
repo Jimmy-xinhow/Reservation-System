@@ -58,6 +58,10 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
   const tasks = taskRows as Task[];
   const openCount = tasks.filter((task) => task.status !== "done").length;
   const highPriorityCount = tasks.filter((task) => task.priority === "high" && task.status !== "done").length;
+  const activeFilters = new URLSearchParams();
+  for (const key of ["status", "category", "priority", "assignee"] as const) {
+    if (params[key]) activeFilters.set(key, params[key]);
+  }
   return (
     <div className="admin-page">
       <header className="admin-page-header">
@@ -126,6 +130,7 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
                 <div className="flex flex-wrap items-end gap-2">
                   <form action={updateHandoffTaskAction} className="grid grid-cols-2 items-end gap-2 sm:flex">
                     <input type="hidden" name="id" value={task.id} />
+                    <input type="hidden" name="filters" value={activeFilters.toString()} />
                     <label className="text-xs"><span className="label">處理狀態</span><select name="status" defaultValue={task.status} className="input h-10 py-1 text-xs">{Object.entries(STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
                     <label className="text-xs"><span className="label">優先度</span><select name="priority" defaultValue={task.priority} className="input h-10 py-1 text-xs">{Object.entries(PRIORITY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
                     <SubmitButton className="btn btn-secondary min-h-10 px-3 text-xs max-sm:col-span-2">儲存交班狀態</SubmitButton>
@@ -133,6 +138,7 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
                   {task.status !== "done" && (
                     <form action={updateHandoffTaskAction}>
                       <input type="hidden" name="id" value={task.id} />
+                      <input type="hidden" name="filters" value={activeFilters.toString()} />
                       <input type="hidden" name="status" value="done" />
                       <input type="hidden" name="priority" value={task.priority} />
                       <SubmitButton className="btn btn-primary min-h-10 px-3 text-xs" successText="已完成 ✓">標記完成</SubmitButton>

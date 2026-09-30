@@ -3,6 +3,7 @@ import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requireOperator } from "@/lib/admin";
 
 function value(fd: FormData, key: string): string { return (fd.get(key) ?? "").toString().trim(); }
@@ -47,4 +48,11 @@ export async function updateHandoffTaskAction(fd: FormData): Promise<void> {
   }
   revalidatePath("/admin/handoff");
   revalidatePath("/admin/dashboard");
+  const requestedFilters = new URLSearchParams(value(fd, "filters"));
+  const filters = new URLSearchParams();
+  for (const key of ["status", "category", "priority", "assignee"]) {
+    const filter = requestedFilters.get(key);
+    if (filter && filter.length <= 100) filters.set(key, filter);
+  }
+  redirect(`/admin/handoff${filters.size ? `?${filters}` : ""}`);
 }
