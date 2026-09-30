@@ -255,11 +255,38 @@ test("Notify rejection diagnostics expose only the encryption mode and structura
     assert.equal(warnings.length, 1);
     assert.equal(warnings[0][0], "NewebPay notify rejected");
     assert.deepEqual({ phase: warnings[0][1].phase, encryptType: warnings[0][1].encryptType,
-      ciphertextHex: warnings[0][1].ciphertextHex, cbcBlockAligned: warnings[0][1].cbcBlockAligned },
-      { phase: "verify", encryptType: "gcm", ciphertextHex: true, cbcBlockAligned: true });
+      ciphertextHex: warnings[0][1].ciphertextHex, cbcBlockAligned: warnings[0][1].cbcBlockAligned,
+      ciphertextBytes: warnings[0][1].ciphertextBytes, cbcFailureShape: warnings[0][1].cbcFailureShape },
+      { phase: "verify", encryptType: "gcm", ciphertextHex: true, cbcBlockAligned: true,
+        ciphertextBytes: 16, cbcFailureShape: "unrecognized" });
     assert(!JSON.stringify(warnings).includes(TradeInfo));
     assert(!JSON.stringify(warnings).includes(TradeSha));
     assert(!JSON.stringify(warnings).includes(settings.hash_key));
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test("Notify diagnostic classifies a signed zero-padded CBC payload but still rejects it", async () => {
+  const notify = await routeModule("../app/api/payment/newebpay/notify/route.ts");
+  const plain = Buffer.from(JSON.stringify(payload));
+  const padded = Buffer.concat([plain, Buffer.alloc(16 - (plain.length % 16))]);
+  const cipher = createCipheriv("aes-256-cbc", Buffer.from(settings.hash_key), Buffer.from(settings.hash_iv));
+  cipher.setAutoPadding(false);
+  const TradeInfo = Buffer.concat([cipher.update(padded), cipher.final()]).toString("hex");
+  const TradeSha = createHash("sha256").update(`HashKey=${settings.hash_key}&${TradeInfo}&HashIV=${settings.hash_iv}`).digest("hex").toUpperCase();
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    const response = await notify.POST({ formData: async () => new URLSearchParams({ MerchantID: settings.merchant_id, TradeInfo, TradeSha }) });
+    assert.equal(response.status, 400);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0][1].cbcFailureShape, "zero_json");
+    const log = JSON.stringify(warnings);
+    for (const sensitive of [TradeInfo, TradeSha, settings.hash_key, settings.hash_iv, "REG_TEST1234"]) {
+      assert(!log.includes(sensitive));
+    }
   } finally {
     console.warn = originalWarn;
   }

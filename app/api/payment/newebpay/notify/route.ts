@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { createDecipheriv } from "node:crypto";
 import { createServiceClient } from "@/lib/supabase";
 import { asPaymentFormFields, decryptAndVerifyNewebpay, getPaymentSettingsByMerchant, parseNewebpayPaymentResult } from "@/lib/payment";
 import { processPaymentWebhook } from "@/lib/payment-webhook";
@@ -31,7 +32,48 @@ function verificationEnvelope(fields: Record<string, string>) {
       fields.EncryptType === undefined ? "omitted" : "unexpected",
     ciphertextHex: tradeInfo.length > 0 && tradeInfo.length % 2 === 0 && /^[0-9a-f]+$/i.test(tradeInfo),
     cbcBlockAligned: tradeInfo.length > 0 && tradeInfo.length % 32 === 0,
+    ciphertextBytes: tradeInfo.length / 2,
   };
+}
+
+// Diagnostics only: the documented MPG default is CBC/PKCS7. A successful
+// no-padding probe must never turn an unverified callback into an accepted one.
+function cbcFailureShape(fields: Record<string, string>, settings: { hash_key: string | null; hash_iv: string | null }): string {
+  const hex = fields.TradeInfo ?? "";
+  if (!settings.hash_key || !settings.hash_iv ||
+      Buffer.byteLength(settings.hash_key, "utf8") !== 32 || Buffer.byteLength(settings.hash_iv, "utf8") !== 16 ||
+      hex.length === 0 || hex.length > 32768 || hex.length % 32 !== 0 || !/^[0-9a-f]+$/i.test(hex)) {
+    return "not_probed";
+  }
+  try {
+    const decipher = createDecipheriv("aes-256-cbc", Buffer.from(settings.hash_key, "utf8"), Buffer.from(settings.hash_iv, "utf8"));
+    decipher.setAutoPadding(false);
+    const raw = Buffer.concat([decipher.update(Buffer.from(hex, "hex")), decipher.final()]);
+    let end = raw.length;
+    let padding = "none";
+    if (raw[end - 1] === 0) {
+      while (end > 0 && raw[end - 1] === 0) end--;
+      padding = "zero";
+    } else {
+      const count = raw[end - 1];
+      if (count >= 1 && count <= 16 && raw.subarray(end - count).every((byte) => byte === count)) {
+        end -= count;
+        padding = "pkcs7";
+      }
+    }
+    if (padding === "none" || end === 0) return "unrecognized";
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(raw.subarray(0, end));
+    try {
+      const value: unknown = JSON.parse(text);
+      if (value && typeof value === "object" && !Array.isArray(value) &&
+          typeof (value as Record<string, unknown>).Status === "string") return `${padding}_json`;
+    } catch { /* The official sample also shows RespondType=String. */ }
+    const query = new URLSearchParams(text);
+    if (query.has("Status") && query.has("MerchantID")) return `${padding}_query`;
+    return "unrecognized";
+  } catch {
+    return "unrecognized";
+  }
 }
 
 function parsingFailureReason(error: unknown): string {
@@ -60,10 +102,12 @@ export async function POST(req: NextRequest) {
     try {
       payload = decryptAndVerifyNewebpay(fields, settings);
     } catch (error) {
+      const reason = verificationFailureReason(error);
       console.warn("NewebPay notify rejected", {
         phase: "verify",
-        reason: verificationFailureReason(error),
+        reason,
         ...verificationEnvelope(fields),
+        cbcFailureShape: reason === "cbc_bad_padding" ? cbcFailureShape(fields, settings) : "not_probed",
       });
       return response("SIGNATURE_ERROR", 400);
     }
