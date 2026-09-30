@@ -116,14 +116,15 @@ export function customerBrowserFallbackUrl(key: CustomerEntryKey, source: URLSea
   return `${path}${params.size ? `?${params.toString()}` : ""}`;
 }
 
-export function bookingLiffHandoffUrl(source: URLSearchParams, selection: { serviceId: string; doctorId: string; date: string; visitType: "first" | "return" }): string {
+export function bookingLiffHandoffUrl(source: URLSearchParams, selection: { serviceId: string; doctorId: string; date: string; visitType: "first" | "return" }, liffId: string | null): string | null {
+  if (!liffId) return null;
   const url = new URL(customerBrowserFallbackUrl("booking", source), "https://customer-entry.invalid");
-  url.pathname = "/book";
+  url.pathname = `/${encodeURIComponent(liffId)}`;
   url.searchParams.set("view", "booking");
   url.searchParams.set("task", "1");
   for (const [key, value] of Object.entries({ service_id: selection.serviceId, doctor_id: selection.doctorId, date: selection.date, visit_type: selection.visitType })) {
     if (value) url.searchParams.set(key, value);
     else url.searchParams.delete(key);
   }
-  return `${url.pathname}${url.search}`;
+  return `https://liff.line.me${url.pathname}${url.search}`;
 }

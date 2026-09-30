@@ -81,9 +81,11 @@ test("optional providers stay selected while resources never require fictional s
 
 test("browser-to-LINE handoff uses current choices, discards stale choices and excludes personal fields", () => {
   const source = new URLSearchParams("clinic_slug=brand-a&service_id=old&doctor_id=old&date=2026-09-14&phone=0912345678&idToken=secret&utm_source=web");
-  const href = bookingLiffHandoffUrl(source, { serviceId: "new", doctorId: "", date: "2026-09-20", visitType: "first" });
+  const href = bookingLiffHandoffUrl(source, { serviceId: "new", doctorId: "", date: "2026-09-20", visitType: "first" }, "12345-test");
+  assert.ok(href);
   const url = parse(href);
-  assert.equal(url.pathname, "/book");
+  assert.equal(url.origin, "https://liff.line.me");
+  assert.equal(url.pathname, "/12345-test");
   assert.equal(url.searchParams.get("view"), "booking");
   assert.equal(url.searchParams.get("task"), "1");
   assert.equal(url.searchParams.get("service_id"), "new");
@@ -95,6 +97,7 @@ test("browser-to-LINE handoff uses current choices, discards stale choices and e
   const fallback = parse(customerBrowserFallbackUrl("booking", url.searchParams));
   assert.equal(fallback.searchParams.get("date"), "2026-09-20");
   assert.equal(fallback.searchParams.get("visit_type"), "first");
+  assert.equal(bookingLiffHandoffUrl(source, { serviceId: "new", doctorId: "", date: "2026-09-20", visitType: "first" }, null), null);
 });
 
 test("return-to-LINE handles unsupported browsers and SDK failures without crashing", () => {
