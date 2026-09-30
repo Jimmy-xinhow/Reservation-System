@@ -31,7 +31,7 @@ async function sendInfrastructureAlert() {
   const payload = {
     from,
     to: [to],
-    subject: `[${environment}] 平台 Web／DB 健康檢查失敗`,
+    subject: `[${environment}] 平台健康監測無法完成`,
     html: `<p>${environment} 的平台健康監測無法完成，請檢查 Web、資料庫與告警 API。</p><p>觀察時段（UTC）：${hour}:00。</p><p>本信不含品牌或顧客資料。</p>`,
   };
   const testEndpoint = process.env.NODE_ENV === 'test' ? process.env.INFRA_ALERT_TEST_ENDPOINT ?? '' : '';
@@ -92,12 +92,19 @@ try {
     await stopOnFailure('invalid_result', { http_status: response.status });
   }
   if (process.env.CRON_ALERT_ENABLED === '1') {
-    const alertResponse = await fetch(new URL('/api/cron/health/alerts', target), {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${secret}` },
-      signal: AbortSignal.timeout(10_000),
-      redirect: 'error',
-    });
+    let alertResponse;
+    try {
+      // The alert endpoint records seven jobs and drains deliveries. It can outlast
+      // the read-only health check without indicating a Web/DB outage.
+      alertResponse = await fetch(new URL('/api/cron/health/alerts', target), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${secret}` },
+        signal: AbortSignal.timeout(30_000),
+        redirect: 'error',
+      });
+    } catch {
+      await stopOnFailure('alert_request_failed');
+    }
     if (alertResponse.status !== 200) {
       await stopOnFailure('alert_failed', { http_status: alertResponse.status });
     }

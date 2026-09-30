@@ -35,6 +35,10 @@ async function exercise(status, body, envOverride = {}, alertStatus = 200, email
     }
     seen.push({ method: req.method, path: req.url, authorized: req.headers.authorization === `Bearer ${secret}` });
     if (req.url === '/api/cron/health/alerts') {
+      if (alertStatus === 'disconnect') {
+        req.socket.destroy();
+        return;
+      }
       res.writeHead(alertStatus, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: alertStatus === 200 }));
       return;
@@ -138,6 +142,7 @@ test('Web failure sends one direct infrastructure alert with stable private-free
   assert.equal(first.emails.length, 1);
   assert.equal(first.emails[0].authorized, true);
   assert.equal(first.emails[0].idempotencyKey, 'infra-health-staging-2026100100');
+  assert.equal(first.emails[0].payload.subject, '[staging] 平台健康監測無法完成');
   assert.deepEqual(first.emails[0].payload, second.emails[0].payload);
   assert.equal(first.emails[0].idempotencyKey, second.emails[0].idempotencyKey);
   assert(!JSON.stringify(first.emails).includes(privateText));
@@ -173,6 +178,19 @@ test('Web alert API failure falls back to direct infrastructure alert', async ()
   assert.equal(result.record.status, 'alert_failed');
   assert.equal(result.record.infra_alert, 'accepted');
   assert.equal(result.emails.length, 1);
+});
+
+test('alert API transport failure is distinct from a Web health failure', async () => {
+  const result = await exercise(200, response(), {
+    ...infraEnv,
+    CRON_ALERT_ENABLED: '1',
+  }, 'disconnect');
+  assert.equal(result.code, 1);
+  assert.equal(result.record.status, 'alert_request_failed');
+  assert.equal(result.record.infra_alert, 'accepted');
+  assert.equal(result.seen.length, 2);
+  assert.equal(result.emails.length, 1);
+  assert(!result.stdout.includes(secret));
 });
 
 test('provider rejection stays failed and never logs provider body or key', async () => {

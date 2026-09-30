@@ -69,6 +69,8 @@ staging 實查僅有 Web service，cronSchedule／nextCronRunAt 皆為 null。�
 
 Web 或 DB 本身不可用時，監測 worker 可選擇設 `INFRA_ALERT_ENABLED=1`、`INFRA_ALERT_RESEND_API_KEY`、`INFRA_ALERT_FROM`、`INFRA_ALERT_TO_EMAIL`，使用與品牌寄信分開、限已驗證網域且僅可發信的 Resend key。Web 回 401／500、健康結果無效、連線失敗，或 Web 告警 API 失敗時，worker 不透過 Web／DB，直接向 Resend 寄送不含顧客／品牌資料的固定內容；同一 Railway environment／UTC 小時使用同一 Idempotency-Key 及內容，避免五分鐘排程重複寄送。Web 正常回報七類排程故障時，仍由既有 Web 告警處理，不走此備援。直寄僅記錄 `accepted`／`send_failed` 等固定結果，不記錄金鑰或服務商回應；`accepted` 只是服務商接受，仍須隔離 staging 真實收件、重試去重及故障恢復實測。這條路徑不會寄恢復信，持續故障跨 UTC 小時可再提醒；監測 worker 或整個 Railway 平台不可用時也無法發送，仍須平台外的監控與足夠試營運觀察期，G4-06 才能結案。
 
+staging 同版 `650cb54c` 於 2026-10-01 03:15（Asia/Taipei）曾在健康 API 200／1.3 秒後，因告警 API 請求滿 10 秒被監測器取消而記錄 `request_failed`；Railway HTTP 記錄同請求為 499／9,996 毫秒，其他四次告警 API 為 200／3–5 秒。下一輪自然恢復，這是一次監測端逾時，不足以判定 Web／DB 斷線。後續監測器將告警 API 等待上限調整為 30 秒，並將其傳輸失敗單列 `alert_request_failed`；直接備援的信件主旨使用涵蓋 Web、DB 與告警 API 的固定文字，避免把此類失敗誤述為 Web／DB 故障。部署後仍須核對自然排程與真實故障寄件；本段程式修補本身不是 G4-06 驗收。
+
 ### 工作失敗處理
 
 1. 找 `cron_run` 的執行時間與 status，再看同次七個 `cron_job` 的 job、status、http_status、duration_ms。
