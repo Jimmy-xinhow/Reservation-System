@@ -110,6 +110,13 @@ test('handoff renders task 1001 with scoped rows and accurate counts', async () 
   assert(h.calls.every(call => call.filters.some(([column, value]) => column === 'clinic_id' && value === brand)));
 });
 
+test('unfinished task exposes an unambiguous completion form scoped to its row', async () => {
+  const h = fixture({ taskCount: 1 });
+  const html = await h.render();
+  assert.match(html, /標記完成/);
+  assert.match(html, /name="id" value="task-0000"[^]*name="status" value="done"[^]*name="priority" value="normal"/);
+});
+
 test('handoff resolves member 1001 without enumerating global Auth or showing foreign member', async () => {
   const h = fixture({ taskCount: 0, memberCount: 1001 });
   const html = await h.render();

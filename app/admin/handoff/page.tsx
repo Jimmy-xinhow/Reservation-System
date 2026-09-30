@@ -123,12 +123,22 @@ export default async function HandoffPage({ searchParams }: { searchParams: Prom
                   <p className="mt-1 text-xs leading-5 text-slate-500">{task.assigned_to ? `負責：${emailById.get(task.assigned_to) ?? "品牌成員"}` : "未指派"}{task.due_at ? ` · 期限：${new Date(task.due_at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}` : ""}</p>
                   {task.note && <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{task.note}</p>}
                 </div>
-                <form action={updateHandoffTaskAction} className="grid grid-cols-2 items-end gap-2 sm:flex">
-                  <input type="hidden" name="id" value={task.id} />
-                  <label className="text-xs"><span className="label">處理狀態</span><select name="status" defaultValue={task.status} className="input h-10 py-1 text-xs">{Object.entries(STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-                  <label className="text-xs"><span className="label">優先度</span><select name="priority" defaultValue={task.priority} className="input h-10 py-1 text-xs">{Object.entries(PRIORITY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-                  <SubmitButton className="btn btn-secondary min-h-10 px-3 text-xs max-sm:col-span-2">儲存交班狀態</SubmitButton>
-                </form>
+                <div className="flex flex-wrap items-end gap-2">
+                  <form action={updateHandoffTaskAction} className="grid grid-cols-2 items-end gap-2 sm:flex">
+                    <input type="hidden" name="id" value={task.id} />
+                    <label className="text-xs"><span className="label">處理狀態</span><select name="status" defaultValue={task.status} className="input h-10 py-1 text-xs">{Object.entries(STATUS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+                    <label className="text-xs"><span className="label">優先度</span><select name="priority" defaultValue={task.priority} className="input h-10 py-1 text-xs">{Object.entries(PRIORITY).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+                    <SubmitButton className="btn btn-secondary min-h-10 px-3 text-xs max-sm:col-span-2">儲存交班狀態</SubmitButton>
+                  </form>
+                  {task.status !== "done" && (
+                    <form action={updateHandoffTaskAction}>
+                      <input type="hidden" name="id" value={task.id} />
+                      <input type="hidden" name="status" value="done" />
+                      <input type="hidden" name="priority" value={task.priority} />
+                      <SubmitButton className="btn btn-primary min-h-10 px-3 text-xs" successText="已完成 ✓">標記完成</SubmitButton>
+                    </form>
+                  )}
+                </div>
               </article>
             ))}
           </div>

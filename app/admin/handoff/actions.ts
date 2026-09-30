@@ -38,8 +38,13 @@ export async function updateHandoffTaskAction(fd: FormData): Promise<void> {
   if (!id) throw new Error("缺少待辦識別碼");
   if (!["open", "in_progress", "done"].includes(status)) throw new Error("待辦狀態不正確");
   if (!["low", "normal", "high"].includes(priority)) throw new Error("優先度不正確");
-  const { error } = await adminQuery(member.supabase.from("handoff_tasks").update({ status, priority }).eq("id", id).eq("clinic_id", member.clinicId));
+  const { data, error } = await adminQuery(member.supabase.from("handoff_tasks")
+    .update({ status, priority }).eq("id", id).eq("clinic_id", member.clinicId)
+    .select("id,status,priority").maybeSingle());
   if (error) throw new Error(adminErrorMessage(`更新交班待辦失敗：${error.message}`));
+  if (!data || data.id !== id || data.status !== status || data.priority !== priority) {
+    throw new Error("無法確認交班待辦已更新，請重新整理後再試。");
+  }
   revalidatePath("/admin/handoff");
   revalidatePath("/admin/dashboard");
 }
