@@ -124,7 +124,8 @@ node scripts/audit-storage-buckets.mjs --project-ref=<Supabase project ref>
 | `CRON_SECRET` | Vercel／Railway Cron 呼叫提醒、報名逾時、行銷與 Rich Menu 排程 endpoint 的密鑰(長亂數) |
 | `CRON_HEALTH_ENABLED` | Railway worker 專用；`1` 代表每項工作後以 `CRON_SECRET` 回寫不含顧客資料的執行結果。須先套用 `cron_job_runs` migration 並部署 `/api/cron/health`；未設定時沿用既有 worker 行為 |
 | `CRON_ALERT_ENABLED` | Web 與獨立健康監測 worker 均設 `1` 才送告警；先套用 `202609300002`。未設定時維持原唯讀監測，不宣稱 Email 告警通過 |
-| `CRON_ALERT_CLINIC_ID` / `CRON_ALERT_TO_EMAIL` | 只設在 Web；前者指定已有 Vault Resend 寄件憑證的品牌 UUID，後者是平台操作人員收件 Email。監測 worker 不持有 Resend 金鑰或收件人資料 |
+| `CRON_ALERT_CLINIC_ID` / `CRON_ALERT_TO_EMAIL` | 只設在 Web；前者指定已有 Vault Resend 寄件憑證的品牌 UUID，後者是平台操作人員收件 Email |
+| `INFRA_ALERT_ENABLED` / `INFRA_ALERT_RESEND_API_KEY` / `INFRA_ALERT_FROM` / `INFRA_ALERT_TO_EMAIL` | 只設在獨立健康監測 worker；可選的 Web／DB 故障直寄備援。使用獨立、限寄件網域、僅可發信的 Resend key 與已驗證寄件者；不寫入 repo 或一般 worker。Web 正常回 503（排程故障）仍走既有事件告警，不會重複直寄；直寄以 UTC 小時鍵去重，未經 staging 實際收件驗證不能算營運告警通過。整個 Railway 平台或監測 worker 故障時仍須平台外部監測 |
 | `CRON_ALLOWED_CLINIC_IDS` | Web 與隔離 worker 必須設定相同的品牌 UUID 清單；設定後七支全域 GET 排程拒絕執行，POST 只接受清單內品牌。空值、重複或不合法 UUID 會 fail closed；排程健康頁改查 scoped 執行紀錄 |
 | `REMINDER_HOURS_BEFORE` | 預約前幾小時發提醒(預設 24) |
 | `MEMBERSHIP_LOW_BALANCE_THRESHOLD` | 會員餘額提醒門檻（預設 1 堂） |
