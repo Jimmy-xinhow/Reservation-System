@@ -281,8 +281,14 @@ export async function cancelAppointmentAction(fd: FormData) {
   const id = str(fd, "id");
   if (!id) throw new Error("缺少 id");
   const { data: current } = await supabase.from("appointments").select("patient_id").eq("id", id).eq("clinic_id", clinicId).maybeSingle();
-  const { error } = await createServiceClient().rpc("cancel_appointment", { p_clinic_id: clinicId, p_appointment_id: id, p_note: "cancelled appointment" });
+  const { data: cancelled, error } = await createServiceClient().rpc("cancel_appointment_by_operator", {
+    p_clinic_id: clinicId,
+    p_appointment_id: id,
+    p_actor_user_id: user.id,
+    p_note: "cancelled by operator",
+  });
   if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
+  if (typeof cancelled !== "string") throw new Error("預約取消失敗");
   await notifyAppointmentStatus(createServiceClient(), id, "cancelled").catch((notificationError: unknown) => console.error("Appointment cancellation notification failed", { category: deliveryError(notificationError) }));
   if (current?.patient_id) {
     await recordCrmInteraction(supabase, {
