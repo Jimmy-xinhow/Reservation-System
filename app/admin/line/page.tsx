@@ -76,6 +76,7 @@ export default async function LinePage({
     .from("patients")
     .select("name, line_user_id")
     .eq("clinic_id", clinicId)
+    .eq("active", true)
     .not("line_user_id", "is", null)
     .limit(1)
     .maybeSingle());

@@ -85,19 +85,30 @@ async function requireEnabledLineAdmin() {
 
 // ── LINE 測試推播 ─────────────────────────────────────────
 export async function sendTestPushAction(fd: FormData) {
-  const { supabase, clinicId } = await requireAdmin();
+  const { supabase, clinicId } = await requireEnabledLineAdmin();
   const to = str(fd, "line_user_id");
   if (!to) redirect("/admin/line?test=err&reason=" + encodeURIComponent("請填 line_user_id"));
 
   let failed = false;
   try {
+    const { data: patient, error: patientError } = await supabase
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("line_user_id", to)
+      .eq("active", true)
+      .limit(1)
+      .maybeSingle();
+    if (patientError) throw patientError;
+    if (!patient) throw new Error("此 LINE 帳號不是本品牌的有效顧客");
     const { data: clinic, error } = await supabase
       .from("clinics")
       .select("line_destination")
       .eq("id", clinicId)
       .maybeSingle();
     if (error) throw new Error("操作暫時無法完成，請稍後再試（" + deliveryError(error) + "）");
-    const token = await lineAccessTokenForDestination(clinic?.line_destination as string | undefined);
+    if (!clinic?.line_destination) throw new Error("此品牌尚未設定 LINE destination");
+    const token = await lineAccessTokenForDestination(clinic.line_destination);
     await pushMessages(to, [{ type: "text", text: "【品牌】測試推播 ✅ 連線正常。" }], token);
   } catch (e) {
     failed = true;
