@@ -53,7 +53,12 @@ async function completeAccountLink(request: NextRequest) {
   }
 
   const service = createServiceClient();
-  const clinicId = await resolvePublicClinicIdFromScope(service, { clinicSlug, host: request.nextUrl.host });
+  // Railway can expose localhost in nextUrl; the edge Host carries the public
+  // brand domain and must be checked before querying patients or creating a nonce.
+  const clinicId = await resolvePublicClinicIdFromScope(service, {
+    clinicSlug,
+    host: request.headers.get("host") || request.nextUrl.host,
+  });
   if (!clinicId) return new Response("brand not found", { status: 404 });
 
   const { data: patient, error: patientError } = await service
