@@ -406,12 +406,21 @@ export default function BookPage() {
     setSubmitErr(null);
   }
 
-  function changeView(nextView: CustomerView) {
+  function changeView(nextView: CustomerView, exitTaskMode = false) {
     setView(nextView);
     const params = liffEntryParams(window.location.search);
     params.delete("tab");
+    if (exitTaskMode) {
+      setTaskMode(false);
+      params.delete("task");
+    }
     params.set("view", nextView);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  }
+
+  function leaveBookingResult(nextView: "home" | "appointments") {
+    bookAnother();
+    changeView(nextView, true);
   }
 
   async function addCustomerAppToHomeScreen() {
@@ -579,7 +588,13 @@ export default function BookPage() {
             <p className="rounded-xl bg-red-50 p-3 text-left text-xs leading-relaxed text-red-700">
               提醒：無法前來請務必提前取消。<strong>累計三次未提前取消而未出席，將暫停一個月的線上預約資格。</strong>
             </p>
-            <button onClick={bookAnother} className="btn btn-secondary w-full">
+            <button type="button" onClick={() => leaveBookingResult("appointments")} className="btn btn-primary w-full">
+              查看我的預約
+            </button>
+            <button type="button" onClick={() => leaveBookingResult("home")} className="btn btn-secondary w-full">
+              返回服務首頁
+            </button>
+            <button type="button" onClick={bookAnother} className="btn btn-secondary w-full">
               再預約一筆
             </button>
             {taskMode && isInClient && result.deposit_status !== "pending" && (
