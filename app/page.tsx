@@ -136,7 +136,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
               <span className="text-lg">💬</span> 加入 LINE，開始預約
             </a>
           ) : (
-            <p className="rounded-xl bg-slate-50 p-3 text-center text-sm text-slate-500">目前提供瀏覽器預約，選擇下方服務即可開始。</p>
+            <p className="rounded-xl bg-slate-50 p-3 text-center text-sm text-slate-500">{liffUrl ? "可透過 LINE 或瀏覽器預約，請選擇下方入口。" : "目前提供瀏覽器預約，選擇下方服務即可開始。"}</p>
           )}
 
           {liffUrl && (
