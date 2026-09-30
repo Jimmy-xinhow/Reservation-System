@@ -42,11 +42,25 @@ function todayStr(offset = 0): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date(Date.now() + offset * 24 * 60 * 60 * 1000));
 }
 
+function externalBrowserFallbackUrl(): string {
+  if (typeof window === "undefined") return "/";
+  const params = liffEntryParams(window.location.search);
+  const requested = params.get("view");
+  const view: CustomerView = requested && ["home", "booking", "appointments", "events", "tickets", "membership", "support", "brand"].includes(requested)
+    ? requested as CustomerView
+    : params.has("service_id") ? "booking" : "home";
+  return browserFallbackUrl(view);
+}
+
 export default function BookPage() {
   const [entryConfig, setEntryConfig] = useState<EntryConfig | null>(null);
   const [entryError, setEntryError] = useState<string | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
-  const { ready, idToken, error: liffError, isInClient, canCreateHomeShortcut } = useLiff(entryConfig === null ? undefined : entryConfig.liff_id);
+  const fallbackUrl = useMemo(externalBrowserFallbackUrl, []);
+  const { ready, idToken, error: liffError, isInClient, canCreateHomeShortcut } = useLiff(
+    entryConfig === null ? undefined : entryConfig.liff_id,
+    { endpointOrigin: entryConfig?.liff_endpoint_origin, browserFallbackUrl: fallbackUrl },
+  );
   const [loadErr, setLoadErr] = useState<string | null>(null);
   const [shortcutState, setShortcutState] = useState<{ busy: boolean; message: string | null }>({ busy: false, message: null });
 

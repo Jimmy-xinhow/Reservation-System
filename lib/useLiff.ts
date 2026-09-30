@@ -46,11 +46,20 @@ export interface LiffState {
  * 載入並初始化指定品牌的 LIFF。undefined 代表品牌設定仍在載入；null
  * 代表該品牌沒有可用的 LIFF，避免先用全域 ID 初始化到錯誤渠道。
  */
-export function useLiff(liffId: string | null | undefined): LiffState {
+export function useLiff(
+  liffId: string | null | undefined,
+  externalEntry?: { endpointOrigin: string | undefined; browserFallbackUrl: string },
+): LiffState {
   const [state, setState] = useState<LiffState>({ ready: false, idToken: null, error: null, isInClient: false, canCreateHomeShortcut: false });
 
   useEffect(() => {
     if (liffId === undefined) return;
+    // LINE only accepts a login redirect beneath the configured LIFF Endpoint.
+    // A brand custom domain serves the same page but is not that endpoint.
+    if (externalEntry?.endpointOrigin && window.location.origin !== externalEntry.endpointOrigin) {
+      window.location.replace(externalEntry.browserFallbackUrl);
+      return;
+    }
     if (!liffId) {
       setState({ ready: false, idToken: null, error: "此品牌尚未完成 LIFF 設定", isInClient: false, canCreateHomeShortcut: false });
       return;
@@ -89,7 +98,7 @@ export function useLiff(liffId: string | null | undefined): LiffState {
     return () => {
       cancelled = true;
     };
-  }, [liffId]);
+  }, [liffId, externalEntry?.endpointOrigin, externalEntry?.browserFallbackUrl]);
 
   return state;
 }

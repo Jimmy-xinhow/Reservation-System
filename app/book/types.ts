@@ -39,6 +39,7 @@ export interface EntryConfig {
   intro: string | null;
   line_basic_id: string | null;
   liff_id: string | null;
+  liff_endpoint_origin: string;
   booking_mode: "time" | "number";
   brand_page_enabled: boolean;
   brand_logo_url: string | null;
