@@ -5,6 +5,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import { formatAmount, formatEventDate } from "@/lib/registration";
 import { decryptRegistrationToken } from "@/lib/registration-credentials";
 import { buildRegistrationStatusFlex } from "@/lib/line-ui-templates";
@@ -18,6 +19,7 @@ export type RegistrationNotificationKind = (typeof REGISTRATION_NOTIFICATION_KIN
 interface RegistrationRecord {
   id: string;
   clinic_id: string;
+  patient_id: string | null;
   event_id: string;
   session_id: string;
   registration_no: string;
@@ -50,7 +52,7 @@ export async function notifyRegistrationStatus(
 ): Promise<NotificationResult> {
   const { data: registration, error: registrationError } = await svc
     .from("registrations")
-    .select("id, clinic_id, event_id, session_id, registration_no, status, payment_status, amount, name, email, line_user_id, checkin_token_encrypted")
+    .select("id, clinic_id, patient_id, event_id, session_id, registration_no, status, payment_status, amount, name, email, line_user_id, checkin_token_encrypted")
     .eq("id", registrationId)
     .maybeSingle();
   if (registrationError) throw new Error(registrationError.message);
@@ -80,6 +82,9 @@ export async function notifyRegistrationStatus(
     if (claim) {
       let deliveryAttempted = false;
       try {
+        if (!row.patient_id || !(await isVerifiedLineRecipient(svc, row.clinic_id, row.line_user_id, row.patient_id))) {
+          throw new Error("LINE recipient identity is not verified for this brand");
+        }
         const context = await getClinicLineChannelContext(svc, row.clinic_id);
         const ticketsUrl = customerEntryUrl("tickets", {
           baseUrl: process.env.APP_URL?.trim() || "http://localhost:3000",

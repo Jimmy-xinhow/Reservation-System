@@ -5,6 +5,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { buildAppointmentStatusFlex } from "@/lib/line-ui-templates";
 import { customerEntryUrl } from "@/lib/customer-entry";
@@ -74,6 +75,9 @@ export async function notifyAppointmentStatus(
     if (claim) {
       let deliveryAttempted = false;
       try {
+        if (!(await isVerifiedLineRecipient(svc, appointment.clinic_id, appointment.patient_line_user_id, appointment.patient_id))) {
+          throw new Error("LINE recipient identity is not verified for this brand");
+        }
         const context = await getClinicLineChannelContext(svc, appointment.clinic_id);
         const token = await lineAccessTokenForDestination(appointment.line_destination ?? undefined);
         const manageUrl = customerEntryUrl(kind === "cancelled" ? "booking" : "appointments", {

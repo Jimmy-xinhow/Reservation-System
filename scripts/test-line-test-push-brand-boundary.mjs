@@ -28,10 +28,10 @@ function actionWithPatient(patientState, calls, moduleEnabled = true, destinatio
     '@/lib/admin': { requireAdmin: async () => ({ supabase, clinicId: 'own-brand' }) },
     '@/lib/admin-modules': { isAdminModuleEnabled: async () => moduleEnabled },
     '@/lib/supabase': { createServiceClient: () => ({}) },
-    '@/lib/line-customer-identity': { getLineCustomerIdentity: async (_svc, brand, to) => {
-      calls.identityChecks.push([brand, to]);
+    '@/lib/line-customer-identity': { isVerifiedLineRecipient: async (_svc, brand, to, patientId) => {
+      calls.identityChecks.push([brand, to, patientId]);
       if (verifiedIdentity === 'error') throw new Error('private identity detail');
-      return verifiedIdentity ? { patientId: 'own-patient' } : null;
+      return verifiedIdentity;
     } },
     '@/lib/delivery-error': { deliveryError: () => 'safe-category' },
     '@/lib/line': {
@@ -73,7 +73,7 @@ test('active patient in the current brand can receive a test push', async () => 
   const action = actionWithPatient(true, calls);
   await assert.rejects(action(recipient('own-line-user')), /redirect:\/admin\/line\?test=ok$/);
   assert.deepEqual(calls.pushed, ['own-line-user']);
-  assert.deepEqual(calls.identityChecks, [['own-brand', 'own-line-user']]);
+  assert.deepEqual(calls.identityChecks, [['own-brand', 'own-line-user', 'own-patient']]);
 });
 
 test('an editable local patient row cannot authorize push without verified LINE identity', async () => {

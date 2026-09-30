@@ -19,7 +19,7 @@ for (const domain of ['appointment', 'registration']) {
       test(`${domain}/${channel}: ${failure} cannot turn uncertain delivery into retryable failure`, async () => {
         let state = 'sending';
         const writes = [], logs = [], sends = [];
-        const row = { id: 'item', clinic_id: 'brand', status: 'confirmed', name: 'Synthetic', clinic_name: 'Synthetic', start_at: new Date().toISOString(), email_enabled: channel === 'email', line_channel_enabled: channel === 'line', email: channel === 'email' ? 'synthetic@example.invalid' : null, line_user_id: channel === 'line' ? 'synthetic' : null, patient_email: channel === 'email' ? 'synthetic@example.invalid' : null, patient_line_user_id: channel === 'line' ? 'synthetic' : null };
+        const row = { id: 'item', clinic_id: 'brand', patient_id: 'patient', status: 'confirmed', name: 'Synthetic', clinic_name: 'Synthetic', start_at: new Date().toISOString(), email_enabled: channel === 'email', line_channel_enabled: channel === 'line', email: channel === 'email' ? 'synthetic@example.invalid' : null, line_user_id: channel === 'line' ? 'synthetic' : null, patient_email: channel === 'email' ? 'synthetic@example.invalid' : null, patient_line_user_id: channel === 'line' ? 'synthetic' : null };
         const svc = { from: table => {
           const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: table === 'registrations' ? row : table === 'clinic_settings' ? { email_enabled: channel === 'email', line_channel_enabled: channel === 'line' } : {}, error: null }) };
           return q;
@@ -35,6 +35,7 @@ for (const domain of ['appointment', 'registration']) {
           },
           recordSkippedNotification: async () => {}, buildMessage: () => ({ subject: 'test', html: 'test' }),
           getClinicLineChannelContext: async () => { if (failure === 'pre_send') throw Error('secret config-error'); return {}; },
+          isVerifiedLineRecipient: async () => true,
           lineAccessTokenForDestination: async () => 'test', customerEntryUrl: () => '/',
           pushMessages: send, sendEmail: send, isEmailProviderRejected: error => error?.message === 'delivery_error:provider_rejected', emailConfigForClinic: async () => ({}),
           buildAppointmentStatusFlex: () => ({}), buildRegistrationStatusFlex: () => ({}),
@@ -76,6 +77,36 @@ for (const domain of ['appointment', 'registration']) {
 }
 
 for (const domain of ['appointment', 'registration']) {
+  test(`${domain}: unverified LINE recipient is rejected before provider call`, async () => {
+    const writes = [], sends = [];
+    const row = { id: 'item', clinic_id: 'brand', patient_id: 'patient', status: 'confirmed',
+      name: 'Synthetic', clinic_name: 'Synthetic', line_channel_enabled: true, email_enabled: false,
+      line_user_id: 'forged-line', patient_line_user_id: 'forged-line' };
+    const svc = { from: table => {
+      const query = { select: () => query, eq: () => query, maybeSingle: async () => ({
+        data: table === 'registrations' ? row : table === 'clinic_settings'
+          ? { line_channel_enabled: true, email_enabled: false } : {}, error: null,
+      }) };
+      return query;
+    } };
+    const fn = await extract(`lib/${domain}-notifications.ts`, domain === 'appointment' ? 'notifyAppointmentStatus' : 'notifyRegistrationStatus', {
+      loadAppointment: async () => row, buildMessage: () => ({ subject: 'test', html: 'test' }),
+      claimNotification: async () => 'claim',
+      finishNotification: async (_svc, _id, status) => { writes.push(status); },
+      isVerifiedLineRecipient: async () => false,
+      getClinicLineChannelContext: async () => { throw Error('must not read LINE context'); },
+      pushMessages: async () => { sends.push('line'); },
+      emailConfigForClinic: async () => null,
+      recordSkippedNotification: async () => {},
+      publicRegistrationPaymentUrl: () => '/', decryptRegistrationToken: () => null,
+      deliveryError: () => 'delivery_error:internal', console: { error: () => {} },
+    });
+    const result = await fn(svc, 'item', 'confirmed');
+    assert.equal(result.failed, 1);
+    assert.deepEqual(writes, ['failed']);
+    assert.deepEqual(sends, []);
+  });
+
   test(`${domain}: disabled LINE skips delivery while Email still sends`, async () => {
     const effects = [];
     const row = { id: 'item', clinic_id: 'brand', status: 'confirmed', name: 'Synthetic', clinic_name: 'Synthetic',

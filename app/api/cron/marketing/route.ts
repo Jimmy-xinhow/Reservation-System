@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings } from "@/lib/http";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { formatDateTime } from "@/lib/slots";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
@@ -214,6 +215,20 @@ async function runAutomation(
       await markDelivery(svc, claim, "skipped", "顧客或品牌尚未完成 Email 設定");
       summary.skipped += 1;
       continue;
+    }
+
+    if (automation.channel === "line") {
+      try {
+        if (!(await isVerifiedLineRecipient(svc, clinicId, patient.line_user_id!, patient.id))) {
+          await markDelivery(svc, claim, "skipped", "LINE recipient identity is not verified for this brand");
+          summary.skipped += 1;
+          continue;
+        }
+      } catch (error) {
+        await markDelivery(svc, claim, "failed", error instanceof Error ? error.message : "LINE identity lookup failed");
+        summary.failed += 1;
+        continue;
+      }
     }
 
     const rendered = renderTemplate(automation.body, patient, candidate.appointment, clinicName);

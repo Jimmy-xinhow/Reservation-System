@@ -5,6 +5,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { buildWaitlistStatusFlex } from "@/lib/line-ui-templates";
 import { customerEntryUrl } from "@/lib/customer-entry";
@@ -60,6 +61,14 @@ export async function processAppointmentWaitlistNotificationQueue(
       if (row.channel === "line") {
         if (!row.line_user_id) {
           await finish(service, row.log_id, "skipped", "customer has no LINE identity");
+          summary.skipped += 1;
+          continue;
+        }
+        const { data: waitlist, error: waitlistError } = await service.from("appointment_waitlist_entries")
+          .select("patient_id").eq("id", row.waitlist_id).eq("clinic_id", row.clinic_id).maybeSingle();
+        if (waitlistError) throw new Error(waitlistError.message);
+        if (!waitlist?.patient_id || !(await isVerifiedLineRecipient(service, row.clinic_id, row.line_user_id, String(waitlist.patient_id)))) {
+          await finish(service, row.log_id, "skipped", "LINE recipient identity is not verified for this brand");
           summary.skipped += 1;
           continue;
         }

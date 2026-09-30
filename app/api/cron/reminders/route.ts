@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings } from "@/lib/http";
 import { lineAccessTokenForDestination, pushMessages, type LineMessage } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { buildReminderHtml } from "@/lib/reminder-email";
 import { formatDateTime, formatDateSession } from "@/lib/slots";
@@ -19,6 +20,7 @@ export const dynamic = "force-dynamic";
 
 interface ApptRow {
   id: string;
+  patient_id: string;
   start_at: string;
   queue_number: number | null;
   doctors: { name: string } | null;
@@ -88,7 +90,7 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string, appointm
   const hours = Number(process.env.REMINDER_HOURS_BEFORE ?? 24) || 24;
   const now = new Date();
   const until = new Date(now.getTime() + hours * 3600 * 1000);
-  let appointmentQuery = svc.from("appointments").select("id, start_at, queue_number, doctors(name), services(name), patients(name, line_user_id, email)").eq("clinic_id", clinicId).in("status", ["booked", "confirmed"]).gt("start_at", now.toISOString()).lte("start_at", until.toISOString());
+  let appointmentQuery = svc.from("appointments").select("id, patient_id, start_at, queue_number, doctors(name), services(name), patients(name, line_user_id, email)").eq("clinic_id", clinicId).in("status", ["booked", "confirmed"]).gt("start_at", now.toISOString()).lte("start_at", until.toISOString());
   if (appointmentIds) appointmentQuery = appointmentQuery.in("id", appointmentIds);
   const { data: appts, error } = await appointmentQuery;
   if (error) throw new Error(error.message);
@@ -116,6 +118,17 @@ async function runReminderClinic(svc: SupabaseClient, clinicId: string, appointm
     if (!claim) continue;
     if (!lineAccessToken) {
       await finishReminder(svc, claim, "failed", lineAccessError ?? "LINE access token unavailable").catch(() => undefined);
+      lineFailed += 1;
+      continue;
+    }
+    try {
+      if (!(await isVerifiedLineRecipient(svc, clinicId, appointment.patients.line_user_id, appointment.patient_id))) {
+        await finishReminder(svc, claim, "failed", "LINE recipient identity is not verified for this brand");
+        lineFailed += 1;
+        continue;
+      }
+    } catch (error) {
+      await finishReminder(svc, claim, "failed", error instanceof Error ? error.message : "LINE identity lookup failed").catch(() => undefined);
       lineFailed += 1;
       continue;
     }

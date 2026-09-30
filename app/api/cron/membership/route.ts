@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings } from "@/lib/http";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { readCronRecordScope, type CronRecordScope } from "@/lib/cron-scope";
 import { cronScopeDenied } from "@/lib/cron-allowlist";
@@ -119,6 +120,12 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow, membershipI
       if (channel === "line" && !settings.line_channel_enabled) { await finishNotification(service, claim, "skipped", "brand LINE channel is disabled"); result.skipped += 1; continue; }
       if (channel === "line" && !patient?.line_user_id) { await finishNotification(service, claim, "skipped", "customer has no LINE identity"); result.skipped += 1; continue; }
       if (channel === "line" && !lineToken) { await finishNotification(service, claim, "failed", lineTokenError ?? "LINE access token unavailable"); result.failed += 1; continue; }
+      if (channel === "line") {
+        let verified: boolean;
+        try { verified = await isVerifiedLineRecipient(service, clinic.id, patient!.line_user_id!, row.patient_id); }
+        catch (error) { await finishNotification(service, claim, "failed", error instanceof Error ? error.message : "LINE identity lookup failed"); result.failed += 1; continue; }
+        if (!verified) { await finishNotification(service, claim, "skipped", "LINE recipient identity is not verified for this brand"); result.skipped += 1; continue; }
+      }
       if (channel === "email" && (!patient?.email || !emailConfig)) { await finishNotification(service, claim, "skipped", "customer email or email provider unavailable"); result.skipped += 1; continue; }
       const body = notice.kind === "low_balance"
         ? `${clinic.name}提醒：您的${plan?.name ?? "會員方案"}目前剩餘 ${row.credits_remaining} 堂，請於需要時聯繫品牌櫃檯。`

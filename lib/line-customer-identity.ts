@@ -30,6 +30,17 @@ export async function getLineCustomerIdentity(
   };
 }
 
+/** A mutable patient or registration row alone must not authorize a LINE push. */
+export async function isVerifiedLineRecipient(
+  service: SupabaseClient,
+  clinicId: string,
+  lineUserId: string,
+  patientId: string,
+): Promise<boolean> {
+  const identity = await getLineCustomerIdentity(service, clinicId, lineUserId);
+  return identity?.patientId === patientId;
+}
+
 export async function saveLineCustomerIdentity(
   service: SupabaseClient,
   input: {

@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
 import { cronScopeDenied } from "@/lib/cron-allowlist";
 
@@ -76,6 +77,9 @@ async function runFollowups(req: NextRequest, scope?: FollowupScope) {
         if (followup.purpose === "marketing" && !patient.marketing_opt_in) throw new Error("顧客未同意行銷");
         if (followup.channel === "line") {
           if (!patient.line_user_id) throw new Error("顧客沒有 LINE 身分");
+          if (!(await isVerifiedLineRecipient(service, followup.clinic_id, patient.line_user_id, followup.patient_id))) {
+            throw new Error("LINE recipient identity is not verified for this brand");
+          }
           const token = await lineAccessTokenForDestination(clinic?.line_destination ?? undefined);
           deliveryAttempted = true;
           await pushMessages(patient.line_user_id, [{ type: "text", text: followup.body }], token);
