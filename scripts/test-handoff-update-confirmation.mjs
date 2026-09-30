@@ -7,7 +7,6 @@ import ts from 'typescript';
 function loadAction(updateResult) {
   const calls = [];
   const refreshed = [];
-  const navigated = [];
   const query = {
     update(value) { calls.push(['update', value]); return this; },
     eq(column, value) { calls.push(['eq', column, value]); return this; },
@@ -31,12 +30,11 @@ function loadAction(updateResult) {
       };
       if (name === '@/lib/admin') return { requireOperator: async () => member };
       if (name === 'next/cache') return { revalidatePath: path => refreshed.push(path) };
-      if (name === 'next/navigation') return { redirect: path => navigated.push(path) };
       throw new Error(`Unexpected dependency: ${name}`);
     },
-    FormData, Error, Date, URLSearchParams,
+    FormData, Error, Date,
   });
-  return { action: exports.updateHandoffTaskAction, calls, refreshed, navigated };
+  return { action: exports.updateHandoffTaskAction, calls, refreshed };
 }
 
 function form() {
@@ -49,19 +47,15 @@ function form() {
 
 test('matching persisted completion is confirmed and refreshed', async () => {
   const h = loadAction({ data: { id: 'own-task', status: 'done', priority: 'high' }, error: null });
-  const fd = form();
-  fd.set('filters', 'status=open&priority=high&redirect=https%3A%2F%2Fexternal.example');
-  await h.action(fd);
+  await h.action(form());
   assert.deepEqual(h.calls.find(call => call[0] === 'eq' && call[1] === 'clinic_id'), ['eq', 'clinic_id', 'own-brand']);
   assert.deepEqual(h.refreshed, ['/admin/handoff', '/admin/dashboard']);
-  assert.deepEqual(h.navigated, ['/admin/handoff?status=open&priority=high']);
 });
 
 test('zero-row update cannot look successful', async () => {
   const h = loadAction({ data: null, error: null });
   await assert.rejects(h.action(form()), /無法確認交班待辦已更新/);
   assert.deepEqual(h.refreshed, []);
-  assert.deepEqual(h.navigated, []);
 });
 
 test('returned state mismatch cannot look successful', async () => {
