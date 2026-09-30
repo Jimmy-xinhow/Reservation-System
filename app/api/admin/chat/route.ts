@@ -76,6 +76,17 @@ export async function POST(req: NextRequest) {
   if (!payload?.lineUserId) return fail("缺少對話對象");
   try {
     if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return fail("此品牌未啟用 LINE 訊息", 403);
+    // The console only offers this brand's threads. Enforce the same boundary
+    // here so a forged LINE user ID cannot create or deliver another thread.
+    const { data: thread, error: threadError } = await supabase
+      .from("chat_messages")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .eq("line_user_id", payload.lineUserId)
+      .limit(1)
+      .maybeSingle();
+    if (threadError) throw threadError;
+    if (!thread) return fail("找不到此品牌的對話", 404);
     if (payload.action === "block") {
       await setChatBlock(supabase, clinicId, payload.lineUserId, true);
       return ok({ blocked: true });
