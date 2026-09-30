@@ -57,7 +57,7 @@ interface MembershipRow {
   credits_total: number;
   credits_remaining: number;
   expires_at: string | null;
-  membership_plans: { name: string } | { name: string }[] | null;
+  membership_plans: { clinic_id: string; name: string } | { clinic_id: string; name: string }[] | null;
 }
 
 const TAIPEI_DATE = new Intl.DateTimeFormat("en-CA", {
@@ -741,13 +741,16 @@ export async function replyMemberships(replyToken: string, lineUserId: string | 
   }
   const { data, error } = await context.service
     .from("patient_memberships")
-    .select("membership_code, status, credits_total, credits_remaining, expires_at, membership_plans(name)")
+    .select("membership_code, status, credits_total, credits_remaining, expires_at, membership_plans(clinic_id, name)")
     .eq("clinic_id", context.clinicId)
     .in("patient_id", patientIds)
     .order("created_at", { ascending: false })
     .limit(10);
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as unknown as MembershipRow[];
+  if (rows.some((row) => one(row.membership_plans)?.clinic_id !== context.clinicId)) {
+    throw new Error("membership plan tenant mismatch");
+  }
   if (!rows.length) {
     await replyMessages(replyToken, [brandedCard(context, {
       altText: `${context.clinicName}｜目前沒有使用中套票`,

@@ -5,6 +5,7 @@ import { createServiceClient } from "@/lib/supabase";
 import { fail, getClinicSettings, ok, rateLimitResponse } from "@/lib/http";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { createBrowserBookingToken, verifyBrowserBookingToken } from "@/lib/browser-booking";
+import { publicClinicRelation } from "@/lib/public-relation-scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,11 +37,18 @@ export async function POST(request: NextRequest) {
     }
     if (!patientId) return fail("找不到會員資料", 404);
     const [{ data, error }, { data: plans, error: plansError }] = await Promise.all([
-      service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, redemption_snapshot, membership_plans(name, description, price, card_image_url, card_theme, card_accent, redeem_channels, redemption_note)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }),
+      service.from("patient_memberships").select("membership_code, status, credits_total, credits_remaining, starts_at, expires_at, redemption_snapshot, membership_plans(clinic_id, name, description, price, card_image_url, card_theme, card_accent, redeem_channels, redemption_note)").eq("clinic_id", clinicId).eq("patient_id", patientId).order("created_at", { ascending: false }),
       service.from("membership_plans").select("id, name, description, price, credits_total, valid_days, usage_scope, service_id, card_image_url, card_theme, card_accent, redeem_channels, redemption_note").eq("clinic_id", clinicId).eq("active", true).order("created_at", { ascending: false }),
     ]);
     if (error) return fail(error.message, 500);
     if (plansError) return fail(plansError.message, 500);
+    const memberships = (data ?? []).map((row) => {
+      const withSnapshot = applyMembershipRedemptionSnapshot(row);
+      return { ...withSnapshot, membership_plans: publicClinicRelation(withSnapshot.membership_plans, clinicId) };
+    });
+    if (memberships.some((row) => row.membership_plans === null)) {
+      return fail("會員方案資料不一致，請洽品牌人員", 503);
+    }
     const plansWithPrices = await Promise.all((plans ?? []).map(async (plan) => {
       const { data: price, error: priceError } = await service.rpc("get_membership_plan_price", { p_clinic_id: clinicId, p_plan_id: plan.id, p_patient_id: patientId });
       if (priceError) throw new Error(priceError.message);
@@ -49,6 +57,6 @@ export async function POST(request: NextRequest) {
       }
       return { ...plan, price };
     }));
-    return ok({ browser_token: identity ? body?.browser_token : createBrowserBookingToken(clinicId, patientId), memberships: (data ?? []).map(applyMembershipRedemptionSnapshot), plans: plansWithPrices });
+    return ok({ browser_token: identity ? body?.browser_token : createBrowserBookingToken(clinicId, patientId), memberships, plans: plansWithPrices });
   } catch (error) { return fail(error instanceof Error ? error.message : "會員資料查詢失敗", 500); }
 }

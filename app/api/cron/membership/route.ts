@@ -21,7 +21,7 @@ interface MembershipRow {
   membership_code: string;
   credits_remaining: number;
   expires_at: string | null;
-  membership_plans: { name: string } | { name: string }[] | null;
+  membership_plans: { clinic_id: string; name: string } | { clinic_id: string; name: string }[] | null;
   patients: { clinic_id: string; name: string; line_user_id: string | null; email: string | null } | { clinic_id: string; name: string; line_user_id: string | null; email: string | null }[] | null;
 }
 
@@ -81,7 +81,7 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow, membershipI
   const settings = await getClinicSettings(service, clinic.id);
   if (!settings) throw new Error("brand settings unavailable");
   let membershipQuery = service.from("patient_memberships")
-    .select("id, clinic_id, patient_id, membership_code, credits_remaining, expires_at, membership_plans(name), patients(clinic_id, name, line_user_id, email)")
+    .select("id, clinic_id, patient_id, membership_code, credits_remaining, expires_at, membership_plans(clinic_id, name), patients(clinic_id, name, line_user_id, email)")
     .eq("clinic_id", clinic.id).eq("status", "active").order("id").limit(2000);
   if (membershipIds) membershipQuery = membershipQuery.in("id", membershipIds);
   const { data, error } = await membershipQuery;
@@ -91,8 +91,9 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow, membershipI
   const lowBalanceThreshold = Math.max(1, Math.floor(numberEnv("MEMBERSHIP_LOW_BALANCE_THRESHOLD", 1)));
   const expiryLimit = now.getTime() + expiryDays * 24 * 60 * 60 * 1000;
   const rows = (data ?? []) as unknown as MembershipRow[];
-  if (rows.some((row) => one(row.patients)?.clinic_id !== clinic.id)) {
-    throw new Error("membership patient tenant mismatch");
+  if (rows.some((row) => one(row.patients)?.clinic_id !== clinic.id
+    || one(row.membership_plans)?.clinic_id !== clinic.id)) {
+    throw new Error("membership relation tenant mismatch");
   }
   const result = { candidates: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0 };
   let lineToken: string | null = null; let lineTokenError: string | null = null;
