@@ -51,7 +51,7 @@ async function extractedFactory(path, names, dependencies) {
  }).join('\n');
  return (await compile(`export function factory(deps) { const {${dependencies.join(',')}}=deps; ${bodies} return ${names.at(-1)}; }`)).factory;
 }
-const followupFactory=await extractedFactory('app/api/cron/followups/route.ts',['escapeHtml','runFollowups','GET'],['deliveryError','createServiceClient','process','Response','console','fail','cronScopeDenied','lineAccessTokenForDestination','pushMessages','emailConfigForClinic','sendEmail','isEmailProviderRejected','recordCrmInteraction']);
+const followupFactory=await extractedFactory('app/api/cron/followups/route.ts',['escapeHtml','runFollowups','GET'],['deliveryError','createServiceClient','process','Response','console','fail','cronScopeDenied','lineAccessTokenForDestination','pushMessages','emailConfigForClinic','sendEmail','isEmailProviderRejected','recordCrmInteraction','isVerifiedLineRecipient']);
 async function runFollowups(options={}) {
  const events=[],logs=[];
  const jobs=options.jobs??[{id:'one',clinic_id:'brand',patient_id:'patient',purpose:'marketing',channel:options.channel??'line',body:'<test>',subject:null}];
@@ -65,7 +65,7 @@ async function runFollowups(options={}) {
   from:table=>{const q={select:()=>q,eq:()=>q,update:body=>{events.push(['pause',body]);return q;},maybeSingle:async()=>({data:table==='patients'?{active:options.active??true,marketing_opt_in:options.optIn??true,line_user_id:'synthetic',email:'test@example.invalid'}:table==='clinics'?{name:'brand'}:table==='scheduled_followups'?{id:'one'}:{email_enabled:true,line_channel_enabled:!options.lineDisabled,crm_automation_enabled:!options.crmDisabled},error:null})};return q;}
  };
  const send=async()=>{events.push(['send']);if(options.sendRejected)throw new Error('delivery_error:provider_rejected');if(options.sendThrows)throw new Error(privateError);};
- const run=followupFactory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response,console:{error:(...args)=>logs.push(args)},fail:()=>{throw new Error('unexpected outer failure');},cronScopeDenied:()=>null,lineAccessTokenForDestination:async()=>'synthetic',pushMessages:send,emailConfigForClinic:async()=>({}),sendEmail:send,isEmailProviderRejected:error=>error?.message==='delivery_error:provider_rejected',recordCrmInteraction:async()=>{events.push(['crm']);if(options.crmThrows)throw new Error(privateError);}});
+ const run=followupFactory({deliveryError,createServiceClient:()=>service,process:{env:{CRON_SECRET:'test'}},Response,console:{error:(...args)=>logs.push(args)},fail:()=>{throw new Error('unexpected outer failure');},cronScopeDenied:()=>null,lineAccessTokenForDestination:async()=>'synthetic',pushMessages:send,emailConfigForClinic:async()=>({}),sendEmail:send,isEmailProviderRejected:error=>error?.message==='delivery_error:provider_rejected',isVerifiedLineRecipient:async()=>true,recordCrmInteraction:async()=>{events.push(['crm']);if(options.crmThrows)throw new Error(privateError);}});
  const body=await (await run({headers:new Headers({authorization:'Bearer test'})})).json();
  assert(!JSON.stringify(logs).includes('secret-token'));assert(!JSON.stringify(logs).includes('test@example.invalid'));
  return {body,events,logs};

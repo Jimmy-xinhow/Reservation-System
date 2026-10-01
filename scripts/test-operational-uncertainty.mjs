@@ -18,8 +18,8 @@ for (const job of ['reminders', 'marketing', 'membership', 'waitlist']) {
       test(`${job}/${channel}/${failure}: uncertain outcomes never become retryable`, async () => {
         const writes = [], logs = []; let sent = 0, state = job === 'reminders' ? 'sending' : job === 'marketing' ? 'pending' : 'claimed';
         const patient = { clinic_id: 'brand', name: 'synthetic', active: true, marketing_opt_in: true, line_user_id: channel === 'line' ? 'synthetic' : null, email: channel === 'email' ? 'synthetic@example.invalid' : null };
-        const row = { id: 'item', log_id: 'claim', clinic_id: 'brand', patient_id: 'patient', patients: patient, credits_remaining: 1, expires_at: null, kind: 'joined', channel, ...patient, email_enabled: true };
-        const svc = { from: table => { const q = { select: () => q, eq: () => q, in: () => q, gt: () => q, lte: () => q, order: () => q, limit: () => q, maybeSingle: async () => ({ data: {}, error: null }), then: (resolve, reject) => Promise.resolve({ data: [row], error: null }).then(resolve, reject) }; return q; }, rpc: async () => ({ data: [row], error: null }) };
+        const row = { id: 'item', log_id: 'claim', clinic_id: 'brand', patient_id: 'patient', waitlist_id: 'waitlist', membership_plans: { clinic_id: 'brand', name: 'Synthetic' }, patients: patient, credits_remaining: 1, expires_at: null, kind: 'joined', channel, ...patient, email_enabled: true };
+        const svc = { from: table => { const q = { select: () => q, eq: () => q, in: () => q, gt: () => q, lte: () => q, order: () => q, limit: () => q, maybeSingle: async () => ({ data: table === 'appointment_waitlist_entries' ? { patient_id: 'patient' } : {}, error: null }), then: (resolve, reject) => Promise.resolve({ data: [row], error: null }).then(resolve, reject) }; return q; }, rpc: async () => ({ data: [row], error: null }) };
         const send = async () => { sent++; if (failure === 'provider') throw Error('secret provider'); if (failure === 'rejected') throw Error('delivery_error:provider_rejected'); };
         const finish = async (_svc, _id, status) => {
           if (status === 'skipped') return;
@@ -29,7 +29,7 @@ for (const job of ['reminders', 'marketing', 'membership', 'waitlist']) {
         const deps = { getClinicSettings: async () => ({ booking_mode: 'time', email_enabled: true, line_channel_enabled: true }),
           lineAccessTokenForDestination: async () => 'synthetic', emailConfigForClinic: async () => ({}),
           getClinicLineChannelContext: async () => ({ enabled: true }), customerEntryUrl: () => '/',
-          pushMessages: send, sendEmail: send, isEmailProviderRejected: error => error?.message === 'delivery_error:provider_rejected', claimReminder: async () => 'claim', finishReminder: finish,
+          pushMessages: send, sendEmail: send, isVerifiedLineRecipient: async () => true, isEmailProviderRejected: error => error?.message === 'delivery_error:provider_rejected', claimReminder: async () => 'claim', finishReminder: finish,
           claimNotification: async () => 'claim', finishNotification: finish, finish,
           claimDelivery: async () => 'claim', markDelivery: finish, resolveTargetIds: async () => ['patient'],
           getCandidates: async () => [{ patient }], hasRecentDelivery: async () => false,
@@ -82,7 +82,7 @@ test('disabled LINE reminder does not claim or send LINE while Email still deliv
 test('disabled LINE membership notification is skipped while Email still delivers', async () => {
   const effects = [];
   const membership = { id: 'membership', clinic_id: 'brand', credits_remaining: 1, expires_at: null,
-    patients: { clinic_id: 'brand', line_user_id: 'synthetic-line', email: 'synthetic@example.invalid' }, membership_plans: { name: 'Synthetic' } };
+    patients: { clinic_id: 'brand', line_user_id: 'synthetic-line', email: 'synthetic@example.invalid' }, membership_plans: { clinic_id: 'brand', name: 'Synthetic' } };
   const svc = { from: () => {
     const query = { select: () => query, eq: () => query, order: () => query, limit: () => query,
       then: (resolve, reject) => Promise.resolve({ data: [membership], error: null }).then(resolve, reject) };
