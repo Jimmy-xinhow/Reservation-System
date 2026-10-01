@@ -157,9 +157,9 @@ export function Shell({ children, clinicName, logoUrl, primary, accent, soft, in
     const clinicId = source.get("clinic_id")?.trim();
     if (clinicSlug) scope.set("clinic_slug", clinicSlug);
     else if (clinicId) scope.set("clinic_id", clinicId);
-    if (!scope.toString()) return;
     const controller = new AbortController();
-    void fetch(`/api/customer/entry-config?${scope.toString()}`, { cache: "no-store", signal: controller.signal })
+    const query = scope.toString();
+    void fetch(`/api/customer/entry-config${query ? `?${query}` : ""}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         const body = await response.json() as {
           ok?: boolean;
