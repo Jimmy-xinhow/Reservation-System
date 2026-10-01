@@ -108,7 +108,7 @@ export async function sendEmail(
   subject: string,
   html: string,
   options: { idempotencyKey?: string; signal?: AbortSignal } = {},
-): Promise<void> {
+): Promise<string | null> {
   if (!cfg.apiKey || !cfg.from) throw new Error("Email 未設定");
   const res = await providerFetch("https://api.resend.com/emails", {
     method: "POST",
@@ -126,4 +126,11 @@ export async function sendEmail(
     if (res.status === 422) throw new EmailProviderRejectedError();
     throw new Error(`Email 寄送失敗 (${res.status})`);
   }
+  // Resend returns the accepted email ID. A successful HTTP status without a
+  // usable receipt is still ambiguous to callers that require reconciliation.
+  const body: unknown = await res.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const id = (body as Record<string, unknown>).id;
+  return typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    ? id : null;
 }

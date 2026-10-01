@@ -42,6 +42,11 @@ interface NotificationResult {
   skipped: number;
 }
 
+interface NotificationClaim {
+  id: string;
+  attemptCount: number;
+}
+
 export function appointmentNotificationKindForState(
   status: string,
   depositStatus: string,
@@ -101,11 +106,11 @@ export async function notifyAppointmentStatus(
             process.env.APP_URL?.trim() || "http://localhost:3000",
           ),
         })], token);
-        await finishNotification(svc, claim, "sent");
+        await finishNotification(svc, claim.id, "sent");
         result.sent += 1;
       } catch (error) {
         // A lost provider/DB acknowledgement must never make delivery retryable.
-        if (!deliveryAttempted) await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "LINE notification failed");
+        if (!deliveryAttempted) await finishNotification(svc, claim.id, "failed", error instanceof Error ? error.message : "LINE notification failed");
         else console.error("Notification delivery unconfirmed", { category: deliveryError(error) });
         result.failed += 1;
       }
@@ -125,12 +130,15 @@ export async function notifyAppointmentStatus(
       let deliveryAttempted = false;
       try {
         deliveryAttempted = true;
-        await sendEmail(emailConfig, appointment.patient_email, message.subject, message.html);
-        await finishNotification(svc, claim, "sent");
+        const providerMessageId = await sendEmail(emailConfig, appointment.patient_email, message.subject, message.html, {
+          idempotencyKey: `appointment-notification-email-${claim.id}-${claim.attemptCount}`,
+        });
+        if (!providerMessageId) throw new Error("Email provider receipt missing");
+        await finishNotification(svc, claim.id, "sent", undefined, providerMessageId);
         result.sent += 1;
       } catch (error) {
         // A lost provider/DB acknowledgement must never make delivery retryable.
-        if (!deliveryAttempted || isEmailProviderRejected(error)) await finishNotification(svc, claim, "failed", error instanceof Error ? error.message : "Email notification failed");
+        if (!deliveryAttempted || isEmailProviderRejected(error)) await finishNotification(svc, claim.id, "failed", error instanceof Error ? error.message : "Email notification failed");
         else console.error("Notification delivery unconfirmed", { category: deliveryError(error) });
         result.failed += 1;
       }
@@ -312,13 +320,13 @@ async function claimNotification(
   appointment: AppointmentRecord,
   kind: AppointmentNotificationKind,
   channel: "line" | "email",
-): Promise<string | null> {
+): Promise<NotificationClaim | null> {
   const { data: inserted, error: insertError } = await svc
     .from("appointment_notification_logs")
     .insert({ clinic_id: appointment.clinic_id, appointment_id: appointment.id, kind, channel, status: "sending", attempt_count: 1 })
-    .select("id")
+    .select("id, attempt_count")
     .maybeSingle();
-  if (!insertError && inserted?.id) return String(inserted.id);
+  if (!insertError && inserted?.id) return { id: String(inserted.id), attemptCount: Number(inserted.attempt_count) };
   if (insertError && insertError.code !== "23505") throw new Error(insertError.message);
 
   const { data: existing, error: existingError } = await svc
@@ -342,16 +350,17 @@ async function claimNotification(
     .eq("id", existing.id)
     .eq("status", existing.status)
     .eq("updated_at", existing.updated_at)
-    .select("id")
+    .select("id, attempt_count")
     .maybeSingle();
   if (claimError) throw new Error(claimError.message);
-  return claimed?.id ? String(claimed.id) : null;
+  return claimed?.id ? { id: String(claimed.id), attemptCount: Number(claimed.attempt_count) } : null;
 }
 
-async function finishNotification(svc: SupabaseClient, id: string, status: "sent" | "failed", error?: string): Promise<void> {
+async function finishNotification(svc: SupabaseClient, id: string, status: "sent" | "failed", error?: string, providerMessageId?: string): Promise<void> {
   const { error: updateError } = await svc
     .from("appointment_notification_logs")
-    .update({ status, error: status === "failed" ? deliveryError(error) : null, sent_at: status === "sent" ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+    .update({ status, error: status === "failed" ? deliveryError(error) : null, sent_at: status === "sent" ? new Date().toISOString() : null, updated_at: new Date().toISOString(),
+      ...(providerMessageId ? { provider_message_id: providerMessageId } : {}) })
     .eq("id", id);
   if (updateError) throw new Error(updateError.message);
 }

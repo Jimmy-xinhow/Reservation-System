@@ -2671,12 +2671,14 @@ create table if not exists appointment_notification_logs (
   attempt_count integer not null default 0 check (attempt_count >= 0),
   error text,
   sent_at timestamptz,
+  provider_message_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (appointment_id, kind, channel)
 );
 create index if not exists appointment_notification_logs_queue_idx
   on appointment_notification_logs (clinic_id, status, updated_at);
+alter table appointment_notification_logs add column if not exists provider_message_id text;
 
 create or replace function record_appointment_status_event()
 returns trigger

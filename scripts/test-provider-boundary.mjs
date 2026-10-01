@@ -40,7 +40,7 @@ const cases=[
  ['getRichMenuInsightSummary',['r','20260901','20260921',token],{richMenuId:'r'},'GET'],
  ['pushMessages',['u',messages,token],undefined,'POST'],
  ['replyMessages',['reply',messages,token],undefined,'POST'],
- ['sendEmail',[{apiKey:token,from:'from@example.invalid'},'to@example.invalid','subject','<p>private</p>'],undefined,'POST'],
+ ['sendEmail',[{apiKey:token,from:'from@example.invalid'},'to@example.invalid','subject','<p>private</p>'],{id:'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'},'POST'],
 ];
 function safe(e){assert.ok(!e.stack.includes('CANARY'));assert.ok(!e.stack.includes('0912345678'));assert.equal(e.cause,undefined);return true;}
 for(const [name,args,data,method,special] of cases){
@@ -53,11 +53,13 @@ for(const [name,args,data,method,special] of cases){
    const result=await api[name](...args);
    if(name==='createRichMenu')assert.equal(result,'r');
    else if(name==='issueLineAccountLinkToken')assert.equal(result,'link');
+   else if(name==='sendEmail')assert.equal(result,data.id);
    else if(special==='image')assert.equal(result.bytes.byteLength,4);
    else if(name==='getQuotaConsumption')assert.equal(result,data.totalUsage);
    else if(data!==undefined)assert.equal(JSON.stringify(result),JSON.stringify(data));
    else assert.equal(result,undefined);
   }else if(mode==='http'&&special==='image')assert.equal(await api[name](...args),null);
+  else if(mode==='body'&&name==='sendEmail')assert.equal(await api[name](...args),null);
   else await assert.rejects(api[name](...args),e=>{safe(e);if(mode==='http')assert.match(e.message,/503/);return true;});
   assert.equal(calls,1,'never automatically repeat requests');assert.equal(textReads,0,'never read upstream failure body');
   assert.equal(request.init.method??'GET',method);

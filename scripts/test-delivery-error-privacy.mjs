@@ -39,7 +39,18 @@ test('Resend 422 is a definite rejection while server and transport failures rem
  assert.equal(await call({ok:false,status:422}),'rejected');
  assert.equal(await call({ok:false,status:500}),'Email 寄送失敗 (500)');
  assert.equal(await call(new Error('fetch failed')),'fetch failed');
- assert.equal(await call({ok:true,status:200}),'accepted');
+ assert.equal(await call({ok:true,status:200,json:async()=>({id:'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'})}),'accepted');
+});
+
+test('Resend accepted response returns a usable receipt and keeps the idempotency key',async()=>{
+ const source=ts.createSourceFile('lib/email.ts',read('lib/email.ts'),ts.ScriptTarget.Latest,true);
+ const send=source.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='sendEmail');
+ assert(send);
+ const calls=[];
+ const factory=(await compile(`export function factory(providerFetch) { ${send.getText(source).replace(/^export /,'')} return sendEmail; }`)).factory;
+ const api=factory(async (_url,request)=>{calls.push(request);return {ok:true,status:200,json:async()=>({id:'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'})};});
+ assert.equal(await api({apiKey:'secret',from:'qa@example.invalid'},'customer@example.invalid','test','<p>test</p>',{idempotencyKey:'appointment-notification-email-claim'}),'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee');
+ assert.equal(calls[0].headers['Idempotency-Key'],'appointment-notification-email-claim');
 });
 
 // Execute the real route/action bodies with controlled boundary dependencies.
