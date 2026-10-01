@@ -10,8 +10,8 @@ function today(): string { return new Intl.DateTimeFormat("en-CA", { timeZone: "
 function csvCell(value: unknown): string { return `"${String(value ?? "").replace(/"/g, '""')}"`; }
 
 export async function GET(req: NextRequest) {
+  const member = await requireNonProvider();
   try {
-    const member = await requireNonProvider();
     const end = validDate(req.nextUrl.searchParams.get("to"), today());
     const start = validDate(req.nextUrl.searchParams.get("from"), end);
     const startIso = new Date(`${start}T00:00:00+08:00`).toISOString();
