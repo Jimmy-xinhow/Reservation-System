@@ -166,6 +166,7 @@ async function routeModule(path) {
     export const processPaymentWebhook=async(_db,event)=>{globalThis.__g203Events.push(event);return {changed:false,accepted:event.success,duplicate:false}};
     export const findPaymentOrderByMerchant=async()=>globalThis.__g203RecoveryOrder??null;
     export const resolvePublicClinicId=async()=>globalThis.__g203BrandId??null;
+    export const isSharedHost=host=>host.endsWith('.up.railway.app')||host==='localhost';
     export const verifiedPaymentCustomerOrigin=async()=>globalThis.__g203BrandOrigin??null;
     export const checkRateLimit=async()=>({allowed:true});
     export const queryPaidNewebpayOrder=async()=>{globalThis.__g203QueryCalls=(globalThis.__g203QueryCalls??0)+1;return globalThis.__g203QueryResult??null};
@@ -180,6 +181,7 @@ async function routeModule(path) {
 }
 test("notify and browser return routes use the same verified MPG event; POST returns 303 GET redirect", async () => {
   globalThis.__g203Events = [];
+  globalThis.__g203BrandId = settings.clinic_id;
   const notify = await routeModule("../app/api/payment/newebpay/notify/route.ts");
   const returned = await routeModule("../app/api/payment/return/route.ts");
   const query = "https://example.test/api/payment/return?provider=newebpay&order=REG_TEST1234&clinic_slug=test-brand";
@@ -197,6 +199,50 @@ test("notify and browser return routes use the same verified MPG event; POST ret
   assert.deepEqual(globalThis.__g203Events[0], globalThis.__g203Events[1]);
   assert.equal(globalThis.__g203Events[0].success, true);
   delete globalThis.__g203Events;
+  delete globalThis.__g203BrandId;
+});
+
+test("both providers' signed browser returns cannot process a payment through another brand slug", async () => {
+  globalThis.__g203Events = [];
+  globalThis.__g203BrandId = "other-brand";
+  try {
+    const returned = await routeModule("../app/api/payment/return/route.ts");
+    const request = {
+      nextUrl: new URL("https://example.test/api/payment/return?provider=newebpay&order=REG_TEST1234&clinic_slug=other-brand"),
+      formData: async () => new URLSearchParams(signed(payload)),
+    };
+    const result = await returned.POST(request);
+    assert.equal(result.status, 404);
+    assert.deepEqual(globalThis.__g203Events, []);
+    const ecpayFields = { MerchantID: settings.merchant_id, MerchantTradeNo: "REG_TEST1234", TradeNo: "123456", RtnCode: "1", TradeAmt: "100" };
+    const content = Object.entries(ecpayFields).sort(([a], [b]) => a.toLowerCase().localeCompare(b.toLowerCase())).map(([key, value]) => `${key}=${value}`).join("&");
+    const encoded = encodeURIComponent(`HashKey=${settings.hash_key}&${content}&HashIV=${settings.hash_iv}`).toLowerCase().replace(/%20/g, "+");
+    const CheckMacValue = createHash("sha256").update(encoded).digest("hex").toUpperCase();
+    const ecpayResult = await returned.POST({
+      nextUrl: new URL("https://example.test/api/payment/return?provider=ecpay&order=REG_TEST1234&clinic_slug=other-brand"),
+      formData: async () => new URLSearchParams({ ...ecpayFields, CheckMacValue }),
+    });
+    assert.equal(ecpayResult.status, 404);
+    assert.deepEqual(globalThis.__g203Events, []);
+    const withoutSlug = await returned.POST({
+      nextUrl: new URL("https://other-brand.example.test/api/payment/return?provider=newebpay&order=REG_TEST1234"),
+      headers: new Headers({ host: "other-brand.example.test" }),
+      formData: async () => new URLSearchParams(signed(payload)),
+    });
+    assert.equal(withoutSlug.status, 404);
+    assert.deepEqual(globalThis.__g203Events, []);
+    const oldSharedReturn = await returned.POST({
+      nextUrl: new URL("https://app.up.railway.app/api/payment/return?provider=newebpay&order=REG_TEST1234"),
+      headers: new Headers({ host: "app.up.railway.app" }),
+      formData: async () => new URLSearchParams(signed(payload)),
+    });
+    assert.equal(oldSharedReturn.status, 303);
+    assert.equal(new URL(oldSharedReturn.headers.get("location")).searchParams.get("state"), "returned");
+    assert.equal(globalThis.__g203Events.length, 1);
+  } finally {
+    delete globalThis.__g203Events;
+    delete globalThis.__g203BrandId;
+  }
 });
 
 test("gateway browser return keeps a verified brand domain despite Railway's internal localhost URL", async () => {
@@ -217,6 +263,7 @@ test("gateway browser return keeps a verified brand domain despite Railway's int
 
 test("CBC decode failure can recover only one matching order through a verified official query", async () => {
   globalThis.__g203Events = [];
+  globalThis.__g203BrandId = settings.clinic_id;
   globalThis.__g203QueryCalls = 0;
   globalThis.__g203RecoveryOrder = { status: "pending", amount: 100 };
   globalThis.__g203QueryResult = { tradeNo: "1234567890", payload: { Status: "SUCCESS" } };
@@ -237,7 +284,7 @@ test("CBC decode failure can recover only one matching order through a verified 
     assert.equal(new URL(tampered.headers.get("location")).searchParams.get("state"), "error");
     assert.equal(globalThis.__g203QueryCalls, 1);
   } finally {
-    for (const key of ["__g203Events", "__g203QueryCalls", "__g203RecoveryOrder", "__g203QueryResult"]) delete globalThis[key];
+    for (const key of ["__g203Events", "__g203BrandId", "__g203QueryCalls", "__g203RecoveryOrder", "__g203QueryResult"]) delete globalThis[key];
   }
 });
 
@@ -305,6 +352,7 @@ test("NewebPay notify rejects a bad signature as a client error without processi
 
 test("ECPay signed SimulatePaid delivery probes never change payment state via either route", async () => {
   globalThis.__g203Events = [];
+  globalThis.__g203BrandId = settings.clinic_id;
   const fields = { MerchantID: settings.merchant_id, MerchantTradeNo: "REG_TEST1234", TradeNo: "12345", RtnCode: "1", TradeAmt: "100", SimulatePaid: "1" };
   const content = Object.entries(fields).sort(([a],[b]) => a.toLowerCase().localeCompare(b.toLowerCase())).map(([k,v]) => `${k}=${v}`).join("&");
   const encoded = encodeURIComponent(`HashKey=${settings.hash_key}&${content}&HashIV=${settings.hash_iv}`).toLowerCase().replace(/%20/g,"+");
@@ -316,4 +364,5 @@ test("ECPay signed SimulatePaid delivery probes never change payment state via e
   assert.equal((await returned.POST(request())).status, 303);
   assert.equal(globalThis.__g203Events.length, 0);
   delete globalThis.__g203Events;
+  delete globalThis.__g203BrandId;
 });

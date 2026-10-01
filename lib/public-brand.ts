@@ -9,7 +9,7 @@ export interface PublicBrandScope {
   host?: string | null;
 }
 
-function isSharedHost(host: string): boolean {
+export function isSharedHost(host: string): boolean {
   if (!host) return true;
   if (
     ["localhost", "127.0.0.1", "[::1]"].includes(host)

@@ -12,7 +12,7 @@ import { notificationKindForStatus, notifyRegistrationStatus } from "@/lib/regis
 import { notifyAppointmentStatus } from "@/lib/appointment-notifications";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { findPaymentOrderByMerchant } from "@/lib/payment-order-lookup";
-import { resolvePublicClinicId } from "@/lib/public-brand";
+import { isSharedHost, resolvePublicClinicId } from "@/lib/public-brand";
 import { verifiedPaymentCustomerOrigin } from "@/lib/payment-public-origin";
 import { queryPaidNewebpayOrder } from "@/lib/newebpay-query";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -118,6 +118,21 @@ async function recoverNewebpayBrowserReturn(
   return true;
 }
 
+async function returnBrandMatchesMerchant(
+  req: NextRequest,
+  svc: SupabaseClient,
+  clinicSlug: string | null,
+  merchantClinicId: string,
+): Promise<boolean> {
+  const entryClinicId = await resolvePublicClinicId(req, svc);
+  if (clinicSlug) return entryClinicId === merchantClinicId;
+  const host = (req.headers.get("host") || req.nextUrl.host)
+    .split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
+  // Older shared-host return URLs may have no slug. Every other host must
+  // resolve to the same brand as the signed merchant, including custom hosts.
+  return isSharedHost(host) || entryClinicId === merchantClinicId;
+}
+
 async function processReturnFields(req: NextRequest, fields: Record<string, string>, provider: Provider): Promise<NextResponse> {
   const orderFromQuery = validOrder(req.nextUrl.searchParams.get("order"));
   const clinicSlug = req.nextUrl.searchParams.get("clinic_slug")?.trim() || null;
@@ -129,6 +144,11 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
     const merchantOrderNo = validOrder(fields.MerchantTradeNo) ?? orderFromQuery;
     if (!settings || !merchantOrderNo || !verifyEcpay(fields, settings)) {
       return orderFromQuery ? resultRedirect(req, orderFromQuery, provider, "error", clinicSlug) : new NextResponse("付款回傳驗證失敗", { status: 400 });
+    }
+    // A valid merchant signature does not authorize writing through another
+    // brand's slug or verified domain.
+    if (!(await returnBrandMatchesMerchant(req, svc, clinicSlug, settings.clinic_id))) {
+      return new NextResponse("付款回傳品牌不相符", { status: 404 });
     }
     if (fields.SimulatePaid === "1") return resultRedirect(req, merchantOrderNo, provider, "returned", clinicSlug);
     await processPaymentWebhook(svc, {
@@ -149,6 +169,9 @@ async function processReturnFields(req: NextRequest, fields: Record<string, stri
   const merchantId = fields.MerchantID ?? "";
   const settings = await getPaymentSettingsByMerchant(svc, "newebpay", merchantId);
   if (!settings) return orderFromQuery ? resultRedirect(req, orderFromQuery, provider, "error", clinicSlug) : new NextResponse("付款回傳驗證失敗", { status: 400 });
+  if (!(await returnBrandMatchesMerchant(req, svc, clinicSlug, settings.clinic_id))) {
+    return new NextResponse("付款回傳品牌不相符", { status: 404 });
+  }
   let payload: Record<string, unknown>;
   try {
     payload = decryptAndVerifyNewebpay(fields, settings);
