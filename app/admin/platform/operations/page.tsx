@@ -53,6 +53,20 @@ export default async function PlatformOperationsPage() {
   if (backlogs.some((count) => !Number.isSafeInteger(count) || count === null || count < 0)) {
     throw new Error(adminErrorMessage("通知待查數量無法確認"));
   }
+  const { data: appointmentRows, error: appointmentRowsError } = (appointmentBacklog ?? 0) > 0
+    ? await adminQuery(service.from("appointment_notification_logs")
+      .select("id,clinic_id,kind,channel,status,updated_at,created_at")
+      .in("status", ["sending", "failed"])
+      .or(`updated_at.lte.${overdueCutoff},updated_at.is.null`)
+      .order("created_at", { ascending: true }).limit(10))
+    : { data: [], error: null };
+  if (appointmentRowsError || !appointmentRows) throw new Error(adminErrorMessage("讀取待查預約通知失敗"));
+  const brandIds = [...new Set(appointmentRows.map((row) => row.clinic_id))];
+  const { data: appointmentBrands, error: appointmentBrandsError } = brandIds.length > 0
+    ? await adminQuery(service.from("clinics").select("id,name").in("id", brandIds))
+    : { data: [], error: null };
+  if (appointmentBrandsError || !appointmentBrands) throw new Error(adminErrorMessage("讀取待查通知品牌失敗"));
+  const appointmentBrandNames = new Map(appointmentBrands.map((brand) => [brand.id, brand.name]));
   const cronRows = await adminQuery(Promise.all(CRON_JOB_EXPECTATIONS.map(({ job }) =>
     service.from("cron_job_runs").select("status,result_code,http_status,completed_at")
       .eq("mode", "global").eq("job", job).order("completed_at", { ascending: false }).limit(1),
@@ -101,6 +115,7 @@ export default async function PlatformOperationsPage() {
         <div className="platform-panel space-y-4 p-5">
           <div><p className="eyebrow">待處理訊息</p><h2 className="mt-1 text-lg font-bold text-slate-900">待查通知與訊息</h2><p className="mt-1 text-sm leading-6 text-slate-500">包含超過 15 分鐘、缺少完成時間或已失敗的紀錄，以及逾期未執行的 LINE／Email 回訪。只顯示數量，不顯示顧客資料。</p></div>
           <div className="space-y-3"><QueueRow label="預約通知" value={appointmentBacklog ?? 0} /><QueueRow label="報名通知" value={registrationBacklog ?? 0} /><QueueRow label="行前提醒" value={reminderBacklog ?? 0} /><QueueRow label="CRM Lite 投遞" value={crmBacklog ?? 0} /><QueueRow label="會員通知" value={membershipBacklog ?? 0} /><QueueRow label="候補通知" value={waitlistBacklog ?? 0} /><QueueRow label="回訪處理中／失敗" value={followupInProgressBacklog ?? 0} /><QueueRow label="逾期回訪" value={followupPendingBacklog ?? 0} /></div>
+          {appointmentRows.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-xs text-slate-700"><p className="font-semibold text-slate-900">待查預約通知（最早 10 筆）</p><ul className="mt-2 space-y-2">{appointmentRows.map((row) => <li key={row.id} className="rounded-lg bg-white p-2"><span className="font-medium">{appointmentBrandNames.get(row.clinic_id) ?? "品牌資料待查"}</span><span> · {row.channel === "line" ? "LINE" : "Email"} · {row.kind === "pending" ? "待付款" : row.kind === "confirmed" ? "確認" : row.kind === "cancelled" ? "取消" : "改期"} · {row.status === "sending" ? "結果未確認" : "送出失敗"}</span><p className="mt-1 text-slate-500">紀錄 ID：{row.id} · 更新：{row.updated_at ? new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", dateStyle: "short", timeStyle: "short" }).format(new Date(row.updated_at)) : "無時間"}</p></li>)}</ul></div>}
           {warningCount > 0 ? <p className="border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">待查狀態可能代表供應商已接受訊息。請先核對品牌、原通知與供應商紀錄；結果不明時不要直接重送。</p> : <p className="border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">目前沒有逾期待查紀錄；這不代表排程正在執行，也不證明 LINE／Email 已送達。仍須另查 worker 執行與告警。</p>}
         </div>
       </section>

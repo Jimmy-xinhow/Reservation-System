@@ -15,7 +15,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('lib/cron-operations-healt
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
 } }).outputText, { exports: cronExports, Object, Number, Date });
 
-function fixture({ counts = {}, cronRows = {}, errorTable, deny = false } = {}) {
+function fixture({ counts = {}, cronRows = {}, appointmentRows = [], appointmentBrands = [], errorTable, deny = false } = {}) {
   const calls = [];
   let serviceClients = 0;
   const service = { from(table) {
@@ -26,6 +26,12 @@ function fixture({ counts = {}, cronRows = {}, errorTable, deny = false } = {}) 
         if (table === 'cron_job_runs') {
           const job = call.filters.find(([method, column]) => method === 'eq' && column === 'job')?.[2];
           return { data: cronRows[job] ? [cronRows[job]] : [], error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
+        }
+        if (table === 'appointment_notification_logs' && call.select?.[0]?.includes('clinic_id')) {
+          return { data: appointmentRows, error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
+        }
+        if (table === 'clinics' && call.select?.[0] === 'id,name') {
+          return { data: appointmentBrands, error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
         }
         const pending = call.filters.some(([method, column, value]) => method === 'eq' && column === 'status' && value === 'pending');
         const lookup = `${table}${pending ? ':pending' : ''}`;
@@ -104,6 +110,20 @@ test('incomplete sends and overdue followups surface as attention without return
   assert.ok(appointment.filters.some(([method, column, values]) => method === 'in' && column === 'status' && values.includes('sending')));
   const pending = f.calls.find(call => call.table === 'scheduled_followups' && call.filters.some(([method, column, value]) => method === 'eq' && column === 'status' && value === 'pending'));
   assert.ok(pending.filters.some(([method, column, values]) => method === 'in' && column === 'channel' && values.includes('line') && values.includes('email')));
+});
+
+test('appointment backlog shows safe triage fields without recipient or provider error', async () => {
+  const f = fixture({ counts: { appointment_notification_logs: 1 },
+    appointmentRows: [{ id: 'qa-log-1', clinic_id: 'qa-brand-1', kind: 'confirmed', channel: 'email', status: 'sending', updated_at: '2026-10-01T10:00:00Z', created_at: '2026-10-01T09:59:00Z', error: 'PRIVATE_PROVIDER_CANARY' }],
+    appointmentBrands: [{ id: 'qa-brand-1', name: 'QA 測試品牌' }] });
+  const html = renderToStaticMarkup(await f.page());
+  assert.match(html, /QA 測試品牌/);
+  assert.match(html, /Email · 確認 · 結果未確認/);
+  assert.match(html, /qa-log-1/);
+  assert.doesNotMatch(html, /PRIVATE_PROVIDER_CANARY/);
+  const detail = f.calls.find(call => call.table === 'appointment_notification_logs' && call.select?.[0]?.includes('clinic_id'));
+  assert.equal(detail.select[0], 'id,clinic_id,kind,channel,status,updated_at,created_at');
+  assert(detail.filters.some(([method, value]) => method === 'limit' && value === 10));
 });
 
 test('query failure fails closed and never reveals provider text', async () => {
