@@ -40,6 +40,7 @@ test("brand login access checks membership in the requested brand", async () => 
 
 test("brand entry shows only active brand identity", async () => {
   const filters = [];
+  const limits = [];
   const query = {
     select(columns) { assert.equal(columns, "id, name"); return this; },
     eq(column, value) { filters.push([column, value]); return this; },
@@ -49,10 +50,28 @@ test("brand entry shows only active brand identity", async () => {
     "next/server": { NextResponse: response },
     "@/lib/supabase": { createServiceClient: () => ({ from: () => query }) },
     "@/lib/delivery-error": { deliveryError: () => "safe" },
+    "@/lib/http": { rateLimitResponse: async (request, key, limit) => {
+      limits.push([request.url, key, limit]);
+      return null;
+    } },
   });
   const result = await route.GET(new Request(`https://example.invalid/api/admin/brand-entry?brand=${ownBrand}`));
   assert.equal(result.status, 200);
   assert.deepEqual(JSON.parse(JSON.stringify(result.body)), { id: ownBrand, name: "測試品牌" });
   assert.deepEqual(filters, [["id", ownBrand], ["active", true]]);
   assert.equal((await route.GET(new Request("https://example.invalid/api/admin/brand-entry?brand=invalid"))).status, 400);
+  assert.deepEqual(limits, [[`https://example.invalid/api/admin/brand-entry?brand=${ownBrand}`, "admin:brand-entry", 30]]);
+});
+
+test("brand entry rejects exhausted shared limit before service-role lookup", async () => {
+  let lookedUp = false;
+  const route = load("app/api/admin/brand-entry/route.ts", {
+    "next/server": { NextResponse: response },
+    "@/lib/supabase": { createServiceClient: () => { lookedUp = true; throw new Error("must not query"); } },
+    "@/lib/delivery-error": { deliveryError: () => "safe" },
+    "@/lib/http": { rateLimitResponse: async () => ({ status: 429 }) },
+  });
+  const denied = await route.GET(new Request(`https://example.invalid/api/admin/brand-entry?brand=${ownBrand}`));
+  assert.equal(denied.status, 429);
+  assert.equal(lookedUp, false);
 });

@@ -1,14 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
 import { deliveryError } from "@/lib/delivery-error";
+import { rateLimitResponse } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const brand = new URL(request.url).searchParams.get("brand") ?? "";
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(brand)) {
     return NextResponse.json({ error: "品牌入口無效" }, { status: 400 });
   }
+  const limited = await rateLimitResponse(request, "admin:brand-entry", 30);
+  if (limited) return limited;
   try {
     const { data, error } = await createServiceClient().from("clinics")
       .select("id, name")
