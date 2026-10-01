@@ -4,13 +4,13 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 
-function loadChatRoute(enabled, calls) {
+function loadChatRoute(enabled, calls, role = 'staff') {
   const source = fs.readFileSync('app/api/admin/chat/route.ts', 'utf8');
   const exports = {};
-  const member = { clinicId: 'qa-clinic', role: 'staff', supabase: {}, user: { id: 'qa-user' } };
+  const member = { clinicId: 'qa-clinic', role, supabase: {}, user: { id: 'qa-user' } };
   const deps = {
     '@/lib/admin': { requireMember: async () => member, requireOperator: async () => member },
-    '@/lib/admin-modules': { isAdminModuleEnabled: async () => enabled },
+    '@/lib/admin-modules': { isAdminModuleEnabled: async () => { calls.push('module'); return enabled; } },
     '@/lib/http': {
       ok: data => Response.json({ ok: true, data }),
       fail: (error, status = 400) => Response.json({ ok: false, error }, { status }),
@@ -40,7 +40,7 @@ test('disabled LINE module rejects chat reads before exposing old messages', asy
     assert.equal(response.status, 403);
     assert.doesNotMatch(await response.text(), /PRIVATE_CHAT_CANARY/);
   }
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls.filter(call => call !== 'module'), []);
 });
 
 test('disabled LINE module rejects chat writes before changing conversation state', async () => {
@@ -49,6 +49,21 @@ test('disabled LINE module rejects chat writes before changing conversation stat
   for (const action of ['block', 'send']) {
     const response = await route.POST({ json: async () => ({ action, lineUserId: 'qa-line', body: 'PRIVATE_CHAT_CANARY' }) });
     assert.equal(response.status, 403);
+  }
+  assert.deepEqual(calls.filter(call => call !== 'module'), []);
+});
+
+test('provider chat reads are empty without accessing clinic settings denied by RLS', async () => {
+  const calls = [];
+  const route = loadChatRoute(true, calls, 'provider');
+  for (const [type, key, expected] of [
+    ['threads', 'threads', []],
+    ['messages', 'messages', []],
+    ['unread', 'count', 0],
+  ]) {
+    const response = await route.GET({ nextUrl: new URL(`https://example.invalid/api/admin/chat?type=${type}&u=qa-line`) });
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).data[key], expected);
   }
   assert.deepEqual(calls, []);
 });

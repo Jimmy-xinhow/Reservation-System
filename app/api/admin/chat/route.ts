@@ -34,12 +34,13 @@ export async function GET(req: NextRequest) {
   const { supabase, clinicId } = member;
   const type = req.nextUrl.searchParams.get("type");
   try {
-    if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return fail("此品牌未啟用 LINE 訊息", 403);
     if (member.role === "provider") {
+      // Provider RLS cannot read clinic_settings; all chat data remains hidden.
       if (type === "unread") return ok({ count: 0 });
       if (type === "messages") return ok({ messages: [] });
       return ok({ threads: [] });
     }
+    if (!(await isAdminModuleEnabled(supabase, clinicId, "line"))) return fail("此品牌未啟用 LINE 訊息", 403);
     if (type === "unread") return ok({ count: await unreadCount(supabase, clinicId) });
     if (type === "messages") {
       const u = req.nextUrl.searchParams.get("u") ?? "";
