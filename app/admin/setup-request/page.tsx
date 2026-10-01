@@ -47,12 +47,15 @@ export default async function BrandSetupRequestPage({ searchParams }: { searchPa
         <div className="space-y-4">
           <label className="block text-sm"><span className="label">提供哪些服務或活動？請寫名稱與大致時長</span><textarea name="serviceSummary" required maxLength={500} rows={3} defaultValue={answers?.serviceSummary ?? ""} className={selectClass} placeholder="例如：諮詢 30 分鐘、美容服務 60 分鐘" /></label>
           <label className="block text-sm"><span className="label">營業／可預約時段（可留白）</span><textarea name="openingHours" maxLength={300} rows={2} defaultValue={answers?.openingHours ?? ""} className={selectClass} placeholder="例如：週一至週五 10:00–19:00，週末休息" /></label>
+          <label className="block text-sm"><span className="label">同一時段最多可接待幾筆？（未定可留白）</span><input type="number" name="simultaneousBookings" min={1} step={1} defaultValue={answers?.simultaneousBookings ?? ""} className={selectClass} placeholder="例如：所有服務共用 1 個接待名額" /></label>
+          <label className="block text-sm"><span className="label">各項服務售價（未定可留白）</span><textarea name="pricingSummary" maxLength={800} rows={3} defaultValue={answers?.pricingSummary ?? ""} className={selectClass} placeholder="例如：服務 A NT$800；服務 B NT$1,200；免收費請填 NT$0" /></label>
         </div>
       </section>
       <section className={boxClass}>
         <h2 className="mb-4 font-semibold text-slate-900">3. 顧客入口與收款</h2>
         <fieldset><legend className="label">希望使用的入口／通知（可複選）</legend><div className="grid gap-3 sm:grid-cols-2">{([ ["line", "LINE 官方帳號"], ["email", "Email 通知"], ["browser", "一般瀏覽器預約"], ["website", "品牌網站／自訂網域"] ] as const).map(([value, label]) => <label key={value} className="flex min-h-11 items-center gap-3 rounded-lg border border-slate-200 px-3 text-sm"><input name="channels" type="checkbox" value={value} defaultChecked={answers?.channels.includes(value)} />{label}</label>)}</div></fieldset>
         <label className="mt-4 block text-sm"><span className="label">付款需求</span><select name="payment" required defaultValue={answers?.payment ?? ""} className={selectClass}><option value="" disabled>請選擇</option><option value="none">暫不收款</option><option value="newebpay">藍新金流</option><option value="ecpay">綠界金流</option><option value="unsure">希望我們建議</option></select></label>
+        <label className="mt-4 block text-sm"><span className="label">每筆預約訂金 NT$（未定可留白，0 表示先免付）</span><input type="number" name="depositAmount" min={0} step={1} defaultValue={answers?.depositAmount ?? ""} className={selectClass} placeholder="例如：100" /></label>
         <label className="mt-4 block text-sm"><span className="label">其他設定需求（可留白）</span><textarea name="additionalNeeds" maxLength={500} rows={3} defaultValue={answers?.additionalNeeds ?? ""} className={selectClass} placeholder="例如：多人共用電話、第一次服務較長、需要候補" /></label>
       </section>
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">請勿在表單中填寫 LINE／金流／Email 金鑰、密碼、顧客資料。憑證必須由有權限的人員在品牌設定頁安全儲存。重新提交會更新這個品牌的需求並回到「待處理」。</div>

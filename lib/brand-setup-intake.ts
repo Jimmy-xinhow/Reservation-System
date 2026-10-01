@@ -6,6 +6,9 @@ export interface BrandSetupAnswers {
   payment: "none" | "newebpay" | "ecpay" | "unsure";
   serviceSummary: string;
   openingHours: string;
+  simultaneousBookings?: number | null;
+  pricingSummary?: string;
+  depositAmount?: number | null;
   targetDate: string | null;
   additionalNeeds: string;
 }
@@ -26,6 +29,17 @@ function choice<T extends string>(fd: FormData, name: string, allowed: readonly 
   return value as T;
 }
 
+function nonNegativeInteger(fd: FormData, name: string, allowZero: boolean): number | null {
+  const raw = single(fd, name, 15);
+  if (!raw) return null;
+  if (!/^\d+$/.test(raw)) throw new Error(`「${name}」請填寫整數。`);
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || (!allowZero && value === 0)) {
+    throw new Error(`「${name}」數值不正確。`);
+  }
+  return value;
+}
+
 export function parseBrandSetupAnswers(fd: FormData): BrandSetupAnswers {
   const channels = fd.getAll("channels");
   const allowedChannels = ["line", "email", "browser", "website"] as const;
@@ -38,15 +52,25 @@ export function parseBrandSetupAnswers(fd: FormData): BrandSetupAnswers {
   }
   const serviceSummary = single(fd, "serviceSummary", 500);
   const openingHours = single(fd, "openingHours", 300);
+  const simultaneousBookings = nonNegativeInteger(fd, "simultaneousBookings", false);
+  const pricingSummary = single(fd, "pricingSummary", 800);
+  const depositAmount = nonNegativeInteger(fd, "depositAmount", true);
+  const payment = choice(fd, "payment", ["none", "newebpay", "ecpay", "unsure"]);
   if (!serviceSummary) throw new Error("請簡述要提供的服務或活動。");
+  if (payment === "none" && depositAmount !== null && depositAmount > 0) {
+    throw new Error("未使用線上金流時，預約訂金請填 0 或留白。");
+  }
   return {
     goal: choice(fd, "goal", ["booking", "registration", "both"]),
     bookingMode: choice(fd, "bookingMode", ["time", "number", "unsure"]),
     assignment: choice(fd, "assignment", ["required", "optional", "resource", "unsure"]),
     channels: [...new Set(channels as BrandSetupAnswers["channels"])],
-    payment: choice(fd, "payment", ["none", "newebpay", "ecpay", "unsure"]),
+    payment,
     serviceSummary,
     openingHours,
+    simultaneousBookings,
+    pricingSummary,
+    depositAmount,
     targetDate: targetDate || null,
     additionalNeeds: single(fd, "additionalNeeds", 500),
   };

@@ -39,6 +39,9 @@ export default async function PlatformSetupRequestsPage() {
           <div><dt className="text-slate-500">入口與通知</dt><dd className="mt-1 font-medium">{answer.channels?.map((channel) => channelNames[channel] ?? channel).join("、") || "未選"}</dd></div>
           <div><dt className="text-slate-500">預計啟用</dt><dd className="mt-1 font-medium">{answer.targetDate || "未指定"}</dd></div>
           <div className="sm:col-span-2"><dt className="text-slate-500">服務與時長</dt><dd className="mt-1 whitespace-pre-wrap break-words">{answer.serviceSummary}</dd></div>
+          <div><dt className="text-slate-500">同時接待量</dt><dd className="mt-1 font-medium">{answer.simultaneousBookings == null ? "未提供" : `每時段 ${answer.simultaneousBookings} 筆`}</dd></div>
+          <div><dt className="text-slate-500">預約訂金</dt><dd className="mt-1 font-medium">{answer.depositAmount == null ? "未提供" : answer.depositAmount === 0 ? "先免付" : `NT$${answer.depositAmount}`}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-slate-500">各服務售價</dt><dd className="mt-1 whitespace-pre-wrap break-words">{answer.pricingSummary || "未提供"}</dd></div>
           {answer.openingHours && <div className="sm:col-span-2"><dt className="text-slate-500">可預約時段</dt><dd className="mt-1 whitespace-pre-wrap break-words">{answer.openingHours}</dd></div>}
           {answer.additionalNeeds && <div className="sm:col-span-2"><dt className="text-slate-500">其他需求</dt><dd className="mt-1 whitespace-pre-wrap break-words">{answer.additionalNeeds}</dd></div>}
         </dl>
