@@ -20,6 +20,8 @@ test('delivery failures allow only exact operational reasons or categories',()=>
  assert.equal(deliveryError({message:privateError}),'delivery_error:internal');
  assert.equal(deliveryError('顧客未同意行銷'),'顧客未同意行銷');
  assert.equal(deliveryError('顧客未同意行銷 '+privateError),'delivery_error:connection');
+ assert.equal(deliveryError('LINE Webhook URL 與本環境不符；請核對本頁下方的訊息接收網址。若此官方帳號也供其他環境使用，請勿直接覆蓋其 Webhook。'),'LINE Webhook URL 與本環境不符；請核對本頁下方的訊息接收網址。若此官方帳號也供其他環境使用，請勿直接覆蓋其 Webhook。');
+ assert.equal(deliveryError('LINE Webhook URL 與本環境不符；' + privateError),'delivery_error:connection');
  assert.equal(deliveryError('delivery_error:configuration'),'delivery_error:configuration');
  assert.equal(deliveryError('delivery_error:provider_rejected'),'delivery_error:provider_rejected');
  assert.equal(deliveryError('delivery_error:connection '+privateError),'delivery_error:connection');
