@@ -955,6 +955,17 @@ function normalizedWebhookUrl(value: string): string {
   return `${url.origin}${pathname}${url.search}`;
 }
 
+function lineVerificationError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (message.startsWith("LINE Webhook URL 不一致，應設定為 ")) {
+    return "LINE Webhook URL 與本環境不符；請核對本頁下方的訊息接收網址。若此官方帳號也供其他環境使用，請勿直接覆蓋其 Webhook。";
+  }
+  if (message === "LINE Developers 尚未啟用 webhook" || message === "LINE destination 與目前 access token 的 Bot 不一致") {
+    return message;
+  }
+  return deliveryError(error);
+}
+
 export async function verifyLineChannelSettingsAction() {
   const { supabase, clinicId } = await requireAdmin();
   const service = createServiceClient();
@@ -995,7 +1006,7 @@ export async function verifyLineChannelSettingsAction() {
     if (!verifiedChannel) throw new Error("找不到此品牌的 LINE 渠道設定，請先儲存後再驗證");
   } catch (error) {
     result = "err";
-    reason = deliveryError(error);
+    reason = lineVerificationError(error);
     const { error: updateError } = await service
       .from("clinic_line_channels")
       .update({ verification_status: "error", verification_error: reason, last_verified_at: verifiedAt })
