@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createDecipheriv } from "node:crypto";
+import { captureRejectedNewebpayCallback } from "@/lib/newebpay-forensics";
 import { createServiceClient } from "@/lib/supabase";
 import { asPaymentFormFields, decryptAndVerifyNewebpay, getPaymentSettingsByMerchant, parseNewebpayPaymentResult } from "@/lib/payment";
 import { processPaymentWebhook } from "@/lib/payment-webhook";
@@ -103,6 +104,9 @@ export async function POST(req: NextRequest) {
       payload = decryptAndVerifyNewebpay(fields, settings);
     } catch (error) {
       const reason = verificationFailureReason(error);
+      if (reason === "cbc_bad_padding") {
+        try { captureRejectedNewebpayCallback(fields, settings); } catch { /* Diagnostics must not alter callback rejection. */ }
+      }
       console.warn("NewebPay notify rejected", {
         phase: "verify",
         reason,

@@ -172,7 +172,8 @@ async function routeModule(path) {
     export const queryPaidNewebpayOrder=async()=>{globalThis.__g203QueryCalls=(globalThis.__g203QueryCalls??0)+1;return globalThis.__g203QueryResult??null};
     export const notifyRegistrationStatus=async()=>{};
     export const notifyAppointmentStatus=async()=>{};
-    export const notificationKindForStatus=()=>null;`;
+    export const notificationKindForStatus=()=>null;
+    export const captureRejectedNewebpayCallback=()=>{globalThis.__g203CaptureCount=(globalThis.__g203CaptureCount??0)+1;return false};`;
   const mockUrl = `data:text/javascript;base64,${Buffer.from(mocks).toString("base64")}`;
   const code = ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText
     .replace(/from "@\/lib\/[^\"]+"/g, () => `from ${JSON.stringify(mockUrl)}`)
@@ -311,6 +312,32 @@ test("Notify rejection diagnostics expose only the encryption mode and structura
     assert(!JSON.stringify(warnings).includes(settings.hash_key));
   } finally {
     console.warn = originalWarn;
+  }
+});
+
+test("only a signed CBC padding failure reaches the optional forensic capture", async () => {
+  const notify = await routeModule("../app/api/payment/newebpay/notify/route.ts");
+  const TradeInfo = "00".repeat(16);
+  const TradeSha = createHash("sha256")
+    .update(`HashKey=${settings.hash_key}&${TradeInfo}&HashIV=${settings.hash_iv}`)
+    .digest("hex").toUpperCase();
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  globalThis.__g203CaptureCount = 0;
+  try {
+    const signedFailure = await notify.POST({
+      formData: async () => new URLSearchParams({ MerchantID: settings.merchant_id, TradeInfo, TradeSha }),
+    });
+    assert.equal(signedFailure.status, 400);
+    assert.equal(globalThis.__g203CaptureCount, 1);
+    const unsignedFailure = await notify.POST({
+      formData: async () => new URLSearchParams({ MerchantID: settings.merchant_id, TradeInfo, TradeSha: "0".repeat(64) }),
+    });
+    assert.equal(unsignedFailure.status, 400);
+    assert.equal(globalThis.__g203CaptureCount, 1);
+  } finally {
+    console.warn = originalWarn;
+    delete globalThis.__g203CaptureCount;
   }
 });
 
