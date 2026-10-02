@@ -11,6 +11,8 @@ interface ChatMsg {
   created_at: string;
 }
 
+interface PendingMessage { id: string; body: string }
+
 async function post<T>(url: string, payload: unknown): Promise<T> {
   const res = await fetch(withPublicBrandScope(url), {
     method: "POST",
@@ -47,6 +49,9 @@ export default function ChatTab({ idToken }: { idToken: string | null }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [pending, setPending] = useState<PendingMessage | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const sendingRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastCount = useRef(0);
 
@@ -76,18 +81,38 @@ export default function ChatTab({ idToken }: { idToken: string | null }) {
     }
   }, [messages]);
 
-  async function send() {
-    const body = text.trim();
-    if (!body || !idToken || sending) return;
+  async function send(retry = false) {
+    const body = retry ? pending?.body ?? "" : text.trim();
+    if (!body || !idToken || sendingRef.current || (pending && !retry)) return;
+    const message = retry && pending ? pending : { id: crypto.randomUUID(), body };
+    sendingRef.current = true;
     setSending(true);
     setErr(null);
+    setNotice(null);
+    setPending(message);
+    setText("");
     try {
-      await post("/api/chat/send", { idToken, body });
-      setText("");
-      await load();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "送出失敗");
+      const response = await fetch(withPublicBrandScope("/api/chat/send"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, body: message.body, messageId: message.id }),
+      });
+      const result = await response.json().catch(() => null) as
+        { ok?: boolean; data?: { sent?: boolean }; error?: string } | null;
+      if (response.ok && result?.ok === true && result.data?.sent === true) {
+        setPending(null);
+        await load();
+      } else if (response.status >= 400 && response.status < 500 && result?.ok === false && typeof result.error === "string") {
+        setPending(null);
+        setText(message.body);
+        setErr(result.error);
+      } else {
+        setNotice("暫時無法確認這則訊息是否已送出。請使用下方按鈕確認／重試，勿另行重複留言。");
+      }
+    } catch {
+      setNotice("連線中斷，尚無法確認這則訊息是否已送出。請使用下方按鈕確認／重試，勿另行重複留言。");
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -129,6 +154,15 @@ export default function ChatTab({ idToken }: { idToken: string | null }) {
       </div>
 
       {err && <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">{err}</p>}
+      {pending && notice && (
+        <div role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p>{notice}</p>
+          <p className="my-2 whitespace-pre-wrap break-words">{pending.body}</p>
+          <button type="button" className="btn btn-secondary" disabled={sending} onClick={() => send(true)}>
+            {sending ? "確認中…" : "確認／重試這則訊息"}
+          </button>
+        </div>
+      )}
 
       <div className="mt-3 flex items-end gap-2">
         <textarea
@@ -142,13 +176,13 @@ export default function ChatTab({ idToken }: { idToken: string | null }) {
           }}
           rows={1}
           placeholder={idToken ? "輸入訊息…" : "確認身分中…"}
-          disabled={!idToken}
+          disabled={!idToken || sending || pending !== null}
           className="input max-h-28 min-h-[42px] flex-1 resize-none"
         />
         <button
           type="button"
-          onClick={send}
-          disabled={!idToken || sending || !text.trim()}
+          onClick={() => send()}
+          disabled={!idToken || sending || pending !== null || !text.trim()}
           className="btn btn-primary shrink-0"
         >
           {sending ? "送出中…" : "送出"}

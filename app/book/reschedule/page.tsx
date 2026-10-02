@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { bookingDoctorSelection } from "@/lib/booking-selection";
 import { formatDateSession, formatTime } from "@/lib/slots";
-import { closeLiffWindow, useLiff } from "@/lib/useLiff";
+import { useLiff } from "@/lib/useLiff";
 import { liffEntryParams } from "@/lib/liff-entry-state";
-import { Shell as CustomerAppShell } from "../BookingFlowUi";
+import { ReturnToLineButton, Shell as CustomerAppShell } from "../BookingFlowUi";
 
 interface Doctor {
   id: string;
@@ -119,6 +120,8 @@ export default function ReschedulePage() {
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const submitLock = useRef(false);
+  const paymentLock = useRef(false);
   const [result, setResult] = useState<RescheduleResult | null>(null);
   const [brandSuffix, setBrandSuffix] = useState("");
 
@@ -128,6 +131,10 @@ export default function ReschedulePage() {
     const clinicSlug = params.get("clinic_slug")?.trim();
     const clinicId = params.get("clinic_id")?.trim();
     setAppointmentId(id);
+    if (!id) {
+      setLoading(false);
+      setError("缺少預約資料，請重新從我的預約進入");
+    }
     if (clinicSlug) setBrandSuffix(`?clinic_slug=${encodeURIComponent(clinicSlug)}`);
     else if (clinicId) setBrandSuffix(`?clinic_id=${encodeURIComponent(clinicId)}`);
   }, []);
@@ -164,46 +171,48 @@ export default function ReschedulePage() {
   const providerRequired = !selectedService || selectedService.booking_target === "provider_required";
   const providerOptional = selectedService?.booking_target === "provider_optional";
 
+  const serviceReady = !!config && (serviceId ? !!selectedService : config.services.length === 0 && !appointment?.service_id);
+  const doctorReady = !!config && (doctorId ? config.doctors.some((doctor) => doctor.id === doctorId) : !providerRequired);
+  const selectionReady = serviceReady && doctorReady && !!date;
+  const selectionNotice = !serviceReady
+    ? "原服務目前未開放或尚未選擇，請重新選擇服務；若無可選服務，請聯絡店家協助改期。"
+    : !doctorReady ? "請選擇目前可預約的服務提供者。" : null;
+
   useEffect(() => {
     if (!config || !appointment) return;
-    if (selectedService && !providerRequired) setDoctorId("");
-  }, [appointment, config, providerRequired, selectedService]);
+    const target = selectedService?.booking_target ?? "provider_required";
+    const nextDoctor = bookingDoctorSelection(target, doctorId, config.doctors);
+    if (nextDoctor !== doctorId) setDoctorId(nextDoctor);
+  }, [appointment, config, doctorId, selectedService]);
 
-  useEffect(() => {
-    if (!config || !appointment || !providerRequired || doctorId) return;
-    if (config.doctors.length === 1) setDoctorId(config.doctors[0].id);
-  }, [appointment, config, doctorId, providerRequired]);
-
-  const loadAvailability = useCallback(async () => {
-    if (!config || !date || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
-    setAvailabilityLoading(true);
-    setError(null);
-    setSlots([]);
-    setSessions([]);
-    setPickedStart("");
-    setPickedTemplate("");
+  const loadAvailability = useCallback(async (signal: AbortSignal) => {
+    setAvailabilityLoading(false);
+    setSlots([]); setSessions([]); setPickedStart(""); setPickedTemplate("");
+    if (!config || !appointment || !selectionReady) return;
+    setAvailabilityLoading(true); setError(null);
     try {
       const query = new URLSearchParams({ date, visit_type: visitType });
       if (doctorId) query.set("doctor_id", doctorId);
       if (serviceId) query.set("service_id", serviceId);
-      const data = await api<{ slots?: Slot[]; sessions?: Session[] }>(
-        `/api/booking/availability?${query.toString()}`,
-      );
-      setSlots(data.slots ?? []);
-      setSessions(data.sessions ?? []);
+      const data = await api<{ slots?: Slot[]; sessions?: Session[] }>(`/api/booking/availability?${query.toString()}`, { signal });
+      if (signal.aborted) return;
+      setSlots(data.slots ?? []); setSessions(data.sessions ?? []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "載入可預約時段失敗");
+      if (!signal.aborted) setError(loadError instanceof Error ? loadError.message : "載入時段失敗");
     } finally {
-      setAvailabilityLoading(false);
+      if (!signal.aborted) setAvailabilityLoading(false);
     }
-  }, [config, date, doctorId, providerRequired, serviceId, visitType]);
+  }, [appointment, config, date, doctorId, selectionReady, serviceId, visitType]);
 
   useEffect(() => {
-    if (appointment && config && date && (!providerRequired || doctorId)) void loadAvailability();
-  }, [appointment, config, date, doctorId, loadAvailability, providerRequired]);
+    const controller = new AbortController();
+    void loadAvailability(controller.signal);
+    return () => controller.abort();
+  }, [loadAvailability]);
 
   async function submit() {
-    if (!idToken || !appointment || !config || (providerRequired && !doctorId) || (config.services.length > 0 && !serviceId)) return;
+    if (submitLock.current) return;
+    if (!idToken || !appointment || !config || !selectionReady || availabilityLoading || submitting) return;
     if (config.booking_mode === "time" && !pickedStart) {
       setError("請選擇新的時段");
       return;
@@ -212,6 +221,7 @@ export default function ReschedulePage() {
       setError("請選擇新的預約時段");
       return;
     }
+    submitLock.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -232,14 +242,16 @@ export default function ReschedulePage() {
         body: JSON.stringify(body),
       }));
     } catch (submitError) {
+      submitLock.current = false;
       setError(submitError instanceof Error ? submitError.message : "改期失敗");
-    } finally {
       setSubmitting(false);
     }
   }
 
   async function payDeposit() {
+    if (paymentLock.current || result?.deposit_status !== "pending") return;
     if (!idToken || !result?.appointment_id) return;
+    paymentLock.current = true;
     setPaying(true);
     setPaymentError(null);
     try {
@@ -249,7 +261,7 @@ export default function ReschedulePage() {
         body: JSON.stringify({
           appointment_id: result.appointment_id,
           idToken,
-          return_path: window.location.pathname + window.location.search,
+          return_path: `/book${brandSuffix}${brandSuffix ? "&" : "?"}view=appointments`,
         }),
       });
       const form = document.createElement("form");
@@ -266,13 +278,14 @@ export default function ReschedulePage() {
       document.body.appendChild(form);
       form.submit();
     } catch (payError) {
+      paymentLock.current = false;
       setPaymentError(payError instanceof Error ? payError.message : "付款建立失敗");
       setPaying(false);
     }
   }
 
   if (liffError) {
-    return <Shell><Message tone="error">{liffError}<Link className="btn btn-secondary mt-3 inline-flex" href={`/book/browser${brandSuffix}`}>改用瀏覽器預約</Link></Message></Shell>;
+    return <Shell><Message tone="error">{liffError}<Link className="btn btn-secondary mt-3 inline-flex" href={`/book/browser/my${brandSuffix}`}>改用瀏覽器查詢預約</Link></Message></Shell>;
   }
 
   if (result) {
@@ -293,15 +306,15 @@ export default function ReschedulePage() {
               {paymentError && <p className="rounded-lg bg-red-50 p-2 text-left text-xs text-red-700">{paymentError}</p>}
             </div>
           )}
-          {isInClient && result.deposit_status !== "pending" && <button type="button" className="btn btn-primary w-full" onClick={() => closeLiffWindow()}>完成並回到 LINE</button>}
-          <Link className="btn btn-secondary w-full" href={`/book${brandSuffix}`}>返回預約頁</Link>
+          {isInClient && result.deposit_status !== "pending" && <ReturnToLineButton />}
+          <Link className="btn btn-secondary w-full" href={`/book${brandSuffix}${brandSuffix ? "&" : "?"}view=appointments`}>返回我的預約</Link>
         </div>
       </Shell>
     );
   }
 
+  if (error && !appointment) return <Shell><Message tone="error">{error}<Link className="btn btn-secondary mt-3 inline-flex" href={`/book${brandSuffix}${brandSuffix ? "&" : "?"}view=appointments`}>返回</Link></Message></Shell>;
   if (loading || !config) return <Shell><Message>{error ?? "載入中…"}</Message></Shell>;
-  if (error && !appointment) return <Shell><Message tone="error">{error}<Link className="btn btn-secondary mt-3 inline-flex" href={`/book${brandSuffix}`}>返回</Link></Message></Shell>;
   if (!appointment) return <Shell><Message tone="error">找不到預約</Message></Shell>;
 
   return (
@@ -312,7 +325,7 @@ export default function ReschedulePage() {
           <h1 className="text-2xl font-bold text-slate-900">預約改期</h1>
           <p className="mt-1 text-sm text-slate-500">請選擇新的服務提供者、日期與可用時段。</p>
         </div>
-        <Link href={`/book${brandSuffix}`} className="text-sm text-brand-700">返回</Link>
+        <Link href={`/book${brandSuffix}${brandSuffix ? "&" : "?"}view=appointments`} className="text-sm text-brand-700">返回</Link>
       </div>
 
       <div className="card mb-4 space-y-2 p-4 text-sm text-slate-600">
@@ -321,9 +334,9 @@ export default function ReschedulePage() {
         <p>{appointment.doctors?.name ?? ""}{appointment.patients?.name ? `・${appointment.patients.name}` : ""}</p>
       </div>
 
-      <div className="card space-y-4 p-5">
+      <fieldset disabled={submitting} className="card space-y-4 p-5">
         {(providerRequired || providerOptional) && <label className="block text-sm"><span className="label">服務提供者{providerOptional ? "（可不指定）" : ""}</span><select className="input" value={doctorId} onChange={(event) => setDoctorId(event.target.value)} required={providerRequired}><option value="">{providerRequired ? "請選擇" : "由系統安排"}</option>{config.doctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.name}{doctor.specialty ? `・${doctor.specialty}` : ""}</option>)}</select></label>}
-        {config.services.length > 0 && <label className="block text-sm"><span className="label">服務項目</span><select className="input" value={serviceId} onChange={(event) => setServiceId(event.target.value)} required><option value="">請選擇服務</option>{config.services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>}
+        {config.services.length > 0 && <label className="block text-sm"><span className="label">服務項目</span><select className="input" value={serviceId} onChange={(event) => setServiceId(event.target.value)} required><option value="">請選擇服務</option>{serviceId && !selectedService && <option value={serviceId} disabled>原服務已停止開放</option>}{config.services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></label>}
         <label className="block text-sm"><span className="label">日期</span><input type="date" className="input" min={todayStr()} max={maxDate} value={date} onChange={(event) => setDate(event.target.value)} /></label>
         <div>
           <span className="label">新的可預約時段</span>
@@ -332,11 +345,11 @@ export default function ReschedulePage() {
           ) : (
             <div className="grid grid-cols-1 gap-2">{sessions.map((session) => <button type="button" key={session.template_id} onClick={() => setPickedTemplate(session.template_id)} className={`rounded-xl border p-3 text-left text-sm ${pickedTemplate === session.template_id ? "border-brand-600 bg-brand-50 text-brand-700" : "border-slate-200"}`}>{formatDateSession(session.session_start)}<span className="ml-2 text-xs text-slate-400">剩餘 {session.remaining}</span></button>)}</div>
           )}
-          {!availabilityLoading && (config.booking_mode === "time" ? slots.length === 0 : sessions.length === 0) && <p className="mt-2 text-sm text-slate-400">這天沒有可用時段，請更換日期或服務。</p>}
+          {selectionReady && !availabilityLoading && (config.booking_mode === "time" ? slots.length === 0 : sessions.length === 0) && <p className="mt-2 text-sm text-slate-400">這天沒有可用時段，請更換日期或服務。</p>}
         </div>
-        {error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-        <button type="button" className="btn btn-primary w-full" disabled={submitting || availabilityLoading} onClick={() => void submit()}>{submitting ? "改期處理中…" : "確認改期"}</button>
-      </div>
+        {selectionNotice && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{selectionNotice}</p>}{error && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        <button type="button" className="btn btn-primary w-full" disabled={submitting || availabilityLoading || !selectionReady || (config.booking_mode === "time" ? !pickedStart : !pickedTemplate)} onClick={() => void submit()}>{submitting ? "改期處理中…" : "確認改期"}</button>
+      </fieldset>
     </Shell>
   );
 }

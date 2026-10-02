@@ -1,6 +1,8 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { publicCustomerEntryUrl } from "@/lib/customer-entry";
 import {
   brandPagePreferredEntry,
   isBrandPageTemplate,
@@ -31,10 +33,11 @@ interface BrandPageSettingsRow {
   memberships_enabled: boolean;
 }
 
-function scopedPath(path: string, clinic: ClinicRow, clinicId: string): string {
+function scopedPath(path: string, clinic: ClinicRow, clinicId: string, extra?: Record<string, string>): string {
   const params = new URLSearchParams();
   if (clinic.slug) params.set("clinic_slug", clinic.slug);
   else params.set("clinic_id", clinicId);
+  for (const [key, value] of Object.entries(extra ?? {})) params.set(key, value);
   return `${path}?${params.toString()}`;
 }
 
@@ -105,10 +108,21 @@ export async function loadPublicBrandPage(supabase: SupabaseClient, clinicId: st
     description: typeof row.description === "string" ? row.description : null,
   }));
   const events = activeEvents((eventsResult.data ?? []) as Array<Record<string, unknown>>);
+  const line = await getClinicLineChannelContext(supabase, clinicId).catch(() => null);
+  const entryContext = { clinicId, clinicSlug: clinic.slug, enabled: line?.enabled ?? false, liffId: line?.liffId ?? null, loginChannelId: line?.loginChannelId ?? null };
+  const lineEntryAvailable = entryContext.enabled && Boolean(entryContext.liffId && entryContext.loginChannelId);
+  for (const service of services) {
+    service.href = publicCustomerEntryUrl("booking", entryContext, { service_id: service.id });
+    if (lineEntryAvailable) service.browserHref = scopedPath("/book/browser", clinic, clinicId, { service_id: service.id });
+  }
+  for (const event of events) {
+    event.href = publicCustomerEntryUrl("events", entryContext, { event: event.id });
+    if (lineEntryAvailable) event.browserHref = scopedPath("/register", clinic, clinicId, { event: event.id });
+  }
   const content = normalizeBrandPageContent(settings.brand_page_content, settings.brand_page_template);
-  const booking = settings.public_booking_enabled ? scopedPath("/book/browser", clinic, clinicId) : null;
-  const registration = settings.events_enabled && settings.public_registration_enabled ? scopedPath("/register", clinic, clinicId) : null;
-  const membership = settings.memberships_enabled ? scopedPath("/membership", clinic, clinicId) : null;
+  const booking = settings.public_booking_enabled ? publicCustomerEntryUrl("booking", entryContext) : null;
+  const registration = settings.events_enabled && settings.public_registration_enabled ? publicCustomerEntryUrl("events", entryContext) : null;
+  const membership = settings.memberships_enabled ? publicCustomerEntryUrl("membership", entryContext) : null;
   const records = scopedPath("/my", clinic, clinicId);
   const learning = settings.brand_page_template === "education" && settings.events_enabled
     ? scopedPath("/learn", clinic, clinicId)

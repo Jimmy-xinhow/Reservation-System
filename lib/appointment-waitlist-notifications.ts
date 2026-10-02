@@ -1,8 +1,11 @@
+import type { CronRecordScope } from "@/lib/cron-scope";
+import { deliveryError } from "@/lib/delivery-error";
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { buildWaitlistStatusFlex } from "@/lib/line-ui-templates";
 import { customerEntryUrl } from "@/lib/customer-entry";
@@ -41,18 +44,31 @@ export interface AppointmentWaitlistNotificationSummary {
 export async function processAppointmentWaitlistNotificationQueue(
   service: SupabaseClient,
   limit = 50,
+  scope?: CronRecordScope,
 ): Promise<AppointmentWaitlistNotificationSummary> {
-  const { data, error } = await service.rpc("claim_appointment_waitlist_notifications", { p_limit: limit });
+  if (scope && scope.recordIds.length === 0) return { claimed: 0, sent: 0, failed: 0, skipped: 0 };
+  const { data, error } = scope
+    ? await service.rpc("claim_appointment_waitlist_notifications_for_scope", { p_clinic_id: scope.clinicId, p_waitlist_ids: scope.recordIds, p_limit: limit })
+    : await service.rpc("claim_appointment_waitlist_notifications", { p_limit: limit });
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as ClaimedNotification[];
   const summary: AppointmentWaitlistNotificationSummary = { claimed: rows.length, sent: 0, failed: 0, skipped: 0 };
   const flexDesignsByClinic = new Map<string, unknown>();
 
   for (const row of rows) {
+    let deliveryAttempted = false;
     try {
       if (row.channel === "line") {
         if (!row.line_user_id) {
           await finish(service, row.log_id, "skipped", "customer has no LINE identity");
+          summary.skipped += 1;
+          continue;
+        }
+        const { data: waitlist, error: waitlistError } = await service.from("appointment_waitlist_entries")
+          .select("patient_id").eq("id", row.waitlist_id).eq("clinic_id", row.clinic_id).maybeSingle();
+        if (waitlistError) throw new Error(waitlistError.message);
+        if (!waitlist?.patient_id || !(await isVerifiedLineRecipient(service, row.clinic_id, row.line_user_id, String(waitlist.patient_id)))) {
+          await finish(service, row.log_id, "skipped", "LINE recipient identity is not verified for this brand");
           summary.skipped += 1;
           continue;
         }
@@ -78,6 +94,7 @@ export async function processAppointmentWaitlistNotificationQueue(
           if (flexSettingsError) throw new Error(flexSettingsError.message);
           flexDesignsByClinic.set(row.clinic_id, flexSettings?.line_flex_designs ?? {});
         }
+        deliveryAttempted = true;
         await pushMessages(row.line_user_id, [buildWaitlistStatusFlex({
           kind: row.kind,
           clinicName: row.clinic_name,
@@ -105,14 +122,16 @@ export async function processAppointmentWaitlistNotificationQueue(
         const config = await emailConfigForClinic(row.clinic_id);
         if (!config) throw new Error("brand email credentials are unavailable");
         const text = waitlistText(row, null);
+        deliveryAttempted = true;
         await sendEmail(config, row.email, waitlistSubject(row.kind), `<div style="font-family:sans-serif;max-width:520px;margin:auto;padding:20px"><h2>${escapeHtml(waitlistSubject(row.kind))}</h2><p style="white-space:pre-line">${escapeHtml(text)}</p></div>`);
       }
       await finish(service, row.log_id, "sent");
       summary.sent += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "waitlist notification failed";
-      console.error("Appointment waitlist notification failed", { logId: row.log_id, clinicId: row.clinic_id, error: message });
-      await finish(service, row.log_id, "failed", message).catch(() => undefined);
+      console.error("Appointment waitlist notification failed", { logId: row.log_id, clinicId: row.clinic_id, category: deliveryError(message) });
+      // Only failures before the provider call are safe to retry.
+      if (!deliveryAttempted || isEmailProviderRejected(error)) await finish(service, row.log_id, "failed", message).catch(() => undefined);
       summary.failed += 1;
     }
   }
@@ -128,7 +147,7 @@ async function finish(
   const { error: finishError } = await service.rpc("finish_appointment_waitlist_notification", {
     p_log_id: logId,
     p_status: status,
-    p_error: error,
+    p_error: status === "failed" ? deliveryError(error) : error,
   });
   if (finishError) throw new Error(finishError.message);
 }

@@ -1,3 +1,5 @@
+
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceAction, updateServiceAction, toggleServiceAction, deleteServiceAction } from "../service-actions";
@@ -11,13 +13,10 @@ export const dynamic = "force-dynamic";
 export default async function ServicesPage() {
   const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
-  const [{ data, error }, { data: addonData, error: addonError }] = await Promise.all([
-    supabase.from("services").select("id, name, category, description, price, duration_minutes, buffer_minutes, booking_target, booking_fields, active").eq("clinic_id", clinicId).order("created_at"),
-    supabase.from("service_addons").select("id, service_id, name, description, duration_minutes, price, active").eq("clinic_id", clinicId).order("sort_order").order("created_at"),
+  const [services, addons] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("services").select("id, name, category, description, price, duration_minutes, buffer_minutes, booking_target, booking_fields, active").eq("clinic_id", clinicId).order("created_at").order("id").range(from, to)) as Promise<ServiceItem[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("service_addons").select("id, service_id, name, description, duration_minutes, price, active").eq("clinic_id", clinicId).order("sort_order").order("created_at").order("id").range(from, to)) as Promise<ServiceAddon[]>,
   ]);
-  if (error || addonError) throw new Error(error?.message ?? addonError?.message ?? "讀取服務設定失敗");
-  const services = (data ?? []) as ServiceItem[];
-  const addons = (addonData ?? []) as ServiceAddon[];
   const activeServices = services.filter((service) => service.active);
   const resourceOnlyServices = activeServices.filter((service) => service.booking_target === "resource_only");
   const activeAddons = addons.filter((addon) => addon.active);

@@ -55,6 +55,7 @@ interface LineTemplateGalleryProps {
   initialTemplateKey?: string;
   brandPrimaryColor: string | null;
   brandAccentColor: string | null;
+  lineEnabled: boolean;
 }
 
 const DEFAULT_STYLE: Partial<Record<LineFlexTemplateKey, LineFlexStyleKey>> = {
@@ -86,7 +87,7 @@ function createDesign(template: LineUiTemplateDefinition, primary: string | null
   };
 }
 
-export default function LineTemplateGallery({ clinicName, initialDesigns, initialTemplateKey, brandPrimaryColor, brandAccentColor }: LineTemplateGalleryProps) {
+export default function LineTemplateGallery({ clinicName, initialDesigns, initialTemplateKey, brandPrimaryColor, brandAccentColor, lineEnabled }: LineTemplateGalleryProps) {
   const [category, setCategory] = useState<"all" | LineUiCategory>("all");
   const savedDesigns = useMemo(() => parseLineFlexDesignSettings(initialDesigns), [initialDesigns]);
   const firstTemplateKey = isLineFlexTemplateKey(initialTemplateKey) ? initialTemplateKey : "welcome";
@@ -165,6 +166,7 @@ export default function LineTemplateGallery({ clinicName, initialDesigns, initia
         onUploadImage={uploadImage}
         uploading={uploading}
         uploadError={uploadError}
+        lineEnabled={lineEnabled}
       />
     </section>
   );
@@ -221,6 +223,7 @@ function FlexDesignEditor({
   onUploadImage,
   uploading,
   uploadError,
+  lineEnabled,
 }: {
   template: LineUiTemplateDefinition;
   design: LineFlexDesignConfig;
@@ -231,6 +234,7 @@ function FlexDesignEditor({
   onUploadImage: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   uploading: boolean;
   uploadError: string;
+  lineEnabled: boolean;
 }) {
   const kind = PREVIEW_KIND[template.key] ?? "appointment";
   return (
@@ -325,7 +329,7 @@ function FlexDesignEditor({
 
           <div className="line-flex-savebar">
             <button type="submit" className="btn btn-secondary min-h-11">儲存品牌草稿</button>
-            <button type="submit" formAction={publishLineFlexDesignAction} className="btn btn-primary min-h-11">發布到實際 LINE</button>
+            <button type="submit" formAction={publishLineFlexDesignAction} disabled={!lineEnabled} className="btn btn-primary min-h-11">發布到實際 LINE</button>
           </div>
         </form>
       </div>

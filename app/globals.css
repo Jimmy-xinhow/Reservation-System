@@ -474,10 +474,10 @@ body {
 .admin-setup-list { display: grid; }
 .admin-setup-row {
   display: grid;
-  grid-template-columns: 32px minmax(150px, .72fr) minmax(240px, 1.28fr) auto;
+  grid-template-columns: 32px minmax(0, .72fr) minmax(0, 1.28fr) auto;
   align-items: center;
   gap: 12px;
-  min-height: 58px;
+  min-height: 64px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--admin-border);
   color: #27332e;
@@ -500,9 +500,9 @@ body {
 .admin-setup-row[data-status="done"] .admin-setup-row-number { border-color: #288066; background: #288066; color: #fff; }
 .admin-setup-row[data-status="warning"] .admin-setup-row-number { border-color: #bf7b23; color: #9a5b13; }
 .admin-setup-row[data-status="blocked"] .admin-setup-row-number { border-color: #ba4a42; color: #9a312b; }
-.admin-setup-row strong { display: block; font-size: 13px; font-variation-settings: "wght" 650; }
-.admin-setup-row p { color: #66716c; font-size: 11px; line-height: 1.5; }
-.admin-setup-row-state { font-size: 11px; font-variation-settings: "wght" 650; white-space: nowrap; }
+.admin-setup-row strong { display: block; font-size: 14px; font-variation-settings: "wght" 650; }
+.admin-setup-row p { color: #66716c; font-size: 13px; line-height: 1.5; }
+.admin-setup-row-state { font-size: 12px; font-variation-settings: "wght" 650; white-space: nowrap; }
 .admin-setup-row[data-status="done"] .admin-setup-row-state { color: #26705b; }
 .admin-setup-row[data-status="warning"] .admin-setup-row-state { color: #9a5b13; }
 .admin-setup-row[data-status="blocked"] .admin-setup-row-state { color: #9a312b; }

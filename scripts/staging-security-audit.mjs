@@ -14,6 +14,9 @@ if (environmentName.toLowerCase() !== "staging") {
   console.error(`[security-audit] 僅允許 staging；目前環境為 ${environmentName || "unknown"}`);
   process.exit(1);
 }
+if (new URL(supabaseUrl).hostname !== "ongjsegewpnbkqugrpom.supabase.co") {
+  throw new Error("Refusing to run against an unpinned Supabase project");
+}
 
 const service = createClient(supabaseUrl, serviceKey, {
   auth: { persistSession: false, autoRefreshToken: false },
@@ -30,6 +33,7 @@ let fixtureClinicId = null;
 let fixtureUserId = null;
 let fixtureAdminUserId = null;
 let sourcePatientId = null;
+let sourceClinicId = null;
 let fixturePatientId = null;
 let failed = false;
 
@@ -61,8 +65,17 @@ async function cleanup() {
   }
 
   if (sourcePatientId) await remove("source patient", service.from("patients").delete().eq("id", sourcePatientId));
+  if (sourceClinicId) {
+    await remove("source attendance settings", service.from("attendance_settings").delete().eq("clinic_id", sourceClinicId));
+    await remove("source activation metrics", service.from("clinic_activation_metrics").delete().eq("clinic_id", sourceClinicId));
+    await remove("source LINE channel", service.from("clinic_line_channels").delete().eq("clinic_id", sourceClinicId));
+    await remove("source entitlement", service.from("brand_entitlements").delete().eq("clinic_id", sourceClinicId));
+    await remove("source settings", service.from("clinic_settings").delete().eq("clinic_id", sourceClinicId));
+    await remove("source clinic", service.from("clinics").delete().eq("id", sourceClinicId));
+  }
   if (fixturePatientId) await remove("fixture patient", service.from("patients").delete().eq("id", fixturePatientId));
   if (fixtureClinicId) {
+    await remove("fixture attendance settings", service.from("attendance_settings").delete().eq("clinic_id", fixtureClinicId));
     await remove("fixture schedules", service.from("schedule_templates").delete().eq("clinic_id", fixtureClinicId));
     await remove("fixture services", service.from("services").delete().eq("clinic_id", fixtureClinicId));
     await remove("fixture providers", service.from("doctors").delete().eq("clinic_id", fixtureClinicId));
@@ -70,6 +83,7 @@ async function cleanup() {
     await remove("fixture LINE channel", service.from("clinic_line_channels").delete().eq("clinic_id", fixtureClinicId));
     await remove("fixture entitlement", service.from("brand_entitlements").delete().eq("clinic_id", fixtureClinicId));
     await remove("fixture settings", service.from("clinic_settings").delete().eq("clinic_id", fixtureClinicId));
+    await remove("fixture activation metrics", service.from("clinic_activation_metrics").delete().eq("clinic_id", fixtureClinicId));
     await remove("fixture clinic", service.from("clinics").delete().eq("id", fixtureClinicId));
   }
   if (fixtureUserId) {
@@ -84,12 +98,11 @@ async function cleanup() {
 }
 
 try {
-  const sourceClinics = await must(
-    "read source clinic",
-    service.from("clinics").select("id").eq("active", true).limit(1),
+  const sourceClinic = await must(
+    "create isolated source clinic",
+    service.from("clinics").insert({ name: "QA RLS Source Brand", slug: `${qaSlug}-source`, active: true }).select("id").single(),
   );
-  const sourceClinicId = sourceClinics?.[0]?.id;
-  if (!sourceClinicId) throw new Error("staging 沒有可用的來源品牌");
+  sourceClinicId = sourceClinic.id;
 
   const sourcePatient = await must(
     "create source patient",

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { requireOperator } from "@/lib/admin";
 import { fail, ok } from "@/lib/http";
 import { isAdminModuleEnabled } from "@/lib/admin-modules";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,19 +19,21 @@ export async function GET(request: NextRequest) {
     if (sessionId && !/^[0-9a-f-]{36}$/i.test(sessionId)) return fail("場次識別碼不正確");
     const start = new Date(`${date}T00:00:00+08:00`).toISOString();
     const end = new Date(`${date}T23:59:59+08:00`).toISOString();
-    let query = member.supabase.from("registrations")
-      .select("id, event_id, session_id, registration_no, status, name, phone, events(title), event_sessions!inner(name, start_at, end_at)")
-      .eq("clinic_id", member.clinicId)
-      .in("status", ["confirmed", "attended", "no_show"])
-      .gte("event_sessions.start_at", start)
-      .lte("event_sessions.start_at", end)
-      .order("created_at", { ascending: true })
-      .limit(200);
-    if (eventId) query = query.eq("event_id", eventId);
-    if (sessionId) query = query.eq("session_id", sessionId);
-    const { data, error } = await query;
-    if (error) return fail(error.message, 500);
-    return ok(data ?? []);
+    const rows = await fetchAllSupabasePages((from, to) => {
+      let query = member.supabase.from("registrations")
+        .select("id, event_id, session_id, registration_no, status, name, events(title), event_sessions!inner(name, start_at)")
+        .eq("clinic_id", member.clinicId)
+        .in("status", ["confirmed", "attended", "no_show"])
+        .gte("event_sessions.start_at", start)
+        .lte("event_sessions.start_at", end)
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to);
+      if (eventId) query = query.eq("event_id", eventId);
+      if (sessionId) query = query.eq("session_id", sessionId);
+      return query;
+    });
+    return ok(rows);
   } catch (error) {
     return fail(error instanceof Error ? error.message : "載入報到名單失敗", 500);
   }

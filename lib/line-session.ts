@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { errorCategory } from "./error-category";
 
 export type LineCustomerIntent = "booking" | "support" | "events" | "membership";
 
@@ -37,7 +38,10 @@ export async function finishLineWebhookEvent(
   error?: unknown,
 ): Promise<void> {
   if (!eventId?.trim()) return;
-  const message = error instanceof Error ? error.message.slice(0, 1000) : error ? String(error).slice(0, 1000) : null;
+  const failed = error !== undefined && error !== null;
+  const message = failed
+    ? `webhook_error:${errorCategory(error instanceof Error ? error.message : typeof error === "string" ? error : "")}`
+    : null;
   const { error: updateError } = await service
     .from("line_webhook_events")
     .update({

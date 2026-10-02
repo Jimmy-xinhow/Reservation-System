@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
 import { requireSystemPermission } from "@/lib/platform";
@@ -11,8 +13,8 @@ export async function startTrialObservationAction(fd: FormData): Promise<void> {
   const clinicId = value(fd, "clinic_id");
   const notes = value(fd, "notes");
   if (!clinicId) throw new Error("請選擇試用品牌");
-  const { error } = await createServiceClient().rpc("start_trial_brand_observation", { p_actor_user_id: actor.user.id, p_clinic_id: clinicId, p_notes: notes || null });
-  if (error) throw new Error(error.message.includes("three") ? "同時最多觀察三個試用品牌" : `啟動觀察失敗：${error.message}`);
+  const { error } = await adminQuery(createServiceClient().rpc("start_trial_brand_observation", { p_actor_user_id: actor.user.id, p_clinic_id: clinicId, p_notes: notes || null }));
+  if (error) throw new Error(error.message.includes("three") ? "同時最多觀察三個試用品牌" : `啟動觀察失敗：${adminErrorMessage(error)}`);
   revalidatePath("/admin/platform/reports");
 }
 
@@ -20,8 +22,8 @@ export async function completeTrialObservationAction(fd: FormData): Promise<void
   const actor = await requireSystemPermission("brands.manage");
   const observationId = value(fd, "observation_id");
   if (!observationId) throw new Error("缺少觀察識別碼");
-  const { error } = await createServiceClient().rpc("complete_trial_brand_observation", { p_actor_user_id: actor.user.id, p_observation_id: observationId });
-  if (error) throw new Error(`完成觀察失敗：${error.message}`);
+  const { error } = await adminQuery(createServiceClient().rpc("complete_trial_brand_observation", { p_actor_user_id: actor.user.id, p_observation_id: observationId }));
+  if (error) throw new Error(`完成觀察失敗：${adminErrorMessage(error)}`);
   revalidatePath("/admin/platform/reports");
 }
 
@@ -38,7 +40,7 @@ export async function updateFeatureInterestAction(fd: FormData): Promise<void> {
   const willingness = willingnessRaw ? Number.parseInt(willingnessRaw, 10) : null;
   if (willingness !== null && (!Number.isInteger(willingness) || willingness < 0 || willingness > 1_000_000)) throw new Error("月付意願金額不正確");
   if (note.length > 1000) throw new Error("備註不可超過 1000 字");
-  const { error } = await createServiceClient().from("feature_interest_signals").upsert({ clinic_id: clinicId, feature_key: featureKey, interest, willingness_monthly: willingness, note: note || null, recorded_by: actor.user.id, updated_at: new Date().toISOString() }, { onConflict: "clinic_id,feature_key" });
-  if (error) throw new Error(`保存付費意願失敗：${error.message}`);
+  const { error } = await adminQuery(createServiceClient().from("feature_interest_signals").upsert({ clinic_id: clinicId, feature_key: featureKey, interest, willingness_monthly: willingness, note: note || null, recorded_by: actor.user.id, updated_at: new Date().toISOString() }, { onConflict: "clinic_id,feature_key" }));
+  if (error) throw new Error(`保存付費意願失敗：${adminErrorMessage(error)}`);
   revalidatePath("/admin/platform/reports");
 }

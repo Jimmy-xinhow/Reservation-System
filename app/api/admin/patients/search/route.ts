@@ -44,26 +44,25 @@ export async function GET(req: NextRequest) {
     .or(orParts.join(","))
     .order("name")
     .limit(10);
-  if (error) return fail(error.message, 500);
+  if (error) return fail("讀取顧客失敗，請重新整理後再試", 500);
 
   const hits: Hit[] = data ?? [];
 
-  // MMDD:PostgREST 無法對 date 抽月/日,改在此處掃描生日後合併。
+  // 使用既有的品牌＋生日索引，避免只掃到前 1,000 位有生日的顧客。
   if (isMonthDay) {
-    const suffix = `-${mmdd.slice(0, 2)}-${mmdd.slice(2, 4)}`; // -MM-DD
     const { data: withBday, error: bErr } = await supabase
       .from("patients")
       .select("id, name, phone, birthday")
       .eq("clinic_id", clinicId)
       .eq("active", true)
-      .not("birthday", "is", null)
+      .eq("birthday_mmdd", mmdd)
       .order("name")
-      .limit(1000);
-    if (bErr) return fail(bErr.message, 500);
+      .limit(10);
+    if (bErr) return fail("讀取顧客失敗，請重新整理後再試", 500);
 
     const seen = new Set(hits.map((h) => h.id));
     for (const p of (withBday ?? []) as Hit[]) {
-      if (p.birthday?.endsWith(suffix) && !seen.has(p.id)) {
+      if (!seen.has(p.id)) {
         seen.add(p.id);
         hits.push(p);
       }

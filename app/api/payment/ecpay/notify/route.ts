@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
     const svc = createServiceClient();
     const settings = await getPaymentSettingsByMerchant(svc, "ecpay", merchantId);
     if (!settings || !verifyEcpay(fields, settings)) return response("0|SIGNATURE_ERROR", 400);
+    // Provider back-office delivery probes are not payments, even with a valid MAC.
+    if (fields.SimulatePaid === "1") return response("1|OK");
 
     const merchantOrderNo = fields.MerchantTradeNo ?? "";
     const tradeNo = fields.TradeNo ?? null;

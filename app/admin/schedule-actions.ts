@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/admin";
@@ -24,22 +26,22 @@ export async function createTemplateAction(fd: FormData) {
   const serviceId = str(fd, "service_id");
   if (!doctorId && !serviceId) throw new Error("請指定服務提供者或服務");
   if (doctorId) {
-    const { data: doctor, error: doctorError } = await supabase
+    const { data: doctor, error: doctorError } = await adminQuery(supabase
       .from("doctors")
       .select("id")
       .eq("id", doctorId)
       .eq("clinic_id", clinicId)
       .eq("active", true)
-      .maybeSingle();
-    if (doctorError) throw new Error(doctorError.message);
+      .maybeSingle());
+    if (doctorError) throw new Error(adminErrorMessage(doctorError));
     if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
   }
   if (serviceId) {
-    const { data: service, error: serviceError } = await supabase.from("services").select("id").eq("id", serviceId).eq("clinic_id", clinicId).eq("active", true).maybeSingle();
-    if (serviceError) throw new Error(serviceError.message);
+    const { data: service, error: serviceError } = await adminQuery(supabase.from("services").select("id").eq("id", serviceId).eq("clinic_id", clinicId).eq("active", true).maybeSingle());
+    if (serviceError) throw new Error(adminErrorMessage(serviceError));
     if (!service) throw new Error("服務不屬於目前品牌或已停用");
   }
-  const { error } = await supabase.from("schedule_templates").insert({
+  const { error } = await adminQuery(supabase.from("schedule_templates").insert({
     clinic_id: clinicId,
     doctor_id: doctorId || null,
     service_id: serviceId || null,
@@ -49,8 +51,8 @@ export async function createTemplateAction(fd: FormData) {
     slot_minutes: intOr(fd, "slot_minutes", 15),
     capacity: intOr(fd, "capacity", 1),
     active: true,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/schedules");
 }
 
@@ -61,23 +63,23 @@ export async function updateTemplateAction(fd: FormData) {
   const serviceId = str(fd, "service_id");
   if (!doctorId && !serviceId) throw new Error("請指定服務提供者或服務");
   if (doctorId) {
-    const { data: doctor, error: doctorError } = await supabase
+    const { data: doctor, error: doctorError } = await adminQuery(supabase
       .from("doctors")
       .select("id")
       .eq("id", doctorId)
       .eq("clinic_id", clinicId)
       .eq("active", true)
-      .maybeSingle();
-    if (doctorError) throw new Error(doctorError.message);
+      .maybeSingle());
+    if (doctorError) throw new Error(adminErrorMessage(doctorError));
     if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
   }
   if (serviceId) {
-    const { data: service, error: serviceError } = await supabase.from("services").select("id").eq("id", serviceId).eq("clinic_id", clinicId).eq("active", true).maybeSingle();
-    if (serviceError) throw new Error(serviceError.message);
+    const { data: service, error: serviceError } = await adminQuery(supabase.from("services").select("id").eq("id", serviceId).eq("clinic_id", clinicId).eq("active", true).maybeSingle());
+    if (serviceError) throw new Error(adminErrorMessage(serviceError));
     if (!service) throw new Error("服務不屬於目前品牌或已停用");
   }
   if (!id) throw new Error("缺少 id");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("schedule_templates")
     .update({
       doctor_id: doctorId || null,
@@ -89,8 +91,8 @@ export async function updateTemplateAction(fd: FormData) {
       capacity: intOr(fd, "capacity", 1),
     })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/schedules");
 }
 
@@ -98,23 +100,23 @@ export async function toggleTemplateAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("schedule_templates")
     .update({ active: !active })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/schedules");
 }
 
 export async function deleteTemplateAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("schedule_templates")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", clinicId);
+    .eq("clinic_id", clinicId));
   if (error) throw new Error("此服務時段已有預約，無法刪除，請改為停用。");
   revalidatePath("/admin/schedules");
 }
@@ -130,12 +132,12 @@ export async function createExceptionAction(fd: FormData) {
 
   // 休診某門診段且未選日期 → 永久停用該門診段(等同門診表停用)
   if (isClosed && tplId && !date) {
-    const { error } = await supabase
+    const { error } = await adminQuery(supabase
       .from("schedule_templates")
       .update({ active: false })
       .eq("id", tplId)
-      .eq("clinic_id", clinicId);
-    if (error) throw new Error(error.message);
+      .eq("clinic_id", clinicId));
+    if (error) throw new Error(adminErrorMessage(error));
     revalidatePath("/admin/exceptions");
     revalidatePath("/admin/schedules");
     return;
@@ -146,25 +148,25 @@ export async function createExceptionAction(fd: FormData) {
   const serviceId = str(fd, "service_id");
   if (!doctorId && !serviceId) throw new Error("請指定服務提供者或服務");
   if (doctorId) {
-    const { data: doctor, error: doctorError } = await supabase
+    const { data: doctor, error: doctorError } = await adminQuery(supabase
       .from("doctors")
       .select("id")
       .eq("id", doctorId)
       .eq("clinic_id", clinicId)
       .eq("active", true)
-      .maybeSingle();
-    if (doctorError) throw new Error(doctorError.message);
+      .maybeSingle());
+    if (doctorError) throw new Error(adminErrorMessage(doctorError));
     if (!doctor) throw new Error("服務提供者不屬於目前品牌或已停用");
   }
   if (serviceId) {
-    const { data: service, error: serviceError } = await supabase
+    const { data: service, error: serviceError } = await adminQuery(supabase
       .from("services")
       .select("id")
       .eq("id", serviceId)
       .eq("clinic_id", clinicId)
       .eq("active", true)
-      .maybeSingle();
-    if (serviceError) throw new Error(serviceError.message);
+      .maybeSingle());
+    if (serviceError) throw new Error(adminErrorMessage(serviceError));
     if (!service) throw new Error("服務不屬於目前品牌或已停用");
   }
 
@@ -187,33 +189,33 @@ export async function createExceptionAction(fd: FormData) {
     row.slot_minutes = intOr(fd, "slot_minutes", 15);
     row.capacity = intOr(fd, "capacity", 1);
   }
-  const { error } = await supabase.from("schedule_exceptions").insert(row);
-  if (error) throw new Error(error.message);
+  const { error } = await adminQuery(supabase.from("schedule_exceptions").insert(row));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/exceptions");
 }
 
 export async function deleteExceptionAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("schedule_exceptions")
     .delete()
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/exceptions");
 }
 
 // ── 服務提供者(服務排程可選)────────────────────────────────
 export async function createDoctorAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
-  const { error } = await supabase.from("doctors").insert({
+  const { error } = await adminQuery(supabase.from("doctors").insert({
     clinic_id: clinicId,
     name: str(fd, "name"),
     specialty: str(fd, "specialty") || null,
     active: true,
-  });
-  if (error) throw new Error(error.message);
+  }));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/schedules");
 }
 
@@ -222,12 +224,12 @@ export async function updateDoctorAction(fd: FormData) {
   const id = str(fd, "id");
   const name = str(fd, "name");
   if (!id || !name) throw new Error("缺少服務提供者或姓名");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("doctors")
     .update({ name, specialty: str(fd, "specialty") || null })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/schedules");
 }
 
@@ -235,11 +237,11 @@ export async function toggleDoctorAction(fd: FormData) {
   const { supabase, clinicId } = await requireAdmin();
   const id = str(fd, "id");
   const active = bool(fd, "active");
-  const { error } = await supabase
+  const { error } = await adminQuery(supabase
     .from("doctors")
     .update({ active: !active })
     .eq("id", id)
-    .eq("clinic_id", clinicId);
-  if (error) throw new Error(error.message);
+    .eq("clinic_id", clinicId));
+  if (error) throw new Error(adminErrorMessage(error));
   revalidatePath("/admin/schedules");
 }

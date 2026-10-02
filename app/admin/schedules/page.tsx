@@ -1,4 +1,5 @@
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { requireAdmin } from "@/lib/admin";
 import {
   createTemplateAction,
@@ -41,7 +42,7 @@ interface Template {
 export default async function SchedulesPage() {
   const { clinicId } = await requireAdmin();
   const supabase = await createSupabaseServer();
-  const [{ data: doctors }, { data: templates }, { data: services }] = await Promise.all([
+  const [{ data: doctors, error: doctorsError }, { data: templates, error: templatesError }, { data: services, error: servicesError }] = await adminQuery(Promise.all([
     supabase.from("doctors").select("id, name, specialty, active").eq("clinic_id", clinicId).order("name"),
     supabase
       .from("schedule_templates")
@@ -50,7 +51,9 @@ export default async function SchedulesPage() {
       .order("weekday")
       .order("start_time"),
     supabase.from("services").select("id, name, active").eq("clinic_id", clinicId).order("name"),
-  ]);
+  ]));
+  const readError = doctorsError ?? templatesError ?? servicesError;
+  if (readError) throw new Error(adminErrorMessage(readError));
 
   const docs = (doctors ?? []) as Doctor[];
   const tpls = (templates ?? []) as Template[];

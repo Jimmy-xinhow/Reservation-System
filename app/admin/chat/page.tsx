@@ -22,7 +22,7 @@ export default async function ChatPage() {
         <div>
           <p className="eyebrow">顧客訊息</p>
           <h1 className="admin-page-title">線上客服</h1>
-          <p className="admin-page-description">集中回覆顧客從預約頁送出的訊息。這是平台內對話，不會占用 LINE 主動推播額度。</p>
+          <p className="admin-page-description">集中查看顧客訊息；後台回覆會透過品牌 LINE 官方帳號推播，使用品牌的 LINE 訊息額度。</p>
         </div>
       </header>
       <ChatConsole initialThreads={threads} />

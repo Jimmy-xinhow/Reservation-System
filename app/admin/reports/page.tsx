@@ -1,3 +1,4 @@
+import { reportRange } from "@/lib/report-range";
 import Link from "next/link";
 import { requireNonProvider } from "@/lib/admin";
 import { formatDateTime } from "@/lib/slots";
@@ -41,10 +42,6 @@ function one<T>(value: Relation<T>): T | null {
   return Array.isArray(value) ? value[0] ?? null : value;
 }
 
-function todayTaipei(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
-}
-
 function shiftDate(date: string, days: number): string {
   const value = new Date(`${date}T00:00:00+08:00`);
   value.setDate(value.getDate() + days);
@@ -59,13 +56,6 @@ function recentDateSeries(from: string, to: string, limit = 60): string[] {
     cursor = shiftDate(cursor, -1);
   }
   return result;
-}
-
-function rangeIso(from: string, to: string): { start: string; end: string } {
-  return {
-    start: new Date(`${from}T00:00:00+08:00`).toISOString(),
-    end: new Date(`${to}T23:59:59.999+08:00`).toISOString(),
-  };
 }
 
 function percent(value: number, total: number): string {
@@ -119,12 +109,9 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
   const { supabase, clinicId, clinicName } = await requireNonProvider();
   const service = createServiceClient();
   const params = await searchParams;
-  const today = todayTaipei();
-  const from = params.from && /^\d{4}-\d{2}-\d{2}$/.test(params.from) ? params.from : shiftDate(today, -29);
-  const to = params.to && /^\d{4}-\d{2}-\d{2}$/.test(params.to) ? params.to : today;
-  const normalizedFrom = from <= to ? from : to;
-  const normalizedTo = from <= to ? to : from;
-  const range = rangeIso(normalizedFrom, normalizedTo);
+  const range = reportRange(params.from, params.to);
+  const normalizedFrom = range.startDate;
+  const normalizedTo = range.endDate;
   const [appointments, registrations, payments, salesPayments, deliveries, funnelRows, waitlistResult, promotedResult] = await Promise.all([
     fetchAllSupabasePages((from, to) => supabase.from("appointments").select("start_at, status, membership_id, source, doctors(name), services(name)").eq("clinic_id", clinicId).gte("start_at", range.start).lte("start_at", range.end).order("start_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => supabase.from("registrations").select("created_at, status, payment_status, amount, discount_amount, membership_id, events(title), event_sessions(name), event_ticket_types(name)").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
@@ -133,10 +120,10 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
     fetchAllSupabasePages((from, to) => supabase.from("crm_delivery_logs").select("status").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     fetchAllSupabasePages((from, to) => service.from("funnel_events").select("event_name, source").eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end).order("created_at").order("id").range(from, to)),
     supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).gte("created_at", range.start).lte("created_at", range.end),
-    supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("status", "promoted").gte("updated_at", range.start).lte("updated_at", range.end),
+    supabase.from("waitlist_entries").select("id", { count: "exact", head: true }).eq("clinic_id", clinicId).eq("status", "promoted").gte("created_at", range.start).lte("created_at", range.end),
   ]);
   const error = waitlistResult.error ?? promotedResult.error;
-  if (error) throw new Error(error.message);
+  if (error || waitlistResult.count === null || promotedResult.count === null) throw new Error("報表資料讀取不完整，請重新載入後再試");
 
   const appointmentRows = appointments as AppointmentRow[];
   const registrationRows = registrations as RegistrationRow[];
@@ -215,7 +202,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
-        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">預約與報名摘要</h2><Line label="預約未到（分母：有效預約）" value={`${appointmentNoShow} / ${validAppointmentRows.length}`} /><Line label="報名未到（分母：有效報名）" value={`${registrationNoShow} / ${validRegistrationRows.length}`} /><Line label="報名報到完成" value={registrationAttended} /><Line label="候補筆數" value={waitlistResult.count ?? 0} /><Line label="候補填補率" value={percent(promotedResult.count ?? 0, waitlistResult.count ?? 0)} /><Line label="報名取消" value={registrationRows.filter((row) => row.status === "cancelled").length} /><Line label="套票扣抵" value={`${membershipUses} 次`} /></section>
+        <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">預約與報名摘要</h2><Line label="預約未到（分母：有效預約）" value={`${appointmentNoShow} / ${validAppointmentRows.length}`} /><Line label="報名未到（分母：有效報名）" value={`${registrationNoShow} / ${validRegistrationRows.length}`} /><Line label="報名報到完成" value={registrationAttended} /><Line label="候補筆數" value={waitlistResult.count ?? 0} /><Line label="候補填補率（本期建立候補）" value={percent(promotedResult.count ?? 0, waitlistResult.count ?? 0)} /><Line label="報名取消" value={registrationRows.filter((row) => row.status === "cancelled").length} /><Line label="套票扣抵" value={`${membershipUses} 次`} /></section>
         <section className="card space-y-3 p-5"><h2 className="font-semibold text-slate-900">付款、優惠與 CRM 摘要</h2><Line label="線上金流成功" value={`${paidPayments.length} 筆 · NT$${paidPayments.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="後台收款" value={`${salesPaymentRows.length} 筆 · NT$${salesPaymentRows.reduce((sum, row) => sum + Number(row.amount), 0).toLocaleString("zh-TW")}`} /><Line label="優惠折抵" value={`NT$${discountAmount.toLocaleString("zh-TW")}`} /><Line label="線上金流失敗／逾時" value={paymentRows.filter((row) => row.status === "failed" || row.status === "expired").length} /><Line label="行銷投遞成功" value={deliverySent} /><Line label="行銷失敗／跳過" value={`${deliveryFailed} / ${deliverySkipped}`} /></section>
       </div>
 

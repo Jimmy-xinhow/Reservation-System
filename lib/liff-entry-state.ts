@@ -25,3 +25,12 @@ export function liffEntryParam(search: string, key: string): string | null {
   const value = liffEntryParams(search).get(key)?.trim();
   return value || null;
 }
+
+/** A deep link selects a day only; current availability is always fetched again. */
+export function bookingEntryDate(source: URLSearchParams, today: string, maxDate: string): string | null {
+  const value = source.get("date")?.trim();
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value < today || value > maxDate) return null;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) return null;
+  return value;
+}

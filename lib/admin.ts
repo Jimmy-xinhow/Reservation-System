@@ -1,5 +1,6 @@
 import "server-only";
 
+import { readAccessData } from "./auth-boundary";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
@@ -69,11 +70,10 @@ const findMemberContext = cache(async function findMemberContext(): Promise<Memb
   const { supabase, user } = await getSupabaseServerAuth();
   if (!user) return null;
 
-  const { data, error } = await supabase
+  const data = await readAccessData(supabase
     .from("clinic_members")
     .select("clinic_id, role, access_type, permissions, clinics(name, active)")
-    .eq("user_id", user.id);
-  if (error) throw new Error(error.message);
+    .eq("user_id", user.id));
 
   const rows = (data ?? []) as Array<{
     clinic_id: string;
@@ -173,13 +173,12 @@ export async function requireBrandAdmin(): Promise<MemberContext> {
 /** Provider pages must use an explicit doctor assignment; an empty assignment is fail-closed. */
 export async function getAssignedDoctorIds(context: MemberContext): Promise<string[]> {
   if (!hasBrandPermission(context, "provider.assigned")) return [];
-  const { data, error } = await context.supabase
+  const data = await readAccessData(context.supabase
     .from("doctor_assignments")
     .select("doctor_id")
     .eq("clinic_id", context.clinicId)
     .eq("user_id", context.user.id)
-    .eq("active", true);
-  if (error) throw new Error(error.message);
+    .eq("active", true));
   return [...new Set((data ?? []).map((row) => row.doctor_id as string))];
 }
 

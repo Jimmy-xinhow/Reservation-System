@@ -4,6 +4,7 @@ import { fail, ok, rateLimitResponse } from "@/lib/http";
 import { resolvePublicClinicId } from "@/lib/public-brand";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { lineBrandTheme } from "@/lib/line-ui-templates";
+import { publicRequestOrigin } from "@/lib/public-origin";
 import { customerAppConfigFromContent, isBrandPageTemplate, normalizeBrandPageContent } from "@/lib/brand-page";
 
 export const runtime = "nodejs";
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
       intro: clinic.intro,
       line_basic_id: clinic.line_basic_id,
       liff_id: line.enabled ? line.liffId : null,
+      liff_endpoint_origin: publicRequestOrigin(request.nextUrl.origin),
       booking_mode: settings.booking_mode === "number" ? "number" : "time",
       brand_page_enabled: settings.brand_page_enabled === true,
       brand_logo_url: settings.brand_logo_url?.trim() || null,

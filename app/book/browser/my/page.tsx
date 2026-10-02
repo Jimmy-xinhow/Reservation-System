@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatDateSession, formatTime } from "@/lib/slots";
-import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemoveMatching } from "@/lib/browser-storage";
+import { CustomerApiError } from "@/lib/customer-api-error";
 import { Shell as CustomerAppShell } from "../../BookingFlowUi";
 
 interface Appointment {
@@ -38,8 +39,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
     | { ok: true; data: T }
     | { ok: false; error: string }
     | null;
-  if (!body) throw new Error("無法取得伺服器回應");
-  if (!body.ok) throw new Error(body.error);
+  if (!response.ok || !body?.ok) throw new CustomerApiError(body && !body.ok ? body.error : "無法取得伺服器回應", response.status);
   return body.data;
 }
 
@@ -91,7 +91,13 @@ export default function BrowserMyAppointmentsPage() {
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const actionLock = useRef(false);
+  const loadRequest = useRef(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const identityLock = useRef(false);
+
   const load = useCallback(async (browserToken: string) => {
+    const request = ++loadRequest.current;
     setLoading(true);
     setError(null);
     try {
@@ -100,13 +106,20 @@ export default function BrowserMyAppointmentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ browser_token: browserToken }),
       });
+      if (request !== loadRequest.current) return;
       setAppointments(data.appointments);
       setWaitlists(data.waitlists ?? []);
     } catch (loadError) {
-      setAppointments(null);
+      if (request !== loadRequest.current) return;
+      if (loadError instanceof CustomerApiError && [401, 403].includes(loadError.status)) {
+        safeLocalStorageRemoveMatching([customerTokenKey(), tokenKey(), "membership_browser_token"], browserToken);
+        setToken(null);
+        setAppointments(null);
+        setWaitlists([]);
+      }
       setError(loadError instanceof Error ? loadError.message : "載入預約失敗");
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
   }, []);
 
@@ -126,10 +139,12 @@ export default function BrowserMyAppointmentsPage() {
   }, [load]);
 
   async function identify() {
+    if (identityLock.current) return;
     if (!name.trim() || !phone.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(birthday)) {
       setError("請填寫姓名、電話與生日");
       return;
     }
+    identityLock.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -143,12 +158,28 @@ export default function BrowserMyAppointmentsPage() {
       await load(data.browser_token);
     } catch (identifyError) {
       setError(identifyError instanceof Error ? identifyError.message : "身分驗證失敗");
+    } finally {
+      identityLock.current = false;
       setLoading(false);
     }
   }
 
+  function reidentify() {
+    if (!token || actionLock.current || loading) return;
+    loadRequest.current += 1;
+    safeLocalStorageRemoveMatching([customerTokenKey(), tokenKey(), "membership_browser_token"], token);
+    setToken(null);
+    setAppointments(null);
+    setWaitlists([]);
+    setNotice(null);
+    setError(null);
+  }
+
   async function cancel(appointmentId: string) {
-    if (!token) return;
+    if (!token || actionLock.current) return;
+    actionLock.current = true;
+    loadRequest.current += 1;
+    setNotice(null);
     setWorking(appointmentId);
     setError(null);
     try {
@@ -157,30 +188,42 @@ export default function BrowserMyAppointmentsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ browser_token: token, appointment_id: appointmentId }),
       });
+      setAppointments((current) => current?.filter((item) => item.id !== appointmentId) ?? null);
+      setNotice("預約已取消。");
       await load(token);
     } catch (cancelError) {
       setError(cancelError instanceof Error ? cancelError.message : "取消失敗");
     } finally {
+      actionLock.current = false;
       setWorking(null);
     }
   }
 
   async function waitlistAction(waitlistId: string, action: "accept" | "cancel") {
-    if (!token) return;
+    if (!token || actionLock.current) return;
+    actionLock.current = true;
+    loadRequest.current += 1;
+    setNotice(null);
     setWorking(waitlistId);
     setError(null);
     try {
       await api("/api/booking/waitlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ browser_token: token, waitlist_id: waitlistId, action }) });
+      setWaitlists((current) => current.filter((item) => item.id !== waitlistId));
+      setNotice(action === "accept" ? "已接受候補名額，請查看預約及訂金狀態。" : "候補已取消。");
       await load(token);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : "候補操作失敗");
     } finally {
+      actionLock.current = false;
       setWorking(null);
     }
   }
 
   async function pay(appointmentId: string) {
-    if (!token) return;
+    if (!token || actionLock.current) return;
+    actionLock.current = true;
+    loadRequest.current += 1;
+    setNotice(null);
     setWorking(appointmentId);
     setError(null);
     try {
@@ -191,6 +234,7 @@ export default function BrowserMyAppointmentsPage() {
       document.body.appendChild(form); form.submit();
     } catch (paymentError) {
       setError(paymentError instanceof Error ? paymentError.message : "付款頁開啟失敗");
+      actionLock.current = false;
       setWorking(null);
     }
   }
@@ -210,12 +254,15 @@ export default function BrowserMyAppointmentsPage() {
           <button type="button" className="btn btn-primary w-full" disabled={loading} onClick={() => void identify()}>{loading ? "驗證中…" : "查看預約"}</button>
         </div>
       )}
+      {notice && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{notice}</p>}
+      {token && <button type="button" disabled={loading || working !== null} onClick={() => void load(token)} className="btn btn-secondary mb-4">重新整理預約</button>}
       {error && <p className="mb-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {token && error && <button type="button" disabled={loading || working !== null} onClick={reidentify} className="btn btn-secondary mb-4">重新驗證身分</button>}
       {token && loading && <p className="card p-6 text-center text-sm text-slate-500">載入中…</p>}
-      {token && !loading && waitlists.length > 0 && <section className="mb-4 space-y-3"><h2 className="px-1 text-sm font-medium text-slate-600">我的候補</h2>{waitlists.map((item) => <div key={item.id} className={`card space-y-3 p-4 ${item.status === "offered" ? "border-amber-300 bg-amber-50" : ""}`}><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-slate-900">{item.requested_start_at ? `${formatDateSession(item.requested_start_at)} ${formatTime(item.requested_start_at)}` : item.requested_date}</p><p className="mt-1 text-xs text-slate-500">{item.services?.name ?? item.doctors?.name ?? "預約候補"}</p></div><span className="badge bg-amber-100 text-amber-800">{item.status === "offered" ? "名額保留中" : `第 ${item.position} 位`}</span></div><div className="flex gap-2">{item.status === "offered" && <button type="button" className="btn btn-primary min-h-11 flex-1" disabled={working === item.id} onClick={() => void waitlistAction(item.id, "accept")}>接受名額</button>}<button type="button" className="btn btn-secondary min-h-11 flex-1" disabled={working === item.id} onClick={() => void waitlistAction(item.id, "cancel")}>取消候補</button></div></div>)}</section>}
+      {token && !loading && waitlists.length > 0 && <section className="mb-4 space-y-3"><h2 className="px-1 text-sm font-medium text-slate-600">我的候補</h2>{waitlists.map((item) => <div key={item.id} className={`card space-y-3 p-4 ${item.status === "offered" ? "border-amber-300 bg-amber-50" : ""}`}><div className="flex items-start justify-between gap-3"><div><p className="font-medium text-slate-900">{item.requested_start_at ? `${formatDateSession(item.requested_start_at)} ${formatTime(item.requested_start_at)}` : item.requested_date}</p><p className="mt-1 text-xs text-slate-500">{item.services?.name ?? item.doctors?.name ?? "預約候補"}</p></div><span className="badge bg-amber-100 text-amber-800">{item.status === "offered" ? "名額保留中" : `第 ${item.position} 位`}</span></div>{item.status === "offered" && <p className="text-sm text-amber-900">請於 {item.offer_expires_at ? `${formatDateSession(item.offer_expires_at)} ${formatTime(item.offer_expires_at)}` : "通知期限內"} 接受，逾時會自動提供給下一位。</p>}<div className="flex gap-2">{item.status === "offered" && <button type="button" className="btn btn-primary min-h-11 flex-1" disabled={working !== null} onClick={() => void waitlistAction(item.id, "accept")}>接受名額</button>}<button type="button" className="btn btn-secondary min-h-11 flex-1" disabled={working !== null} onClick={() => void waitlistAction(item.id, "cancel")}>取消候補</button></div></div>)}</section>}
       {token && !loading && appointments && (
         appointments.length === 0 ? (waitlists.length === 0 ? <p className="card p-6 text-center text-sm text-slate-500">目前沒有可管理的未來預約或候補。</p> : null) :
-          <div className="space-y-3">{appointments.map((appointment) => <div key={appointment.id} className="card flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center"><div><p className="font-medium text-slate-900">{formatDateSession(appointment.start_at)} {formatTime(appointment.start_at)}</p><p className="mt-1 text-xs text-slate-500">{appointment.doctors?.name ?? ""}{appointment.patients?.name ? `・${appointment.patients.name}` : ""}・{appointment.visit_type === "first" ? "首次服務" : "再次服務"}</p></div><div className="flex flex-wrap gap-2">{appointment.deposit_status === "pending" && <button type="button" className="btn btn-primary px-3 py-1.5 text-xs" disabled={working === appointment.id} onClick={() => void pay(appointment.id)}>{`付訂金 $${appointment.deposit_amount}`}</button>}{appointment.service_id && <Link href={scopePage(`/book/browser?service_id=${encodeURIComponent(appointment.service_id)}${appointment.doctor_id ? `&doctor_id=${encodeURIComponent(appointment.doctor_id)}` : ""}`)} className="btn btn-secondary px-3 py-1.5 text-xs">再次預約</Link>}<Link href={scopePage(`/book/browser/reschedule?appointment_id=${encodeURIComponent(appointment.id)}`)} className="btn btn-secondary px-3 py-1.5 text-xs">改期</Link><button type="button" className="btn btn-danger px-3 py-1.5 text-xs" disabled={working === appointment.id} onClick={() => void cancel(appointment.id)}>{working === appointment.id ? "取消中…" : "取消"}</button></div></div>)}</div>
+          <div className="space-y-3">{appointments.map((appointment) => <div key={appointment.id} className="card flex flex-col items-start justify-between gap-3 p-4 sm:flex-row sm:items-center"><div><p className="font-medium text-slate-900">{formatDateSession(appointment.start_at)} {formatTime(appointment.start_at)}</p><p className="mt-1 text-xs text-slate-500">{appointment.doctors?.name ?? ""}{appointment.patients?.name ? `・${appointment.patients.name}` : ""}・{appointment.visit_type === "first" ? "首次服務" : "再次服務"}</p></div><div className="flex flex-wrap gap-2">{appointment.deposit_status === "pending" && <button type="button" className="btn btn-primary px-3 py-1.5 text-xs" disabled={working !== null} onClick={() => void pay(appointment.id)}>{`付訂金 $${appointment.deposit_amount}`}</button>}{appointment.service_id && <Link href={scopePage(`/book/browser?service_id=${encodeURIComponent(appointment.service_id)}${appointment.doctor_id ? `&doctor_id=${encodeURIComponent(appointment.doctor_id)}` : ""}`)} className="btn btn-secondary px-3 py-1.5 text-xs">再次預約</Link>}<Link href={scopePage(`/book/browser/reschedule?appointment_id=${encodeURIComponent(appointment.id)}`)} className="btn btn-secondary px-3 py-1.5 text-xs">改期</Link><button type="button" className="btn btn-danger px-3 py-1.5 text-xs" disabled={working !== null} onClick={() => void cancel(appointment.id)}>{working === appointment.id ? "取消中…" : "取消"}</button></div></div>)}</div>
       )}
     </Shell>
   );

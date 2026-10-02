@@ -1,5 +1,6 @@
 import "server-only";
 
+import { ACCESS_UNAVAILABLE } from "./auth-boundary";
 import { redirect } from "next/navigation";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { getSupabaseServerAuth } from "./supabase-server";
@@ -41,7 +42,7 @@ function envPlatformAdminIds(): Set<string> {
 }
 
 function isMissingPlatformTable(error: { code?: string; message?: string } | null): boolean {
-  return error?.code === "42P01" || Boolean(error?.message?.includes("platform_admins"));
+  return error?.code === "42P01";
 }
 
 const findPlatformContext = cache(async function findPlatformContext(): Promise<PlatformContext | null> {
@@ -62,7 +63,7 @@ const findPlatformContext = cache(async function findPlatformContext(): Promise<
       .maybeSingle();
     if (error) {
       if (isMissingPlatformTable(error)) return null;
-      throw new Error(error.message);
+      throw new Error(ACCESS_UNAVAILABLE);
     }
     if (!data || (data.role !== "owner" && data.role !== "admin")) return null;
     return {
@@ -74,7 +75,7 @@ const findPlatformContext = cache(async function findPlatformContext(): Promise<
     };
   } catch (error) {
     if (error instanceof Error && /SUPABASE_SERVICE_ROLE_KEY|NEXT_PUBLIC_SUPABASE_URL/.test(error.message)) return null;
-    throw error;
+    throw new Error(ACCESS_UNAVAILABLE);
   }
 });
 

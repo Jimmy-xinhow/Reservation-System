@@ -99,7 +99,7 @@
   white-space: nowrap;
 }
 
-.secureState::before {
+.secureState[data-in-line="true"]::before {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 999px;

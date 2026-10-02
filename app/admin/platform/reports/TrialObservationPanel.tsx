@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { SubmitButton } from "@/components/SubmitButton";
 import { createServiceClient } from "@/lib/supabase";
 import { completeTrialObservationAction, startTrialObservationAction, updateFeatureInterestAction } from "./actions";
@@ -36,22 +38,22 @@ function duration(from: string, to: string | null): string {
 
 export async function TrialObservationPanel({ brands, canManage }: { brands: Brand[]; canManage: boolean }) {
   const service = createServiceClient();
-  const { data: observationData, error: observationError } = await service.from("trial_brand_observations").select("id, clinic_id, status, started_at, ended_at, notes").order("started_at", { ascending: false }).limit(30);
-  if (observationError) throw new Error(`讀取試用觀察失敗：${observationError.message}`);
+  const { data: observationData, error: observationError } = await adminQuery(service.from("trial_brand_observations").select("id, clinic_id, status, started_at, ended_at, notes").order("started_at", { ascending: false }).limit(30));
+  if (observationError) throw new Error(adminErrorMessage(`讀取試用觀察失敗：${observationError.message}`));
   const allObservations = (observationData ?? []) as Observation[];
   const active = allObservations.filter((item) => item.status === "active");
   const displayed = active.length > 0 ? active : allObservations.filter((item) => item.status === "completed").slice(0, 3);
   const ids = [...new Set(displayed.map((item) => item.clinic_id))];
   const earliest = displayed.reduce<string | null>((current, item) => !current || item.started_at < current ? item.started_at : current, null);
   const empty = { data: [], error: null };
-  const [metricsResult, productResult, funnelResult, interestResult] = ids.length > 0 ? await Promise.all([
+  const [metricsResult, productResult, funnelResult, interestResult] = ids.length > 0 ? await adminQuery(Promise.all([
     service.from("clinic_activation_metrics").select("clinic_id, measurement_started_at, first_bookable_at, first_booking_at").in("clinic_id", ids),
     service.from("admin_product_events").select("clinic_id, event_name, session_id, metadata, created_at").in("clinic_id", ids).gte("created_at", earliest!),
     service.from("funnel_events").select("clinic_id, event_name, source, created_at").in("clinic_id", ids).gte("created_at", earliest!),
     service.from("feature_interest_signals").select("clinic_id, feature_key, interest, willingness_monthly, note").in("clinic_id", ids),
-  ]) : [empty, empty, empty, empty];
+  ])) : [empty, empty, empty, empty];
   const readError = metricsResult.error ?? productResult.error ?? funnelResult.error ?? interestResult.error;
-  if (readError) throw new Error(`讀取觀察指標失敗：${readError.message}`);
+  if (readError) throw new Error(adminErrorMessage(`讀取觀察指標失敗：${readError.message}`));
   const metrics = (metricsResult.data ?? []) as Metric[];
   const productEvents = (productResult.data ?? []) as ProductEvent[];
   const funnelEvents = (funnelResult.data ?? []) as FunnelEvent[];

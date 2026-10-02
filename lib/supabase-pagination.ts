@@ -1,4 +1,5 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 const PAGE_SIZE = 1000;
 
@@ -13,9 +14,10 @@ export async function fetchAllSupabasePages<T>(
 ): Promise<T[]> {
   const rows: T[] = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(error.message);
-    if (!data || data.length === 0) break;
+    const { data, error } = await adminQuery(fetchPage(from, from + PAGE_SIZE - 1));
+    if (error) throw new Error(adminErrorMessage(error));
+    if (!Array.isArray(data)) throw new Error("讀取清單不完整，請重新載入後再試");
+    if (data.length === 0) break;
     rows.push(...data);
     if (data.length < PAGE_SIZE) break;
   }

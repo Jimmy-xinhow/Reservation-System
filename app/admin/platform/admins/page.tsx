@@ -1,3 +1,6 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { readAdminAccountSummaries, type AccountSummary as AuthAccountSummary } from "@/lib/admin-account-summaries";
 import { SubmitButton } from "@/components/SubmitButton";
 import { SystemPermissionPicker } from "@/components/PermissionPresetPicker";
 import { TechnicalDetails } from "@/components/TechnicalDetails";
@@ -26,29 +29,15 @@ interface SystemMemberRow {
   created_at: string;
 }
 
-interface AuthAccountSummary {
-  email: string;
-  emailConfirmedAt: string | null;
-  invitedAt: string | null;
-  lastSignInAt: string | null;
-}
-
 export default async function SystemPeoplePage() {
   const actor = await requireSystemAdmin();
-  const service = createServiceClient();
-  const [{ data: rows, error: rowsError }, { data: users, error: usersError }] = await Promise.all([
+  const service = await adminQuery(Promise.resolve().then(() => createServiceClient()));
+  const { data: rows, error: rowsError } = await adminQuery(
     service.from("platform_admins").select("user_id, access_type, permissions, active, created_at").order("created_at", { ascending: true }),
-    service.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-  ]);
-  if (rowsError) throw new Error(`讀取系統人員失敗：${rowsError.message}`);
-  if (usersError) throw new Error(`讀取帳號清單失敗：${usersError.message}`);
-  const usersById = new Map<string, AuthAccountSummary>(users.users.map((user) => [user.id, {
-    email: user.email ?? "未設定 Email",
-    emailConfirmedAt: user.email_confirmed_at ?? null,
-    invitedAt: user.invited_at ?? null,
-    lastSignInAt: user.last_sign_in_at ?? null,
-  }]));
+  );
+  if (rowsError) throw new Error(adminErrorMessage(`讀取系統人員失敗：${rowsError.message}`));
   const members = (rows ?? []) as SystemMemberRow[];
+  const usersById = await readAdminAccountSummaries(service, members.map((member) => member.user_id));
   const passwordTargets = members.map((member) => ({
     userId: member.user_id,
     email: usersById.get(member.user_id)?.email ?? member.user_id,

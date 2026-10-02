@@ -3,10 +3,21 @@ import { createServiceClient } from "@/lib/supabase";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
 import { lineBrandTheme } from "@/lib/line-ui-templates";
 import { clinicLiffUrl, getClinicLineChannelContext } from "@/lib/line-channel";
+import { adminErrorMessage } from "@/lib/admin-query";
 
 export const dynamic = "force-dynamic";
 
-export default async function LineAccountLinkPage({
+export default async function LineAccountLinkPage(props: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  try {
+    return await renderAccountLinkPage(props);
+  } catch (error) {
+    throw new Error(adminErrorMessage(error));
+  }
+}
+
+async function renderAccountLinkPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -18,10 +29,11 @@ export default async function LineAccountLinkPage({
   const mode = params.mode === "existing" ? "existing" : null;
   const service = createServiceClient();
   const clinicId = clinicSlug ? await resolvePublicClinicIdFromScope(service, { clinicSlug }) : null;
-  const [{ data: clinic }, { data: settings }] = clinicId ? await Promise.all([
+  const [{ data: clinic, error: clinicError }, { data: settings, error: settingsError }] = clinicId ? await Promise.all([
     service.from("clinics").select("name").eq("id", clinicId).eq("active", true).maybeSingle(),
     service.from("clinic_settings").select("brand_page_template, brand_primary_color, brand_accent_color, brand_logo_url").eq("clinic_id", clinicId).maybeSingle(),
-  ]) : [{ data: null }, { data: null }];
+  ]) : [{ data: null, error: null }, { data: null, error: null }];
+  if (clinicError || settingsError) throw new Error("品牌會員設定暫時無法讀取");
   const brandName = (clinic?.name as string | null)?.trim() || "品牌會員服務";
   const theme = lineBrandTheme(
     settings?.brand_page_template as string | null,
@@ -29,11 +41,13 @@ export default async function LineAccountLinkPage({
     settings?.brand_accent_color as string | null,
   );
   const logoUrl = (settings?.brand_logo_url as string | null)?.trim() || null;
-  const lineContext = clinicId ? await getClinicLineChannelContext(service, clinicId).catch(() => null) : null;
+  const lineContext = clinicId ? await getClinicLineChannelContext(service, clinicId) : null;
   const firstTimeUrl = lineContext ? clinicLiffUrl(lineContext, { view: "membership", task: "1" }) : null;
   const existingQuery = new URLSearchParams({ clinic_slug: clinicSlug, linkToken, mode: "existing" });
   const existingHref = `/line/account-link?${existingQuery.toString()}`;
-  const errorMessage = error === "not_found"
+  const errorMessage = error === "rate"
+    ? "操作太頻繁，請稍候再試，不需要更改姓名、電話或生日。"
+    : error === "not_found"
     ? "找不到相符的既有會員資料。如果這是第一次使用，請返回並選擇「第一次使用・建立會員」。"
     : "資料沒有吻合。請確認姓名、電話與生日是否和品牌留存內容完全一致，再重新送出。";
 

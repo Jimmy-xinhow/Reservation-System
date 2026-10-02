@@ -1,3 +1,5 @@
+
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ModuleDisabled } from "@/components/ModuleDisabled";
 import { requireAdmin } from "@/lib/admin";
@@ -20,21 +22,11 @@ export default async function MembershipLevelsPage() {
   const { clinicId, supabase } = await requireAdmin();
   if (!(await isAdminModuleEnabled(supabase, clinicId, "memberships"))) return <ModuleDisabled title="會員與套票" />;
   const service = createServiceClient();
-  const [
-    { data: levels, error: levelsError },
-    { data: plans, error: plansError },
-    { data: prices, error: pricesError },
-  ] = await Promise.all([
-    service.from("membership_levels").select("id, code, name, sort_order, discount_percent, active").eq("clinic_id", clinicId).order("sort_order").order("name"),
-    service.from("membership_plans").select("id, name, price").eq("clinic_id", clinicId).eq("active", true).order("name"),
-    service.from("membership_plan_level_prices").select("id, plan_id, level_id, price").eq("clinic_id", clinicId),
+  const [levelRows, planRows, priceRows] = await Promise.all([
+    fetchAllSupabasePages((from, to) => service.from("membership_levels").select("id, code, name, sort_order, discount_percent, active").eq("clinic_id", clinicId).order("sort_order").order("name").order("id").range(from, to)) as Promise<Level[]>,
+    fetchAllSupabasePages((from, to) => service.from("membership_plans").select("id, name, price").eq("clinic_id", clinicId).eq("active", true).order("name").order("id").range(from, to)) as Promise<Plan[]>,
+    fetchAllSupabasePages((from, to) => service.from("membership_plan_level_prices").select("id, plan_id, level_id, price").eq("clinic_id", clinicId).order("id").range(from, to)) as Promise<PriceRule[]>,
   ]);
-  const firstError = levelsError ?? plansError ?? pricesError;
-  if (firstError) throw new Error(`讀取會員等級資料失敗：${firstError.message}`);
-
-  const levelRows = (levels ?? []) as Level[];
-  const planRows = (plans ?? []) as Plan[];
-  const priceRows = (prices ?? []) as PriceRule[];
   const levelName = new Map(levelRows.map((level) => [level.id, level.name]));
   const planName = new Map(planRows.map((plan) => [plan.id, plan.name]));
   const activeLevelCount = levelRows.filter((level) => level.active).length;

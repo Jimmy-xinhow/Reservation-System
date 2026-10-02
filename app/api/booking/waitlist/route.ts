@@ -30,7 +30,7 @@ interface Body {
 export async function POST(req: NextRequest) {
   const rate = await checkRateLimit(req, "booking:waitlist", 20);
   if (!rate.allowed) {
-    const response = fail("請稍後再試", 429);
+    const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
     return response;
   }
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     const service = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, service);
-    if (!clinicId) return fail("缺少品牌設定", 500);
+    if (!clinicId) return fail("缺少品牌設定", 404);
     const identity = await verifiedIdentity(service, clinicId, body);
     if (identity.error) return fail(identity.error, identity.status);
     if (!identity.patientId) return fail("缺少顧客", 400);

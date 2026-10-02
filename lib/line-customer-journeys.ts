@@ -3,7 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { customerEntryUrl } from "@/lib/customer-entry";
 import { issueLineAccountLinkToken, replyMessages, type LineMessage } from "@/lib/line";
-import { getLineCustomerIdentity } from "@/lib/line-customer-identity";
+import { ensureLineCustomerIdentity, getLineCustomerIdentity } from "@/lib/line-customer-identity";
 import { clearLineCustomerSession, getLineCustomerSession, saveLineCustomerSession } from "@/lib/line-session";
 import { isClinicOpenNow } from "@/lib/queue";
 import { recordCrmInteraction } from "@/lib/crm-interactions";
@@ -57,7 +57,7 @@ interface MembershipRow {
   credits_total: number;
   credits_remaining: number;
   expires_at: string | null;
-  membership_plans: { name: string } | { name: string }[] | null;
+  membership_plans: { clinic_id: string; name: string } | { clinic_id: string; name: string }[] | null;
 }
 
 const TAIPEI_DATE = new Intl.DateTimeFormat("en-CA", {
@@ -741,13 +741,16 @@ export async function replyMemberships(replyToken: string, lineUserId: string | 
   }
   const { data, error } = await context.service
     .from("patient_memberships")
-    .select("membership_code, status, credits_total, credits_remaining, expires_at, membership_plans(name)")
+    .select("membership_code, status, credits_total, credits_remaining, expires_at, membership_plans(clinic_id, name)")
     .eq("clinic_id", context.clinicId)
     .in("patient_id", patientIds)
     .order("created_at", { ascending: false })
     .limit(10);
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as unknown as MembershipRow[];
+  if (rows.some((row) => one(row.membership_plans)?.clinic_id !== context.clinicId)) {
+    throw new Error("membership plan tenant mismatch");
+  }
   if (!rows.length) {
     await replyMessages(replyToken, [brandedCard(context, {
       altText: `${context.clinicName}｜目前沒有使用中套票`,
@@ -799,6 +802,11 @@ export async function replyBrandInfo(replyToken: string, context: LineCustomerJo
 
 export async function startLineSupport(replyToken: string, lineUserId: string | undefined, context: LineCustomerJourneyContext): Promise<void> {
   if (!lineUserId) throw new Error("無法取得 LINE 身分");
+  await ensureLineCustomerIdentity(context.service, {
+    clinicId: context.clinicId,
+    lineUserId,
+    lineAccessToken: context.lineAccessToken,
+  });
   await saveLineCustomerSession(context.service, context.clinicId, lineUserId, { intent: "support", step: "waiting_message", context: {} }, 30);
   await replyMessages(replyToken, [brandedCard(context, {
     altText: `${context.clinicName}｜LINE 客服已連線`,
@@ -828,6 +836,13 @@ export async function handleLineSupportText(replyToken: string, lineUserId: stri
   if (!lineUserId) return false;
   const session = await getLineCustomerSession(context.service, context.clinicId, lineUserId);
   if (session?.intent !== "support") return false;
+  if (!(await getLineCustomerIdentity(context.service, context.clinicId, lineUserId))) {
+    await ensureLineCustomerIdentity(context.service, {
+      clinicId: context.clinicId,
+      lineUserId,
+      lineAccessToken: context.lineAccessToken,
+    });
+  }
   const { data: blocked } = await context.service.from("chat_blocks").select("line_user_id").eq("clinic_id", context.clinicId).eq("line_user_id", lineUserId).maybeSingle();
   if (!blocked) {
     const { error } = await context.service.from("chat_messages").insert({ clinic_id: context.clinicId, line_user_id: lineUserId, sender: "patient", body });

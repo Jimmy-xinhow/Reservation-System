@@ -15,6 +15,7 @@ import {
   type PaymentSettings,
 } from "@/lib/payment";
 import { addMerchantOrderToHistory } from "@/lib/payment-order-lookup";
+import { verifiedPaymentCustomerOrigin } from "@/lib/payment-public-origin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,14 +66,15 @@ async function formForOrder(
   settings: PaymentSettings,
   order: { merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; membership_plan_id: string | null; return_path: string },
   baseUrl: string,
+  customerOrigin: string,
   clinicSlug: string | null,
 ) {
   const isRegistration = Boolean(order.registration_id);
   const returnQuery = new URLSearchParams({ order: order.merchant_order_no, provider: settings.provider });
   if (clinicSlug) returnQuery.set("clinic_slug", clinicSlug);
-  const returnUrl = `${baseUrl}/api/payment/return?${returnQuery.toString()}`;
+  const returnUrl = `${customerOrigin}/api/payment/return?${returnQuery.toString()}`;
   const notifyUrl = `${baseUrl}/api/payment/${settings.provider}/notify`;
-  const clientBackUrl = `${baseUrl}${order.return_path}`;
+  const clientBackUrl = `${customerOrigin}${order.return_path}`;
   const args = {
     settings,
     merchantOrderNo: order.merchant_order_no,
@@ -88,7 +90,7 @@ async function formForOrder(
 export async function POST(req: NextRequest) {
   const rate = await checkRateLimit(req, "payment:create", 12);
   if (!rate.allowed) {
-    const response = fail("請稍後再試", 429);
+    const response = fail("請稍後再試", rate.unavailable ? 503 : 429);
     response.headers.set("Retry-After", String(rate.retryAfterSeconds));
     return response;
   }
@@ -105,7 +107,9 @@ export async function POST(req: NextRequest) {
   if ([body.registration_id, body.appointment_id, body.membership_plan_id].filter(Boolean).length > 1) return fail("付款對象不唯一");
   if (body.idToken && body.browser_token) return fail("付款身分不唯一");
 
-  const svc = createServiceClient();
+  const operator = body.appointment_id && !body.idToken && !body.browser_token
+    ? await requireOperator()
+    : null;
   let clinicId: string;
   let registrationId: string | null = null;
   let appointmentId: string | null = null;
@@ -118,9 +122,10 @@ export async function POST(req: NextRequest) {
   let existingOrder: { id: string; merchant_order_no: string; amount: number; registration_id: string | null; appointment_id: string | null; membership_plan_id: string | null; patient_id: string | null; provider: string; status: string; expires_at: string | null; return_path: string | null; provider_payload: Record<string, unknown> } | null = null;
 
   try {
+    const svc = createServiceClient();
     if (body.registration_id) {
       const publicClinicId = await resolvePublicClinicId(req, svc);
-      if (!publicClinicId) return fail("缺少品牌設定", 500);
+      if (!publicClinicId) return fail("缺少品牌設定", 404);
       const customerIdentity = !body.checkin_token && body.browser_token ? verifyBrowserBookingToken(body.browser_token) : null;
       if (!body.checkin_token && (!customerIdentity || customerIdentity.clinicId !== publicClinicId)) return fail("缺少付款憑證", 401);
       let registrationQuery = svc
@@ -153,6 +158,7 @@ export async function POST(req: NextRequest) {
         .from("payment_orders")
         .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
         .eq("registration_id", registration.id)
+        .eq("clinic_id", clinicId)
         .eq("status", "pending")
         .maybeSingle();
       if (foundError) throw new Error(foundError.message);
@@ -160,7 +166,7 @@ export async function POST(req: NextRequest) {
     } else if (body.membership_plan_id) {
       if (!body.browser_token) return fail("缺少會員身分憑證");
       const publicClinicId = await resolvePublicClinicId(req, svc);
-      if (!publicClinicId) return fail("缺少品牌設定", 500);
+      if (!publicClinicId) return fail("缺少品牌設定", 404);
       const { data: membershipSettings, error: membershipSettingsError } = await svc
         .from("clinic_settings")
         .select("memberships_enabled")
@@ -180,8 +186,8 @@ export async function POST(req: NextRequest) {
       if (!patient || !plan) return fail("會員方案不存在或已停用", 404);
       const { data: price, error: priceError } = await svc.rpc("get_membership_plan_price", { p_clinic_id: clinicId, p_plan_id: plan.id, p_patient_id: patient.id });
       if (priceError) throw new Error(priceError.message);
-      const priceRow = Array.isArray(price) ? price[0] : price;
-      amount = Number((priceRow as { price?: number } | null)?.price ?? 0);
+      // get_membership_plan_price returns a scalar PostgreSQL integer.
+      amount = typeof price === "number" ? price : 0;
       if (!Number.isInteger(amount) || amount <= 0) return fail("此方案目前不提供公開付款", 409);
       paymentExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       returnPath = safeReturnPath(body.return_path, "/membership");
@@ -189,18 +195,22 @@ export async function POST(req: NextRequest) {
       patientId = patient.id;
       const { data: found, error: foundError } = await svc
         .from("payment_orders")
-        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
+        .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload, membership_credits_snapshot, membership_redemption_snapshot")
         .eq("membership_plan_id", plan.id)
+        .eq("clinic_id", clinicId)
         .eq("patient_id", patient.id)
         .eq("status", "pending")
         .maybeSingle();
       if (foundError) throw new Error(foundError.message);
+      if (found && (found.membership_credits_snapshot == null || found.membership_redemption_snapshot == null)) {
+        return fail("此筆舊套票訂單缺少購買內容紀錄，請聯絡店家確認後再付款", 409);
+      }
       existingOrder = found;
     } else {
       appointmentId = body.appointment_id ?? null;
       if (body.idToken || body.browser_token) {
         clinicId = (await resolvePublicClinicId(req, svc)) ?? "";
-        if (!clinicId) return fail("缺少品牌設定", 500);
+        if (!clinicId) return fail("缺少品牌設定", 404);
         let lineUserId: string | null = null;
         let browserPatientId: string | null = null;
         if (body.idToken) {
@@ -229,15 +239,17 @@ export async function POST(req: NextRequest) {
           return fail("付款身分不符", 403);
         }
       } else {
-        const member = await requireOperator();
-        clinicId = member.clinicId;
+        if (!operator) return fail("缺少付款管理權限", 401);
+        clinicId = operator.clinicId;
       }
-      const appointment = publicAppointment ?? (await svc
+      const appointmentResult = publicAppointment ? { data: publicAppointment, error: null } : await svc
         .from("appointments")
         .select("id, clinic_id, deposit_amount, deposit_status, deposit_expires_at, status")
         .eq("id", appointmentId)
         .eq("clinic_id", clinicId)
-        .maybeSingle()).data;
+        .maybeSingle();
+      if (appointmentResult.error) throw new Error(appointmentResult.error.message);
+      const appointment = appointmentResult.data;
       if (!appointment) return fail("查無預約", 404);
       const { data: activeWaitlistOffer, error: waitlistError } = await svc
         .from("appointment_waitlist_entries")
@@ -257,6 +269,7 @@ export async function POST(req: NextRequest) {
         .from("payment_orders")
         .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
         .eq("appointment_id", appointment.id)
+        .eq("clinic_id", clinicId)
         .eq("status", "pending")
         .maybeSingle();
       if (foundError) throw new Error(foundError.message);
@@ -312,6 +325,7 @@ export async function POST(req: NextRequest) {
         let concurrentQuery = svc
           .from("payment_orders")
           .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
+          .eq("clinic_id", clinicId)
           .eq("status", "pending");
         if (registrationId) concurrentQuery = concurrentQuery.eq("registration_id", registrationId);
         else if (membershipPlanId && patientId) concurrentQuery = concurrentQuery.eq("membership_plan_id", membershipPlanId).eq("patient_id", patientId);
@@ -336,6 +350,7 @@ export async function POST(req: NextRequest) {
           provider_payload: addMerchantOrderToHistory(existingOrder.provider_payload, existingOrder.merchant_order_no),
         })
         .eq("id", existingOrder.id)
+        .eq("clinic_id", clinicId)
         .eq("status", "pending")
         .eq("merchant_order_no", existingOrder.merchant_order_no)
         .select("id, merchant_order_no, amount, registration_id, appointment_id, membership_plan_id, patient_id, provider, status, expires_at, return_path, provider_payload")
@@ -347,10 +362,13 @@ export async function POST(req: NextRequest) {
 
     const { data: clinic, error: clinicError } = await svc.from("clinics").select("slug").eq("id", clinicId).maybeSingle();
     if (clinicError) throw new Error(clinicError.message);
+    const platformOrigin = requestBaseUrl(req);
+    const customerOrigin = await verifiedPaymentCustomerOrigin(req, svc, clinicId) ?? platformOrigin;
     const form = await formForOrder(
       settings,
       { ...order, return_path: order.return_path || returnPath },
-      requestBaseUrl(req),
+      platformOrigin,
+      customerOrigin,
       (clinic?.slug as string | null | undefined) ?? null,
     );
     return ok({ order_id: order.id, provider: settings.provider, form });

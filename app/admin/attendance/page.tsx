@@ -1,3 +1,6 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { readAdminAccountSummaries } from "@/lib/admin-account-summaries";
 import Link from "next/link";
 import { requireMember } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
@@ -71,7 +74,7 @@ function dateTime(value: string | null): string {
 export default async function AttendancePage({ searchParams }: { searchParams: Promise<{ from?: string; to?: string }> }) {
   const member = await requireMember();
   const params = await searchParams;
-  const service = createServiceClient();
+  const service = await adminQuery(Promise.resolve().then(() => createServiceClient()));
   const isBrandAdmin = member.accessType === "brand_admin";
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
   const from = validDate(params.from, `${today.slice(0, 8)}01`);
@@ -87,23 +90,21 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
     .limit(2000);
   if (!isBrandAdmin) eventsQuery = eventsQuery.eq("user_id", member.user.id);
 
-  const [{ data: settingsData, error: settingsError }, { data: staffData, error: staffError }, { data: eventsData, error: eventsError }, { data: members, error: membersError }, { data: authUsers, error: authError }] = await Promise.all([
+  const [{ data: settingsData, error: settingsError }, { data: staffData, error: staffError }, { data: eventsData, error: eventsError }, { data: members, error: membersError }] = await adminQuery(Promise.all([
     service.from("attendance_settings").select("click_enabled, qr_enabled, line_enabled, qr_refresh_seconds").eq("clinic_id", member.clinicId).maybeSingle(),
     isBrandAdmin ? service.from("attendance_staff").select("user_id, display_name, line_user_id, active").eq("clinic_id", member.clinicId) : Promise.resolve({ data: [], error: null }),
     eventsQuery,
     isBrandAdmin
-      ? member.supabase.from("clinic_members").select("user_id, access_type").eq("clinic_id", member.clinicId)
+      ? service.from("clinic_members").select("user_id, access_type").eq("clinic_id", member.clinicId)
       : Promise.resolve({ data: [{ user_id: member.user.id, access_type: member.accessType }], error: null }),
-    isBrandAdmin
-      ? service.auth.admin.listUsers({ page: 1, perPage: 1000 })
-      : Promise.resolve({ data: { users: [] }, error: null }),
-  ]);
-  const attendanceError = settingsError ?? staffError ?? eventsError ?? membersError ?? authError;
-  if (attendanceError && attendanceError.code !== "42P01") throw new Error(`讀取出勤資料失敗：${attendanceError.message}`);
+  ]));
+  const attendanceError = settingsError ?? staffError ?? eventsError ?? membersError;
+  if (attendanceError) throw new Error(adminErrorMessage(`讀取出勤資料失敗：${attendanceError.message}`));
 
   const emailById = new Map<string, string>();
   if (isBrandAdmin) {
-    for (const user of authUsers?.users ?? []) emailById.set(user.id, user.email ?? user.id);
+    const accounts = await readAdminAccountSummaries(service, (members ?? []).map((row) => row.user_id as string));
+    for (const [id, account] of accounts) emailById.set(id, account.email);
   } else emailById.set(member.user.id, member.user.email ?? "我的帳號");
 
   const settings = settingsData ?? { click_enabled: true, qr_enabled: false, line_enabled: false, qr_refresh_seconds: 60 };

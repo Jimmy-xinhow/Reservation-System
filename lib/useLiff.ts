@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { tryCloseLiffWindow } from "@/lib/liff-window";
 
 interface LiffSdk {
   init: (config: { liffId: string }) => Promise<void>;
   isLoggedIn: () => boolean;
-  login: () => void;
+  login: (config?: { redirectUri: string }) => void;
   getIDToken: () => string | null;
   isInClient?: () => boolean;
   isApiAvailable?: (apiName: "createShortcutOnHomeScreen") => boolean;
@@ -45,11 +46,20 @@ export interface LiffState {
  * 載入並初始化指定品牌的 LIFF。undefined 代表品牌設定仍在載入；null
  * 代表該品牌沒有可用的 LIFF，避免先用全域 ID 初始化到錯誤渠道。
  */
-export function useLiff(liffId: string | null | undefined): LiffState {
+export function useLiff(
+  liffId: string | null | undefined,
+  externalEntry?: { endpointOrigin: string | undefined; browserFallbackUrl: string },
+): LiffState {
   const [state, setState] = useState<LiffState>({ ready: false, idToken: null, error: null, isInClient: false, canCreateHomeShortcut: false });
 
   useEffect(() => {
     if (liffId === undefined) return;
+    // LINE only accepts a login redirect beneath the configured LIFF Endpoint.
+    // A brand custom domain serves the same page but is not that endpoint.
+    if (externalEntry?.endpointOrigin && window.location.origin !== externalEntry.endpointOrigin) {
+      window.location.replace(externalEntry.browserFallbackUrl);
+      return;
+    }
     if (!liffId) {
       setState({ ready: false, idToken: null, error: "此品牌尚未完成 LIFF 設定", isInClient: false, canCreateHomeShortcut: false });
       return;
@@ -59,8 +69,11 @@ export function useLiff(liffId: string | null | undefined): LiffState {
       try {
         const liff = await loadSdk();
         await liff.init({ liffId });
+        if (cancelled) return;
         if (!liff.isLoggedIn()) {
-          liff.login();
+          // SDK initialization removes its credentials first. The default login
+          // return is the configured endpoint, which drops brand/task parameters.
+          liff.login({ redirectUri: window.location.href });
           return; // 導向登入後會重新載入頁面
         }
         const token = liff.getIDToken();
@@ -85,7 +98,7 @@ export function useLiff(liffId: string | null | undefined): LiffState {
     return () => {
       cancelled = true;
     };
-  }, [liffId]);
+  }, [liffId, externalEntry?.endpointOrigin, externalEntry?.browserFallbackUrl]);
 
   return state;
 }
@@ -104,7 +117,5 @@ export async function createLiffHomeShortcut(url: string): Promise<void> {
 
 /** 完成單一 LIFF 任務後回到 LINE；瀏覽器備援入口則回傳 false。 */
 export function closeLiffWindow(): boolean {
-  if (typeof window === "undefined" || window.liff?.isInClient?.() !== true || !window.liff.closeWindow) return false;
-  window.liff.closeWindow();
-  return true;
+  return tryCloseLiffWindow(typeof window === "undefined" ? undefined : window.liff);
 }

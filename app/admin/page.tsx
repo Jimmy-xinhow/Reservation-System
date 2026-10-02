@@ -1,4 +1,6 @@
 import { createServiceClient } from "@/lib/supabase";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import { canOperate, canViewSensitiveCustomerData, getAssignedDoctorIds, getOptionalMember } from "@/lib/admin";
 import { getOptionalPlatformAdmin } from "@/lib/platform";
 import { redirect } from "next/navigation";
@@ -89,49 +91,41 @@ export default async function TodayPage({
   const dayStart = new Date(`${viewDate}T00:00:00+08:00`).toISOString();
   const dayEnd = new Date(`${viewDate}T23:59:59.999+08:00`).toISOString();
 
-  let apptQuery = supabase
-    .from("appointments")
-    .select(
-      "id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, service_id, doctors(name), patients(name, phone), services(name)",
-    )
-    .eq("clinic_id", clinicId)
-    .gte("start_at", dayStart)
-    .lte("start_at", dayEnd);
-  if (fDoctor) apptQuery = apptQuery.eq("doctor_id", fDoctor);
-  if (fStatus) apptQuery = apptQuery.eq("status", fStatus);
-  if (providerOnly) {
-    apptQuery = apptQuery.in(
-      "doctor_id",
-      assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"],
-    );
-  }
-
-  const [{ data: settings }, { data: doctors }, { data: appts }, { data: waitlistData }] = await Promise.all([
+  const [{ data: settings, error: settingsError }, doctors, appts, waitlistData] = await adminQuery(Promise.all([
     settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
-    (() => {
+    fetchAllSupabasePages((from, to) => {
       let query = supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true);
       if (providerOnly) query = query.in("id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
-      return query.order("name");
-    })(),
-    apptQuery.order("start_at").order("queue_number", { nullsFirst: true }),
+      return query.order("name").order("id").range(from, to);
+    }),
+    fetchAllSupabasePages((from, to) => {
+      let query = supabase.from("appointments")
+        .select("id, start_at, queue_number, visit_type, status, deposit_status, deposit_amount, doctor_id, service_id, doctors(name), patients(name, phone), services(name)")
+        .eq("clinic_id", clinicId).gte("start_at", dayStart).lte("start_at", dayEnd);
+      if (fDoctor) query = query.eq("doctor_id", fDoctor);
+      if (fStatus) query = query.eq("status", fStatus);
+      if (providerOnly) query = query.in("doctor_id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
+      return query.order("start_at").order("queue_number", { nullsFirst: true }).order("id").range(from, to);
+    }),
     providerOnly
-      ? Promise.resolve({ data: [] })
-      : supabase
+      ? Promise.resolve([])
+      : fetchAllSupabasePages((from, to) => supabase
           .from("appointment_waitlist_entries")
           .select("id, appointment_id, requested_date, requested_start_at, position, status, offer_expires_at, doctors(name), patients(name, phone), services(name)")
           .eq("clinic_id", clinicId)
           .eq("requested_date", viewDate)
           .in("status", ["waiting", "offered"])
-          .order("position"),
-  ]);
+          .order("position").order("id").range(from, to)),
+  ]));
+  if (settingsError) throw new Error(adminErrorMessage(settingsError));
 
   // 注意:settings 為 null 代表「讀不到設定」(權限/RLS/未建),不要靜默當成 time 制掩蓋,
   // 以 settingsUnavailable 明確提示;mode 僅用於排版,真正的狀態以警示呈現。
   const settingsUnavailable = !settings;
   const mode = (settings?.booking_mode as "time" | "number") ?? "time";
-  const waitlistRows = (waitlistData ?? []) as unknown as WaitlistRow[];
+  const waitlistRows = waitlistData as unknown as WaitlistRow[];
   const offeredAppointmentIds = new Set(waitlistRows.filter((item) => item.status === "offered" && item.appointment_id).map((item) => item.appointment_id));
-  const rows = ((appts ?? []) as unknown as Row[]).filter((item) => !offeredAppointmentIds.has(item.id));
+  const rows = (appts as unknown as Row[]).filter((item) => !offeredAppointmentIds.has(item.id));
   // 切換日期時保留服務提供者/狀態篩選
   const dayLink = (d: string) => {
     const u = new URLSearchParams();
@@ -160,7 +154,7 @@ export default async function TodayPage({
         </div>
       </div>
 
-      <AppointmentDateToolbar initialDate={viewDate} initialDoctor={fDoctor} initialStatus={fStatus} doctors={doctors ?? []} count={rows.length} />
+      <AppointmentDateToolbar initialDate={viewDate} initialDoctor={fDoctor} initialStatus={fStatus} doctors={doctors} count={rows.length} />
 
       {settingsUnavailable && (
         <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">

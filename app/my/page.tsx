@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { formatEventDate } from "@/lib/registration";
 import { formatDateSession, formatTime } from "@/lib/slots";
-import { safeLocalStorageGet, safeLocalStorageSet } from "@/lib/browser-storage";
+import { safeLocalStorageGet, safeLocalStorageSet, safeLocalStorageRemoveMatching } from "@/lib/browser-storage";
+import { CustomerApiError } from "@/lib/customer-api-error";
 import { Shell as CustomerAppShell } from "@/app/book/BookingFlowUi";
 
 interface PortalData {
@@ -51,56 +52,81 @@ export default function MyCustomerPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
+  const [cancelPending, setCancelPending] = useState<string | null>(null);
+  const [homePath, setHomePath] = useState("/");
+  const actionLock = useRef(false);
+  const loadRequest = useRef(0);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
 
   const load = useCallback(async (browserToken: string) => {
+    const request = ++loadRequest.current;
     setLoading(true);
     setError(null);
     try {
       const response = await fetch(`/api/customer/portal${scopeSuffix()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ browser_token: browserToken }), cache: "no-store" });
-      const body = await response.json() as { ok?: boolean; data?: PortalData; error?: string };
-      if (!response.ok || !body.ok || !body.data) throw new Error(body.error ?? "顧客資料載入失敗");
+      const body = await response.json().catch(() => null) as { ok?: boolean; data?: PortalData; error?: string } | null;
+      if (request !== loadRequest.current) return;
+      if (!response.ok || !body?.ok || !body.data) throw new CustomerApiError(body?.error ?? "顧客資料載入失敗", response.status);
       setData(body.data);
+      setNeedsVerification(false);
       safeLocalStorageSet([[tokenKey(), browserToken]]);
     } catch (loadError) {
-      setData(null);
-      setError(loadError instanceof Error ? loadError.message : "顧客資料載入失敗");
+      if (request !== loadRequest.current) return;
+      if (loadError instanceof CustomerApiError && [401, 403].includes(loadError.status)) {
+        setData(null);
+        setNeedsVerification(true);
+        const key = tokenKey();
+        safeLocalStorageRemoveMatching([key, key.replace("customer_browser_token:", "booking_browser_token:"), "membership_browser_token"], browserToken);
+      }
+      setError(loadError instanceof TypeError ? "連線失敗，請確認網路後重試" : loadError instanceof Error ? loadError.message : "顧客資料載入失敗");
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    setHomePath(`/${scopeSuffix()}`);
     const stored = storedToken();
     if (stored) void load(stored);
     else setLoading(false);
   }, [load]);
 
   async function cancelRegistration(registrationId: string) {
+    if (actionLock.current) return;
     const token = storedToken();
     if (!token) { setActionError("顧客身分已過期，請重新驗證"); return; }
-    if (!window.confirm("確定要取消這筆活動報名嗎？")) return;
+    if (cancelPending !== registrationId) return;
+    actionLock.current = true;
+    loadRequest.current += 1;
+    setActionMessage(null);
     setActing(registrationId); setActionError(null);
     try {
       const response = await fetch(`/api/customer/registration-action${scopeSuffix()}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ browser_token: token, registration_id: registrationId, action: "cancel" }) });
-      const body = await response.json() as { ok?: boolean; error?: string };
-      if (!response.ok || !body.ok) throw new Error(body.error ?? "取消報名失敗");
+      const body = await response.json().catch(() => null) as { ok?: boolean; data?: { registration_status?: string }; error?: string } | null;
+      if (!response.ok || !body?.ok) throw new Error(body?.error ?? "取消報名失敗");
+      if (body.data?.registration_status !== "cancelled") throw new Error("尚未確認取消結果，請重新整理紀錄。");
+      setData((current) => current ? { ...current, registrations: current.registrations.map((item) => item.id === registrationId ? { ...item, status: "cancelled" } : item) } : null);
+      setCancelPending(null);
+      setActionMessage("報名已取消。已付款項請依店家退款流程處理。");
       await load(token);
-    } catch (caught) { setActionError(caught instanceof Error ? caught.message : "取消報名失敗"); }
-    finally { setActing(null); }
+    } catch (caught) { setActionError(caught instanceof TypeError ? "連線失敗，請確認網路後重試" : caught instanceof Error ? caught.message : "取消報名失敗"); }
+    finally { actionLock.current = false; setActing(null); }
   }
 
   return (
     <CustomerAppShell>
       <div>
       <header className="mb-6 flex items-center justify-end gap-3">
-        <Link href={`/${scopeSuffix()}`} className="text-sm text-brand-700 hover:underline">返回品牌首頁</Link>
+        <Link href={homePath} className="text-sm text-brand-700 hover:underline">返回品牌首頁</Link>
       </header>
       {loading && <p className="card p-6 text-center text-sm text-slate-500">載入我的紀錄…</p>}
+      {actionMessage && <p role="status" className="mb-4 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">{actionMessage}</p>}
       {!loading && error && (
         <section className="card space-y-4 p-6 text-center">
-          <h1 className="text-lg font-semibold text-slate-900">需要重新驗證</h1>
+          <h1 className="text-lg font-semibold text-slate-900">{needsVerification ? "需要重新驗證" : "暫時無法更新紀錄"}</h1>
           <p className="text-sm leading-6 text-slate-500">{error}</p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:justify-center"><Link href={`/book/browser${scopeSuffix()}`} className="btn btn-primary">重新預約／驗證</Link><Link href={`/membership${scopeSuffix()}`} className="btn btn-secondary">查詢會員資料</Link></div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">{!needsVerification && <button type="button" disabled={acting !== null} onClick={() => { const token = storedToken(); if (token) void load(token); else setNeedsVerification(true); }} className="btn btn-primary">重新整理紀錄</button>}<Link href={`/book/browser/my${scopeSuffix()}`} className="btn btn-secondary">重新驗證身分</Link></div>
         </section>
       )}
       {!loading && data && (
@@ -111,7 +137,7 @@ export default function MyCustomerPage() {
             <div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的預約</h2><Link href={`/book/browser${scopeSuffix()}`} className="text-sm text-brand-700">新增預約</Link></div>
             {data.appointments.length === 0 ? <Empty text="目前沒有預約紀錄。" /> : <div className="space-y-2">{data.appointments.slice(0, 8).map((item) => <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-900">{formatDateSession(item.start_at)} {formatTime(item.start_at)}</p><p className="mt-1 text-sm text-slate-500">{item.services?.name ?? "服務"} · {item.doctors?.name ?? "服務提供者"} · {item.visit_type === "first" ? "首次服務" : "再次服務"}</p></div><div className="flex shrink-0 items-center gap-2"><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span>{["booked", "confirmed"].includes(item.status) && <Link href={`/book/browser/my${scopeSuffix()}`} className="btn btn-secondary px-3 py-1.5 text-xs">管理預約</Link>}</div></div>)}</div>}
           </section>
-          <section className="card space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的活動報名</h2><div className="flex gap-3"><Link href={`/learn${scopeSuffix()}`} className="text-sm text-brand-700">學員專區</Link><Link href={`/register${scopeSuffix()}`} className="text-sm text-brand-700">查看活動</Link></div></div>{actionError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}{data.registrations.length === 0 ? <Empty text="目前沒有活動報名。" /> : <div className="space-y-2">{data.registrations.slice(0, 8).map((item) => { const event = one(item.events); const session = one(item.event_sessions); const cancellable = ["pending", "confirmed", "waitlisted"].includes(item.status); return <div key={item.registration_no} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-900">{event?.title ?? "活動"}</p><p className="mt-1 text-sm text-slate-500">{session ? `${session.name} · ${formatEventDate(session.start_at)}` : item.registration_no} · {statusLabel(item.payment_status)}</p></div><div className="flex shrink-0 items-center gap-2"><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span>{item.payment_status === "pending" && <Link href={`/register/pay?registration_id=${encodeURIComponent(item.id)}${scopeSuffix().replace("?", "&")}`} className="btn btn-primary px-3 py-1.5 text-xs">前往付款</Link>}{cancellable && <button type="button" onClick={() => void cancelRegistration(item.id)} disabled={acting === item.id} className="btn btn-secondary px-3 py-1.5 text-xs">{acting === item.id ? "處理中…" : "取消報名"}</button>}</div></div>; })}</div>}</section>
+          <section className="card space-y-3 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的活動報名</h2><div className="flex gap-3"><Link href={`/learn${scopeSuffix()}`} className="text-sm text-brand-700">學員專區</Link><Link href={`/register${scopeSuffix()}`} className="text-sm text-brand-700">查看活動</Link></div></div>{actionError && <p className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{actionError}</p>}{data.registrations.length === 0 ? <Empty text="目前沒有活動報名。" /> : <div className="space-y-2">{data.registrations.slice(0, 8).map((item) => { const event = one(item.events); const session = one(item.event_sessions); const cancellable = ["pending", "confirmed", "waitlisted"].includes(item.status); return <div key={item.registration_no} className="flex flex-col gap-3 rounded-xl border border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-900">{event?.title ?? "活動"}</p><p className="mt-1 text-sm text-slate-500">{session ? `${session.name} · ${formatEventDate(session.start_at)}` : item.registration_no} · {statusLabel(item.payment_status)}</p></div><div className="flex shrink-0 items-center gap-2"><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span>{item.status === "pending" && item.payment_status === "pending" && <Link href={`/register/pay?registration_id=${encodeURIComponent(item.id)}${scopeSuffix().replace("?", "&")}`} className="btn btn-primary px-3 py-1.5 text-xs">前往付款</Link>}{cancellable && (cancelPending === item.id ? <div role="group" aria-label="取消報名確認" className="max-w-xs space-y-2 rounded-xl bg-amber-50 p-3"><p className="text-sm text-amber-900">確定取消「{event?.title ?? "這筆活動"}」的報名？</p><p className="text-xs text-slate-600">取消後將釋放名額；已付款項請聯絡店家處理。</p><div className="flex gap-2"><button type="button" disabled={acting !== null} className="btn btn-secondary px-3 py-1.5 text-xs" onClick={() => setCancelPending(null)}>保留報名</button><button type="button" disabled={acting !== null} className="btn btn-primary px-3 py-1.5 text-xs" onClick={() => void cancelRegistration(item.id)}>{acting === item.id ? "處理中…" : "確認取消報名"}</button></div></div> : <button type="button" onClick={() => { setActionError(null); setCancelPending(item.id); }} disabled={acting !== null} className="btn btn-secondary px-3 py-1.5 text-xs">取消報名</button>)}</div></div>; })}</div>}</section>
           <section className="card space-y-3 p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-semibold text-slate-900">我的套票</h2><Link href={`/membership${scopeSuffix()}`} className="text-sm text-brand-700">購買套票</Link></div>{data.memberships.length === 0 ? <Empty text="目前沒有套票。" /> : <div className="space-y-2">{data.memberships.slice(0, 8).map((item) => { const plan = one(item.membership_plans); return <div key={item.membership_code} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 p-4"><div><p className="font-medium text-slate-900">{plan?.name ?? "會員方案"}</p><p className="mt-1 text-sm text-slate-500">剩餘 {item.credits_remaining}／{item.credits_total} 堂{item.expires_at ? ` · 到期 ${new Date(item.expires_at).toLocaleDateString("zh-TW", { timeZone: "Asia/Taipei" })}` : ""}</p></div><span className="badge bg-slate-100 text-slate-600">{statusLabel(item.status)}</span></div>; })}</div>}</section>
         </div>
       )}

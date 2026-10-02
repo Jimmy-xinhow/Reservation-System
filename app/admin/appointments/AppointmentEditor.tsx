@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireOperator } from "@/lib/admin";
@@ -50,7 +52,7 @@ export default async function AppointmentEditor({
   const member = await requireOperator();
   const supabase = member.supabase;
   const service = createServiceClient();
-  const [settingsResult, doctorsResult, servicesResult, clinicResult, appointmentResult] = await Promise.all([
+  const [settingsResult, doctorsResult, servicesResult, clinicResult, appointmentResult] = await adminQuery(Promise.all([
     supabase.from("clinic_settings").select("booking_mode").eq("clinic_id", member.clinicId).maybeSingle(),
     supabase.from("doctors").select("id, name").eq("clinic_id", member.clinicId).eq("active", true).order("name"),
     supabase.from("services").select("id, name, booking_target, booking_fields").eq("clinic_id", member.clinicId).eq("active", true).order("created_at"),
@@ -64,10 +66,10 @@ export default async function AppointmentEditor({
           .in("status", ["booked", "confirmed"])
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
-  ]);
+  ]));
 
   const firstError = [settingsResult.error, doctorsResult.error, servicesResult.error, clinicResult.error, appointmentResult.error].find(Boolean);
-  if (firstError) throw new Error(firstError.message);
+  if (firstError) throw new Error(adminErrorMessage(firstError.message));
   if (appointmentId && !appointmentResult.data) notFound();
 
   const mode = settingsResult.data?.booking_mode === "number" ? "number" : "time";

@@ -1,4 +1,5 @@
 import "server-only";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -17,12 +18,12 @@ export async function isAdminModuleEnabled(
   clinicId: string,
   module: AdminModuleKey,
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  const { data, error } = await adminQuery(supabase
     .from("clinic_settings")
     .select("events_enabled, memberships_enabled, crm_automation_enabled, line_channel_enabled, beauty_operations_enabled")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
+    .maybeSingle());
+  if (error) throw new Error(adminErrorMessage(error));
   if (!data) throw new Error("品牌設定不存在");
   const settings = data as ModuleSettingsRow;
   if (module === "events") return settings.events_enabled;
@@ -30,4 +31,28 @@ export async function isAdminModuleEnabled(
   if (module === "crm") return settings.crm_automation_enabled;
   if (module === "beauty") return settings.beauty_operations_enabled;
   return settings.line_channel_enabled;
+}
+
+export async function assertBeautyOperationsEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "beauty"))) {
+    throw new Error("此品牌尚未啟用服務營運與庫存");
+  }
+}
+
+export async function assertEventsEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "events"))) {
+    throw new Error("此品牌尚未啟用活動與報名");
+  }
+}
+
+export async function assertMembershipsEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "memberships"))) {
+    throw new Error("此品牌尚未啟用會員與套票");
+  }
+}
+
+export async function assertCrmAutomationEnabled(member: { supabase: SupabaseClient; clinicId: string }): Promise<void> {
+  if (!(await isAdminModuleEnabled(member.supabase, member.clinicId, "crm"))) {
+    throw new Error("此品牌尚未啟用顧客回訪與自動提醒");
+  }
 }

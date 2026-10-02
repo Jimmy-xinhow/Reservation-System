@@ -2,6 +2,7 @@
 // Resend 免費方案每月約 3,000 封。
 
 import "server-only";
+import { providerFetch, providerOperation } from "@/lib/provider-boundary";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase";
@@ -15,6 +16,18 @@ export interface EmailCredentialStatus {
   configured: boolean;
   source: "vault" | "environment" | null;
   from: string | null;
+}
+
+/** Resend rejected the request before accepting an email for delivery. */
+export class EmailProviderRejectedError extends Error {
+  constructor() {
+    super("delivery_error:provider_rejected");
+    this.name = "EmailProviderRejectedError";
+  }
+}
+
+export function isEmailProviderRejected(error: unknown): error is EmailProviderRejectedError {
+  return error instanceof EmailProviderRejectedError;
 }
 
 function envMap(name: "RESEND_API_KEYS_JSON" | "RESEND_EMAIL_FROM_JSON"): Record<string, string> {
@@ -56,10 +69,10 @@ export async function emailConfigForClinic(
   clinicId: string,
   service: SupabaseClient = createServiceClient(),
 ): Promise<EmailConfig | null> {
-  const { data, error } = await service.rpc("get_clinic_email_configuration", {
+  const { data, error } = await providerOperation(() => service.rpc("get_clinic_email_configuration", {
     p_clinic_id: clinicId,
-  });
-  if (error) throw new Error(`Email 憑證讀取失敗: ${error.message}`);
+  }), "品牌憑證讀取失敗");
+  if (error) throw new Error(`Email 憑證讀取失敗`);
   const row = (Array.isArray(data) ? data[0] : null) as
     | { api_key?: unknown; from_address?: unknown }
     | null;
@@ -75,12 +88,12 @@ export async function getEmailCredentialStatus(
   service: SupabaseClient,
   clinicId: string,
 ): Promise<EmailCredentialStatus> {
-  const { data, error } = await service
+  const { data, error } = await providerOperation(() => service
     .from("clinic_email_secret_refs")
     .select("api_key_secret_id, from_address")
     .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) throw new Error(`Email 設定狀態讀取失敗: ${error.message}`);
+    .maybeSingle(), "品牌設定狀態讀取失敗");
+  if (error) throw new Error(`Email 設定狀態讀取失敗`);
   if (data?.api_key_secret_id && typeof data.from_address === "string") {
     return { configured: true, source: "vault", from: data.from_address };
   }
@@ -94,18 +107,30 @@ export async function sendEmail(
   to: string,
   subject: string,
   html: string,
-): Promise<void> {
+  options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+): Promise<string | null> {
   if (!cfg.apiKey || !cfg.from) throw new Error("Email 未設定");
-  const res = await fetch("https://api.resend.com/emails", {
+  const res = await providerFetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${cfg.apiKey}`,
       "Content-Type": "application/json",
+      ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
     },
     body: JSON.stringify({ from: cfg.from, to, subject, html }),
+    signal: options.signal,
   });
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Email 寄送失敗 (${res.status}): ${detail}`);
+    // Resend's validation_error response is a definite rejection. A transport
+    // failure or server error may have accepted the email, so keep those uncertain.
+    if (res.status === 422) throw new EmailProviderRejectedError();
+    throw new Error(`Email 寄送失敗 (${res.status})`);
   }
+  // Resend returns the accepted email ID. A successful HTTP status without a
+  // usable receipt is still ambiguous to callers that require reconciliation.
+  const body: unknown = await res.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  const id = (body as Record<string, unknown>).id;
+  return typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+    ? id : null;
 }

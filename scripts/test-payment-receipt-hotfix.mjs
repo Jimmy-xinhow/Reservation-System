@@ -17,9 +17,6 @@ vm.runInNewContext(compiled, {
     if (name === 'node:crypto') return { createHash };
     if (name === './payment-order-lookup') return {
       findPaymentOrderByMerchant: async () => currentOrder,
-      mergePaymentProviderEvent: (previous, merchant, receipt) => ({
-        ...previous, last_merchant_order_no: merchant, last_event: receipt,
-      }),
     };
     throw new Error('Unexpected import: ' + name);
   },
@@ -28,9 +25,16 @@ vm.runInNewContext(compiled, {
 function database(duplicate = false) {
   const inserted = new Map();
   const updated = new Map();
+  const transitions = [];
   return {
     inserted,
     updated,
+    transitions,
+    async rpc(name, args) {
+      assert.equal(name, 'transition_verified_payment');
+      transitions.push(args);
+      return { data: true, error: null };
+    },
     from(table) {
       return {
         insert: async value => {
@@ -95,11 +99,13 @@ for (const [provider, success] of [['ecpay', true], ['newebpay', false]]) {
     { duplicate: false, accepted: success, changed: true });
   const webhook = verifyReceipt(db.inserted.get('payment_webhook_events').payload, callback);
   const transaction = verifyReceipt(db.inserted.get('payment_transactions').payload, callback);
-  const storedOrder = JSON.parse(JSON.stringify(db.updated.get('payment_orders').provider_payload));
+  const transition = db.transitions[0];
+  assert.equal(db.transitions.length, 1);
+  const transitionReceipt = verifyReceipt(transition.p_payload, callback);
   assert.deepEqual(transaction, webhook);
-  assert.deepEqual(storedOrder.last_event, webhook);
-  assert.equal(storedOrder.other_key, 'preserved');
-  assert.equal(storedOrder.last_merchant_order_no, 'SYNTH-100');
+  assert.deepEqual(transitionReceipt, webhook);
+  assert.equal(transition.p_expected_status, 'pending');
+  assert.equal(transition.p_event_key, callback.eventKey);
 }
 
 currentOrder = order('ecpay', 'paid');
@@ -109,6 +115,7 @@ assert.deepEqual(JSON.parse(JSON.stringify(duplicateResult)),
   { duplicate: true, accepted: true, changed: false });
 verifyReceipt(duplicateDb.inserted.get('payment_webhook_events').payload, event('ecpay', true));
 assert.equal(duplicateDb.inserted.has('payment_transactions'), false);
+assert.equal(duplicateDb.transitions.length, 0);
 
 currentOrder = order('ecpay');
 const mismatchDb = database();
@@ -121,7 +128,6 @@ console.log(JSON.stringify({
   providerFlows: 2,
   duplicateFlow: true,
   amountMismatchWrites: 0,
-  eightFieldReceiptInThreeStores: true,
+  eightFieldReceiptPassedToWebhookTransactionAndTransitionRpc: true,
   rawCustomerAndSignatureExcluded: true,
-  unrelatedOrderKeysPreserved: true,
 }));

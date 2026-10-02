@@ -3,24 +3,32 @@ import {
   createStaffAction,
   listClinicDoctors,
   removeStaffAction,
-  resetStaffPasswordAction,
+  sendStaffPasswordSetupAction,
   setStaffRoleAction,
   setDoctorAssignmentsAction,
 } from "./actions";
 import { SubmitButton } from "@/components/SubmitButton";
-import { brandAccessLabel } from "@/lib/access-control";
+import { BRAND_PERMISSION_DEFINITIONS, brandAccessLabel } from "@/lib/access-control";
 import { BrandPermissionPicker } from "@/components/PermissionPresetPicker";
 
 export const dynamic = "force-dynamic";
 
-export default async function UsersPage() {
-  const [staff, doctors] = await Promise.all([listStaff(), listClinicDoctors()]);
+export default async function UsersPage({ searchParams }: { searchParams: Promise<{ notice?: string }> }) {
+  const [staff, doctors, params] = await Promise.all([listStaff(), listClinicDoctors(), searchParams]);
+  const notice = params.notice === "invited"
+    ? "已寄出邀請信。新員工可從信中的連結自行設定密碼。"
+    : params.notice === "existing"
+      ? "既有帳號已加入本品牌，可沿用原帳號登入。若忘記密碼，可從下方寄送設定信。"
+      : params.notice === "password-email"
+        ? "密碼設定信已寄出，請員工從最新郵件自行設定。"
+        : null;
 
   return (
     <div className="admin-page">
       <header className="admin-page-header">
-        <div><p className="eyebrow">員工管理</p><h1 className="admin-page-title">員工與權限</h1><p className="admin-page-description">建立品牌員工帳號，依工作內容設定操作權限與可查看的服務提供者。</p></div>
+        <div><p className="eyebrow">員工管理</p><h1 className="admin-page-title">員工與權限</h1><p className="admin-page-description">以 Email 邀請新員工自行設定密碼，再依工作內容設定操作權限與可查看的服務提供者。已有帳號者可用原帳號登入。</p></div>
       </header>
+      {notice && <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
 
       {/* 新增帳號 */}
       <form action={createStaffAction} className="admin-section flex flex-wrap items-end gap-3 p-5">
@@ -28,24 +36,81 @@ export default async function UsersPage() {
           <span className="mb-1 block font-medium text-slate-600">Email</span>
           <input name="email" type="email" required autoComplete="email" className="input" placeholder="staff@clinic.com" />
         </label>
-        <label className="text-sm">
-          <span className="mb-1 block font-medium text-slate-600">初始密碼(至少 8 碼)</span>
-          <input name="password" type="password" required minLength={8} autoComplete="new-password" className="input" placeholder="至少 8 碼" />
-        </label>
         <label className="text-sm"><span className="mb-1 block font-medium text-slate-600">帳號身分</span><select name="access_type" defaultValue="employee" className="input"><option value="employee">品牌員工</option><option value="brand_admin">品牌管理者</option></select></label>
         <BrandPermissionPicker />
-        <SubmitButton className="btn btn-primary">新增帳號</SubmitButton>
+        <SubmitButton className="btn btn-primary">邀請或加入員工</SubmitButton>
       </form>
 
+      {/* 手機以人員卡片呈現完整操作，避免寬表格只露出 Email。 */}
+      <div className="space-y-3 md:hidden">
+        {staff.length === 0 && <p className="admin-section px-5 py-8 text-center text-sm text-slate-500">尚無帳號</p>}
+        {staff.map((m) => (
+          <details key={m.userId} className="group admin-section overflow-hidden">
+            <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-4 [&::-webkit-details-marker]:hidden">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-slate-900" title={m.email}>{m.email}</span>
+                <span className="mt-1 block text-xs text-slate-500">{brandAccessLabel(m.accessType)}{m.isSelf ? " · 目前登入" : ""}</span>
+              </span>
+              <span className="shrink-0 text-xs font-medium text-brand-700">管理設定 <span aria-hidden="true" className="inline-block transition-transform group-open:rotate-180">⌄</span></span>
+            </summary>
+            <div className="space-y-4 border-t border-slate-100 px-4 py-4">
+              <div>
+                <p className="text-xs font-medium text-slate-500">目前工作權限</p>
+                <p className="mt-1 text-sm text-slate-700">{m.permissions.map((permission) => BRAND_PERMISSION_DEFINITIONS.find((item) => item.key === permission)?.label ?? permission).join("、")}</p>
+              </div>
+              <p className="text-xs text-slate-500">加入日期：{m.createdAt ? m.createdAt.slice(0, 10) : "—"}</p>
+              {!m.isSelf && (
+                <form action={setStaffRoleAction} className="space-y-3">
+                  <input type="hidden" name="user_id" value={m.userId} />
+                  <label className="block text-sm font-medium text-slate-700">帳號身分
+                    <select name="access_type" defaultValue={m.accessType} className="input mt-1 w-full">
+                      <option value="employee">品牌員工</option>
+                      <option value="brand_admin">品牌管理者</option>
+                    </select>
+                  </label>
+                  <BrandPermissionPicker defaults={m.permissions} compact />
+                  <SubmitButton className="btn btn-primary w-full">儲存身分與權限</SubmitButton>
+                </form>
+              )}
+              {m.permissions.includes("provider.assigned") && (
+                <form action={setDoctorAssignmentsAction} className="space-y-3 rounded-xl bg-slate-50 p-3">
+                  <input type="hidden" name="user_id" value={m.userId} />
+                  <p className="text-sm font-medium text-slate-700">可查看的服務提供者</p>
+                  {doctors.length === 0 ? <p className="text-xs text-slate-500">尚未建立服務提供者</p> : doctors.map((doctor) => (
+                    <label key={doctor.id} className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
+                      <input type="checkbox" name="doctor_ids" value={doctor.id} defaultChecked={m.assignedDoctors.some((assigned) => assigned.id === doctor.id)} />
+                      {doctor.name}
+                    </label>
+                  ))}
+                  <SubmitButton className="btn btn-secondary w-full">儲存指派</SubmitButton>
+                </form>
+              )}
+              {m.accessType === "employee" && !m.isSelf && (
+                <form action={sendStaffPasswordSetupAction}>
+                  <input type="hidden" name="user_id" value={m.userId} />
+                  <SubmitButton className="btn btn-secondary w-full">寄送密碼設定信</SubmitButton>
+                </form>
+              )}
+              {!m.isSelf && (
+                <form action={removeStaffAction}>
+                  <input type="hidden" name="user_id" value={m.userId} />
+                  <SubmitButton className="w-full rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700">移除本品牌權限</SubmitButton>
+                </form>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+
       {/* 帳號列表 */}
-      <div className="admin-section overflow-x-auto">
+      <div className="admin-section hidden overflow-x-auto md:block">
         <table className="tbl">
           <thead>
             <tr>
               <th>Email</th>
               <th>身分與權限</th>
               <th>建立日期</th>
-              <th>重設密碼</th>
+              <th>登入協助</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -105,20 +170,11 @@ export default async function UsersPage() {
                 <td className="text-slate-400">{m.createdAt ? m.createdAt.slice(0, 10) : "—"}</td>
                 <td>
                   {m.accessType === "brand_admin" ? (
-                    <span className="text-xs text-slate-400">管理者密碼不在此頁代改</span>
+                    <span className="text-xs text-slate-400">由管理者自行設定</span>
                   ) : (
-                    <form action={resetStaffPasswordAction} className="flex items-center gap-1.5">
+                    <form action={sendStaffPasswordSetupAction}>
                       <input type="hidden" name="user_id" value={m.userId} />
-                      <input type="email" value={m.email} autoComplete="username" readOnly tabIndex={-1} className="sr-only" aria-hidden="true" />
-                      <input
-                        name="password"
-                        type="password"
-                        minLength={8}
-                        autoComplete="new-password"
-                        placeholder="新密碼"
-                        className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-xs"
-                      />
-                      <SubmitButton className="admin-inline-action text-brand-700">更新</SubmitButton>
+                      <SubmitButton className="admin-inline-action text-brand-700">寄送密碼設定信</SubmitButton>
                     </form>
                   )}
                 </td>

@@ -1,7 +1,8 @@
+import { customerSubmissionFetch } from "@/lib/customer-submission";
 import { liffEntryParams } from "@/lib/liff-entry-state";
 
 export async function bookingApi<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(withBookingBrandScope(url), init);
+  const res = await customerSubmissionFetch(withBookingBrandScope(url), init);
   const json = (await res.json().catch(() => null)) as
     | { ok: true; data: T }
     | { ok: false; error: string }

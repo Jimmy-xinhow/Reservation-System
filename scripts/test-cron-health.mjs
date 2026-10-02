@@ -1,0 +1,12 @@
+import test from'node:test';import assert from'node:assert/strict';import{assessCronHealth}from'./check-cron-health.mjs';
+const now=Date.parse('2026-09-21T00:00:00Z'),at='2026-09-20T23:59:00Z';const rows=[{event:'cron_job',run_id:'one',job:'membership',status:'success',http_status:200,at},{event:'cron_run',run_id:'one',status:'success',jobs:1,at}];
+test('health accepts a recent complete run',()=>assert.equal(assessCronHealth(rows,['membership'],120000,now).status,'healthy'));
+test('health detects real log becoming stale without another success',()=>assert.equal(assessCronHealth(rows,['membership'],30000,now).status,'stale'));
+test('health detects no logs',()=>assert.equal(assessCronHealth([],['membership'],120000,now).status,'missing'));
+test('health rejects incomplete job set',()=>assert.equal(assessCronHealth(rows,['membership','reminders'],120000,now).ok,false));
+test('health detects a new run with no final record',()=>assert.equal(assessCronHealth([...rows,{...rows[0],run_id:'two',at:'2026-09-21T00:00:00Z'}],['membership'],120000,now).status,'incomplete'));
+test('health catches failure even when an older success exists',()=>assert.equal(assessCronHealth([...rows,{...rows[1],status:'failed',run_id:'two',at:'2026-09-21T00:00:00Z'}],['membership'],120000,now).status,'failed'));
+test('health does not ignore a newer config failure',()=>assert.equal(assessCronHealth([...rows,{event:'cron_config',status:'invalid_scope',timestamp:'2026-09-21T00:00:00Z'}],['membership'],120000,now).status,'configuration_failed'));
+test('health fails closed on missing timestamp',()=>assert.equal(assessCronHealth([{...rows[1],at:undefined}],['membership'],120000,now).status,'invalid_timestamp'));
+test('health rejects duplicate jobs',()=>assert.equal(assessCronHealth([rows[0],rows[0],rows[1]],['membership'],120000,now).ok,false));
+test('health accepts recovery after older failure and unordered logs',()=>assert.equal(assessCronHealth([...rows,{...rows[1],at:'2026-09-20T23:58:00Z',status:'failed'}],['membership'],120000,now).ok,true));

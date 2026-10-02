@@ -1,3 +1,5 @@
+
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 import Link from "next/link";
 import { createSupabaseServer } from "@/lib/supabase-server";
 import { canOperate, canViewSensitiveCustomerData, requireNonProvider } from "@/lib/admin";
@@ -35,26 +37,22 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
   const fromIso = new Date(`${registeredFrom}T00:00:00+08:00`).toISOString();
   const toExclusive = new Date(new Date(`${registeredTo}T00:00:00+08:00`).getTime() + 86400000).toISOString();
   const supabase = await createSupabaseServer();
-  const [eventsResult, sessionsResult] = await Promise.all([
-    supabase.from("events").select("id, title").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }),
-    supabase.from("event_sessions").select("id, event_id, name, start_at").eq("clinic_id", member.clinicId).order("start_at", { ascending: false }).limit(500),
+  const [eventOptions, allSessionOptions] = await Promise.all([
+    fetchAllSupabasePages((from, to) => supabase.from("events").select("id, title").eq("clinic_id", member.clinicId).order("created_at", { ascending: false }).order("id").range(from, to)) as Promise<EventOption[]>,
+    fetchAllSupabasePages((from, to) => supabase.from("event_sessions").select("id, event_id, name, start_at").eq("clinic_id", member.clinicId).order("start_at", { ascending: false }).order("id").range(from, to)) as Promise<SessionOption[]>,
   ]);
-  const optionsError = eventsResult.error ?? sessionsResult.error;
-  if (optionsError) throw new Error(optionsError.message);
-  const eventOptions = (eventsResult.data ?? []) as EventOption[];
-  const allSessionOptions = (sessionsResult.data ?? []) as SessionOption[];
   const sessionOptions = eventId ? allSessionOptions.filter((session) => session.event_id === eventId) : allSessionOptions;
-  let query = supabase.from("registrations")
-    .select("id, event_id, session_id, registration_no, status, payment_status, amount, discount_amount, membership_id, name, phone, email, created_at, events(title), event_sessions(name, start_at)")
-    .eq("clinic_id", member.clinicId).gte("created_at", fromIso).lt("created_at", toExclusive).order("created_at", { ascending: false }).limit(1000);
-  if (status) query = query.eq("status", status);
-  if (eventId) query = query.eq("event_id", eventId);
-  if (sessionId) query = query.eq("session_id", sessionId);
-  if (q) query = query.or(`registration_no.ilike.%${q}%,name.ilike.%${q}%,phone.ilike.%${q}%`);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  const rows = (data ?? []) as unknown as RegistrationRow[];
   const showPii = canViewSensitiveCustomerData(member.role);
+  const projection = `id, event_id, session_id, registration_no, status, payment_status, amount, discount_amount, membership_id, created_at, events(title), event_sessions(name, start_at)${showPii ? ", name, phone, email" : ""}`;
+  const rows = await fetchAllSupabasePages((from, to) => {
+    let query = supabase.from("registrations").select(projection)
+      .eq("clinic_id", member.clinicId).gte("created_at", fromIso).lt("created_at", toExclusive);
+    if (status) query = query.eq("status", status);
+    if (eventId) query = query.eq("event_id", eventId);
+    if (sessionId) query = query.eq("session_id", sessionId);
+    if (q) query = query.or(showPii ? `registration_no.ilike.%${q}%,name.ilike.%${q}%,phone.ilike.%${q}%` : `registration_no.ilike.%${q}%`);
+    return query.order("created_at", { ascending: false }).order("id").range(from, to);
+  }) as unknown as RegistrationRow[];
   const groups = new Map<string, RegistrationRow[]>();
   for (const row of rows) { const key = `${row.event_id}:${row.session_id}`; groups.set(key, [...(groups.get(key) ?? []), row]); }
   const exportParams = new URLSearchParams({ format: "csv", registered_from: registeredFrom, registered_to: registeredTo });
@@ -63,7 +61,7 @@ export default async function RegistrationsPage({ searchParams }: { searchParams
   return <div className="admin-page">
     <div className="admin-page-header"><div><div className="eyebrow">活動與報名</div><h1 className="admin-page-title">報名名單</h1><p className="admin-page-description">依活動與場次分組管理，預設只顯示近 30 天建立的報名，避免歷史資料混在同一張長表。</p></div><Link href={`/api/admin/registrations?${exportParams.toString()}`} className="btn btn-secondary w-fit">匯出目前範圍 CSV</Link></div>
     <form className="admin-toolbar grid gap-3 lg:grid-cols-6">
-      <label className="text-sm lg:col-span-2"><span className="label">搜尋</span><input name="q" defaultValue={q} className="input" placeholder="報名編號、姓名或電話" /></label>
+      <label className="text-sm lg:col-span-2"><span className="label">搜尋</span><input name="q" defaultValue={q} className="input" placeholder={showPii ? "報名編號、姓名或電話" : "報名編號"} /></label>
       <label className="text-sm"><span className="label">活動</span><select name="event_id" defaultValue={eventId ?? ""} className="input"><option value="">全部活動</option>{eventOptions.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}</select></label>
       <label className="text-sm"><span className="label">場次</span><select name="session_id" defaultValue={sessionId ?? ""} className="input"><option value="">全部場次</option>{sessionOptions.map((session) => <option key={session.id} value={session.id}>{session.name} · {formatEventDate(session.start_at)}</option>)}</select></label>
       <label className="text-sm"><span className="label">狀態</span><select name="status" defaultValue={status ?? ""} className="input"><option value="">全部</option><option value="pending">待付款</option><option value="confirmed">已確認</option><option value="waitlisted">候補</option><option value="attended">已報到</option><option value="cancelled">已取消</option><option value="no_show">未到</option></select></label>

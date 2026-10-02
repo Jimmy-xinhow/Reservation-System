@@ -15,6 +15,9 @@ const baseUrl = (
   (railwayPublicDomain ? `https://${railwayPublicDomain}` : "")
 ).replace(/\/$/, "");
 if (!baseUrl) throw new Error("缺少 STAGING_BASE_URL、PUBLIC_APP_URL 或 RAILWAY_PUBLIC_DOMAIN");
+if (new URL(baseUrl).hostname !== "reservation-system-staging-staging.up.railway.app") {
+  throw new Error("Refusing to run against an unpinned staging API host");
+}
 
 const gates = [
   { name: "公開頁面與 Cron 未授權邊界", script: "smoke-public.mjs", env: { SMOKE_BASE_URL: baseUrl } },
@@ -24,9 +27,14 @@ const gates = [
   { name: "提醒、自動化與通知佇列", script: "staging-notification-audit.mjs" },
   { name: "瀏覽器身分與跨品牌操作", script: "staging-browser-identity-audit.mjs" },
 ];
+const isolatedOnly = process.argv.includes("--isolated-only");
+if (process.argv.some(arg => arg.startsWith("--") && arg !== "--isolated-only")) {
+  throw new Error("未知驗收選項");
+}
+const selectedGates = isolatedOnly ? gates.filter(gate => gate.script !== "staging-browser-identity-audit.mjs") : gates;
 
 console.log(`[staging gate] target=${baseUrl}`);
-for (const gate of gates) {
+for (const gate of selectedGates) {
   console.log(`\n[staging gate] START ${gate.name}`);
   const result = spawnSync(process.execPath, [path.join(root, "scripts", gate.script)], {
     cwd: root,
@@ -41,4 +49,8 @@ for (const gate of gates) {
   console.log(`[staging gate] PASS ${gate.name}`);
 }
 
-console.log(`\nStaging core acceptance passed (${gates.length}/${gates.length} gates).`);
+if (isolatedOnly) {
+  console.log(`\nStaging isolated acceptance passed (${selectedGates.length}/${gates.length} gates); verified-host browser identity remains unverified.`);
+} else {
+  console.log(`\nStaging core acceptance passed (${gates.length}/${gates.length} gates).`);
+}

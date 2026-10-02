@@ -1,9 +1,13 @@
+import { deliveryError } from "@/lib/delivery-error";
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase";
-import { getClinicSettings } from "@/lib/http";
-import { emailConfigForClinic, sendEmail } from "@/lib/email";
+import { fail, getClinicSettings } from "@/lib/http";
+import { emailConfigForClinic, isEmailProviderRejected, sendEmail } from "@/lib/email";
 import { lineAccessTokenForDestination, pushMessages } from "@/lib/line";
+import { isVerifiedLineRecipient } from "@/lib/line-customer-identity";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readCronRecordScope, type CronRecordScope } from "@/lib/cron-scope";
+import { cronScopeDenied } from "@/lib/cron-allowlist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +22,8 @@ interface MembershipRow {
   membership_code: string;
   credits_remaining: number;
   expires_at: string | null;
-  membership_plans: { name: string } | { name: string }[] | null;
-  patients: { name: string; line_user_id: string | null; email: string | null } | { name: string; line_user_id: string | null; email: string | null }[] | null;
+  membership_plans: { clinic_id: string; name: string } | { clinic_id: string; name: string }[] | null;
+  patients: { clinic_id: string; name: string; line_user_id: string | null; email: string | null } | { clinic_id: string; name: string; line_user_id: string | null; email: string | null }[] | null;
 }
 
 interface ClinicRow { id: string; name: string; line_destination: string | null }
@@ -41,42 +45,60 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 }
 
-export async function GET(request: NextRequest) {
+export async function POST(request: NextRequest) {
+  const scope = await readCronRecordScope(request, "membership_ids");
+  if (scope instanceof Response) return scope;
+  return runMembershipReminders(request, scope);
+}
+
+export async function GET(request: NextRequest) { return runMembershipReminders(request); }
+
+async function runMembershipReminders(request: NextRequest, scope?: CronRecordScope) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return new Response("unauthorized", { status: 401 });
+  const denied = cronScopeDenied(scope?.clinicId);
+  if (denied) return denied;
   try {
     const service = createServiceClient();
-    const { data: clinics, error } = await service.from("clinics").select("id, name, line_destination").eq("active", true);
+    let clinicQuery = service.from("clinics").select("id, name, line_destination").eq("active", true);
+    if (scope) clinicQuery = clinicQuery.eq("id", scope.clinicId);
+    const { data: clinics, error } = await clinicQuery;
     if (error) throw new Error(error.message);
     const summary = { candidates: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0 };
     const errors: string[] = [];
     for (const clinic of (clinics ?? []) as ClinicRow[]) {
       try {
-        const result = await runClinic(service, clinic);
+        const result = await runClinic(service, clinic, scope?.recordIds);
         summary.candidates += result.candidates; summary.sent += result.sent; summary.failed += result.failed; summary.skipped += result.skipped; summary.duplicate += result.duplicate;
-      } catch (clinicError) { errors.push(`${clinic.id}: ${clinicError instanceof Error ? clinicError.message : "membership reminder failed"}`); }
+      } catch (clinicError) { errors.push(`${clinic.id}: ${deliveryError(clinicError)}`); }
     }
-    return Response.json({ ok: errors.length === 0, ...summary, errors });
+    return Response.json({ ok: errors.length === 0 && summary.failed === 0, ...summary, errors });
   } catch (error) {
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : "membership reminder failed" }, { status: 500 });
+    return fail(error instanceof Error ? error.message : "membership reminder failed", 500);
   }
 }
 
-async function runClinic(service: SupabaseClient, clinic: ClinicRow) {
+async function runClinic(service: SupabaseClient, clinic: ClinicRow, membershipIds?: string[]) {
   const settings = await getClinicSettings(service, clinic.id);
   if (!settings) throw new Error("brand settings unavailable");
-  const { data, error } = await service.from("patient_memberships")
-    .select("id, clinic_id, patient_id, membership_code, credits_remaining, expires_at, membership_plans(name), patients(name, line_user_id, email)")
+  let membershipQuery = service.from("patient_memberships")
+    .select("id, clinic_id, patient_id, membership_code, credits_remaining, expires_at, membership_plans(clinic_id, name), patients(clinic_id, name, line_user_id, email)")
     .eq("clinic_id", clinic.id).eq("status", "active").order("id").limit(2000);
+  if (membershipIds) membershipQuery = membershipQuery.in("id", membershipIds);
+  const { data, error } = await membershipQuery;
   if (error) throw new Error(error.message);
   const now = new Date();
   const expiryDays = numberEnv("MEMBERSHIP_EXPIRY_NOTICE_DAYS", 7);
   const lowBalanceThreshold = Math.max(1, Math.floor(numberEnv("MEMBERSHIP_LOW_BALANCE_THRESHOLD", 1)));
   const expiryLimit = now.getTime() + expiryDays * 24 * 60 * 60 * 1000;
   const rows = (data ?? []) as unknown as MembershipRow[];
+  if (rows.some((row) => one(row.patients)?.clinic_id !== clinic.id
+    || one(row.membership_plans)?.clinic_id !== clinic.id)) {
+    throw new Error("membership relation tenant mismatch");
+  }
   const result = { candidates: 0, sent: 0, failed: 0, skipped: 0, duplicate: 0 };
   let lineToken: string | null = null; let lineTokenError: string | null = null;
-  if (rows.some((row) => Boolean(one(row.patients)?.line_user_id))) {
+  if (settings.line_channel_enabled && rows.some((row) => Boolean(one(row.patients)?.line_user_id))) {
     try { lineToken = await lineAccessTokenForDestination(clinic.line_destination ?? undefined); }
     catch (error) { lineTokenError = error instanceof Error ? error.message : "LINE access token unavailable"; }
   }
@@ -95,8 +117,15 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow) {
       const claim = await claimNotification(service, row, notice.kind, channel, notice.windowKey);
       if (claim === "duplicate") { result.duplicate += 1; continue; }
       if (!claim) continue;
+      if (channel === "line" && !settings.line_channel_enabled) { await finishNotification(service, claim, "skipped", "brand LINE channel is disabled"); result.skipped += 1; continue; }
       if (channel === "line" && !patient?.line_user_id) { await finishNotification(service, claim, "skipped", "customer has no LINE identity"); result.skipped += 1; continue; }
       if (channel === "line" && !lineToken) { await finishNotification(service, claim, "failed", lineTokenError ?? "LINE access token unavailable"); result.failed += 1; continue; }
+      if (channel === "line") {
+        let verified: boolean;
+        try { verified = await isVerifiedLineRecipient(service, clinic.id, patient!.line_user_id!, row.patient_id); }
+        catch (error) { await finishNotification(service, claim, "failed", error instanceof Error ? error.message : "LINE identity lookup failed"); result.failed += 1; continue; }
+        if (!verified) { await finishNotification(service, claim, "skipped", "LINE recipient identity is not verified for this brand"); result.skipped += 1; continue; }
+      }
       if (channel === "email" && (!patient?.email || !emailConfig)) { await finishNotification(service, claim, "skipped", "customer email or email provider unavailable"); result.skipped += 1; continue; }
       const body = notice.kind === "low_balance"
         ? `${clinic.name}提醒：您的${plan?.name ?? "會員方案"}目前剩餘 ${row.credits_remaining} 堂，請於需要時聯繫品牌櫃檯。`
@@ -105,7 +134,11 @@ async function runClinic(service: SupabaseClient, clinic: ClinicRow) {
         if (channel === "line") await pushMessages(patient!.line_user_id!, [{ type: "text", text: body }], lineToken!);
         else await sendEmail(emailConfig!, patient!.email!, notice.kind === "low_balance" ? "會員堂數提醒" : "會員期限提醒", `<div style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(body)}</div>`);
         await finishNotification(service, claim, "sent"); result.sent += 1;
-      } catch (sendError) { await finishNotification(service, claim, "failed", sendError instanceof Error ? sendError.message : "notification failed"); result.failed += 1; }
+      } catch (sendError) {
+        if (channel === "email" && isEmailProviderRejected(sendError)) await finishNotification(service, claim, "failed", sendError.message);
+        else console.error("Membership delivery unconfirmed", { category: deliveryError(sendError) });
+        result.failed += 1;
+      }
     }
   }
   return result;
@@ -118,6 +151,6 @@ async function claimNotification(service: SupabaseClient, row: MembershipRow, ki
 }
 
 async function finishNotification(service: SupabaseClient, id: string, status: "sent" | "failed" | "skipped", error: string | null = null): Promise<void> {
-  const { error: updateError } = await service.from("membership_notification_logs").update({ status, error, sent_at: status === "sent" ? new Date().toISOString() : null }).eq("id", id);
+  const { error: updateError } = await service.from("membership_notification_logs").update({ status, error: status === "failed" ? deliveryError(error) : error, sent_at: status === "sent" ? new Date().toISOString() : null }).eq("id", id);
   if (updateError) throw new Error(updateError.message);
 }

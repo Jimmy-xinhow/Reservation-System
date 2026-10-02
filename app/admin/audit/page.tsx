@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { TechnicalDetails } from "@/components/TechnicalDetails";
 import { requireAdmin } from "@/lib/admin";
 import { auditSourceLabel, auditStatusLabel } from "@/lib/admin-display";
@@ -7,13 +9,13 @@ export const dynamic = "force-dynamic";
 interface AuditRow { id: string; created_at: string; from_status: string | null; to_status: string; source: string; actor_id: string | null; note: string | null; kind: string; reference_id: string; }
 export default async function AuditPage() {
   const { supabase, clinicId } = await requireAdmin();
-  const [{ data: appointments, error: appointmentsError }, { data: registrations, error: registrationsError }, { data: payments, error: paymentsError }] = await Promise.all([
-    supabase.from("appointment_status_events").select("id, created_at, from_status, to_status, source, actor_id, note, appointment_id").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(100),
-    supabase.from("registration_status_events").select("id, created_at, from_status, to_status, source, actor_id, note, registration_id").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(100),
-    supabase.from("payment_status_events").select("id, created_at, from_status, to_status, source, actor_id, note, payment_order_id").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(100),
-  ]);
+  const [{ data: appointments, error: appointmentsError }, { data: registrations, error: registrationsError }, { data: payments, error: paymentsError }] = await adminQuery(Promise.all([
+    supabase.from("appointment_status_events").select("id, created_at, from_status, to_status, source, actor_id, note, appointment_id").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(200),
+    supabase.from("registration_status_events").select("id, created_at, from_status, to_status, source, actor_id, note, registration_id").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(200),
+    supabase.from("payment_status_events").select("id, created_at, from_status, to_status, source, actor_id, note, payment_order_id").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(200),
+  ]));
   const firstError = appointmentsError ?? registrationsError ?? paymentsError;
-  if (firstError) throw new Error(`讀取操作紀錄失敗：${firstError.message}`);
+  if (firstError) throw new Error(adminErrorMessage(`讀取操作紀錄失敗：${firstError.message}`));
   const rows: AuditRow[] = [
     ...((appointments ?? []) as Array<Record<string, unknown>>).map((row) => ({ ...row, kind: "預約", reference_id: String(row.appointment_id) }) as AuditRow),
     ...((registrations ?? []) as Array<Record<string, unknown>>).map((row) => ({ ...row, kind: "報名", reference_id: String(row.registration_id) }) as AuditRow),

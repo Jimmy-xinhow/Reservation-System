@@ -1,4 +1,4 @@
-import { createSupabaseServer } from "@/lib/supabase-server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { requireAdmin } from "@/lib/admin";
 import { createExceptionAction, deleteExceptionAction } from "../schedule-actions";
 import ExceptionForm from "../_components/ExceptionForm";
@@ -38,9 +38,8 @@ interface Exception {
 }
 
 export default async function ExceptionsPage() {
-  const { clinicId } = await requireAdmin();
-  const supabase = await createSupabaseServer();
-  const [{ data: doctors }, { data: services }, { data: templates }, { data: exceptions }] = await Promise.all([
+  const { supabase, clinicId } = await requireAdmin();
+  const [{ data: doctors, error: doctorsError }, { data: services, error: servicesError }, { data: templates, error: templatesError }, { data: exceptions, error: exceptionsError }] = await adminQuery(Promise.all([
     supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
     supabase.from("services").select("id, name").eq("clinic_id", clinicId).eq("active", true).order("name"),
     supabase
@@ -53,7 +52,9 @@ export default async function ExceptionsPage() {
       .select("id, doctor_id, service_id, date, is_closed, start_time, end_time, capacity")
       .eq("clinic_id", clinicId)
       .order("date", { ascending: false }),
-  ]);
+  ]));
+  const firstError = doctorsError ?? servicesError ?? templatesError ?? exceptionsError;
+  if (firstError) throw new Error(adminErrorMessage(`讀取例外日期設定失敗：${firstError.message}`));
 
   const docs = (doctors ?? []) as Doctor[];
   const svcs = (services ?? []) as Service[];

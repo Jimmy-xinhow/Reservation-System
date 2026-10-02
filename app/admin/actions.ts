@@ -1,4 +1,6 @@
 "use server";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -13,7 +15,9 @@ function str(fd: FormData, k: string): string {
 export async function setActiveClinicAction(fd: FormData): Promise<void> {
   const context = await requireMember();
   const clinicId = str(fd, "clinic_id");
-  if (!context.clinics.some((clinic) => clinic.id === clinicId)) throw new Error("無權限切換此品牌");
+  if (!context.clinics.some((clinic) => clinic.id === clinicId)) {
+    redirect("/admin/dashboard?notice=brand-access");
+  }
   const store = await cookies();
   store.set(ACTIVE_CLINIC_COOKIE, clinicId, {
     httpOnly: true,
@@ -37,17 +41,17 @@ export async function createBrandAction(fd: FormData): Promise<void> {
   if (phone.length > 80 || address.length > 240) throw new Error("品牌公開資訊過長");
 
   const svc = createServiceClient();
-  const { data, error } = await svc.rpc("create_brand_with_owner", {
+  const { data, error } = await adminQuery(svc.rpc("create_brand_with_owner", {
     p_actor_user_id: member.user.id,
     p_source_clinic_id: member.clinicId,
     p_name: name,
     p_slug: slug,
     p_phone: phone || null,
     p_address: address || null,
-  });
+  }));
   if (error) {
     if (error.code === "23505") throw new Error("品牌短網址已存在");
-    throw new Error(error.message);
+    throw new Error(adminErrorMessage(error));
   }
   const row = (Array.isArray(data) ? data[0] : data) as { clinic_id?: unknown } | null;
   if (!row || typeof row.clinic_id !== "string") throw new Error("品牌建立失敗");
@@ -69,6 +73,6 @@ export async function createBrandAction(fd: FormData): Promise<void> {
 // ── 登出 ──────────────────────────────────────────────────
 export async function signOutAction() {
   const supabase = await createSupabaseServer();
-  await supabase.auth.signOut();
+  await adminQuery(supabase.auth.signOut());
   redirect("/admin/login");
 }

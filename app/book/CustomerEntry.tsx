@@ -266,6 +266,14 @@ function EventsView({ app }: { app: CustomerAppConfig }) {
       .then(async (response) => {
         const body = await response.json() as { ok?: boolean; data?: { events: EventSummary[] }; error?: string };
         if (!response.ok || !body.ok || !body.data) throw new Error(body.error ?? "活動載入失敗");
+        const selectedEventId = liffEntryParams(window.location.search).get("event")?.trim();
+        if (selectedEventId) {
+          if (!body.data.events.some((event) => event.id === selectedEventId)) {
+            throw new Error("指定活動目前未開放報名");
+          }
+          window.location.replace(scopedPath("/register", { event: selectedEventId, liff: "1" }));
+          return;
+        }
         setEvents(body.data.events);
       })
       .catch((caught) => setError(caught instanceof Error ? caught.message : "活動載入失敗"));

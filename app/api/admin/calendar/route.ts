@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canViewSensitiveCustomerData, getAssignedDoctorIds, requireMember } from "@/lib/admin";
 import { createSupabaseServer } from "@/lib/supabase-server";
+import { fail } from "@/lib/http";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 interface AppointmentRow {
   id: string;
@@ -37,11 +39,12 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createSupabaseServer();
     const assigned = member.role === "provider" ? await getAssignedDoctorIds(member) : [];
-    let query = supabase.from("appointments").select("id, doctor_id, start_at, end_at, status, visit_type, deposit_status, doctors(name), patients(name, phone), services(name)").eq("clinic_id", member.clinicId).gte("start_at", start.toISOString()).lt("start_at", end.toISOString()).order("start_at");
-    if (member.role === "provider") query = query.in("doctor_id", assigned.length ? assigned : ["00000000-0000-0000-0000-000000000000"]);
-    if (doctorId) query = query.eq("doctor_id", doctorId);
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
+    const data = await fetchAllSupabasePages((from, to) => {
+      let query = supabase.from("appointments").select("id, doctor_id, start_at, end_at, status, visit_type, deposit_status, doctors(name), patients(name, phone), services(name)").eq("clinic_id", member.clinicId).gte("start_at", start.toISOString()).lt("start_at", end.toISOString());
+      if (member.role === "provider") query = query.in("doctor_id", assigned.length ? assigned : ["00000000-0000-0000-0000-000000000000"]);
+      if (doctorId) query = query.eq("doctor_id", doctorId);
+      return query.order("start_at").order("id").range(from, to);
+    });
 
     const showPii = canViewSensitiveCustomerData(member.role);
     const events = ((data ?? []) as unknown as AppointmentRow[]).map((row) => {
@@ -75,6 +78,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ events }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "日曆資料載入失敗";
-    return NextResponse.json({ error: message }, { status: message.includes("登入") ? 401 : 500 });
+    return fail(message, 500);
   }
 }

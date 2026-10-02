@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { Fragment } from "react";
 import type { PublicBrandPageData } from "@/lib/brand-page";
 import styles from "./LiveBrandPage.module.css";
 
@@ -46,6 +47,7 @@ interface PublicOffer {
   title: string;
   description: string;
   href: string;
+  browserHref: string | null;
   kind: "service" | "event";
 }
 
@@ -83,14 +85,16 @@ function offersFor(brand: PublicBrandPageData, mode: PageMode): PublicOffer[] {
     id: event.id,
     title: event.title,
     description: eventMeta(event),
-    href: eventHref(brand, event.slug),
+    href: event.href ?? eventHref(brand, event.slug),
+    browserHref: event.browserHref ?? null,
     kind: "event",
   }));
   const services: PublicOffer[] = brand.services.map((service) => ({
     id: service.id,
     title: service.name,
     description: service.description ?? (mode === "beauty" ? "查看療程說明、服務人員與可約時間" : "查看內容與可預約時段"),
-    href: brand.links.booking ?? brand.links.primary,
+    href: service.href ?? brand.links.booking ?? brand.links.primary,
+    browserHref: service.browserHref ?? null,
     kind: "service",
   }));
   const combined = mode === "education" ? [...events, ...services] : [...services, ...events];
@@ -100,6 +104,7 @@ function offersFor(brand: PublicBrandPageData, mode: PageMode): PublicOffer[] {
     title: brand.content.section_title,
     description: brand.content.section_description,
     href: brand.links.primary,
+    browserHref: null,
     kind: mode === "education" ? "event" : "service",
   }];
 }
@@ -150,11 +155,14 @@ function BeautyOfferIndex({ brand }: { brand: PublicBrandPageData }) {
   return (
     <div className={styles.beautyOfferIndex}>
       {offersFor(brand, "beauty").map((offer) => (
-        <a href={offer.href} key={`${offer.kind}-${offer.id}`}>
-          <span className={styles.beautyOfferTitle}><small>{offer.kind === "service" ? "專業護理" : "主題講座"}</small><strong>{offer.title}</strong></span>
-          <span className={styles.beautyOfferDescription}>{offer.description}</span>
-          <span className={styles.beautyOfferAction}>{offer.kind === "service" ? "查看可約時段" : "查看開放場次"}<b aria-hidden="true">↗</b></span>
-        </a>
+        <Fragment key={`${offer.kind}-${offer.id}`}>
+          <a href={offer.href}>
+            <span className={styles.beautyOfferTitle}><small>{offer.kind === "service" ? "專業護理" : "主題講座"}</small><strong>{offer.title}</strong></span>
+            <span className={styles.beautyOfferDescription}>{offer.description}</span>
+            <span className={styles.beautyOfferAction}>{offer.kind === "service" ? "查看可約時段" : "查看開放場次"}<b aria-hidden="true">↗</b></span>
+          </a>
+          {offer.browserHref && <a className={styles.browserFallback} href={offer.browserHref}>不使用 LINE？改用瀏覽器{offer.kind === "event" ? "報名" : "預約"} →</a>}
+        </Fragment>
       ))}
     </div>
   );
@@ -239,11 +247,14 @@ function EducationCatalog({ brand }: { brand: PublicBrandPageData }) {
   return (
     <div className={styles.educationCatalog}>
       {offersFor(brand, "education").map((offer) => (
-        <a href={offer.href} key={`${offer.kind}-${offer.id}`}>
-          <span className={styles.educationType}>{offer.kind === "event" ? "課程報名" : "一對一課程"}</span>
-          <span className={styles.educationOfferCopy}><strong>{offer.title}</strong><small>{offer.description}</small></span>
-          <span className={styles.educationOfferAction}>查看內容與場次 <b aria-hidden="true">→</b></span>
-        </a>
+        <Fragment key={`${offer.kind}-${offer.id}`}>
+          <a href={offer.href}>
+            <span className={styles.educationType}>{offer.kind === "event" ? "課程報名" : "一對一課程"}</span>
+            <span className={styles.educationOfferCopy}><strong>{offer.title}</strong><small>{offer.description}</small></span>
+            <span className={styles.educationOfferAction}>查看內容與場次 <b aria-hidden="true">→</b></span>
+          </a>
+          {offer.browserHref && <a className={styles.browserFallback} href={offer.browserHref}>不使用 LINE？改用瀏覽器{offer.kind === "event" ? "報名" : "預約"} →</a>}
+        </Fragment>
       ))}
     </div>
   );
@@ -333,12 +344,15 @@ function FitnessSchedule({ brand }: { brand: PublicBrandPageData }) {
   return (
     <div className={styles.fitnessSchedule}>
       {offersFor(brand, "fitness").map((offer) => (
-        <a href={offer.href} key={`${offer.kind}-${offer.id}`}>
-          <span className={styles.fitnessType}>{offer.kind === "event" ? "團體課" : "私人課"}</span>
-          <strong>{offer.title}</strong>
-          <small>{offer.description}</small>
-          <span className={styles.fitnessBook}>{offer.kind === "event" ? "查看場次" : "查看時段"}<b aria-hidden="true">↗</b></span>
-        </a>
+        <Fragment key={`${offer.kind}-${offer.id}`}>
+          <a href={offer.href}>
+            <span className={styles.fitnessType}>{offer.kind === "event" ? "團體課" : "私人課"}</span>
+            <strong>{offer.title}</strong>
+            <small>{offer.description}</small>
+            <span className={styles.fitnessBook}>{offer.kind === "event" ? "查看場次" : "查看時段"}<b aria-hidden="true">↗</b></span>
+          </a>
+          {offer.browserHref && <a className={styles.browserFallback} href={offer.browserHref}>不使用 LINE？改用瀏覽器{offer.kind === "event" ? "報名" : "預約"} →</a>}
+        </Fragment>
       ))}
     </div>
   );

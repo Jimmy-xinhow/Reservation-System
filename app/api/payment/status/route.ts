@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   try {
     const svc = createServiceClient();
     const clinicId = await resolvePublicClinicId(req, svc);
-    if (!clinicId) return fail("缺少品牌設定", 500);
+    if (!clinicId) return fail("缺少品牌設定", 404);
     const order = await findPaymentOrderByMerchant(svc, clinicId, provider as PaymentProvider, orderNo);
     if (!order) return fail("找不到付款訂單", 404);
 

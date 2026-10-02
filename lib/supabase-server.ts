@@ -1,5 +1,6 @@
 import "server-only";
 
+import { readVerifiedUser } from "./auth-boundary";
 import { cookies } from "next/headers";
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -35,6 +36,6 @@ export const createSupabaseServer = cache(async function createSupabaseServer():
 /** 同一個 Server Component 請求只向 Supabase Auth 驗證一次登入者。 */
 export const getSupabaseServerAuth = cache(async () => {
   const supabase = await createSupabaseServer();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await readVerifiedUser(supabase);
   return { supabase, user };
 });

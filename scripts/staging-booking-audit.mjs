@@ -7,6 +7,7 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const environmentName = process.env.RAILWAY_ENVIRONMENT_NAME ?? process.env.NODE_ENV ?? "";
 if (!supabaseUrl || !anonKey || !serviceKey) throw new Error("缺少 Supabase staging 環境變數");
 if (environmentName.toLowerCase() !== "staging") throw new Error(`僅允許 staging；目前環境為 ${environmentName || "unknown"}`);
+if (new URL(supabaseUrl).hostname !== "ongjsegewpnbkqugrpom.supabase.co") throw new Error("Refusing to run against an unpinned Supabase project");
 
 const service = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const suffix = `${Date.now()}-${randomBytes(3).toString("hex")}`;
@@ -74,10 +75,12 @@ async function cleanupClinic(targetClinicId) {
       "patient_records",
       "patients",
       "clinic_members",
+      "attendance_settings",
       "clinic_line_channels",
       "brand_entitlements",
       "clinic_settings",
     ]) await remove(table, service.from(table).delete().eq("clinic_id", targetClinicId));
+    await remove("activation metrics", service.from("clinic_activation_metrics").delete().eq("clinic_id", targetClinicId));
     await remove("clinic", service.from("clinics").delete().eq("id", targetClinicId));
   }
   if (errors.length) throw new Error(errors.join("; "));
@@ -97,10 +100,6 @@ async function cleanup() {
 }
 
 try {
-  const staleClinics = await must("find stale QA clinics", service.from("clinics").select("id").like("slug", "qa-booking-%"));
-  for (const staleClinic of staleClinics ?? []) await cleanupClinic(staleClinic.id);
-  if ((staleClinics ?? []).length > 0) pass(`已清理 ${staleClinics.length} 個先前中斷的 QA 預約租戶`);
-
   const clinic = await must("create clinic", service.from("clinics").insert({
     name: "QA Booking Lifecycle",
     slug: qaSlug,
@@ -322,7 +321,7 @@ try {
   await must("force appointment deposit expiry", service.from("appointments").update({
     deposit_expires_at: new Date(Date.now() - 60_000).toISOString(),
   }).eq("id", depositAppointmentId));
-  const expiredDepositCount = await must("expire pending appointment deposits", service.rpc("expire_pending_appointment_deposits"));
+  const expiredDepositCount = await must("expire pending appointment deposits", service.rpc("expire_pending_appointment_deposits_for_clinic", { p_clinic_id: clinicId }));
   const expiredDeposit = await must("read expired appointment deposit", service.from("appointments")
     .select("status,deposit_status,deposit_expires_at").eq("id", depositAppointmentId).single());
   const expiredDepositOrder = await must("read expired appointment payment order", service.from("payment_orders")

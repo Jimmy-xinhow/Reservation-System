@@ -188,6 +188,14 @@
 .fitnessSchedule { border-top: 1px solid var(--ink); }
 .fitnessSchedule > a { display: grid; grid-template-columns: 90px minmax(190px, .78fr) minmax(250px, 1.22fr) 148px; gap: 20px; align-items: center; min-height: 124px; padding: 25px 0; border-bottom: 1px solid var(--line); transition: background 160ms ease, padding-inline 160ms ease; }
 .fitnessSchedule > a:hover { padding-inline: 12px; background: rgba(255,255,255,.36); }
+.beautyOfferIndex > a.browserFallback, .educationCatalog > a.browserFallback, .fitnessSchedule > a.browserFallback {
+  display: inline-flex; grid-template-columns: none; align-items: center; width: fit-content;
+  min-height: 44px; margin-top: 0; padding: 8px 0 20px; border-bottom: 0;
+  color: var(--ink); font-size: 14px; font-weight: 560; text-decoration: underline; text-underline-offset: 4px;
+}
+.beautyOfferIndex > a.browserFallback:hover, .educationCatalog > a.browserFallback:hover, .fitnessSchedule > a.browserFallback:hover {
+  padding-inline: 0; background: transparent; text-decoration-thickness: 2px;
+}
 .fitnessType { width: fit-content; color: #8a641c; font-size: 12px; font-weight: 620; }
 .fitnessSchedule strong { font-family: var(--font-editorial); font-size: clamp(20px, 1.75vw, 25px); font-weight: 560; line-height: 1.46; }
 .fitnessSchedule small { color: var(--muted); font-size: 14px; line-height: 1.76; }

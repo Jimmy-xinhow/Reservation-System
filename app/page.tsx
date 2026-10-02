@@ -7,6 +7,8 @@ import { FunnelTracker } from "@/components/FunnelTracker";
 import { MarketingHome } from "@/components/MarketingHome";
 import { IndustryShowcase } from "@/components/showcase/IndustryShowcase";
 import { loadPublicBrandPage } from "@/lib/public-brand-page";
+import { getClinicLineChannelContext } from "@/lib/line-channel";
+import { publicCustomerEntryUrl } from "@/lib/customer-entry";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +38,9 @@ async function getClinic(clinicId: string | null): Promise<ClinicInfo | null> {
 function isPlatformHost(host: string | null): boolean {
   const normalized = (host ?? "").split(",")[0].trim().toLowerCase().replace(/:\d+$/, "");
   if (!normalized || ["localhost", "127.0.0.1", "[::1]"].includes(normalized)) return true;
-  const configuredHosts = [process.env.PUBLIC_PLATFORM_HOSTS, process.env.RAILWAY_PUBLIC_DOMAIN, process.env.VERCEL_URL]
+  // Railway may assign a tenant custom domain here; only explicit platform
+  // hosts and deployment-owned hostnames should bypass brand resolution.
+  const configuredHosts = [process.env.PUBLIC_PLATFORM_HOSTS, process.env.VERCEL_URL]
     .flatMap((value) => (value ?? "").split(","))
     .map((value) => value.trim().toLowerCase().replace(/:\d+$/, ""))
     .filter(Boolean);
@@ -48,7 +52,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
   const clinicSlug = typeof params.clinic_slug === "string" ? params.clinic_slug : null;
   const clinicIdParam = typeof params.clinic_id === "string" ? params.clinic_id : null;
   const requestHeaders = await headers();
-  const requestHost = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host");
+  const requestHost = requestHeaders.get("host");
   if (!clinicSlug && !clinicIdParam && isPlatformHost(requestHost)) return <MarketingHome />;
 
   let clinicId: string | null = null;
@@ -80,9 +84,9 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
     : clinicIdParam
       ? `?clinic_id=${encodeURIComponent(clinicIdParam)}`
       : "";
-  const liffId = process.env.NEXT_PUBLIC_LIFF_ID;
-  const liffUrl = liffId
-    ? `https://liff.line.me/${liffId}${clinicScopeSuffix}`
+  const lineContext = clinicId ? await getClinicLineChannelContext(createServiceClient(), clinicId).catch(() => null) : null;
+  const liffUrl = lineContext?.enabled && lineContext.liffId && lineContext.loginChannelId
+    ? publicCustomerEntryUrl("booking", lineContext)
     : null;
   const browserBookingUrl = `/book/browser${clinicScopeSuffix}`;
   const registrationUrl = `/register${clinicScopeSuffix}`;
@@ -132,7 +136,7 @@ export default async function HomePage({ searchParams }: { searchParams?: Promis
               <span className="text-lg">💬</span> 加入 LINE，開始預約
             </a>
           ) : (
-            <p className="rounded-xl bg-slate-50 p-3 text-center text-sm text-slate-500">目前提供瀏覽器預約，選擇下方服務即可開始。</p>
+            <p className="rounded-xl bg-slate-50 p-3 text-center text-sm text-slate-500">{liffUrl ? "可透過 LINE 或瀏覽器預約，請選擇下方入口。" : "目前提供瀏覽器預約，選擇下方服務即可開始。"}</p>
           )}
 
           {liffUrl && (

@@ -5,6 +5,8 @@ import { getQueueForDate, taipeiToday, type QueueAppt } from "@/lib/queue";
 import { advanceServingAction, setQueueAutoAction, setStatusAction } from "../appointment-actions";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
+import { ModuleDisabled } from "@/components/ModuleDisabled";
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 
 export const dynamic = "force-dynamic";
 
@@ -33,14 +35,16 @@ export default async function QueuePage({
     : role === "provider" ? undefined : requestedDoctorId;
   const supabase = await createSupabaseServer();
   const settingsClient = role === "provider" ? createServiceClient() : supabase;
-  const [{ data: settings }, { data: doctors }] = await Promise.all([
-    settingsClient.from("clinic_settings").select("booking_mode").eq("clinic_id", clinicId).maybeSingle(),
+  const [{ data: settings, error: settingsError }, { data: doctors, error: doctorsError }] = await adminQuery(Promise.all([
+    settingsClient.from("clinic_settings").select("booking_mode, legacy_progress_enabled").eq("clinic_id", clinicId).maybeSingle(),
     (() => {
       let query = supabase.from("doctors").select("id, name").eq("clinic_id", clinicId).eq("active", true);
       if (role === "provider") query = query.in("id", assignedDoctorIds.length > 0 ? assignedDoctorIds : ["00000000-0000-0000-0000-000000000000"]);
       return query.order("name");
     })(),
-  ]);
+  ]));
+  if (settingsError || doctorsError || !settings) throw new Error(adminErrorMessage(settingsError ?? doctorsError ?? "叫號設定載入失敗"));
+  if (settings.legacy_progress_enabled !== true) return <ModuleDisabled title="現場叫號" />;
   const mode = (settings?.booking_mode as "time" | "number") ?? "time";
   const canManageQueue = role !== "provider";
   const sessions = role === "provider"

@@ -1,3 +1,5 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import Link from "next/link";
 import { TechnicalDetails } from "@/components/TechnicalDetails";
 import { requireSystemPermission } from "@/lib/platform";
@@ -13,13 +15,13 @@ export default async function PlatformSettingsPage() {
     { count: vaultLineSecretCount, error: lineSecretError },
     { count: vaultEmailSecretCount, error: emailSecretError },
     { count: vaultPaymentSecretCount, error: paymentSecretError },
-  ] = await Promise.all([
+  ] = await adminQuery(Promise.all([
     service.from("clinic_line_secret_refs").select("clinic_id", { count: "exact", head: true }),
     service.from("clinic_email_secret_refs").select("clinic_id", { count: "exact", head: true }),
     service.from("clinic_payment_secret_refs").select("clinic_id", { count: "exact", head: true }),
-  ]);
+  ]));
   const secretStatusError = lineSecretError ?? emailSecretError ?? paymentSecretError;
-  if (secretStatusError) throw new Error(`讀取外部渠道安全設定狀態失敗：${secretStatusError.message}`);
+  if (secretStatusError) throw new Error(adminErrorMessage(`讀取外部渠道安全設定狀態失敗：${secretStatusError.message}`));
   const governanceChecks = [
     { label: "系統帳號身分", value: `目前帳號：${platformAccessLabel(platform.accessType)}`, tone: "good" },
     { label: "多品牌資料隔離", value: "登入身分、品牌範圍與資料庫權限共同保護", tone: "good" },

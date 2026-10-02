@@ -1,20 +1,34 @@
+
+import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import { CsvImportWizard } from "./CsvImportWizard";
+import { safeImportErrors } from "@/lib/import-error";
+import { fetchAllSupabasePages } from "@/lib/supabase-pagination";
 
 export const dynamic = "force-dynamic";
 
 interface ImportJob { id: string; entity: string; status: string; total_rows: number; imported_rows: number; failed_rows: number; error_summary: Array<{ row: number; reason: string }>; created_at: string; }
+interface ImportSummary { status: string; imported_rows: number; }
 const LABEL: Record<string, string> = { patients: "顧客", services: "服務", memberships: "套票餘額" };
 
 export default async function ImportPage() {
   const { clinicId } = await requireAdmin();
-  const { data, error } = await createServiceClient().from("data_import_jobs").select("id, entity, status, total_rows, imported_rows, failed_rows, error_summary, created_at").eq("clinic_id", clinicId).order("created_at", { ascending: false }).limit(20);
-  if (error) throw new Error(`讀取匯入紀錄失敗：${error.message}`);
-  const jobs = (data ?? []) as ImportJob[];
-  const completedJobs = jobs.filter((job) => job.status === "completed").length;
-  const failedJobs = jobs.filter((job) => job.status === "failed").length;
-  const importedRows = jobs.reduce((total, job) => total + job.imported_rows, 0);
+  const service = createServiceClient();
+  const [allSummaries, recentResult] = await Promise.all([
+    fetchAllSupabasePages<ImportSummary>((from, to) => service.from("data_import_jobs")
+      .select("status, imported_rows").eq("clinic_id", clinicId)
+      .order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, to)),
+    adminQuery(service.from("data_import_jobs")
+      .select("id, entity, status, total_rows, imported_rows, failed_rows, error_summary, created_at")
+      .eq("clinic_id", clinicId).order("created_at", { ascending: false }).order("id", { ascending: false }).limit(20)),
+  ]);
+  if (recentResult.error) throw new Error(adminErrorMessage(recentResult.error));
+  if (!Array.isArray(recentResult.data)) throw new Error("讀取匯入紀錄不完整，請重新載入後再試");
+  const jobs = (recentResult.data as ImportJob[]).map((job) => ({ ...job, error_summary: safeImportErrors(job.error_summary) }));
+  const completedJobs = allSummaries.filter((job) => job.status === "completed").length;
+  const failedJobs = allSummaries.filter((job) => job.status === "failed").length;
+  const importedRows = allSummaries.reduce((total, job) => total + job.imported_rows, 0);
   return (
     <div className="admin-page">
       <header className="admin-page-header"><div><p className="eyebrow">搬入既有資料</p><h1 className="admin-page-title">CSV 資料匯入</h1><p className="admin-page-description">將既有顧客、服務與套票餘額分批移入目前品牌。CSV 是試算表可另存的逗號分隔檔案。</p></div></header>

@@ -24,4 +24,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run verify:contracts
+      - run: npm test
       - run: npm run build

@@ -19,8 +19,11 @@ const denseBrandWorkspaces = [
   ["/admin/course-content", "課程內容與學習驗收"],
 ];
 
-function runFixture(mode) {
-  const result = spawnSync(process.execPath, [fixtureScript, mode], {
+function runFixture(mode, scope) {
+  const args = [fixtureScript, mode];
+  if (scope) args.push(scope.suffix, scope.clinic.id,
+    ...Object.values(scope.users).map((user) => user.id));
+  const result = spawnSync(process.execPath, args, {
     cwd: root,
     env: process.env,
     encoding: "utf8",
@@ -38,7 +41,7 @@ async function login(page, identity, entry) {
   if (entry === "platform") await page.getByRole("button", { name: "系統管理後台" }).click();
   await page.getByLabel("Email").fill(account.email);
   await page.getByLabel("密碼").fill(account.password);
-  await page.getByRole("button", { name: entry === "platform" ? "登入系統管理後台" : "登入品牌營運後台" }).click();
+  await page.getByRole("button", { name: entry === "platform" ? "進入系統管理" : "進入品牌營運", exact: true }).click();
   await expect(page).toHaveURL(entry === "platform" ? /\/admin\/platform(?:\?|$)/ : /\/admin\/dashboard(?:\?|$)/);
 }
 
@@ -76,8 +79,8 @@ async function expectNoHorizontalOverflow(page) {
 async function expectDenseWorkspaceLayout(page, { paired = false } = {}) {
   await expectNoHorizontalOverflow(page);
   const headingSize = await page.locator("h1").evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
-  expect(headingSize).toBeGreaterThanOrEqual(24);
-  expect(headingSize).toBeLessThanOrEqual(28);
+  expect(headingSize).toBeGreaterThanOrEqual(26);
+  expect(headingSize).toBeLessThanOrEqual(30);
   await expect(page.locator(".admin-shell")).toHaveCSS("font-size", "14px");
   const helperText = page.locator(".admin-shell .text-xs").first();
   if (await helperText.count()) await expect(helperText).toHaveCSS("font-size", "12px");
@@ -101,7 +104,7 @@ test.beforeAll(() => {
 });
 
 test.afterAll(() => {
-  runFixture("cleanup");
+  if (fixture) runFixture("cleanup", fixture);
 });
 
 test("系統管理者可進入系統人員頁", async ({ page }) => {
@@ -116,7 +119,7 @@ test("系統管理者可進入系統人員頁", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
-test("系統管理者可替既有系統員工設定密碼且員工能登入", async ({ page }) => {
+test("系統管理者可替既有系統員工設定密碼且員工能登入", async ({ page, browser }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page, "system-admin", "platform");
   await page.goto(`${baseUrl}/admin/platform/admins`);
@@ -126,12 +129,20 @@ test("系統管理者可替既有系統員工設定密碼且員工能登入", as
   await page.getByLabel("要設定密碼的系統人員").selectOption({ label: account.email });
   await page.getByLabel("新密碼（至少 8 碼）").fill(nextPassword);
   await page.getByLabel("再次輸入新密碼").fill(nextPassword);
+  const saveResponse = page.waitForResponse((response) => response.url().startsWith(`${baseUrl}/admin/platform/admins`)
+    && response.request().method() === "POST");
   await page.getByRole("button", { name: "只更新所選帳號" }).click();
-  await expect(page.getByLabel("要設定密碼的系統人員")).toHaveValue("");
+  expect((await saveResponse).ok()).toBe(true);
 
   fixture.users["system-employee"].password = nextPassword;
-  await login(page, "system-employee", "platform");
-  await expect(page.getByRole("heading", { name: "系統管理控制台" })).toBeVisible();
+  const employeeContext = await browser.newContext();
+  try {
+    const employeePage = await employeeContext.newPage();
+    await login(employeePage, "system-employee", "platform");
+    await expect(employeePage.getByRole("heading", { name: "系統管理控制台" })).toBeVisible();
+  } finally {
+    await employeeContext.close();
+  }
 });
 
 test("系統員工只能進入獲授權的系統總覽", async ({ page }) => {
@@ -150,7 +161,7 @@ test("品牌管理者可進入品牌人員頁", async ({ page }) => {
   await expect(page).toHaveURL(/\/admin\/dashboard(?:\?|$)/);
   await expect(page.getByRole("heading", { name: "今日工作台" })).toBeVisible();
   await page.goto(`${baseUrl}/admin/users`);
-  await expect(page.getByRole("heading", { name: "品牌人員與權限" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "員工與權限" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
   const csvResponse = await page.request.get(`${baseUrl}/api/admin/reports?from=2026-09-01&to=2026-09-30`);
   expect(csvResponse.status()).toBe(200);
