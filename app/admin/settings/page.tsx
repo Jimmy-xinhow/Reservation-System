@@ -164,7 +164,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
       <div className="divide-y divide-slate-200 border-t border-slate-200">
         <SettingStatus label="LINE 官方帳號" value={!s.line_channel_enabled ? "未啟用" : lineReady ? "已驗證" : "待完成驗證"} ready={lineReady} href="/admin/line" />
-        <SettingStatus label="標準金流" value={!payment?.active ? "未啟用" : paymentSecretStatus.configured ? "已啟用" : "缺少密鑰"} ready={payment?.active === true && paymentSecretStatus.configured} href="/admin/settings?section=channels" />
+        <SettingStatus label="標準金流" value={!payment?.active ? "未啟用" : paymentSecretStatus.configured ? "已啟用" : "缺少密鑰"} ready={payment?.active === true && paymentSecretStatus.configured} readyLabel="設定齊全" href="/admin/settings?section=channels" />
         <SettingStatus label="Email 提醒" value={!s.email_enabled ? "未啟用" : emailConfigured ? "已啟用" : "缺少寄件設定"} ready={s.email_enabled && emailConfigured} href="/admin/settings?section=channels" />
         <SettingStatus label="自訂網域" value={domains.some((item) => item.active) ? "已驗證" : domains.length ? "待驗證" : "尚未新增"} ready={domains.some((item) => item.active)} href="/admin/settings?section=domain" />
       </div>
@@ -429,6 +429,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         <div>
           <h2 className="font-semibold text-slate-900">標準金流</h2>
           <p className="help-text">支援綠界與藍新標準付款。品牌管理者可直接在這裡完成串接；付款密鑰會加密保存，儲存後不會再顯示完整內容。</p>
+          <p className="help-text">商店與密鑰設定齊全不代表已驗證收款；啟用前仍須核對實際交易、付款返回與金流商原始通知回呼。</p>
         </div>
         <fieldset disabled={!canManageSecrets} className="space-y-4 disabled:opacity-65">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -561,11 +562,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function SettingStatus({ label, value, ready, href }: { label: string; value: string; ready: boolean; href: string }) {
+function SettingStatus({ label, value, ready, readyLabel = "就緒", href }: { label: string; value: string; ready: boolean; readyLabel?: string; href: string }) {
   return (
     <Link href={href} className="flex items-center justify-between gap-3 px-4 py-3 transition hover:bg-slate-50">
       <div><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-sm font-semibold text-slate-900">{value}</p></div>
-      <span className={`badge ${ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{ready ? "就緒" : "待處理"}</span>
+      <span className={`badge ${ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{ready ? readyLabel : "待處理"}</span>
     </Link>
   );
 }
