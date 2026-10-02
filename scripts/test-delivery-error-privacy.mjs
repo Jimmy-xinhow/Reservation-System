@@ -246,10 +246,10 @@ test('admin error boundary does not claim durable writes failed or display raw e
  assert.match(html,/無法確認/);assert.match(html,/避免重複送出/);assert(!html.includes('secret-token'));assert(!html.includes('動作沒有完成'));
 });
 const {errorCategory}=await compile(read('lib/error-category.ts'));
-const channelFactory=await extractedFactory('app/admin/channels/actions.ts',['summarize','runChannelTestsAction'],['requireAdmin','createServiceClient','getClinicLineChannelContext','getPaymentSettings','lineAccessTokenForDestination','getBotInfo','emailConfigForClinic','resolvePublicClinicIdFromScope','process','console','errorCategory','revalidatePath','redirect']);
+const channelFactory=await extractedFactory('app/admin/channels/actions.ts',['summarize','hasAcceptedPaymentWebhook','runChannelTestsAction'],['requireAdmin','createServiceClient','getClinicLineChannelContext','getPaymentSettings','lineAccessTokenForDestination','getBotInfo','emailConfigForClinic','resolvePublicClinicIdFromScope','process','console','errorCategory','revalidatePath','redirect']);
 async function runChannels(mode){
  const writes=[],logs=[],effects=[];const failure=()=>{throw new Error(privateError);};
- const service={from:table=>{const q={select:()=>q,eq:()=>q,single:()=>q,then:(resolve,reject)=>{
+ const service={from:table=>{const q={select:()=>q,eq:()=>q,single:()=>q,maybeSingle:async()=>({data:null,error:null}),then:(resolve,reject)=>{
   if(mode==='readThrows')return Promise.reject(new Error(privateError)).then(resolve,reject);
   const data=table==='clinic_settings'?{line_channel_enabled:mode!=='disabled',email_enabled:true,deposit_enabled:true}:table==='clinics'?{slug:'synthetic',line_destination:'destination'}:[];
   return Promise.resolve({data,error:mode==='readError'?{message:privateError}:null}).then(resolve,reject);

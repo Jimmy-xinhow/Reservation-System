@@ -21,6 +21,54 @@ function summarize(checks: Check[]): CheckStatus {
   return "passed";
 }
 
+async function hasAcceptedPaymentWebhook(
+  service: ReturnType<typeof createServiceClient>,
+  clinicId: string,
+  payment: NonNullable<Awaited<ReturnType<typeof getPaymentSettings>>>,
+): Promise<boolean> {
+  const { data: setting, error: settingError } = await service.from("clinic_payment_settings")
+    .select("updated_at")
+    .eq("clinic_id", clinicId)
+    .eq("provider", payment.provider)
+    .eq("environment", payment.environment)
+    .eq("active", true)
+    .maybeSingle();
+  if (settingError) throw settingError;
+  if (!setting?.updated_at) return false;
+
+  const { data: webhooks, error: webhookError } = await service.from("payment_webhook_events")
+    .select("event_key")
+    .eq("clinic_id", clinicId)
+    .eq("provider", payment.provider)
+    .not("processed_at", "is", null)
+    .is("error", null)
+    .gte("created_at", setting.updated_at)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (webhookError) throw webhookError;
+  const eventKeys = [...new Set((webhooks ?? []).map((row) => row.event_key))];
+  if (eventKeys.length === 0) return false;
+
+  const { data: transactions, error: transactionError } = await service.from("payment_transactions")
+    .select("payment_order_id")
+    .eq("clinic_id", clinicId)
+    .eq("status", "accepted")
+    .in("event_key", eventKeys);
+  if (transactionError) throw transactionError;
+  const orderIds = [...new Set((transactions ?? []).map((row) => row.payment_order_id))];
+  if (orderIds.length === 0) return false;
+
+  const { data: orders, error: orderError } = await service.from("payment_orders")
+    .select("id")
+    .eq("clinic_id", clinicId)
+    .eq("provider", payment.provider)
+    .eq("status", "paid")
+    .gte("created_at", setting.updated_at)
+    .in("id", orderIds)
+    .limit(1);
+  if (orderError) throw orderError;
+  return (orders?.length ?? 0) > 0;
+}
 export async function runChannelTestsAction(): Promise<void> {
   const member = await requireAdmin();
   try {
@@ -73,13 +121,16 @@ export async function runChannelTestsAction(): Promise<void> {
         ];
     runs.push({ channel: "email", status: summarize(emailChecks), checks: emailChecks });
 
+    const paymentConfirmed = payment?.hash_key && payment.hash_iv
+      ? await hasAcceptedPaymentWebhook(service, member.clinicId, payment)
+      : false;
     const paymentChecks: Check[] = !settings.deposit_enabled && !payment
       ? [{ label: "標準金流", status: "warning", detail: "未啟用訂金或金流" }]
       : payment
         ? [
             { label: "商店設定", status: "passed", detail: `${payment.provider === "ecpay" ? "綠界" : "藍新"} · ${payment.environment === "production" ? "正式" : "測試"}` },
             { label: "付款驗證資料", status: payment.hash_key && payment.hash_iv ? "passed" : "failed", detail: payment.hash_key && payment.hash_iv ? "私密授權資料已設定" : "尚未設定付款驗證資料" },
-            { label: "實際交易與回呼", status: "warning", detail: "尚未完成測試交易、返回與簽章回呼對帳；設定齊全不代表可收款" },
+            { label: "實際交易與回呼", status: paymentConfirmed ? "passed" : "warning", detail: paymentConfirmed ? "目前商店設定後已有付款成功訂單、接受的交易與已處理簽章回呼；付款返回仍需另行核對" : "尚未找到目前商店設定後的已簽章成功交易；設定齊全不代表可收款" },
           ]
         : [{ label: "標準金流", status: "failed", detail: "訂金已啟用，但沒有啟用中的金流商店" }];
     runs.push({ channel: "payment", status: summarize(paymentChecks), checks: paymentChecks });
