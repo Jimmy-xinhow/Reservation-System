@@ -21,7 +21,7 @@ function load(file, deps) {
       if (name in deps) return deps[name];
       throw new Error(`Unexpected dependency: ${name}`);
     },
-    Promise, Date, Intl, Math, Number, Array, Object, process: { env: {} }, crypto: { randomUUID: () => 'fixture-error-id' }, console: { error() {} },
+    Promise, Date, Intl, Math, Number, Array, Object, Response, URL, process: { env: {} }, crypto: { randomUUID: () => 'fixture-error-id' }, console: { error() {} },
   });
   return exports;
 }
@@ -29,9 +29,10 @@ function load(file, deps) {
 const admin = load('lib/admin-query.ts', { 'server-only': {}, '@/lib/error-category': { errorCategory: () => 'external' } });
 const pagination = load('lib/supabase-pagination.ts', { 'server-only': {}, '@/lib/admin-query': admin });
 
-function fixture({ count = 1001, failTable, failFrom = 1000, denied = false, disabled = false, insight = false } = {}) {
+function fixture({ count = 1001, failTable, failFrom = 1000, denied = false, disabled = false, insight = false, published = false, missingDestination = false } = {}) {
   const calls = [];
   let serviceCalls = 0;
+  let tokenCalls = 0;
   const at = '2026-09-24T00:00:00Z';
   const rows = {
     line_richmenu_versions: Array.from({ length: count }, (_, i) => ({ id: `version-${i}`, clinic_id: clinicId, version_no: count - i,
@@ -62,7 +63,7 @@ function fixture({ count = 1001, failTable, failFrom = 1000, denied = false, dis
         if (table === failTable && call.range?.[0] === failFrom) return Promise.resolve({ data: null, error: { message: secret } }).then(resolve, reject);
         const data = table === 'clinic_settings'
           ? { public_booking_enabled: true, events_enabled: false, public_registration_enabled: false, memberships_enabled: false, line_channel_enabled: false, legacy_progress_enabled: false }
-          : table === 'line_richmenu' ? null
+          : table === 'line_richmenu' ? published ? { published_id: 'line-menu-published', published_version_id: 'version-0', layout: 'full-6', slots: [] } : null
             : (rows[table] ?? []).filter(row => row.clinic_id === call.clinic).slice(call.range?.[0] ?? 0, (call.range?.[1] ?? 999) + 1);
         return Promise.resolve({ data, error: null }).then(resolve, reject);
       },
@@ -88,16 +89,16 @@ function fixture({ count = 1001, failTable, failFrom = 1000, denied = false, dis
     '@/lib/admin': { requireAdmin: async () => { if (denied) throw new Error('DENIED'); return { clinicId }; } },
     '@/components/SubmitButton': { SubmitButton: ({ children }) => React.createElement('button', null, children) },
     '@/components/ConfirmSubmitButton': { ConfirmSubmitButton: ({ children }) => React.createElement('button', null, children) },
-    '@/lib/line': { getRichMenuInsightSummary: async () => ({ impression: { metrics: { count: 100, uniqueUsers: 30 } }, clicks: [] }), lineAccessTokenForDestination: async () => insight ? 'fixture-token' : null },
+    '@/lib/line': { getRichMenuInsightSummary: async () => ({ impression: { metrics: { count: 100, uniqueUsers: 30 } }, clicks: [] }), lineAccessTokenForDestination: async () => { tokenCalls++; return insight || published ? 'fixture-token' : null; } },
     '@/lib/admin-modules': { isAdminModuleEnabled: async () => !disabled },
     '@/components/ModuleDisabled': { ModuleDisabled: ({ title }) => React.createElement('div', null, title) },
     '@/lib/line-channel': { getClinicLineChannelContext: async () => {
-      if (!insight) throw new Error('No isolated LINE channel');
-      return { enabled: true, destination: 'fixture-destination', clinicSlug: 'fixture-brand', liffId: 'fixture-liff', loginChannelId: 'fixture-login', verificationStatus: 'ready' };
+      if (!insight && !published) throw new Error('No isolated LINE channel');
+      return { enabled: true, destination: missingDestination ? null : 'fixture-destination', clinicSlug: 'fixture-brand', liffId: 'fixture-liff', loginChannelId: 'fixture-login', verificationStatus: 'ready' };
     } },
     '@/components/TechnicalDetails': { TechnicalDetails: () => null },
   }).default;
-  return { render: async () => renderToStaticMarkup(await Page({ searchParams: Promise.resolve(insight ? { insight_version: 'version-0' } : {}) })), calls, serviceCalls: () => serviceCalls };
+  return { render: async () => renderToStaticMarkup(await Page({ searchParams: Promise.resolve(insight ? { insight_version: 'version-0' } : {}) })), calls, serviceCalls: () => serviceCalls, tokenCalls: () => tokenCalls };
 }
 
 test('rich menu renders item 1001 from versions, messages, aliases and schedules within tenant', async () => {
@@ -147,4 +148,29 @@ test('insight second-page failure shows safe error without partial conversion', 
   assert(html.includes('目前無法讀取成效資料'));
   assert(!html.includes(secret));
   assert(!html.includes('>1000</td>'));
+});
+
+
+test('published legacy menu without brand destination shows repair guidance and does not fetch token or image', async () => {
+  const h = fixture({ published: true, missingDestination: true });
+  const html = await h.render();
+  assert.match(html, /發布狀態待確認/);
+  assert.match(html, /保留選單發布紀錄，但 LINE 渠道尚未接通/);
+  assert.doesNotMatch(html, /<img[^>]*richmenu-image/);
+  assert.equal(h.tokenCalls(), 0);
+});
+
+test('image API rejects a published menu without destination before any credential fallback', async () => {
+  let tokenCalls = 0;
+  let imageCalls = 0;
+  const GET = load('app/api/admin/richmenu-image/route.ts', {
+    '@/lib/admin': { requireAdmin: async () => ({ clinicId }) },
+    '@/lib/supabase': { createServiceClient: () => ({ from: () => ({ select() { return this; }, eq() { return this; }, maybeSingle: async () => ({ data: { published_id: 'line-menu-published' }, error: null }) }) }) },
+    '@/lib/line-channel': { getClinicLineChannelContext: async () => ({ destination: null }) },
+    '@/lib/line': { lineAccessTokenForDestination: async () => { tokenCalls++; return 'wrong-tenant-token'; }, getRichMenuImage: async () => { imageCalls++; return null; } },
+  }).GET;
+  const response = await GET({ nextUrl: new URL('https://example.invalid/api/admin/richmenu-image') });
+  assert.equal(response.status, 409);
+  assert.equal(tokenCalls, 0);
+  assert.equal(imageCalls, 0);
 });
