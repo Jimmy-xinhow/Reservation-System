@@ -273,7 +273,7 @@ export default async function RichMenuPage({
                 ) : (
                   <p role="status" className="text-sm text-amber-800">此品牌保留選單發布紀錄，但 LINE 渠道尚未接通；目前無法確認官方帳號上的選單或載入預覽。請先完成 LINE 設定並重新檢查連線。</p>
                 )}
-                <form action={unpublishRichMenuAction}><ConfirmSubmitButton confirmMessage="確定要取消目前線上的圖文選單嗎？顧客會立即看不到這份選單。" className="btn btn-danger w-full">取消目前線上發布</ConfirmSubmitButton></form>
+                {accessToken && <form action={unpublishRichMenuAction}><ConfirmSubmitButton confirmMessage="確定要取消目前線上的圖文選單嗎？顧客會立即看不到這份選單。" className="btn btn-danger w-full">取消目前線上發布</ConfirmSubmitButton></form>}
               </div>
             ) : <p className="mt-3 text-sm text-slate-500">尚未設定 LINE 預設圖文選單。</p>}
           </section>

@@ -158,6 +158,7 @@ test('published legacy menu without brand destination shows repair guidance and 
   assert.match(html, /保留選單發布紀錄，但 LINE 渠道尚未接通/);
   assert.doesNotMatch(html, /<img[^>]*richmenu-image/);
   assert.equal(h.tokenCalls(), 0);
+  assert.doesNotMatch(html, /取消目前線上發布/);
 });
 
 test('image API rejects a published menu without destination before any credential fallback', async () => {
@@ -173,4 +174,28 @@ test('image API rejects a published menu without destination before any credenti
   assert.equal(response.status, 409);
   assert.equal(tokenCalls, 0);
   assert.equal(imageCalls, 0);
+});
+
+test('rich-menu actions reject missing destination before a global credential fallback', async () => {
+  const source = ts.createSourceFile('line-actions', fs.readFileSync('app/admin/line-actions.ts', 'utf8'), ts.ScriptTarget.Latest, true);
+  const declaration = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'getRichMenuLineContext');
+  assert(declaration);
+  const code = ts.transpileModule(`${declaration.getText(source)}\nexports.getRichMenuLineContext = getRichMenuLineContext;`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {};
+  let destination = null;
+  let tokenCalls = 0;
+  vm.runInNewContext(code, {
+    exports,
+    Error,
+    getClinicLineChannelContext: async () => ({ enabled: true, liffId: 'qa-liff', destination, clinicSlug: 'qa', verificationStatus: 'ready' }),
+    lineAccessTokenForDestination: async value => { tokenCalls++; assert.equal(value, 'qa-destination'); return 'qa-token'; },
+  });
+  await assert.rejects(exports.getRichMenuLineContext({}, clinicId), /尚未設定 LINE destination/);
+  assert.equal(tokenCalls, 0);
+  destination = 'qa-destination';
+  const context = await exports.getRichMenuLineContext({}, clinicId);
+  assert.equal(context.destination, destination);
+  assert.equal(tokenCalls, 1);
 });
