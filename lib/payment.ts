@@ -229,6 +229,41 @@ function decryptNewebpay(value: string, hashKey: string, hashIv: string): string
   return Buffer.concat([decipher.update(Buffer.from(value, "hex")), decipher.final()]).toString("utf8");
 }
 
+// The MPG 2.0 test gateway has returned signed CBC payloads whose final block
+// is not PKCS7, while the preceding bytes contain a complete JSON result and
+// the nonstandard padding count. Keep this compatibility path test-only and
+// reachable only after TradeSha verification; production still requires PKCS7.
+function decryptNewebpayTestGatewayPadding(value: string, hashKey: string, hashIv: string): string {
+  validateNewebpayKeyMaterial(hashKey, hashIv);
+  if (value.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(value)) throw new Error("藍新測試回呼格式錯誤");
+  const bytes = Buffer.from(value, "hex");
+  if (bytes.length < 32 || bytes.length > 8192 || bytes.length % 16 !== 0) {
+    throw new Error("藍新測試回呼格式錯誤");
+  }
+  const decipher = createDecipheriv("aes-256-cbc", Buffer.from(hashKey, "utf8"), Buffer.from(hashIv, "utf8"));
+  decipher.setAutoPadding(false);
+  const raw = Buffer.concat([decipher.update(bytes), decipher.final()]);
+  try {
+    for (let padding = 17; padding <= 32; padding++) {
+      const end = raw.length - padding;
+      const visiblePadding = padding - 16;
+      if (end <= 0 || !raw.subarray(end, end + visiblePadding).every((byte) => byte === padding)) continue;
+      try {
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(raw.subarray(0, end));
+        const parsed: unknown = JSON.parse(text);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed) &&
+            typeof (parsed as Record<string, unknown>).Status === "string" &&
+            (parsed as Record<string, unknown>).Result &&
+            typeof (parsed as Record<string, unknown>).Result === "object" &&
+            !Array.isArray((parsed as Record<string, unknown>).Result)) return text;
+      } catch { /* Try another bounded padding length. */ }
+    }
+    throw new Error("藍新測試回呼格式錯誤");
+  } finally {
+    raw.fill(0);
+  }
+}
+
 function validateNewebpayKeyMaterial(hashKey: string, hashIv: string): void {
   if (Buffer.byteLength(hashKey, "utf8") !== 32 || Buffer.byteLength(hashIv, "utf8") !== 16) {
     throw new Error("藍新 HashKey 必須 32 bytes、HashIV 必須 16 bytes");
@@ -278,7 +313,17 @@ export function decryptAndVerifyNewebpay(
     .digest("hex")
     .toUpperCase();
   if (!safeCompare(fields.TradeSha, expected)) throw new Error("藍新 TradeSha 驗證失敗");
-  const parsed = JSON.parse(decryptNewebpay(fields.TradeInfo, settings.hash_key, settings.hash_iv)) as unknown;
+  let text: string;
+  try {
+    text = decryptNewebpay(fields.TradeInfo, settings.hash_key, settings.hash_iv);
+  } catch (error) {
+    const code = error instanceof Error ? (error as Error & { code?: unknown }).code : undefined;
+    if (settings.environment !== "test" || fields.Version !== "2.0" ||
+        (fields.EncryptType !== undefined && fields.EncryptType !== "0") ||
+        code !== "ERR_OSSL_BAD_DECRYPT") throw error;
+    text = decryptNewebpayTestGatewayPadding(fields.TradeInfo, settings.hash_key, settings.hash_iv);
+  }
+  const parsed = JSON.parse(text) as unknown;
   if (!parsed || typeof parsed !== "object") throw new Error("藍新回呼內容格式錯誤");
   return parsed as Record<string, unknown>;
 }

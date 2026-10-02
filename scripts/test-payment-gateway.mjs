@@ -104,6 +104,33 @@ test("Vault failure cannot silently fall back to environment payment credentials
   }finally{if(previous===undefined)delete process.env.PAYMENT_SECRETS_JSON;else process.env.PAYMENT_SECRETS_JSON=previous;}
 });
 
+test("MPG test gateway accepts only the captured signed 32-byte padding shape", () => {
+  const unusual = { ...payload, PaddingProbe: "" };
+  while (Buffer.byteLength(JSON.stringify(unusual)) % 32 !== 2) unusual.PaddingProbe += "x";
+  const json = Buffer.from(JSON.stringify(unusual));
+  const padding = 32 - (json.length % 32);
+  assert.equal(padding, 30);
+  const makeFields = (visibleByte = padding) => {
+    const cipher = createCipheriv("aes-256-cbc", Buffer.from(settings.hash_key), Buffer.from(settings.hash_iv));
+    cipher.setAutoPadding(false);
+    const encrypted = Buffer.concat([cipher.update(Buffer.concat([json, Buffer.alloc(padding - 16, visibleByte)])), cipher.final()]);
+    const TradeInfo = Buffer.concat([encrypted, Buffer.alloc(16, 0xa5)]).toString("hex");
+    const TradeSha = createHash("sha256")
+      .update(`HashKey=${settings.hash_key}&${TradeInfo}&HashIV=${settings.hash_iv}`)
+      .digest("hex").toUpperCase();
+    return { MerchantID: settings.merchant_id, TradeInfo, TradeSha, Version: "2.0" };
+  };
+  const fields = makeFields();
+  assert.deepEqual(parse(payment.decryptAndVerifyNewebpay(fields, settings)),
+    { merchantOrderNo: "REG_TEST1234", tradeNo: "1234567890", amount: 100, success: true,
+      eventKey: "REG_TEST1234:1234567890:SUCCESS" });
+  assert.throws(() => payment.decryptAndVerifyNewebpay({ ...fields, TradeSha: "0".repeat(64) }, settings));
+  assert.throws(() => payment.decryptAndVerifyNewebpay(fields, { ...settings, environment: "production" }));
+  assert.throws(() => payment.decryptAndVerifyNewebpay({ ...fields, EncryptType: "1" }, settings));
+  assert.throws(() => payment.decryptAndVerifyNewebpay({ ...fields, Version: "2.3" }, settings));
+  assert.throws(() => payment.decryptAndVerifyNewebpay(makeFields(padding - 1), settings));
+});
+
 test("MPG signed JSON nested Result succeeds without undocumented ResultCode", () => {
   const decoded = payment.decryptAndVerifyNewebpay(signed(payload), settings);
   assert.deepEqual(parse(decoded), { merchantOrderNo: "REG_TEST1234", tradeNo: "1234567890", amount: 100, success: true, eventKey: "REG_TEST1234:1234567890:SUCCESS" });
