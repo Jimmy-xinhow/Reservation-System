@@ -165,7 +165,9 @@ export default async function RichMenuPage({
     const context = await getClinicLineChannelContext(supabase, clinicId);
     previewClinicSlug = context.clinicSlug;
     previewLiffId = context.liffId;
-    try { accessToken = await lineAccessTokenForDestination(context.destination ?? undefined); } catch { accessToken = null; }
+    if (context.destination) {
+      try { accessToken = await lineAccessTokenForDestination(context.destination); } catch { accessToken = null; }
+    }
     lineReadiness = [
       { label: "品牌 LINE 模組", ready: context.enabled },
       { label: "品牌訊息授權", ready: Boolean(context.destination && accessToken) },
@@ -261,12 +263,16 @@ export default async function RichMenuPage({
           <section className="admin-section p-5">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-semibold text-slate-900">目前線上版本</h2>
-              <span className={`badge ${publishedId ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{publishedId ? "已發布" : "未發布"}</span>
+              <span className={`badge ${publishedId ? (accessToken ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800") : "bg-slate-100 text-slate-500"}`}>{publishedId ? (accessToken ? "已發布" : "發布狀態待確認") : "未發布"}</span>
             </div>
             {publishedId ? (
               <div className="mt-4 space-y-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/admin/richmenu-image${publishedVersionId ? `?version=${encodeURIComponent(publishedVersionId)}` : ""}`} alt="目前已發布的 LINE 圖文選單" className="w-full rounded-sm border border-slate-200" />
+                {accessToken ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`/api/admin/richmenu-image${publishedVersionId ? `?version=${encodeURIComponent(publishedVersionId)}` : ""}`} alt="目前已發布的 LINE 圖文選單" className="w-full rounded-sm border border-slate-200" />
+                ) : (
+                  <p role="status" className="text-sm text-amber-800">此品牌保留選單發布紀錄，但 LINE 渠道尚未接通；目前無法確認官方帳號上的選單或載入預覽。請先完成 LINE 設定並重新檢查連線。</p>
+                )}
                 <form action={unpublishRichMenuAction}><ConfirmSubmitButton confirmMessage="確定要取消目前線上的圖文選單嗎？顧客會立即看不到這份選單。" className="btn btn-danger w-full">取消目前線上發布</ConfirmSubmitButton></form>
               </div>
             ) : <p className="mt-3 text-sm text-slate-500">尚未設定 LINE 預設圖文選單。</p>}
