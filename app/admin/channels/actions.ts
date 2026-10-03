@@ -4,7 +4,7 @@ import { errorCategory } from "@/lib/error-category";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
-import { emailConfigForClinic } from "@/lib/email";
+import { emailConfigForClinic, sendEmail } from "@/lib/email";
 import { getBotInfo, getWebhookEndpointInfo, lineAccessTokenForDestination, type LineBotInfo, type LineWebhookEndpointInfo } from "@/lib/line";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { getPaymentSettings } from "@/lib/payment";
@@ -15,6 +15,98 @@ import { createServiceClient } from "@/lib/supabase";
 type CheckStatus = "passed" | "warning" | "failed";
 interface Check { label: string; status: CheckStatus; detail: string; }
 interface Run { channel: "line" | "liff" | "email" | "payment" | "domain"; status: CheckStatus; checks: Check[]; }
+type EmailProof = Check & { kind?: string; receiptId?: string; configRevision?: string };
+interface EmailRun { checks: EmailProof[]; ran_by: string | null; created_at: string; }
+
+function matchingEmailProof(run: EmailRun | null | undefined, kind: string, revision: string): EmailProof | undefined {
+  return (Array.isArray(run?.checks) ? run.checks : []).find((check) => check?.kind === kind
+    && check.configRevision === revision
+    && typeof check.receiptId === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(check.receiptId));
+}
+
+async function emailRevision(service: ReturnType<typeof createServiceClient>, clinicId: string): Promise<string | null> {
+  const { data, error } = await service.from("clinic_email_secret_refs")
+    .select("api_key_secret_id, updated_at")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (error) throw new Error("Email 測試狀態暫時無法讀取");
+  return data?.api_key_secret_id && data.updated_at ? `${data.api_key_secret_id}:${data.updated_at}` : null;
+}
+
+async function recentEmailRuns(service: ReturnType<typeof createServiceClient>, clinicId: string, since: string): Promise<EmailRun[]> {
+  const { data, error } = await service.from("channel_test_runs")
+    .select("checks, ran_by, created_at")
+    .eq("clinic_id", clinicId)
+    .eq("channel", "email")
+    .gte("created_at", since)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error("Email 測試紀錄暫時無法讀取");
+  return (data ?? []) as EmailRun[];
+}
+
+export async function sendChannelEmailTestAction(): Promise<void> {
+  const member = await requireAdmin();
+  const recipient = member.user.email;
+  if (!recipient || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) throw new Error("目前帳號沒有可用的 Email 收件地址");
+  const service = createServiceClient();
+  const { data: settings, error: settingsError } = await service.from("clinic_settings")
+    .select("email_enabled").eq("clinic_id", member.clinicId).single();
+  if (settingsError || !settings?.email_enabled) throw new Error("請先啟用品牌 Email 通知");
+  const revision = await emailRevision(service, member.clinicId);
+  if (!revision) throw new Error("請先在品牌後台儲存 Email 寄件憑證");
+  const config = await emailConfigForClinic(member.clinicId, service);
+  if (!config?.apiKey || !config.from) throw new Error("Email 寄件設定尚未完成");
+
+  const now = Date.now();
+  const previous = await recentEmailRuns(service, member.clinicId, new Date(now - 10 * 60_000).toISOString());
+  if (previous.some((run) => run.ran_by === member.user.id && matchingEmailProof(run, "email_test_sent", revision))) {
+    revalidatePath("/admin/channels");
+    redirect("/admin/channels?email_test=sent");
+  }
+  const windowId = Math.floor(now / (10 * 60_000));
+  let receiptId: string | null;
+  try {
+    receiptId = await sendEmail(config, recipient, `Email 渠道測試 ${windowId}`,
+      `<p>這是品牌後台的 Email 渠道測試信。請確認實際收到後，回到後台按「我已收到測試信」。</p><p>測試編號：${windowId}</p>`,
+      { idempotencyKey: `channel-email-test-${member.clinicId}-${member.user.id}-${revision.replace(/[^a-zA-Z0-9]/g, "")}-${windowId}` });
+  } catch (error) {
+    console.error("Channel Email test failed", { clinicId: member.clinicId, category: errorCategory(error instanceof Error ? error.message : "") });
+    throw new Error("測試信未能確認寄出，請稍後查看收件匣；避免立即重複寄送");
+  }
+  if (!receiptId) throw new Error("寄件服務未回傳可核對的收據，請先查看收件匣；避免立即重複寄送");
+  const checks: EmailProof[] = [{ label: "測試信", status: "warning", detail: "寄件服務已接受，等待目前管理者確認實際收件", kind: "email_test_sent", receiptId, configRevision: revision }];
+  const { error } = await service.from("channel_test_runs").insert({ clinic_id: member.clinicId, channel: "email", status: "warning", checks, ran_by: member.user.id });
+  if (error) throw new Error("測試信可能已寄出，但無法保存收據；請勿立即重送");
+  revalidatePath("/admin/channels");
+  redirect("/admin/channels?email_test=sent");
+}
+
+export async function confirmChannelEmailReceiptAction(): Promise<void> {
+  const member = await requireAdmin();
+  const service = createServiceClient();
+  const { data: settings, error: settingsError } = await service.from("clinic_settings")
+    .select("email_enabled").eq("clinic_id", member.clinicId).single();
+  if (settingsError || !settings?.email_enabled) throw new Error("請先啟用品牌 Email 通知");
+  const revision = await emailRevision(service, member.clinicId);
+  if (!revision) throw new Error("目前 Email 寄件憑證尚未設定");
+  const runs = await recentEmailRuns(service, member.clinicId, new Date(Date.now() - 30 * 60_000).toISOString());
+  const proof = runs
+    .filter((run) => run.ran_by === member.user.id)
+    .map((run) => matchingEmailProof(run, "email_test_sent", revision))
+    .find((check): check is EmailProof => Boolean(check));
+  if (!proof) throw new Error("找不到目前憑證、本人寄出的近期測試信；請先寄送並確認收件");
+  if (runs.some((run) => matchingEmailProof(run, "email_test_receipt_confirmed", revision)?.receiptId === proof.receiptId)) {
+    revalidatePath("/admin/channels");
+    redirect("/admin/channels?email_test=confirmed");
+  }
+  const checks: EmailProof[] = [{ label: "實際收件", status: "passed", detail: "管理者已確認本人信箱收到測試信", kind: "email_test_receipt_confirmed", receiptId: proof.receiptId, configRevision: revision }];
+  const { error } = await service.from("channel_test_runs").insert({ clinic_id: member.clinicId, channel: "email", status: "passed", checks, ran_by: member.user.id });
+  if (error) throw new Error("無法保存收件確認，請稍後重試");
+  revalidatePath("/admin/channels");
+  redirect("/admin/channels?email_test=confirmed");
+}
 
 function summarize(checks: Check[]): CheckStatus {
   if (checks.some((check) => check.status === "failed")) return "failed";
@@ -146,12 +238,19 @@ export async function runChannelTestsAction(): Promise<void> {
     runs.push({ channel: "liff", status: summarize(liffChecks), checks: liffChecks });
 
     const emailConfig = await emailConfigForClinic(member.clinicId);
+    const emailConfigRevision = settings.email_enabled && emailConfig?.apiKey
+      ? await emailRevision(service, member.clinicId) : null;
+    const emailProofRuns = emailConfigRevision
+      ? await recentEmailRuns(service, member.clinicId, new Date(Date.now() - 30 * 24 * 60 * 60_000).toISOString()) : [];
+    const emailReceiptConfirmed = emailConfigRevision
+      ? emailProofRuns.some((run) => Boolean(matchingEmailProof(run, "email_test_receipt_confirmed", emailConfigRevision)))
+      : false;
     const emailChecks: Check[] = !settings.email_enabled
       ? [{ label: "Email 提醒", status: "warning", detail: "品牌尚未啟用 Email" }]
       : [
           { label: "Email 寄送授權", status: emailConfig?.apiKey ? "passed" : "failed", detail: emailConfig?.apiKey ? "私密授權資料已設定" : "尚未設定 Email 寄送服務授權" },
           { label: "寄件人", status: emailConfig?.from ? "passed" : "failed", detail: emailConfig?.from ? emailConfig.from : "缺少寄件人" },
-          { label: "實際收件", status: "warning", detail: "尚未寄送測試信並確認收件；設定齊全不代表郵件已送達" },
+          { label: "實際收件", status: emailReceiptConfirmed ? "passed" : "warning", detail: emailReceiptConfirmed ? "目前憑證的測試信已由品牌管理者確認實收" : "尚未寄送測試信並確認收件；設定齊全不代表郵件已送達" },
         ];
     runs.push({ channel: "email", status: summarize(emailChecks), checks: emailChecks });
 

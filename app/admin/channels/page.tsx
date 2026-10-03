@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import { SubmitButton } from "@/components/SubmitButton";
-import { runChannelTestsAction } from "./actions";
+import { confirmChannelEmailReceiptAction, runChannelTestsAction, sendChannelEmailTestAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ const CHECK_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 const CHANNELS = [
   { key: "line", label: "LINE 訊息", detail: "檢查官方帳號連線與回應模式", icon: "message" },
   { key: "liff", label: "LINE 顧客入口", detail: "檢查 LIFF 設定與後端驗證狀態", icon: "phone" },
-  { key: "email", label: "Email 通知", detail: "檢查寄件設定；不會寄送測試信", icon: "mail" },
+  { key: "email", label: "Email 通知", detail: "檢查寄件設定與實際收件", icon: "mail" },
   { key: "payment", label: "綠界／藍新付款", detail: "檢查商店設定；不會建立測試交易", icon: "payment" },
   { key: "domain", label: "公開網址", detail: "檢查短網址解析或已驗證的網域紀錄", icon: "globe" },
 ] as const;
@@ -48,9 +48,10 @@ function displayStatus(run: Run | undefined, now: number): DisplayStatus {
     ? "passed" : "stale";
 }
 
-export default async function ChannelsPage({ searchParams }: { searchParams: Promise<{ tested?: string }> }) {
+export default async function ChannelsPage({ searchParams }: { searchParams: Promise<{ tested?: string; email_test?: string }> }) {
   const { clinicId } = await requireAdmin();
-  const tested = (await searchParams).tested === "1";
+  const params = await searchParams;
+  const tested = params.tested === "1";
   const supabase = createServiceClient();
   const results = await Promise.all(CHANNELS.map(async (channel) => {
     const { data, error } = await supabase.from("channel_test_runs")
@@ -79,7 +80,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
         <div>
           <p className="eyebrow">外部服務</p>
           <h1 className="admin-page-title">通知與付款檢查</h1>
-          <p className="admin-page-description">逐項查看目前完成的設定與連線檢查，再從同一列進入設定。此處不寄送 Email、不建立付款交易，也不顯示密鑰。</p>
+          <p className="admin-page-description">逐項查看目前完成的設定與連線檢查，再從同一列進入設定。只有按下 Email 測試按鈕才會寄送測試信；此處不建立付款交易，也不顯示密鑰。</p>
         </div>
         <form action={runChannelTestsAction}>
           <SubmitButton className="btn btn-primary"><ActionIcon name="refresh" />重新檢查全部服務</SubmitButton>
@@ -87,6 +88,8 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
       </header>
 
       {tested && <p role="status" className="border-l-4 border-emerald-500 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">檢查已完成。請依下方狀態處理尚未完成的項目。</p>}
+      {params.email_test === "sent" && <p role="status" className="border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm text-blue-900">寄件服務已接受測試信。請到目前登入帳號的收件匣確認，實際收到後再按「我已收到測試信」。</p>}
+      {params.email_test === "confirmed" && <p role="status" className="border-l-4 border-emerald-500 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">已記錄本次實際收件確認；重新檢查全部服務時會沿用目前寄件憑證的驗證紀錄。</p>}
 
       <section className="admin-metric-strip sm:grid-cols-4" aria-label="渠道狀態摘要">
         <Metric label="本項通過" value={counts.passed} tone="text-emerald-700" />
@@ -136,6 +139,19 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
               </details>
             );
           })}
+        </div>
+      </section>
+
+      <section className="admin-section p-4 sm:p-6" aria-label="Email 實際收件測試">
+        <h2 className="font-semibold text-slate-950">Email 實際收件測試</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">測試信只寄到目前登入的管理者信箱。寄件服務接受後，請親自查看收件匣；只有按下收件確認，才會記錄為實際收件。更換品牌寄件憑證後需重新測試。</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <form action={sendChannelEmailTestAction}>
+            <SubmitButton className="btn btn-secondary">寄送一封測試信</SubmitButton>
+          </form>
+          <form action={confirmChannelEmailReceiptAction}>
+            <SubmitButton className="btn btn-primary">我已收到測試信</SubmitButton>
+          </form>
         </div>
       </section>
 
