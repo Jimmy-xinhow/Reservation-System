@@ -33,6 +33,21 @@ test('appointment Email sent state stores the provider receipt, while failures d
   assert.equal(writes[1].sent_at, null);
 });
 
+test('reviewed obsolete appointment failure is never claimed for another send', async () => {
+  let updates = 0;
+  let reads = 0;
+  const query = {
+    insert: () => query, select: () => query, eq: () => query,
+    update: () => { updates++; return query; },
+    maybeSingle: async () => reads++ === 0
+      ? { data: null, error: { code: '23505' } }
+      : { data: { id: 'old', status: 'failed', reviewed_at: '2026-10-03T00:00:00Z', attempt_count: 1 }, error: null },
+  };
+  const claim = await extract('lib/appointment-notifications.ts', 'claimNotification', {});
+  assert.equal(await claim({ from: () => query }, { id: 'appointment', clinic_id: 'brand' }, 'pending', 'line'), null);
+  assert.equal(updates, 0);
+});
+
 for (const domain of ['appointment', 'registration']) {
   const path = `lib/${domain}-notifications.ts`;
   for (const channel of ['line', 'email']) {

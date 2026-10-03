@@ -28,14 +28,16 @@ function fixture({ counts = {}, cronRows = {}, appointmentRows = [], appointment
           return { data: cronRows[job] ? [cronRows[job]] : [], error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
         }
         if (table === 'appointment_notification_logs' && call.select?.[0]?.includes('clinic_id')) {
-          return { data: appointmentRows, error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
+          return { data: call.select[0].includes('appointment_id') ? appointmentRows : [], error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
         }
+        if (table === 'appointments') return { data: [], error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
         if (table === 'clinics' && call.select?.[0] === 'id,name') {
           return { data: appointmentBrands, error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
         }
         const pending = call.filters.some(([method, column, value]) => method === 'eq' && column === 'status' && value === 'pending');
         const lookup = `${table}${pending ? ':pending' : ''}`;
-        return { count: counts[lookup] ?? 0, error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
+        const reviewedCount = table === 'appointment_notification_logs' && call.filters.some(([method, column]) => method === 'not' && column === 'reviewed_at');
+        return { count: reviewedCount ? 0 : counts[lookup] ?? 0, error: table === errorTable ? { message: 'PRIVATE_PROVIDER_CANARY' } : null };
       }).then(resolve, reject);
       return (...args) => {
         if (key === 'select') call.select = args;
@@ -49,7 +51,10 @@ function fixture({ counts = {}, cronRows = {}, appointmentRows = [], appointment
     'react/jsx-runtime': jsx,
     'next/link': { default: ({ href, children }) => jsx.jsx('a', { href, children }) },
     '@/lib/admin-query': { adminQuery: async p => await p, adminErrorMessage: () => '目前無法確認操作結果' },
-    '@/lib/platform': { requireSystemPermission: async () => { if (deny) throw Error('DENIED'); } },
+    '@/lib/platform': { requireSystemPermission: async () => { if (deny) throw Error('DENIED'); return { accessType: 'system_staff' }; } },
+    '@/lib/appointment-notification-review': { canReviewObsoletePendingNotification: () => false },
+    '@/components/ConfirmSubmitButton': { ConfirmSubmitButton: () => null },
+    './actions': { reviewObsoletePendingNotificationAction: () => null },
     '@/lib/cron-operations-health': cronExports,
     '@/lib/supabase': { createServiceClient: () => { serviceClients++; return service; } },
   };
@@ -122,7 +127,7 @@ test('appointment backlog shows safe triage fields without recipient or provider
   assert.match(html, /qa-log-1/);
   assert.doesNotMatch(html, /PRIVATE_PROVIDER_CANARY/);
   const detail = f.calls.find(call => call.table === 'appointment_notification_logs' && call.select?.[0]?.includes('clinic_id'));
-  assert.equal(detail.select[0], 'id,clinic_id,kind,channel,status,updated_at,created_at');
+  assert.equal(detail.select[0], 'id,clinic_id,appointment_id,kind,channel,status,sent_at,provider_message_id,reviewed_at,updated_at,created_at');
   assert(detail.filters.some(([method, value]) => method === 'limit' && value === 10));
 });
 
