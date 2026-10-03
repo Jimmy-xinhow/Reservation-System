@@ -5,10 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin";
 import { emailConfigForClinic } from "@/lib/email";
-import { getBotInfo, lineAccessTokenForDestination } from "@/lib/line";
+import { getBotInfo, getWebhookEndpointInfo, lineAccessTokenForDestination, type LineBotInfo, type LineWebhookEndpointInfo } from "@/lib/line";
 import { getClinicLineChannelContext } from "@/lib/line-channel";
 import { getPaymentSettings } from "@/lib/payment";
 import { resolvePublicClinicIdFromScope } from "@/lib/public-brand";
+import { publicRequestOrigin } from "@/lib/public-origin";
 import { createServiceClient } from "@/lib/supabase";
 
 type CheckStatus = "passed" | "warning" | "failed";
@@ -19,6 +20,38 @@ function summarize(checks: Check[]): CheckStatus {
   if (checks.some((check) => check.status === "failed")) return "failed";
   if (checks.some((check) => check.status === "warning")) return "warning";
   return "passed";
+}
+
+function normalizedWebhookUrl(value: string): string {
+  const url = new URL(value);
+  const pathname = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : url.pathname;
+  return `${url.origin}${pathname}${url.search}`;
+}
+
+function lineDeliveryChecks(bot: LineBotInfo, webhook: LineWebhookEndpointInfo, destination: string, expectedWebhook: string): Check[] {
+  if (bot.userId !== destination) {
+    return [{ label: "官方帳號歸屬", status: "failed", detail: "授權資料對應另一個 LINE 官方帳號，請重新核對此品牌設定" }];
+  }
+  const checks: Check[] = [
+    { label: "Messaging API", status: "passed", detail: `${bot.displayName}（${bot.basicId ?? "無 Basic ID"}）` },
+    { label: "回應模式", status: bot.chatMode === "bot" ? "passed" : "warning", detail: bot.chatMode === "bot" ? "Bot 模式已啟用" : `目前為 ${bot.chatMode ?? "未知"}` },
+  ];
+  let webhookStatus: CheckStatus = "warning";
+  let webhookDetail = "LINE Developers 尚未啟用 Webhook";
+  if (webhook.active) {
+    try {
+      const matches = normalizedWebhookUrl(webhook.endpoint) === normalizedWebhookUrl(expectedWebhook);
+      webhookStatus = matches ? "passed" : "warning";
+      webhookDetail = matches
+        ? "訊息接收網址與本環境相符"
+        : "Webhook 指向另一環境；共用官方帳號請勿直接覆蓋原網址";
+    } catch {
+      webhookStatus = "failed";
+      webhookDetail = "LINE Webhook 網址格式無法確認";
+    }
+  }
+  checks.push({ label: "Webhook 接收", status: webhookStatus, detail: webhookDetail });
+  return checks;
 }
 
 async function hasAcceptedPaymentWebhook(
@@ -89,12 +122,13 @@ export async function runChannelTestsAction(): Promise<void> {
 
     const lineChecks: Check[] = [];
     if (!settings.line_channel_enabled) lineChecks.push({ label: "LINE 模組", status: "warning", detail: "品牌尚未啟用 LINE 渠道" });
-    else {
+    else if (!clinic.line_destination) {
+      lineChecks.push({ label: "官方帳號歸屬", status: "failed", detail: "品牌尚未設定 LINE destination" });
+    } else {
       try {
-        const token = await lineAccessTokenForDestination(clinic.line_destination ?? undefined);
-        const bot = await getBotInfo(token);
-        lineChecks.push({ label: "Messaging API", status: "passed", detail: `${bot.displayName}（${bot.basicId ?? "無 Basic ID"}）` });
-        lineChecks.push({ label: "回應模式", status: bot.chatMode === "bot" ? "passed" : "warning", detail: bot.chatMode === "bot" ? "Bot 模式已啟用" : `目前為 ${bot.chatMode}` });
+        const token = await lineAccessTokenForDestination(clinic.line_destination);
+        const [bot, webhook] = await Promise.all([getBotInfo(token), getWebhookEndpointInfo(token)]);
+        lineChecks.push(...lineDeliveryChecks(bot, webhook, clinic.line_destination, `${publicRequestOrigin()}/api/line/webhook`));
       } catch (error) {
         console.error("Channel LINE check failed", { clinicId: member.clinicId, category: errorCategory(error instanceof Error ? error.message : "") });
         lineChecks.push({ label: "Messaging API", status: "failed", detail: "無法確認 LINE 連線，請檢查官方帳號授權設定後重試。" });
