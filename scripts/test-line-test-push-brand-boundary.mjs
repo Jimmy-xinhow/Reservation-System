@@ -110,3 +110,27 @@ test('missing brand destination cannot use the legacy global LINE token', async 
   await assert.rejects(action(recipient('own-line-user')), /redirect:\/admin\/line\?test=err$/);
   assert.deepEqual(calls.pushed, []);
 });
+
+test('missing destination never resolves a legacy global LINE access token', async () => {
+  const source = ts.createSourceFile('line.ts', readFileSync('lib/line.ts', 'utf8'), ts.ScriptTarget.Latest, true);
+  const declaration = source.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'lineAccessTokenForDestination');
+  assert(declaration);
+  const code = ts.transpileModule(declaration.getText(source) + '\nexports.resolveToken = lineAccessTokenForDestination;', {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {};
+  const destinations = [];
+  vm.runInNewContext(code, {
+    exports, Error,
+    lineCredentialsForDestination: async destination => {
+      destinations.push(destination);
+      return { accessToken: 'legacy-global-token' };
+    },
+    accessToken: value => value,
+  });
+  await assert.rejects(exports.resolveToken(), /LINE destination 必須對應品牌憑證/);
+  await assert.rejects(exports.resolveToken('  '), /LINE destination 必須對應品牌憑證/);
+  assert.deepEqual(destinations, []);
+  assert.equal(await exports.resolveToken('own-destination'), 'legacy-global-token');
+  assert.deepEqual(destinations, ['own-destination']);
+});

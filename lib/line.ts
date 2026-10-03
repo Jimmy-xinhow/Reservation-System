@@ -93,6 +93,7 @@ export async function lineCredentialsForDestination(
 }
 
 export async function lineAccessTokenForDestination(destination?: string): Promise<string> {
+  if (!destination?.trim()) throw new Error("LINE destination 必須對應品牌憑證");
   const credentials = await lineCredentialsForDestination(destination);
   if (!credentials.accessToken) throw new Error("此 LINE 品牌尚未設定 access token");
   return accessToken(credentials.accessToken);

@@ -55,7 +55,7 @@ function fixture({ deny = false, failChannel = '', reject = false } = {}) {
     '@/components/SubmitButton': { SubmitButton: ({ children }) => jsx.jsx('button', { children }) },
     './actions': { runChannelTestsAction: () => {} },
   });
-  return { page, calls };
+  return { page, calls, runs };
 }
 
 test('each channel uses its latest scoped run even if it falls outside the former global top 100', async () => {
@@ -71,6 +71,24 @@ test('each channel uses its latest scoped run even if it falls outside the forme
     assert.ok(call.filters.some(([column, value]) => column === 'clinic_id' && value === clinicId));
     assert.ok(call.filters.some(([column]) => column === 'channel'));
   }
+});
+
+test('expired success is shown as needing recheck without masking fresh or failed results', async () => {
+  const f = fixture();
+  const freshTime = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  f.runs.push({ id: 'payment-fresh', clinic_id: clinicId, channel: 'payment', status: 'passed', checks: [], created_at: freshTime });
+  f.runs.push({ id: 'domain-failed', clinic_id: clinicId, channel: 'domain', status: 'failed', checks: [], created_at: freshTime });
+  const html = renderToStaticMarkup(await f.page.default({ searchParams: Promise.resolve({}) }));
+  const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(text, /本項通過 1 待完成 2 需處理 1/);
+  assert.match(text, /Email 通知 .*? 請重新檢查 查看詳情/);
+  assert.match(text, /上次通過已超過 24 小時，以下是歷史結果/);
+
+  f.runs.push({ id: 'email-fresh', clinic_id: clinicId, channel: 'email', status: 'passed', checks: [], created_at: freshTime });
+  const freshHtml = renderToStaticMarkup(await f.page.default({ searchParams: Promise.resolve({}) }));
+  const freshText = freshHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(freshText, /本項通過 2 待完成 1 需處理 1/);
+  assert.doesNotMatch(freshText, /請重新檢查/);
 });
 
 for (const reject of [false, true]) {

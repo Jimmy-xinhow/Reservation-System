@@ -34,7 +34,8 @@ export async function GET(request: NextRequest) {
   let img: Awaited<ReturnType<typeof getRichMenuImage>>;
   try {
     const context = await getClinicLineChannelContext(svc, clinicId);
-    const token = await lineAccessTokenForDestination(context.destination ?? undefined);
+    if (!context.destination) return new Response("LINE channel not connected", { status: 409 });
+    const token = await lineAccessTokenForDestination(context.destination);
     img = await getRichMenuImage(id, token);
   } catch {
     return new Response("LINE is not configured", { status: 503 });

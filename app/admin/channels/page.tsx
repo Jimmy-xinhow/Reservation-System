@@ -2,18 +2,21 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
 import { createServiceClient } from "@/lib/supabase";
 import { SubmitButton } from "@/components/SubmitButton";
-import { runChannelTestsAction } from "./actions";
+import { confirmChannelEmailReceiptAction, runChannelTestsAction, sendChannelEmailTestAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 type Status = "passed" | "warning" | "failed";
+type DisplayStatus = Status | "stale" | "untested";
 interface Check { label: string; status: Status; detail: string; }
 interface Run { id: string; channel: string; status: Status; checks: Check[]; created_at: string; }
+
+const CHECK_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 
 const CHANNELS = [
   { key: "line", label: "LINE 訊息", detail: "檢查官方帳號連線與回應模式", icon: "message" },
   { key: "liff", label: "LINE 顧客入口", detail: "檢查 LIFF 設定與後端驗證狀態", icon: "phone" },
-  { key: "email", label: "Email 通知", detail: "檢查寄件設定；不會寄送測試信", icon: "mail" },
+  { key: "email", label: "Email 通知", detail: "檢查寄件設定與實際收件", icon: "mail" },
   { key: "payment", label: "綠界／藍新付款", detail: "檢查商店設定；不會建立測試交易", icon: "payment" },
   { key: "domain", label: "公開網址", detail: "檢查短網址解析或已驗證的網域紀錄", icon: "globe" },
 ] as const;
@@ -31,10 +34,24 @@ const STATUS: Record<Status, { label: string; cls: string; dot: string }> = {
   warning: { label: "待完成", cls: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
   failed: { label: "需處理", cls: "bg-red-50 text-red-700", dot: "bg-red-500" },
 };
+const DISPLAY_STATUS: Record<DisplayStatus, { label: string; cls: string; dot: string }> = {
+  ...STATUS,
+  stale: { label: "請重新檢查", cls: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
+  untested: { label: "尚未檢查", cls: "bg-slate-100 text-slate-600", dot: "bg-slate-400" },
+};
 
-export default async function ChannelsPage({ searchParams }: { searchParams: Promise<{ tested?: string }> }) {
+function displayStatus(run: Run | undefined, now: number): DisplayStatus {
+  if (!run) return "untested";
+  if (run.status !== "passed") return run.status;
+  const checkedAt = new Date(run.created_at).getTime();
+  return Number.isFinite(checkedAt) && checkedAt <= now && now - checkedAt <= CHECK_FRESHNESS_MS
+    ? "passed" : "stale";
+}
+
+export default async function ChannelsPage({ searchParams }: { searchParams: Promise<{ tested?: string; email_test?: string }> }) {
   const { clinicId } = await requireAdmin();
-  const tested = (await searchParams).tested === "1";
+  const params = await searchParams;
+  const tested = params.tested === "1";
   const supabase = createServiceClient();
   const results = await Promise.all(CHANNELS.map(async (channel) => {
     const { data, error } = await supabase.from("channel_test_runs")
@@ -49,9 +66,10 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
   })).catch(() => { throw new Error("讀取渠道測試失敗，請重新整理後再試"); });
   const latest = new Map<string, Run>();
   for (const run of results) if (run) latest.set(run.channel, run);
+  const now = Date.now();
   const counts = CHANNELS.reduce((result, channel) => {
-    const status = latest.get(channel.key)?.status ?? "untested";
-    result[status] += 1;
+    const status = displayStatus(latest.get(channel.key), now);
+    result[status === "stale" ? "warning" : status] += 1;
     return result;
   }, { passed: 0, warning: 0, failed: 0, untested: 0 });
   const lastRunAt = [...latest.values()].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.created_at;
@@ -62,7 +80,7 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
         <div>
           <p className="eyebrow">外部服務</p>
           <h1 className="admin-page-title">通知與付款檢查</h1>
-          <p className="admin-page-description">逐項查看目前完成的設定與連線檢查，再從同一列進入設定。此處不寄送 Email、不建立付款交易，也不顯示密鑰。</p>
+          <p className="admin-page-description">逐項查看目前完成的設定與連線檢查，再從同一列進入設定。只有按下 Email 測試按鈕才會寄送測試信；此處不建立付款交易，也不顯示密鑰。</p>
         </div>
         <form action={runChannelTestsAction}>
           <SubmitButton className="btn btn-primary"><ActionIcon name="refresh" />重新檢查全部服務</SubmitButton>
@@ -70,6 +88,8 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
       </header>
 
       {tested && <p role="status" className="border-l-4 border-emerald-500 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">檢查已完成。請依下方狀態處理尚未完成的項目。</p>}
+      {params.email_test === "sent" && <p role="status" className="border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm text-blue-900">寄件服務已接受測試信。請到目前登入帳號的收件匣確認，實際收到後再按「我已收到測試信」。</p>}
+      {params.email_test === "confirmed" && <p role="status" className="border-l-4 border-emerald-500 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">已記錄本次實際收件確認；重新檢查全部服務時會沿用目前寄件憑證的驗證紀錄。</p>}
 
       <section className="admin-metric-strip sm:grid-cols-4" aria-label="渠道狀態摘要">
         <Metric label="本項通過" value={counts.passed} tone="text-emerald-700" />
@@ -86,7 +106,8 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
         <div className="divide-y divide-slate-200">
           {CHANNELS.map((channel) => {
             const run = latest.get(channel.key);
-            const state = run ? STATUS[run.status] : { label: "尚未檢查", cls: "bg-slate-100 text-slate-600", dot: "bg-slate-400" };
+            const status = displayStatus(run, now);
+            const state = DISPLAY_STATUS[status];
             return (
               <details key={channel.key} className="group">
                 <summary className="grid min-h-20 cursor-pointer list-none grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50 sm:grid-cols-[2.5rem_minmax(12rem,.8fr)_minmax(12rem,1fr)_auto_auto]">
@@ -98,13 +119,16 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
                 </summary>
                 <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 sm:pl-[4.75rem]">
                   {run ? (
-                    <div className="grid gap-2 lg:grid-cols-2">
-                      {run.checks.map((check, index) => (
-                        <div key={`${check.label}-${index}`} className="flex gap-3 border-l-2 border-slate-200 bg-white px-3 py-2.5">
-                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${STATUS[check.status].dot}`} />
-                          <div><p className="text-sm font-medium text-slate-800">{check.label}</p><p className="mt-0.5 text-xs leading-5 text-slate-600">{run.channel === "line" && check.label === "Messaging API" && check.status === "failed" ? "無法確認 LINE 連線，請檢查官方帳號授權設定後重試。" : check.detail}</p></div>
-                        </div>
-                      ))}
+                    <div>
+                      {status === "stale" && <p className="mb-3 text-sm text-amber-800">上次通過已超過 24 小時，以下是歷史結果；請重新檢查全部服務。</p>}
+                      <div className="grid gap-2 lg:grid-cols-2">
+                        {run.checks.map((check, index) => (
+                          <div key={`${check.label}-${index}`} className="flex gap-3 border-l-2 border-slate-200 bg-white px-3 py-2.5">
+                            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${STATUS[check.status].dot}`} />
+                            <div><p className="text-sm font-medium text-slate-800">{check.label}</p><p className="mt-0.5 text-xs leading-5 text-slate-600">{run.channel === "line" && check.label === "Messaging API" && check.status === "failed" ? "無法確認 LINE 連線，請檢查官方帳號授權設定後重試。" : check.detail}</p></div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : <p className="text-sm text-slate-600">尚無結果。按上方「重新檢查全部服務」即可開始。</p>}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
@@ -115,6 +139,19 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
               </details>
             );
           })}
+        </div>
+      </section>
+
+      <section className="admin-section p-4 sm:p-6" aria-label="Email 實際收件測試">
+        <h2 className="font-semibold text-slate-950">Email 實際收件測試</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">測試信只寄到目前登入的管理者信箱。寄件服務接受後，請親自查看收件匣；只有按下收件確認，才會記錄為實際收件。更換品牌寄件憑證後需重新測試。</p>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <form action={sendChannelEmailTestAction}>
+            <SubmitButton className="btn btn-secondary">寄送一封測試信</SubmitButton>
+          </form>
+          <form action={confirmChannelEmailReceiptAction}>
+            <SubmitButton className="btn btn-primary">我已收到測試信</SubmitButton>
+          </form>
         </div>
       </section>
 

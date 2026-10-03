@@ -401,9 +401,10 @@ async function getRichMenuLineContext(supabase: SupabaseClient, clinicId: string
   const context = await getClinicLineChannelContext(supabase, clinicId);
   if (!context.enabled) throw new Error("此品牌尚未啟用 LINE／LIFF");
   if (!context.liffId) throw new Error("此品牌尚未設定 LIFF ID");
+  if (!context.destination) throw new Error("此品牌尚未設定 LINE destination");
   if (requireReady && context.verificationStatus !== "ready") throw new Error("LINE／LIFF 尚未完成正式連線驗證");
   return {
-    accessToken: await lineAccessTokenForDestination(context.destination ?? undefined),
+    accessToken: await lineAccessTokenForDestination(context.destination),
     clinicSlug: context.clinicSlug,
     liffId: context.liffId,
     destination: context.destination,

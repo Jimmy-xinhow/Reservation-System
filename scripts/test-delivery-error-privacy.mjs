@@ -20,6 +20,8 @@ test('delivery failures allow only exact operational reasons or categories',()=>
  assert.equal(deliveryError({message:privateError}),'delivery_error:internal');
  assert.equal(deliveryError('顧客未同意行銷'),'顧客未同意行銷');
  assert.equal(deliveryError('顧客未同意行銷 '+privateError),'delivery_error:connection');
+ assert.equal(deliveryError('LINE Webhook URL 與本環境不符；請核對本頁下方的訊息接收網址。若此官方帳號也供其他環境使用，請勿直接覆蓋其 Webhook。'),'LINE Webhook URL 與本環境不符；請核對本頁下方的訊息接收網址。若此官方帳號也供其他環境使用，請勿直接覆蓋其 Webhook。');
+ assert.equal(deliveryError('LINE Webhook URL 與本環境不符；' + privateError),'delivery_error:connection');
  assert.equal(deliveryError('delivery_error:configuration'),'delivery_error:configuration');
  assert.equal(deliveryError('delivery_error:provider_rejected'),'delivery_error:provider_rejected');
  assert.equal(deliveryError('delivery_error:connection '+privateError),'delivery_error:connection');
@@ -244,15 +246,15 @@ test('admin error boundary does not claim durable writes failed or display raw e
  assert.match(html,/無法確認/);assert.match(html,/避免重複送出/);assert(!html.includes('secret-token'));assert(!html.includes('動作沒有完成'));
 });
 const {errorCategory}=await compile(read('lib/error-category.ts'));
-const channelFactory=await extractedFactory('app/admin/channels/actions.ts',['summarize','runChannelTestsAction'],['requireAdmin','createServiceClient','getClinicLineChannelContext','getPaymentSettings','lineAccessTokenForDestination','getBotInfo','emailConfigForClinic','resolvePublicClinicIdFromScope','process','console','errorCategory','revalidatePath','redirect']);
+const channelFactory=await extractedFactory('app/admin/channels/actions.ts',['matchingEmailProof','emailRevision','recentEmailRuns','summarize','normalizedWebhookUrl','lineDeliveryChecks','hasAcceptedPaymentWebhook','runChannelTestsAction'],['requireAdmin','createServiceClient','getClinicLineChannelContext','getPaymentSettings','lineAccessTokenForDestination','getBotInfo','getWebhookEndpointInfo','publicRequestOrigin','emailConfigForClinic','resolvePublicClinicIdFromScope','process','console','errorCategory','revalidatePath','redirect']);
 async function runChannels(mode){
  const writes=[],logs=[],effects=[];const failure=()=>{throw new Error(privateError);};
- const service={from:table=>{const q={select:()=>q,eq:()=>q,single:()=>q,then:(resolve,reject)=>{
+ const service={from:table=>{const q={select:()=>q,eq:()=>q,gte:()=>q,order:()=>q,limit:()=>q,single:()=>q,maybeSingle:async()=>({data:mode==='confirmed'&&table==='clinic_email_secret_refs'?{api_key_secret_id:'credential-ref',updated_at:'2026-10-03T10:00:00Z'}:null,error:null}),then:(resolve,reject)=>{
   if(mode==='readThrows')return Promise.reject(new Error(privateError)).then(resolve,reject);
-  const data=table==='clinic_settings'?{line_channel_enabled:mode!=='disabled',email_enabled:true,deposit_enabled:true}:table==='clinics'?{slug:'synthetic',line_destination:'destination'}:[];
+  const data=table==='clinic_settings'?{line_channel_enabled:mode!=='disabled',email_enabled:true,deposit_enabled:true}:table==='clinics'?{slug:'synthetic',line_destination:'destination'}:table==='channel_test_runs'&&mode==='confirmed'?[{checks:[{kind:'email_test_receipt_confirmed',receiptId:'12345678-abcd-4abc-8abc-123456789abc',configRevision:'credential-ref:2026-10-03T10:00:00Z'}]}]:[];
   return Promise.resolve({data,error:mode==='readError'?{message:privateError}:null}).then(resolve,reject);
  },insert:async rows=>{writes.push(rows);if(mode==='writeThrows')failure();return {error:mode==='writeError'?{message:privateError}:null};}};return q;}};
- const run=channelFactory({requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {clinicId:'brand',user:{id:'admin'}};},createServiceClient:()=>{effects.push('client');if(mode==='client')failure();return service;},getClinicLineChannelContext:async()=>{if(mode==='context')failure();return {enabled:mode!=='disabled',liffId:'synthetic',loginChannelId:'synthetic',liffEndpointPath:'/book',verificationStatus:'ready'};},getPaymentSettings:async()=>{if(mode==='payment')failure();return {provider:'ecpay',environment:'test',hash_key:'key-private',hash_iv:'iv-private'};},lineAccessTokenForDestination:async()=>{effects.push('token');if(mode==='token')failure();return 'token-private';},getBotInfo:async()=>{effects.push('bot');if(mode==='line')failure();return {displayName:'Synthetic brand',basicId:'@synthetic',chatMode:'bot'};},emailConfigForClinic:async()=>{if(mode==='email')failure();return {apiKey:'email-private',from:'sender@example.invalid'};},resolvePublicClinicIdFromScope:async()=>{if(mode==='domain')failure();return 'brand';},process:{env:{PUBLIC_APP_URL:'https://example.invalid'}},console:{error:(...args)=>logs.push(args)},errorCategory,revalidatePath:path=>effects.push(path),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');}});
+  const run=channelFactory({requireAdmin:async()=>{if(mode==='auth')throw new Error('AUTH_REDIRECT');return {clinicId:'brand',user:{id:'admin'}};},createServiceClient:()=>{effects.push('client');if(mode==='client')failure();return service;},getClinicLineChannelContext:async()=>{if(mode==='context')failure();return {enabled:mode!=='disabled',liffId:'synthetic',loginChannelId:'synthetic',liffEndpointPath:'/book',verificationStatus:'ready'};},getPaymentSettings:async()=>{if(mode==='payment')failure();return {provider:'ecpay',environment:'test',hash_key:'key-private',hash_iv:'iv-private'};},lineAccessTokenForDestination:async()=>{effects.push('token');if(mode==='token')failure();return 'token-private';},getBotInfo:async()=>{effects.push('bot');if(mode==='line')failure();return {userId:'destination',displayName:'Synthetic brand',basicId:'@synthetic',chatMode:'bot'};},getWebhookEndpointInfo:async()=>({active:true,endpoint:'https://example.invalid/api/line/webhook'}),publicRequestOrigin:()=> 'https://example.invalid',emailConfigForClinic:async()=>{if(mode==='email')failure();return {apiKey:'email-private',from:'sender@example.invalid'};},resolvePublicClinicIdFromScope:async()=>{if(mode==='domain')failure();return 'brand';},process:{env:{PUBLIC_APP_URL:'https://example.invalid'}},console:{error:(...args)=>logs.push(args)},errorCategory,revalidatePath:path=>effects.push(path),redirect:url=>{effects.push(url);throw new Error('NEXT_REDIRECT');}});
  let error;try{await run();}catch(e){error=e;}
  const serialized=JSON.stringify({writes,logs});for(const secret of ['secret-token','token-private','key-private','iv-private','email-private'])assert(!serialized.includes(secret));
  return {writes,logs,effects,error};
@@ -263,6 +265,11 @@ test('channel success saves five brand-scoped results and redirects outside catc
  assert.deepEqual(statuses,{line:'passed',liff:'passed',email:'warning',payment:'warning',domain:'passed'});
  assert.match(r.writes[0].find(row=>row.channel==='email').checks.find(check=>check.label==='實際收件').detail,/尚未.*收件/);
  assert.match(r.writes[0].find(row=>row.channel==='payment').checks.find(check=>check.label==='實際交易與回呼').detail,/尚未.*交易/);
+});
+test('channel Email passes only after a receipt attestation for the current credential',async()=>{
+ const r=await runChannels('confirmed');assert.equal(r.error.message,'NEXT_REDIRECT');
+ const email=r.writes[0].find(row=>row.channel==='email');assert.equal(email.status,'passed');
+ assert.match(email.checks.find(check=>check.label==='實際收件').detail,/已由品牌管理者確認實收/);
 });
 for(const mode of ['token','line'])test(`channel ${mode} failure saves safe LINE detail and other channel results`,async()=>{
  const r=await runChannels(mode);assert.equal(r.error.message,'NEXT_REDIRECT');assert.equal(r.writes[0].length,5);const line=r.writes[0].find(row=>row.channel==='line');assert.equal(line.status,'failed');assert.equal(line.checks[0].detail,'無法確認 LINE 連線，請檢查官方帳號授權設定後重試。');assert.equal(r.logs[0][1].category,'connection');assert.equal(r.writes[0].find(row=>row.channel==='email').status,'warning');
@@ -276,11 +283,11 @@ test('channel auth rejection stays outside storage catch without DB access',asyn
 test('disabled LINE skips external bot request',async()=>{
  const r=await runChannels('disabled');assert.equal(r.error.message,'NEXT_REDIRECT');assert(!r.effects.includes('bot'));assert(!r.effects.includes('token'));assert.equal(r.writes[0][0].status,'warning');
 });
-const channelsPageFactory=await componentFactory('app/admin/channels/page.tsx',['React','Link','requireAdmin','createServiceClient','SubmitButton','runChannelTestsAction'],'ChannelsPage');
+const channelsPageFactory=await componentFactory('app/admin/channels/page.tsx',['React','Link','requireAdmin','createServiceClient','SubmitButton','runChannelTestsAction','sendChannelEmailTestAction','confirmChannelEmailReceiptAction'],'ChannelsPage');
 async function renderChannels(mode){
  const data=[{id:'synthetic',channel:'line',status:mode==='success'?'passed':'failed',created_at:'2026-09-20T00:00:00Z',checks:[{label:'Messaging API',status:mode==='success'?'passed':'failed',detail:mode==='success'?'Synthetic brand':privateError}]}];
  const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,then:(resolve,reject)=>mode==='throw'?Promise.reject(new Error(privateError)).then(resolve,reject):Promise.resolve({data,error:mode==='error'?{message:privateError}:null}).then(resolve,reject)};
- const Page=channelsPageFactory({React,Link:({href,children})=>React.createElement('a',{href},children),requireAdmin:async()=>({clinicId:'brand'}),createServiceClient:()=>({from:()=>q}),SubmitButton:()=>null,runChannelTestsAction:()=>{}});
+ const Page=channelsPageFactory({React,Link:({href,children})=>React.createElement('a',{href},children),requireAdmin:async()=>({clinicId:'brand'}),createServiceClient:()=>({from:()=>q}),SubmitButton:()=>null,runChannelTestsAction:()=>{},sendChannelEmailTestAction:()=>{},confirmChannelEmailReceiptAction:()=>{}});
  return renderToStaticMarkup(await Page({searchParams:Promise.resolve({})}));
 }
 test('channel page masks historical raw LINE failures but preserves successful identity',async()=>{
