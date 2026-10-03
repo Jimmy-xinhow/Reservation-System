@@ -331,14 +331,14 @@ async function claimNotification(
 
   const { data: existing, error: existingError } = await svc
     .from("appointment_notification_logs")
-    .select("id, status, attempt_count, error, updated_at")
+    .select("id, status, attempt_count, error, updated_at, reviewed_at")
     .eq("clinic_id", appointment.clinic_id)
     .eq("appointment_id", appointment.id)
     .eq("kind", kind)
     .eq("channel", channel)
     .maybeSingle();
   if (existingError) throw new Error(existingError.message);
-  if (!existing || existing.status === "sent" || (existing.status === "failed" && existing.error === "delivery_error:provider_rejected")) return null;
+  if (!existing || existing.reviewed_at || existing.status === "sent" || (existing.status === "failed" && existing.error === "delivery_error:provider_rejected")) return null;
   // Time passing cannot prove that the provider rejected a previous attempt.
   // Throw so the queue keeps its event pending and the worker reports failure.
   if (existing.status === "sending") throw new Error("notification_delivery_unconfirmed");
