@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "npm run verify:contracts && npm run test:customer-entry && npm run test:chat-history && npm run test:staff-credentials && npm run test:storage && npm run test:prod-ingress && npm run test:checkin-live",
+    "test": "npm run verify:contracts && npm run test:customer-entry && npm run test:chat-history && npm run test:staff-credentials && npm run test:storage && npm run test:prod-ingress && npm run test:checkin-live && node --test scripts/test-appointment-notification-review.mjs",
     "test:chat-history": "node --test scripts/test-chat-history-window.mjs",
     "test:cron-alert": "node --test scripts/test-cron-monitor.mjs scripts/test-cron-alert-delivery.mjs",
     "test:prod-ingress": "node --test scripts/test-prod-ingress-hotfix.mjs",

@@ -1,22 +1,26 @@
 
 import { adminErrorMessage, adminQuery } from "@/lib/admin-query";
+import { canReviewObsoletePendingNotification } from "@/lib/appointment-notification-review";
 import { CRON_JOB_EXPECTATIONS, cronRunState, type CronRunState, type CronRunSummary } from "@/lib/cron-operations-health";
+import { ConfirmSubmitButton } from "@/components/ConfirmSubmitButton";
 import Link from "next/link";
 import { requireSystemPermission } from "@/lib/platform";
 import { createServiceClient } from "@/lib/supabase";
+import { reviewObsoletePendingNotificationAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 interface HealthCheck { label: string; description: string; configured: boolean; }
 
 export default async function PlatformOperationsPage() {
-  await requireSystemPermission("operations.view");
+  const platform = await requireSystemPermission("operations.view");
   const service = createServiceClient();
   const overdueCutoff = new Date(Date.now() - 15 * 60_000).toISOString();
   const [
     { count: activeBrands, error: activeBrandsError },
     { count: inactiveBrands, error: inactiveBrandsError },
     { count: appointmentBacklog, error: appointmentBacklogError },
+    { count: reviewedAppointments, error: reviewedAppointmentsError },
     { count: registrationBacklog, error: registrationBacklogError },
     { count: reminderBacklog, error: reminderBacklogError },
     { count: crmBacklog, error: crmBacklogError },
@@ -32,7 +36,8 @@ export default async function PlatformOperationsPage() {
   ] = await adminQuery(Promise.all([
     service.from("clinics").select("id", { count: "exact", head: true }).eq("active", true),
     service.from("clinics").select("id", { count: "exact", head: true }).eq("active", false),
-    service.from("appointment_notification_logs").select("id", { count: "exact", head: true }).in("status", ["sending", "failed"]).or(`updated_at.lte.${overdueCutoff},updated_at.is.null`),
+    service.from("appointment_notification_logs").select("id", { count: "exact", head: true }).in("status", ["sending", "failed"]).is("reviewed_at", null).or(`updated_at.lte.${overdueCutoff},updated_at.is.null`),
+    service.from("appointment_notification_logs").select("id", { count: "exact", head: true }).not("reviewed_at", "is", null),
     service.from("registration_notification_logs").select("id", { count: "exact", head: true }).in("status", ["sending", "failed"]).or(`updated_at.lte.${overdueCutoff},updated_at.is.null`),
     service.from("reminder_logs").select("id", { count: "exact", head: true }).in("result", ["sending", "failed"]).or(`sent_at.lte.${overdueCutoff},sent_at.is.null`),
     service.from("crm_delivery_logs").select("id", { count: "exact", head: true }).in("status", ["pending", "failed"]).or(`attempted_at.lte.${overdueCutoff},attempted_at.is.null`),
@@ -46,22 +51,35 @@ export default async function PlatformOperationsPage() {
     service.from("clinic_payment_secret_refs").select("clinic_id", { count: "exact", head: true }),
     service.from("payment_webhook_events").select("id", { count: "exact", head: true }).is("processed_at", null),
   ]));
-  const errors = [activeBrandsError, inactiveBrandsError, appointmentBacklogError, registrationBacklogError, reminderBacklogError, crmBacklogError, membershipBacklogError, waitlistBacklogError, followupInProgressError, followupPendingError, paymentSettingsError, lineSecretError, emailSecretError, paymentSecretError, webhookError].filter(Boolean);
+  const errors = [activeBrandsError, inactiveBrandsError, appointmentBacklogError, reviewedAppointmentsError, registrationBacklogError, reminderBacklogError, crmBacklogError, membershipBacklogError, waitlistBacklogError, followupInProgressError, followupPendingError, paymentSettingsError, lineSecretError, emailSecretError, paymentSecretError, webhookError].filter(Boolean);
   if (errors.length > 0) throw new Error(adminErrorMessage(`讀取平台健康狀態失敗：${errors[0]?.message ?? "未知錯誤"}`));
 
   const backlogs = [appointmentBacklog, registrationBacklog, reminderBacklog, crmBacklog, membershipBacklog, waitlistBacklog, followupInProgressBacklog, followupPendingBacklog];
-  if (backlogs.some((count) => !Number.isSafeInteger(count) || count === null || count < 0)) {
+  if (backlogs.concat(reviewedAppointments).some((count) => !Number.isSafeInteger(count) || count === null || count < 0)) {
     throw new Error(adminErrorMessage("通知待查數量無法確認"));
   }
   const { data: appointmentRows, error: appointmentRowsError } = (appointmentBacklog ?? 0) > 0
     ? await adminQuery(service.from("appointment_notification_logs")
-      .select("id,clinic_id,kind,channel,status,updated_at,created_at")
+      .select("id,clinic_id,appointment_id,kind,channel,status,sent_at,provider_message_id,reviewed_at,updated_at,created_at")
       .in("status", ["sending", "failed"])
+      .is("reviewed_at", null)
       .or(`updated_at.lte.${overdueCutoff},updated_at.is.null`)
       .order("created_at", { ascending: true }).limit(10))
     : { data: [], error: null };
   if (appointmentRowsError || !appointmentRows) throw new Error(adminErrorMessage("讀取待查預約通知失敗"));
-  const brandIds = [...new Set(appointmentRows.map((row) => row.clinic_id))];
+  const { data: reviewedRows, error: reviewedRowsError } = (reviewedAppointments ?? 0) > 0
+    ? await adminQuery(service.from("appointment_notification_logs")
+      .select("id,clinic_id,kind,channel,status,review_resolution,reviewed_at")
+      .not("reviewed_at", "is", null).order("reviewed_at", { ascending: false }).limit(10))
+    : { data: [], error: null };
+  if (reviewedRowsError || !reviewedRows) throw new Error(adminErrorMessage("讀取已審結通知失敗"));
+  const appointmentIds = [...new Set(appointmentRows.map((row) => row.appointment_id))];
+  const { data: relatedAppointments, error: relatedAppointmentsError } = appointmentIds.length > 0
+    ? await adminQuery(service.from("appointments").select("id,clinic_id,status,start_at").in("id", appointmentIds))
+    : { data: [], error: null };
+  if (relatedAppointmentsError || !relatedAppointments) throw new Error(adminErrorMessage("讀取待查通知預約狀態失敗"));
+  const appointmentsById = new Map(relatedAppointments.map((appointment) => [appointment.id, appointment]));
+  const brandIds = [...new Set([...appointmentRows, ...reviewedRows].map((row) => row.clinic_id))];
   const { data: appointmentBrands, error: appointmentBrandsError } = brandIds.length > 0
     ? await adminQuery(service.from("clinics").select("id,name").in("id", brandIds))
     : { data: [], error: null };
@@ -115,7 +133,9 @@ export default async function PlatformOperationsPage() {
         <div className="platform-panel space-y-4 p-5">
           <div><p className="eyebrow">待處理訊息</p><h2 className="mt-1 text-lg font-bold text-slate-900">待查通知與訊息</h2><p className="mt-1 text-sm leading-6 text-slate-500">包含超過 15 分鐘、缺少完成時間或已失敗的紀錄，以及逾期未執行的 LINE／Email 回訪。只顯示數量，不顯示顧客資料。</p></div>
           <div className="space-y-3"><QueueRow label="預約通知" value={appointmentBacklog ?? 0} /><QueueRow label="報名通知" value={registrationBacklog ?? 0} /><QueueRow label="行前提醒" value={reminderBacklog ?? 0} /><QueueRow label="CRM Lite 投遞" value={crmBacklog ?? 0} /><QueueRow label="會員通知" value={membershipBacklog ?? 0} /><QueueRow label="候補通知" value={waitlistBacklog ?? 0} /><QueueRow label="回訪處理中／失敗" value={followupInProgressBacklog ?? 0} /><QueueRow label="逾期回訪" value={followupPendingBacklog ?? 0} /></div>
-          {appointmentRows.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-xs text-slate-700"><p className="font-semibold text-slate-900">待查預約通知（最早 10 筆）</p><ul className="mt-2 space-y-2">{appointmentRows.map((row) => <li key={row.id} className="rounded-lg bg-white p-2"><span className="font-medium">{appointmentBrandNames.get(row.clinic_id) ?? "品牌資料待查"}</span><span> · {row.channel === "line" ? "LINE" : "Email"} · {row.kind === "pending" ? "待付款" : row.kind === "confirmed" ? "確認" : row.kind === "cancelled" ? "取消" : "改期"} · {row.status === "sending" ? "結果未確認" : "送出失敗"}</span><p className="mt-1 text-slate-500">紀錄 ID：{row.id} · 更新：{row.updated_at ? new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", dateStyle: "short", timeStyle: "short" }).format(new Date(row.updated_at)) : "無時間"}</p></li>)}</ul></div>}
+          <p className="text-xs text-slate-500">已審結的歷史預約通知：{reviewedAppointments ?? 0} 筆。原始投遞失敗紀錄與操作者仍保留，不視為送達。</p>
+          {appointmentRows.length > 0 && <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 text-xs text-slate-700"><p className="font-semibold text-slate-900">待查預約通知（最早 10 筆）</p><ul className="mt-2 space-y-2">{appointmentRows.map((row) => <li key={row.id} className="rounded-lg bg-white p-2"><span className="font-medium">{appointmentBrandNames.get(row.clinic_id) ?? "品牌資料待查"}</span><span> · {row.channel === "line" ? "LINE" : "Email"} · {row.kind === "pending" ? "待付款" : row.kind === "confirmed" ? "確認" : row.kind === "cancelled" ? "取消" : "改期"} · {row.status === "sending" ? "結果未確認" : "送出失敗"}</span><p className="mt-1 text-slate-500">紀錄 ID：{row.id} · 更新：{row.updated_at ? new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", dateStyle: "short", timeStyle: "short" }).format(new Date(row.updated_at)) : "無時間"}</p>{platform?.accessType === "system_admin" && canReviewObsoletePendingNotification(row, appointmentsById.get(row.appointment_id) ?? null) && <form action={reviewObsoletePendingNotificationAction} className="mt-2"><input type="hidden" name="id" value={row.id} /><ConfirmSubmitButton className="btn btn-secondary px-3 py-1.5 text-xs" confirmMessage="此筆原始送出失敗紀錄會保留；預約已取消且時段已過，只結案為不補寄，不代表訊息已送達。確定結案嗎？">結案為過期不補寄</ConfirmSubmitButton></form>}</li>)}</ul></div>}
+          {reviewedRows.length > 0 && <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700"><p className="font-semibold text-slate-900">已審結的失敗稽核（最近 10 筆）</p><ul className="mt-2 space-y-2">{reviewedRows.map((row) => <li key={row.id}><span className="font-medium">{appointmentBrandNames.get(row.clinic_id) ?? "品牌資料待查"}</span> · {row.channel === "line" ? "LINE" : "Email"} · 原狀態「送出失敗」 · {row.review_resolution === "obsolete_no_resend" ? "預約已取消、時段已過；不補寄" : "待核對結案原因"} · 紀錄 ID：{row.id} · 結案：{row.reviewed_at ? new Intl.DateTimeFormat("zh-TW", { timeZone: "Asia/Taipei", dateStyle: "short", timeStyle: "short" }).format(new Date(row.reviewed_at)) : "無時間"}</li>)}</ul></div>}
           {warningCount > 0 ? <p className="border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">待查狀態可能代表供應商已接受訊息。請先核對品牌、原通知與供應商紀錄；結果不明時不要直接重送。</p> : <p className="border-l-2 border-amber-500 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-800">目前沒有逾期待查紀錄；這不代表排程正在執行，也不證明 LINE／Email 已送達。仍須另查 worker 執行與告警。</p>}
         </div>
       </section>

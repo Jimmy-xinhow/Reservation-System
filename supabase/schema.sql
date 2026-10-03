@@ -2672,13 +2672,28 @@ create table if not exists appointment_notification_logs (
   error text,
   sent_at timestamptz,
   provider_message_id text,
+  reviewed_at timestamptz,
+  reviewed_by uuid,
+  review_resolution text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (appointment_id, kind, channel)
+  unique (appointment_id, kind, channel),
+  constraint appointment_notification_review_complete check (
+    (reviewed_at is null and reviewed_by is null and review_resolution is null)
+    or (reviewed_at is not null and reviewed_by is not null and review_resolution is not null
+      and review_resolution = 'obsolete_no_resend'
+      and status = 'failed' and kind = 'pending'
+      and sent_at is null and provider_message_id is null)
+  )
 );
 create index if not exists appointment_notification_logs_queue_idx
   on appointment_notification_logs (clinic_id, status, updated_at);
 alter table appointment_notification_logs add column if not exists provider_message_id text;
+alter table appointment_notification_logs add column if not exists reviewed_at timestamptz;
+alter table appointment_notification_logs add column if not exists reviewed_by uuid;
+alter table appointment_notification_logs add column if not exists review_resolution text;
+create index if not exists appointment_notification_logs_review_queue_idx
+  on appointment_notification_logs (status, updated_at) where reviewed_at is null;
 
 create or replace function record_appointment_status_event()
 returns trigger
