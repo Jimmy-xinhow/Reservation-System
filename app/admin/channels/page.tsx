@@ -7,8 +7,11 @@ import { runChannelTestsAction } from "./actions";
 export const dynamic = "force-dynamic";
 
 type Status = "passed" | "warning" | "failed";
+type DisplayStatus = Status | "stale" | "untested";
 interface Check { label: string; status: Status; detail: string; }
 interface Run { id: string; channel: string; status: Status; checks: Check[]; created_at: string; }
+
+const CHECK_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 
 const CHANNELS = [
   { key: "line", label: "LINE 訊息", detail: "檢查官方帳號連線與回應模式", icon: "message" },
@@ -31,6 +34,19 @@ const STATUS: Record<Status, { label: string; cls: string; dot: string }> = {
   warning: { label: "待完成", cls: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
   failed: { label: "需處理", cls: "bg-red-50 text-red-700", dot: "bg-red-500" },
 };
+const DISPLAY_STATUS: Record<DisplayStatus, { label: string; cls: string; dot: string }> = {
+  ...STATUS,
+  stale: { label: "請重新檢查", cls: "bg-amber-50 text-amber-700", dot: "bg-amber-500" },
+  untested: { label: "尚未檢查", cls: "bg-slate-100 text-slate-600", dot: "bg-slate-400" },
+};
+
+function displayStatus(run: Run | undefined, now: number): DisplayStatus {
+  if (!run) return "untested";
+  if (run.status !== "passed") return run.status;
+  const checkedAt = new Date(run.created_at).getTime();
+  return Number.isFinite(checkedAt) && checkedAt <= now && now - checkedAt <= CHECK_FRESHNESS_MS
+    ? "passed" : "stale";
+}
 
 export default async function ChannelsPage({ searchParams }: { searchParams: Promise<{ tested?: string }> }) {
   const { clinicId } = await requireAdmin();
@@ -49,9 +65,10 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
   })).catch(() => { throw new Error("讀取渠道測試失敗，請重新整理後再試"); });
   const latest = new Map<string, Run>();
   for (const run of results) if (run) latest.set(run.channel, run);
+  const now = Date.now();
   const counts = CHANNELS.reduce((result, channel) => {
-    const status = latest.get(channel.key)?.status ?? "untested";
-    result[status] += 1;
+    const status = displayStatus(latest.get(channel.key), now);
+    result[status === "stale" ? "warning" : status] += 1;
     return result;
   }, { passed: 0, warning: 0, failed: 0, untested: 0 });
   const lastRunAt = [...latest.values()].sort((a, b) => b.created_at.localeCompare(a.created_at))[0]?.created_at;
@@ -86,7 +103,8 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
         <div className="divide-y divide-slate-200">
           {CHANNELS.map((channel) => {
             const run = latest.get(channel.key);
-            const state = run ? STATUS[run.status] : { label: "尚未檢查", cls: "bg-slate-100 text-slate-600", dot: "bg-slate-400" };
+            const status = displayStatus(run, now);
+            const state = DISPLAY_STATUS[status];
             return (
               <details key={channel.key} className="group">
                 <summary className="grid min-h-20 cursor-pointer list-none grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 hover:bg-slate-50 sm:grid-cols-[2.5rem_minmax(12rem,.8fr)_minmax(12rem,1fr)_auto_auto]">
@@ -98,13 +116,16 @@ export default async function ChannelsPage({ searchParams }: { searchParams: Pro
                 </summary>
                 <div className="border-t border-slate-100 bg-slate-50 px-4 py-4 sm:pl-[4.75rem]">
                   {run ? (
-                    <div className="grid gap-2 lg:grid-cols-2">
-                      {run.checks.map((check, index) => (
-                        <div key={`${check.label}-${index}`} className="flex gap-3 border-l-2 border-slate-200 bg-white px-3 py-2.5">
-                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${STATUS[check.status].dot}`} />
-                          <div><p className="text-sm font-medium text-slate-800">{check.label}</p><p className="mt-0.5 text-xs leading-5 text-slate-600">{run.channel === "line" && check.label === "Messaging API" && check.status === "failed" ? "無法確認 LINE 連線，請檢查官方帳號授權設定後重試。" : check.detail}</p></div>
-                        </div>
-                      ))}
+                    <div>
+                      {status === "stale" && <p className="mb-3 text-sm text-amber-800">上次通過已超過 24 小時，以下是歷史結果；請重新檢查全部服務。</p>}
+                      <div className="grid gap-2 lg:grid-cols-2">
+                        {run.checks.map((check, index) => (
+                          <div key={`${check.label}-${index}`} className="flex gap-3 border-l-2 border-slate-200 bg-white px-3 py-2.5">
+                            <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${STATUS[check.status].dot}`} />
+                            <div><p className="text-sm font-medium text-slate-800">{check.label}</p><p className="mt-0.5 text-xs leading-5 text-slate-600">{run.channel === "line" && check.label === "Messaging API" && check.status === "failed" ? "無法確認 LINE 連線，請檢查官方帳號授權設定後重試。" : check.detail}</p></div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : <p className="text-sm text-slate-600">尚無結果。按上方「重新檢查全部服務」即可開始。</p>}
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
